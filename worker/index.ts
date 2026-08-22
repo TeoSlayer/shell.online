@@ -11,6 +11,11 @@ import {
 } from "./analytics";
 import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
+import {
+  GITHUB_REPOSITORY_API_URL,
+  GITHUB_REPOSITORY_URL,
+  readGitHubApiStarCount,
+} from "../shared/github";
 import { STATS_PRESENCE_REFRESH_MS } from "../shared/stats-snapshot";
 import {
   fetchStatsSnapshot,
@@ -127,6 +132,10 @@ export default {
       return json({ ok: true, service: "shell.online", version: RELEASE_VERSION });
     }
 
+    if (url.pathname === "/api/github" && request.method === "GET") {
+      return githubRepositorySummary();
+    }
+
     if (url.pathname === "/api/stats" || url.pathname.startsWith("/api/stats/")) {
       return handleStatsRequest(request, env, url);
     }
@@ -198,6 +207,40 @@ export default {
     return response;
   },
 } satisfies ExportedHandler<Env>;
+
+async function githubRepositorySummary(): Promise<Response> {
+  try {
+    const response = await fetch(GITHUB_REPOSITORY_API_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "shell.online",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 600,
+      },
+    });
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+
+    const stars = readGitHubApiStarCount(await response.json());
+    if (stars === null) throw new Error("GitHub returned an invalid star count");
+
+    return json(
+      { stars, url: GITHUB_REPOSITORY_URL },
+      200,
+      {
+        "Cache-Control": "public, max-age=300, s-maxage=600, stale-while-revalidate=86400",
+      },
+    );
+  } catch {
+    return json(
+      { stars: null, url: GITHUB_REPOSITORY_URL },
+      502,
+      { "Cache-Control": "no-store" },
+    );
+  }
+}
 
 async function handleStatsRequest(request: Request, env: Env, url: URL): Promise<Response> {
   if (!isStatsRequestHost(request, url)) {
