@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#e9eef9" />
+    <meta name="description" content="Turn a terminal command into an interactive browser link. It stays on your machine while trusted link holders watch or type. No account or SSH." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://shell.online/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="shell.online" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://shell.online/" />
+    <meta property="og:title" content="A live browser link for your terminal process" />
+    <meta property="og:description" content="Prefix a command with shell. It runs on your machine while trusted link holders watch or type from any device. Install once; no account or SSH." />
+    <meta property="og:image" content="https://shell.online/social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="shell.online sharing a live terminal process through a browser link" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="A live browser link for your terminal process" />
+    <meta name="twitter:description" content="Prefix a command with shell. It runs locally while trusted link holders watch or type from any device." />
+    <meta name="twitter:image" content="https://shell.online/social-card.png" />
+    <meta name="twitter:image:alt" content="shell.online sharing a live terminal process through a browser link" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <script type="application/ld+json">
+      [
+        {
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "@id": "https://shell.online/#website",
+          "url": "https://shell.online/",
+          "name": "shell.online",
+          "description": "An interactive browser link for a terminal process running on your machine."
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "@id": "https://shell.online/#software",
+          "name": "shell.online",
+          "url": "https://shell.online/",
+          "image": "https://shell.online/social-card.png",
+          "description": "Prefix a terminal command with shell to let trusted link holders watch or type from a browser.",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "macOS, Linux",
+          "isAccessibleForFree": true,
+          "downloadUrl": "https://shell.online/install",
+          "featureList": [
+            "Share terminal processes through an interactive browser link",
+            "Interactive ANSI and TUI support",
+            "Collaborative input and live presence",
+            "Automatic cleanup when the process exits"
+          ],
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        }
+      ]
+    </script>
+    <style>
+      html,body,#app{width:100%;height:100%;margin:0;overflow:hidden;background:#e9eef9}.boot-screen{position:fixed;inset:0;isolation:isolate;display:grid;background:radial-gradient(ellipse 70% 62% at 25% 18%,#fff 0%,#f7f9fdc7 42%,transparent 72%),radial-gradient(ellipse 55% 60% at 86% 74%,#d7e4f6b8 0%,transparent 72%),linear-gradient(145deg,#eef3fb,#e8e7f3);color:#34405c;font-family:system-ui,sans-serif;place-content:center;place-items:center}.boot-screen:before{position:absolute;z-index:-1;width:min(68vw,620px);height:min(38vw,340px);border-radius:50%;background:#ffffff94;content:"";filter:blur(64px);animation:boot-cloud 2.8s ease-in-out infinite alternate}.boot-mark{font-size:clamp(22px,5vw,34px);font-weight:560;letter-spacing:-.06em}.boot-mark i{color:#8494ba;font-style:normal}.boot-status{margin-top:18px;color:#71809e;font-size:12px;letter-spacing:.04em}.boot-dots{display:flex;height:8px;margin-top:11px;gap:6px}.boot-dots i{width:5px;height:5px;border-radius:50%;background:#7386ad;animation:boot-dot 1.05s ease-in-out infinite}.boot-dots i:nth-child(2){animation-delay:.14s}.boot-dots i:nth-child(3){animation-delay:.28s}.seo-fallback{position:absolute;width:1px;height:1px;margin:-1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}@keyframes boot-cloud{to{transform:translate(5vw,-2vh) scale(1.08)}}@keyframes boot-dot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}@media(prefers-reduced-motion:reduce){.boot-screen:before,.boot-dots i{animation:none}}
+    </style>
+    <title>shell.online — A live browser link for your terminal process</title>
+  </head>
+  <body>
+    <main id="app">
+      <section class="boot-screen" aria-label="Loading shell.online">
+        <div class="boot-mark"><span>shell</span><i>.</i>online</div>
+        <span class="boot-status">Opening</span>
+        <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div class="seo-fallback">
+          <h1>A live terminal. One browser link.</h1>
+          <p>Prefix any command with shell. It runs on your machine while trusted link holders watch or type from any device. No account or SSH.</p>
+          <code>shell &lt;your-command&gt;</code>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/web/main.ts"></script>
+  </body>
+</html>

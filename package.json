@@ -1,0 +1,38 @@
+{
+  "name": "shell-online",
+  "version": "0.3.8",
+  "description": "Turn any terminal process into a collaborative browser link.",
+  "private": true,
+  "license": "MIT",
+  "homepage": "https://shell.online",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TeoSlayer/shell.online.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TeoSlayer/shell.online/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "npm run check && npm run build:web && npm run build:cli",
+    "build:cli": "sh ./scripts/build-cli.sh",
+    "build:web": "vite build",
+    "check": "npm run typecheck && npm test",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260822.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.0.0",
+    "wrangler": "^4.125.0"
+  }
+}

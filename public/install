@@ -1,0 +1,119 @@
+#!/bin/sh
+set -eu
+
+base_url=${SHELL_ONLINE_BASE_URL:-https://shell.online}
+
+case "$(uname -s)" in
+  Darwin) platform=darwin ;;
+  Linux) platform=linux ;;
+  *)
+    printf 'shell.online: unsupported operating system: %s\n' "$(uname -s)" >&2
+    exit 1
+    ;;
+esac
+
+case "$(uname -m)" in
+  arm64|aarch64) architecture=arm64 ;;
+  x86_64|amd64) architecture=amd64 ;;
+  *)
+    printf 'shell.online: unsupported architecture: %s\n' "$(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "${SHELL_ONLINE_INSTALL_DIR:-}" ]; then
+  install_dir=$SHELL_ONLINE_INSTALL_DIR
+elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
+  install_dir=/usr/local/bin
+else
+  install_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+fi
+
+temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/shell-online.XXXXXX")
+trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
+binary_name="shell-$platform-$architecture"
+binary_url="$base_url/downloads/$binary_name"
+
+download() {
+  source_url=$1
+  destination=$2
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$source_url" -o "$destination"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$source_url" -O "$destination"
+  else
+    printf 'shell.online: curl or wget is required\n' >&2
+    exit 1
+  fi
+}
+
+download "$binary_url" "$temporary_dir/shell"
+download "$base_url/downloads/SHA256SUMS" "$temporary_dir/SHA256SUMS"
+expected=$(awk -v filename="$binary_name" '$2 == filename { print $1; exit }' "$temporary_dir/SHA256SUMS")
+
+case "$expected" in
+  *[!0-9a-f]*|'')
+    printf 'shell.online: release manifest has no valid checksum for %s\n' "$binary_name" >&2
+    exit 1
+    ;;
+esac
+if [ "${#expected}" -ne 64 ]; then
+  printf 'shell.online: release manifest has an invalid checksum for %s\n' "$binary_name" >&2
+  exit 1
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual=$(sha256sum "$temporary_dir/shell" | awk '{print $1}')
+elif command -v shasum >/dev/null 2>&1; then
+  actual=$(shasum -a 256 "$temporary_dir/shell" | awk '{print $1}')
+else
+  printf 'shell.online: sha256sum or shasum is required\n' >&2
+  exit 1
+fi
+
+if [ "$actual" != "$expected" ]; then
+  printf 'shell.online: downloaded binary failed checksum verification\n' >&2
+  exit 1
+fi
+
+mkdir -p "$install_dir"
+if command -v install >/dev/null 2>&1; then
+  install -m 0755 "$temporary_dir/shell" "$install_dir/shell"
+else
+  cp "$temporary_dir/shell" "$install_dir/shell"
+  chmod 0755 "$install_dir/shell"
+fi
+
+printf 'Installed shell to %s/shell\n' "$install_dir"
+printf 'Verified SHA-256: %s\n' "$actual"
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *)
+    shell_name=${SHELL##*/}
+    printf '\n%s is not on your PATH yet.\n' "$install_dir"
+    case "$shell_name" in
+      fish)
+        printf 'Run this once in fish:\n  fish_add_path "%s"\n' "$install_dir"
+        ;;
+      *)
+        case "$shell_name" in
+          zsh) profile=${ZDOTDIR:-"$HOME"}/.zshrc ;;
+          bash)
+            if [ "$platform" = darwin ]; then
+              profile=$HOME/.bash_profile
+            else
+              profile=$HOME/.bashrc
+            fi
+            ;;
+          *) profile=$HOME/.profile ;;
+        esac
+        printf 'For this terminal, run:\n  export PATH="%s:$PATH"\n' "$install_dir"
+        printf 'To keep it after restart, run:\n  echo '\''export PATH="%s:$PATH"'\'' >> "%s"\n' "$install_dir" "$profile"
+        ;;
+    esac
+    ;;
+esac
+"$install_dir/shell" --version
+printf '\nNext:\n'
+printf '  shell <your-command>   Run it in the background and print its browser link\n'
+printf '  shell help             See the guided start, share, and stop flow\n'
