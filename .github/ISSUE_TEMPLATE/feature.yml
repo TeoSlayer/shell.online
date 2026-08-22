@@ -1,0 +1,24 @@
+name: Focused improvement
+description: Suggest an improvement that preserves the one-command, no-account model.
+title: "idea: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem is not handled well today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Smallest useful change
+      description: Explain how this improves the existing flow without adding unnecessary steps or persistent identity.
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Security and UX tradeoffs
+      description: Consider bearer links, terminal input, mobile behavior, and process lifetime.

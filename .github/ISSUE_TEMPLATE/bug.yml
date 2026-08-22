@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible shell.online problem.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include active share URLs, terminal transcripts, credentials, or security vulnerabilities. Use the private security-reporting link for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `shell --version`.
+      placeholder: shell 0.3.8
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS arm64
+        - macOS amd64
+        - Linux arm64
+        - Linux amd64
+        - Browser/mobile UI
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include minimal reproduction steps, expected behavior, and sanitized output.
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Additional context
+      description: Browser/terminal name, process type, and whether the issue reproduces with a simple command.

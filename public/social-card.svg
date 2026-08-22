@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">shell.online — a live browser link for your terminal process</title>
+  <desc id="desc">A cloudy interface showing one command becoming a collaborative browser terminal.</desc>
+  <defs>
+    <linearGradient id="background" x1="40" y1="20" x2="1160" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8faff"/>
+      <stop offset=".42" stop-color="#e4ecf9"/>
+      <stop offset=".75" stop-color="#eee8f8"/>
+      <stop offset="1" stop-color="#d8e6f7"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="730" y1="120" x2="1090" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".83"/>
+      <stop offset="1" stop-color="#edf2fb" stop-opacity=".62"/>
+    </linearGradient>
+    <linearGradient id="command" x1="72" y1="419" x2="582" y2="489" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".76"/>
+      <stop offset="1" stop-color="#edf1fa" stop-opacity=".58"/>
+    </linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="52"/></filter>
+    <filter id="card-shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#596d99" flood-opacity=".18"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#background)"/>
+  <ellipse cx="210" cy="75" rx="280" ry="160" fill="#fff" fill-opacity=".72" filter="url(#blur)"/>
+  <ellipse cx="1065" cy="90" rx="230" ry="170" fill="#dcd1f3" fill-opacity=".58" filter="url(#blur)"/>
+  <ellipse cx="860" cy="610" rx="360" ry="180" fill="#c8dcf5" fill-opacity=".64" filter="url(#blur)"/>
+
+  <g font-family="Avenir Next, Avenir, Helvetica Neue, sans-serif">
+    <text x="72" y="82" fill="#24324d" font-size="34" font-weight="600" letter-spacing="-1.5">shell<tspan fill="#8092b9">.</tspan>online</text>
+    <text x="72" y="206" fill="#303a55" font-size="77" font-weight="300" letter-spacing="-5">A live terminal.</text>
+    <text x="72" y="286" fill="#303a55" font-size="77" font-weight="300" letter-spacing="-5">One link.</text>
+    <text x="76" y="353" fill="#68748f" font-size="25" font-weight="400">Watch it. Type into it. Hand it off.</text>
+
+    <g filter="url(#card-shadow)">
+      <rect x="72" y="402" width="520" height="78" rx="24" fill="url(#command)" stroke="#fff" stroke-opacity=".88"/>
+      <circle cx="112" cy="441" r="16" fill="#dce6f7" stroke="#8498c1" stroke-opacity=".28"/>
+      <path d="m105 434 8 7-8 7M119 449h12" fill="none" stroke="#50668e" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8"/>
+      <text x="151" y="451" fill="#3f506f" font-size="24" font-weight="500">shell &lt;your-command&gt;</text>
+    </g>
+    <text x="76" y="532" fill="#75819b" font-size="18">No account  ·  Runs locally  ·  TUI-ready</text>
+
+    <g filter="url(#card-shadow)">
+      <rect x="685" y="96" width="445" height="444" rx="32" fill="url(#glass)" stroke="#fff" stroke-opacity=".9"/>
+      <rect x="686" y="97" width="443" height="64" rx="31" fill="#fff" fill-opacity=".4"/>
+      <path d="M686 161h443" stroke="#7588ad" stroke-opacity=".13"/>
+      <circle cx="724" cy="129" r="6" fill="#93a4c6" fill-opacity=".55"/>
+      <circle cx="746" cy="129" r="6" fill="#a89cc4" fill-opacity=".48"/>
+      <circle cx="768" cy="129" r="6" fill="#8eafaa" fill-opacity=".48"/>
+      <text x="799" y="137" fill="#53627e" font-size="18" font-weight="500">train.py</text>
+      <circle cx="1044" cy="129" r="5" fill="#62a981"/>
+      <text x="1058" y="136" fill="#6f7d95" font-size="14">38 ms</text>
+
+      <g font-family="SFMono-Regular, Menlo, monospace" font-size="17">
+        <text x="724" y="208" fill="#6d7b95">epoch 38 / 100</text>
+        <text x="724" y="246" fill="#354664">loss</text><text x="807" y="246" fill="#526d9f">0.0821</text>
+        <text x="724" y="282" fill="#354664">accuracy</text><text x="838" y="282" fill="#4e826d">94.7%</text>
+        <rect x="724" y="314" width="350" height="10" rx="5" fill="#8093b7" fill-opacity=".14"/>
+        <rect x="724" y="314" width="266" height="10" rx="5" fill="#829fd0" fill-opacity=".8"/>
+        <text x="724" y="369" fill="#7d89a1">saving checkpoint…</text>
+        <text x="724" y="414" fill="#405579">›</text>
+      </g>
+
+      <g>
+        <circle cx="1000" cy="488" r="21" fill="#cbd9ef" stroke="#fff" stroke-width="3"/>
+        <circle cx="1033" cy="488" r="21" fill="#dfd4ef" stroke="#fff" stroke-width="3"/>
+        <circle cx="1066" cy="488" r="21" fill="#c8e0da" stroke="#fff" stroke-width="3"/>
+        <text x="992" y="495" fill="#4d5f80" font-size="17" font-weight="600">Y</text>
+        <text x="1025" y="495" fill="#65557f" font-size="17" font-weight="600">D</text>
+        <text x="1058" y="495" fill="#45695f" font-size="17" font-weight="600">A</text>
+      </g>
+    </g>
+  </g>
+</svg>

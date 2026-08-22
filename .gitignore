@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.wrangler/
+wrangler.production.jsonc
+worker-configuration.d.ts
+bin/
+*.log
+.DS_Store
+
+# Local credentials and deployment overrides. Keep the documented examples.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local editor and test artifacts.
+.idea/
+.vscode/
+coverage/
