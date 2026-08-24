@@ -1,7 +1,7 @@
 {
   "name": "shell.online",
   "short_name": "shell.online",
-  "description": "Run a terminal process locally and share it through an interactive browser link.",
+  "description": "Share coding agents, builds, servers, and live terminal processes through an interactive browser link.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

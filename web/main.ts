@@ -141,7 +141,7 @@ if (statsDashboard) {
 }
 
 function renderLanding(): void {
-  document.title = "shell.online — Put any terminal in a browser";
+  document.title = "Share a Live Terminal in Any Browser | shell.online";
   document.documentElement.classList.add("marketing-root");
   document.body.classList.add("marketing-body");
   app!.innerHTML = `
@@ -149,8 +149,8 @@ function renderLanding(): void {
       <header class="marketing-nav">
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Main navigation">
+          <a href="#use-cases">Use cases</a>
           <a href="#how">How it works</a>
-          <a href="#security">Security</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
@@ -197,8 +197,10 @@ function renderLanding(): void {
             <code>shell codex</code>
             <code>shell python train.py</code>
             <code>shell docker compose up</code>
+            <code>shell terraform apply</code>
             <code>shell ssh my-server</code>
             <code>shell htop</code>
+            <code>shell psql</code>
           </div>
         </section>
 
@@ -279,6 +281,64 @@ function renderLanding(): void {
           <article><strong>0</strong><span>accounts required</span></article>
           <article><strong>0</strong><span>retained terminal logs</span></article>
           <article><strong>Any</strong><span>modern browser</span></article>
+        </section>
+
+        <section class="use-cases-section" id="use-cases">
+          <div class="section-heading use-cases-heading">
+            <p>Use cases</p>
+            <h2>One live link.<br />Plenty to keep moving.</h2>
+            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Anyone holding the link can interact, so share it only with people you trust.</span>
+          </div>
+          <div class="use-cases-grid">
+            <article class="use-case-card">
+              <header><span>01</span><i>AI agents</i></header>
+              <h3>Watch coding agents from your phone</h3>
+              <p>Follow Codex or Claude Code while it explores, edits, and tests. Answer a prompt without returning to the computer that started it.</p>
+              <code><b>$</b> shell codex</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>02</span><i>Builds + tests</i></header>
+              <h3>Keep long test suites within reach</h3>
+              <p>Watch compilation and test output live, inspect a failure, or interrupt a stuck run from another device.</p>
+              <code><b>$</b> shell go test -race ./...</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>03</span><i>ML + data</i></header>
+              <h3>Follow training and data jobs</h3>
+              <p>Check progress logs for model training, ETL jobs, migrations, and batch scripts without keeping the original terminal in front of you.</p>
+              <code><b>$</b> shell python train.py</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>04</span><i>Local servers</i></header>
+              <h3>Carry development logs with you</h3>
+              <p>Open a live window into development servers, Docker stacks, file watchers, and other processes that keep printing.</p>
+              <code><b>$</b> shell docker compose up</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>05</span><i>Infrastructure</i></header>
+              <h3>Stay close to deployments</h3>
+              <p>Watch release commands, Terraform plans, and Kubernetes logs, then respond when the terminal needs a deliberate decision.</p>
+              <code><b>$</b> shell terraform apply</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>06</span><i>Remote systems</i></header>
+              <h3>Put an SSH session in a browser</h3>
+              <p>Start SSH where your keys already live and reach that same interactive remote shell from a trusted browser.</p>
+              <code><b>$</b> shell ssh my-server</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>07</span><i>Terminal UIs</i></header>
+              <h3>Open dashboards and consoles anywhere</h3>
+              <p>Use full-screen tools such as htop, database consoles, debuggers, and other ANSI or TUI applications.</p>
+              <code><b>$</b> shell htop</code>
+            </article>
+            <article class="use-case-card">
+              <header><span>08</span><i>Pairing</i></header>
+              <h3>Debug and hand off together</h3>
+              <p>Give a teammate the link to watch, type, and help in the exact terminal session—without creating an account or exchanging SSH keys.</p>
+              <code><b>$</b> shell bash</code>
+            </article>
+          </div>
         </section>
 
         <section class="how-section" id="how">
@@ -373,6 +433,8 @@ function renderLanding(): void {
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <p>A live browser link for any terminal process.</p>
         <nav aria-label="Footer navigation">
+          <a href="#use-cases">Use cases</a>
+          <a href="#security">Security</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
           <a href="/skill">Agent skill</a>
           <a href="/llms.txt">llms.txt</a>

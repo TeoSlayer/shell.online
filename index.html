@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#e9eef9" />
-    <meta name="description" content="Turn a terminal command into an interactive browser link. It stays on your machine while trusted link holders watch or type. No account or SSH." />
+    <meta name="description" content="Share a live terminal through a browser link. Watch coding agents, builds, servers, and long-running commands from your phone—without an account or SSH." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://shell.online/" />
 
@@ -13,8 +13,8 @@
     <meta property="og:site_name" content="shell.online" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://shell.online/" />
-    <meta property="og:title" content="A live browser link for your terminal process" />
-    <meta property="og:description" content="Prefix a command with shell. It runs on your machine while trusted link holders watch or type from any device. Install once; no account or SSH." />
+    <meta property="og:title" content="Share a live terminal in any browser" />
+    <meta property="og:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands from any device. The process stays on your machine." />
     <meta property="og:image" content="https://shell.online/social-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -22,8 +22,8 @@
     <meta property="og:image:alt" content="shell.online sharing a live terminal process through a browser link" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="A live browser link for your terminal process" />
-    <meta name="twitter:description" content="Prefix a command with shell. It runs locally while trusted link holders watch or type from any device." />
+    <meta name="twitter:title" content="Share a live terminal in any browser" />
+    <meta name="twitter:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands from any device." />
     <meta name="twitter:image" content="https://shell.online/social-card.png" />
     <meta name="twitter:image:alt" content="shell.online sharing a live terminal process through a browser link" />
 
@@ -40,7 +40,8 @@
           "@id": "https://shell.online/#website",
           "url": "https://shell.online/",
           "name": "shell.online",
-          "description": "An interactive browser link for a terminal process running on your machine."
+          "alternateName": "shell online",
+          "description": "Share a live terminal process through an interactive browser link."
         },
         {
           "@context": "https://schema.org",
@@ -49,13 +50,20 @@
           "name": "shell.online",
           "url": "https://shell.online/",
           "image": "https://shell.online/social-card.png",
-          "description": "Prefix a terminal command with shell to let trusted link holders watch or type from a browser.",
+          "screenshot": "https://shell.online/screenshots/codex-working-mobile.png",
+          "sameAs": "https://github.com/TeoSlayer/shell.online",
+          "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive browser link.",
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "macOS, Linux",
+          "softwareVersion": "0.3.9",
+          "softwareRequirements": "macOS or Linux on arm64 or amd64; Homebrew is optional",
           "isAccessibleForFree": true,
           "downloadUrl": "https://shell.online/install",
           "featureList": [
             "Share terminal processes through an interactive browser link",
+            "Monitor coding agents and long-running commands from a phone",
+            "Share builds, test suites, development servers, and training jobs",
+            "Open SSH sessions and terminal dashboards in a browser",
             "Interactive ANSI and TUI support",
             "Collaborative input and live presence",
             "Automatic cleanup when the process exits"
@@ -69,23 +77,29 @@
       ]
     </script>
     <style>
-      html,body,#app{width:100%;height:100%;margin:0;overflow:hidden;background:#e9eef9}.boot-screen{position:fixed;inset:0;isolation:isolate;display:grid;background:radial-gradient(ellipse 70% 62% at 25% 18%,#fff 0%,#f7f9fdc7 42%,transparent 72%),radial-gradient(ellipse 55% 60% at 86% 74%,#d7e4f6b8 0%,transparent 72%),linear-gradient(145deg,#eef3fb,#e8e7f3);color:#34405c;font-family:system-ui,sans-serif;place-content:center;place-items:center}.boot-screen:before{position:absolute;z-index:-1;width:min(68vw,620px);height:min(38vw,340px);border-radius:50%;background:#ffffff94;content:"";filter:blur(64px);animation:boot-cloud 2.8s ease-in-out infinite alternate}.boot-mark{font-size:clamp(22px,5vw,34px);font-weight:560;letter-spacing:-.06em}.boot-mark i{color:#8494ba;font-style:normal}.boot-status{margin-top:18px;color:#71809e;font-size:12px;letter-spacing:.04em}.boot-dots{display:flex;height:8px;margin-top:11px;gap:6px}.boot-dots i{width:5px;height:5px;border-radius:50%;background:#7386ad;animation:boot-dot 1.05s ease-in-out infinite}.boot-dots i:nth-child(2){animation-delay:.14s}.boot-dots i:nth-child(3){animation-delay:.28s}.seo-fallback{position:absolute;width:1px;height:1px;margin:-1px;padding:0;clip-path:inset(50%);overflow:hidden;white-space:nowrap}@keyframes boot-cloud{to{transform:translate(5vw,-2vh) scale(1.08)}}@keyframes boot-dot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}@media(prefers-reduced-motion:reduce){.boot-screen:before,.boot-dots i{animation:none}}
+      html,body,#app{width:100%;height:100%;margin:0;overflow:hidden;background:#e9eef9}.boot-screen{position:fixed;inset:0;isolation:isolate;display:grid;padding:24px;background:radial-gradient(ellipse 70% 62% at 25% 18%,#fff 0%,#f7f9fdc7 42%,transparent 72%),radial-gradient(ellipse 55% 60% at 86% 74%,#d7e4f6b8 0%,transparent 72%),linear-gradient(145deg,#eef3fb,#e8e7f3);color:#34405c;font-family:system-ui,sans-serif;text-align:center;place-content:center;place-items:center}.boot-screen:before{position:absolute;z-index:-1;width:min(68vw,620px);height:min(38vw,340px);border-radius:50%;background:#ffffff94;content:"";filter:blur(64px);animation:boot-cloud 2.8s ease-in-out infinite alternate}.boot-mark{font-size:clamp(22px,5vw,34px);font-weight:560;letter-spacing:-.06em}.boot-mark i{color:#8494ba;font-style:normal}.boot-summary{max-width:470px;margin:18px 0 0;color:#65738f;font-size:13px;line-height:1.55}.boot-dots{display:flex;height:8px;margin-top:14px;gap:6px}.boot-dots i{width:5px;height:5px;border-radius:50%;background:#7386ad;animation:boot-dot 1.05s ease-in-out infinite}.boot-dots i:nth-child(2){animation-delay:.14s}.boot-dots i:nth-child(3){animation-delay:.28s}.no-script{min-height:100%;padding:48px;background:#f3f1e9;color:#242721;font:16px/1.6 system-ui,sans-serif}.no-script div{max-width:720px;margin:0 auto}.no-script h1{font-size:clamp(38px,8vw,68px);line-height:1}.no-script code{display:inline-block;padding:12px;border-radius:8px;background:#1d201b;color:#f4f5ed}.no-script a{color:#3157df}@keyframes boot-cloud{to{transform:translate(5vw,-2vh) scale(1.08)}}@keyframes boot-dot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}@media(prefers-reduced-motion:reduce){.boot-screen:before,.boot-dots i{animation:none}}
     </style>
-    <title>shell.online — A live browser link for your terminal process</title>
+    <title>Share a Live Terminal in Any Browser | shell.online</title>
   </head>
   <body>
-    <main id="app">
+    <div id="app">
       <section class="boot-screen" aria-label="Loading shell.online">
         <div class="boot-mark"><span>shell</span><i>.</i>online</div>
-        <span class="boot-status">Opening</span>
+        <p class="boot-summary">Live browser links for coding agents, builds, servers, remote shells, and long-running terminal commands.</p>
         <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-        <div class="seo-fallback">
-          <h1>A live terminal. One browser link.</h1>
-          <p>Prefix any command with shell. It runs on your machine while trusted link holders watch or type from any device. No account or SSH.</p>
-          <code>shell &lt;your-command&gt;</code>
-        </div>
       </section>
-    </main>
+      <noscript>
+        <section class="no-script">
+          <div>
+            <h1>Share a live terminal in any browser.</h1>
+            <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer.</p>
+            <p>Use shell.online for coding agents, builds and test suites, development servers, training jobs, deployments, SSH sessions, terminal dashboards, and pair debugging.</p>
+            <p><code>curl -fsSL https://shell.online/install | sh</code></p>
+            <p><a href="https://github.com/TeoSlayer/shell.online">Read the source and installation guide on GitHub</a>.</p>
+          </div>
+        </section>
+      </noscript>
+    </div>
     <script type="module" src="/web/main.ts"></script>
   </body>
 </html>

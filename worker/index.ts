@@ -1179,6 +1179,7 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
 
 function secureAssetResponse(response: Response, pathname: string, hostname: string): Response {
   const headers = new Headers(response.headers);
+  const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
   headers.set("Content-Security-Policy", [
     "default-src 'self'",
     "script-src 'self'",
@@ -1203,6 +1204,7 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
     pathname === "/skill" ||
     pathname === "/skill/" ||
     pathname === "/llms.txt" ||
+    (isHtmlDocument && (pathname !== "/" || hostname !== "shell.online")) ||
     isStatsHostname(hostname)
   ) {
     headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
