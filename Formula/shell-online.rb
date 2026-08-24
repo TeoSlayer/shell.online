@@ -1,39 +1,16 @@
 class ShellOnline < Formula
   desc "Turn any terminal process into an interactive browser link"
   homepage "https://shell.online"
+  url "https://github.com/TeoSlayer/shell.online/archive/refs/tags/v0.3.9.tar.gz"
+  sha256 "75c671d195d3acb3604d8fe5adf8a962ea94a609de86aff145484c2ab4810908"
   license "MIT"
 
-  on_macos do
-    on_arm do
-      url "https://github.com/TeoSlayer/shell.online/releases/download/v0.3.9/shell-darwin-arm64"
-      sha256 "e87de68ca81a6f45a864a857dc1d8ab247e73005a10a7011efe2c031a30f4ad3"
-    end
-
-    on_intel do
-      url "https://github.com/TeoSlayer/shell.online/releases/download/v0.3.9/shell-darwin-amd64"
-      sha256 "c041598316704773130586017ae0d9424d3c4278d24d9f731626a0079b82d7b0"
-    end
-  end
-
-  on_linux do
-    on_arm do
-      url "https://github.com/TeoSlayer/shell.online/releases/download/v0.3.9/shell-linux-arm64"
-      sha256 "31210b91f829595c559065959c00f0537f6eb06135602fcf27215118b5166ed6"
-    end
-
-    on_intel do
-      url "https://github.com/TeoSlayer/shell.online/releases/download/v0.3.9/shell-linux-amd64"
-      sha256 "321f57d16199adcae6f94aeb48d10ece232fbf08815d04d3a446369702f6b6c4"
-    end
-  end
+  depends_on "go" => :build
 
   def install
-    platform = OS.mac? ? "darwin" : "linux"
-    architecture = Hardware::CPU.arm? ? "arm64" : "amd64"
-    binary = "shell-#{platform}-#{architecture}"
-
-    chmod 0755, binary
-    bin.install binary => "shell"
+    ENV["CGO_ENABLED"] = "0"
+    ldflags = "-X main.version=#{version}"
+    system "go", "build", *std_go_args(output: bin/"shell", ldflags:), "./cmd/shell"
   end
 
   test do

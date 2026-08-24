@@ -16,7 +16,9 @@ brew install shell-online
 
 Homebrew 6 requires one-time trust for third-party taps. Tap-level trust persists across formula updates; review the repository before granting it. Older versions without `brew trust` do not require that line. After setup, use `brew install shell-online`, `brew upgrade shell-online`, or `brew uninstall shell-online`. Homebrew is not required; use the verified installer above on machines without it.
 
-Homebrew and the installer both use a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
+The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged source, installs Go as a build-only dependency when needed, runs go build, and links the result. Application modules are pinned by go.sum and resolved by Go during the build; there are no runtime package dependencies.
+
+The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
 git clone --depth 1 --branch v0.3.9 https://github.com/TeoSlayer/shell.online.git
 cd shell.online

@@ -205,21 +205,22 @@ function renderLanding(): void {
         <section class="install-paths" id="install">
           <div class="install-paths-heading">
             <p>Install your way</p>
-            <h2>Use Brew.<br />Or build it.</h2>
-            <span>Already use Homebrew? Let it manage shell.online. No Brew? Use the verified installer—or compile the tagged source and keep the binary wherever you want.</span>
+            <h2>Use Brew.<br />Or do it yourself.</h2>
+            <span>Homebrew fetches the tagged source, installs the Go build dependency, and compiles shell.online on your machine. No Brew? Use the verified binary installer—or build the same source manually.</span>
           </div>
           <div class="install-path-grid">
             <article class="install-path-card install-path-primary">
               <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
-              <h3>Let Brew manage the binary.</h3>
+              <h3>Let Brew build and manage it.</h3>
               <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
                 <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
                 <span data-copy-label aria-live="polite">Copy setup</span>
               </button>
               <ul>
-                <li>Installs the same checksum-pinned release binary.</li>
+                <li>Fetches the checksum-pinned tagged source.</li>
+                <li>Installs Go as a build-only dependency and compiles locally.</li>
                 <li>Homebrew 6 asks you to trust this vendor tap once.</li>
-                <li>After the one-time tap, upgrades are simply <code>brew upgrade shell-online</code>.</li>
+                <li>Upgrades are simply <code>brew upgrade shell-online</code>.</li>
               </ul>
             </article>
             <article class="install-path-card">
