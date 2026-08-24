@@ -21,11 +21,11 @@ Homebrew users can tap this repository directly once, then use the short formula
 
 ```sh
 brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
-brew trust --formula teoslayer/shell-online/shell-online
+brew trust --tap teoslayer/shell-online
 brew install shell-online
 ```
 
-Homebrew 6 requires the one-time, formula-scoped trust command for third-party taps. Older Homebrew versions that do not provide `brew trust` do not require that line. After setup, the short `brew install shell-online`, `brew upgrade shell-online`, and `brew uninstall shell-online` commands work normally. Confirm the command selected by your `PATH` with `command -v shell` and `shell --version`.
+Homebrew 6 requires one-time trust for third-party taps. Tap-level trust persists across formula updates, which keeps the short install and upgrade commands working; review the repository before granting it. Older Homebrew versions that do not provide `brew trust` do not require that line. After setup, `brew install shell-online`, `brew upgrade shell-online`, and `brew uninstall shell-online` work normally. Confirm the command selected by your `PATH` with `command -v shell` and `shell --version`.
 
 Homebrew and the curl installer both use the checksum-pinned release binary. To compile the tagged source yourself and run it without installing it globally:
 

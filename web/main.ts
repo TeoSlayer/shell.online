@@ -212,13 +212,13 @@ function renderLanding(): void {
             <article class="install-path-card install-path-primary">
               <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
               <h3>Let Brew manage the binary.</h3>
-              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --formula teoslayer/shell-online/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
-                <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --formula …</span><span>brew install shell-online</span></code>
+              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
+                <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
                 <span data-copy-label aria-live="polite">Copy setup</span>
               </button>
               <ul>
                 <li>Installs the same checksum-pinned release binary.</li>
-                <li>Homebrew 6 asks you to trust this formula once.</li>
+                <li>Homebrew 6 asks you to trust this vendor tap once.</li>
                 <li>After the one-time tap, upgrades are simply <code>brew upgrade shell-online</code>.</li>
               </ul>
             </article>

@@ -11,10 +11,10 @@ Supported platforms: macOS and Linux on arm64 or amd64. The installer never prom
 Optional Homebrew installation (the tap lives in this repository):
 
 brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
-brew trust --formula teoslayer/shell-online/shell-online
+brew trust --tap teoslayer/shell-online
 brew install shell-online
 
-Homebrew 6 requires the one-time formula-scoped trust command for third-party taps; older versions without `brew trust` do not require that line. After setup, use `brew install shell-online`, `brew upgrade shell-online`, or `brew uninstall shell-online`. Homebrew is not required; use the verified installer above on machines without it.
+Homebrew 6 requires one-time trust for third-party taps. Tap-level trust persists across formula updates; review the repository before granting it. Older versions without `brew trust` do not require that line. After setup, use `brew install shell-online`, `brew upgrade shell-online`, or `brew uninstall shell-online`. Homebrew is not required; use the verified installer above on machines without it.
 
 Homebrew and the installer both use a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 

@@ -6,7 +6,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
-- Add a Homebrew formula directly to this repository. After Homebrew's one-time tap and formula-scoped trust setup, install, upgrade, or uninstall with the short `shell-online` formula name.
+- Add a Homebrew formula directly to this repository. After Homebrew's one-time tap and tap-trust setup, install, upgrade, or uninstall with the short `shell-online` formula name.
 - Add real phone-form-factor Codex captures and clear Homebrew, standalone installer, and build-it-yourself paths to the landing page.
 
 ### Changed
