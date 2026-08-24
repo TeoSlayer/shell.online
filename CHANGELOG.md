@@ -13,7 +13,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 - Harden the no-Homebrew installer with Rosetta detection, writable-path validation, actionable download and checksum errors, safer shell-profile guidance, and warnings when an older `shell` executable shadows the new installation.
 - Track Homebrew command copies separately while preserving the existing privacy-limited analytics and stored statistics.
-- Expand the landing page with eight practical terminal-sharing use cases, clearer search metadata, linked Pilot Protocol attribution, visible crawlable fallback copy, and stricter no-index handling outside the canonical homepage.
+- Expand the landing page with eight practical terminal-sharing use cases, complete primary search and social metadata, linked Pilot Protocol attribution, visible crawlable fallback copy, and strict no-index handling outside the canonical homepage.
 
 ## [0.3.8] — 2026-08-22
 

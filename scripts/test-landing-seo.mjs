@@ -2,12 +2,14 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, landingSource, sitemap, robots, readme] = await Promise.all([
+const [indexHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource] = await Promise.all([
   readSource("index.html"),
   readSource("web/main.ts"),
   readSource("public/sitemap.xml"),
   readSource("public/robots.txt"),
+  readSource("public/site.webmanifest"),
   readSource("README.md"),
+  readSource("worker/index.ts"),
 ]);
 
 const check = (condition, message) => {
@@ -16,11 +18,45 @@ const check = (condition, message) => {
 
 const title = indexHtml.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
 const description = indexHtml.match(/<meta name="description" content="([^"]+)"/u)?.[1] ?? "";
+const landingMarkup = landingSource.match(/function renderLanding\(\): void \{([\s\S]*?)\n\}\n\nasync function wireGitHubStarCount/u)?.[1] ?? "";
+const manifest = JSON.parse(manifestSource);
+
+check(indexHtml.includes('<html lang="en">'), "Document language is missing");
+check(indexHtml.includes('<meta charset="UTF-8"'), "UTF-8 declaration is missing");
+check(indexHtml.includes('<meta name="viewport"'), "Responsive viewport is missing");
 check(title === "Share a Live Terminal in Any Browser | shell.online", "Unexpected landing title");
 check(description.length >= 120 && description.length <= 170, "Meta description should be specific and concise");
+check(indexHtml.includes('<meta name="robots" content="index, follow, max-image-preview:large"'), "Homepage robots directive is invalid");
 check(indexHtml.includes('<link rel="canonical" href="https://shell.online/"'), "Canonical URL is missing");
+check((indexHtml.match(/rel="canonical"/gu) ?? []).length === 1, "Homepage must have exactly one canonical URL");
 check(!indexHtml.includes("seo-fallback"), "Landing content must not use visually hidden SEO fallback text");
 check(indexHtml.includes("coding agents, builds, servers, remote shells"), "Visible loading copy should describe real use cases");
+check(indexHtml.includes("<noscript>"), "Crawlable no-script product summary is missing");
+check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Landing page must have exactly one primary heading");
+check(landingMarkup.includes('id="use-cases"'), "Visible use-case section is missing");
+
+for (const metadata of [
+  '<meta property="og:type" content="website"',
+  '<meta property="og:site_name" content="shell.online"',
+  '<meta property="og:url" content="https://shell.online/"',
+  '<meta property="og:title" content="Share a live terminal in any browser"',
+  '<meta property="og:description"',
+  '<meta property="og:image" content="https://shell.online/social-card.png"',
+  '<meta property="og:image:width" content="1200"',
+  '<meta property="og:image:height" content="630"',
+  '<meta property="og:image:alt"',
+  '<meta name="twitter:card" content="summary_large_image"',
+  '<meta name="twitter:title"',
+  '<meta name="twitter:description"',
+  '<meta name="twitter:image" content="https://shell.online/social-card.png"',
+  '<meta name="twitter:image:alt"',
+]) {
+  check(indexHtml.includes(metadata), `Social metadata is missing: ${metadata}`);
+}
+check(indexHtml.includes('<link rel="icon" href="/favicon.svg"'), "SVG favicon is missing");
+check(indexHtml.includes('<link rel="icon" href="/favicon-48.png"'), "48px search favicon is missing");
+check(indexHtml.includes('<link rel="manifest" href="/site.webmanifest"'), "Web manifest link is missing");
+check(manifest.name === "shell.online" && manifest.start_url === "/", "Web manifest identity is invalid");
 
 const structuredDataSource = indexHtml.match(
   /<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/u,
@@ -33,12 +69,15 @@ const application = structuredData.find((entry) => entry["@type"] === "SoftwareA
 check(organization?.name === "Pilot Protocol", "Pilot Protocol Organization schema is missing");
 check(organization?.url === "https://pilotprotocol.network/", "Pilot Protocol schema URL is invalid");
 check(website?.url === "https://shell.online/", "WebSite schema URL is invalid");
+check(website?.name === "shell.online" && website?.alternateName === "shell online", "WebSite name schema is invalid");
 check(website?.publisher?.["@id"] === organization?.["@id"], "WebSite publisher is not Pilot Protocol");
 check(application?.name === "shell.online", "SoftwareApplication name is invalid");
 check(application?.creator?.["@id"] === organization?.["@id"], "Software creator is not Pilot Protocol");
 check(application?.offers?.price === "0", "Free software offer is missing");
 check(application?.operatingSystem === "macOS, Linux", "Supported operating systems are missing");
 check(application?.sameAs === "https://github.com/TeoSlayer/shell.online", "Source repository is missing from schema");
+check(application?.image === "https://shell.online/social-card.png", "Application image is missing from schema");
+check(application?.screenshot === "https://shell.online/screenshots/codex-working-mobile.png", "Application screenshot is missing from schema");
 check(landingSource.includes("Developed by"), "Visible Pilot Protocol attribution is missing");
 check(landingSource.includes("https://pilotprotocol.network/"), "Visible Pilot Protocol link is missing");
 check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");
@@ -60,6 +99,12 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-08-24</lastmod>"), "Sitemap lastmod is missing");
+check((sitemap.match(/<loc>/gu) ?? []).length === 1, "Only the canonical homepage should be listed in the sitemap");
+check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
+check(
+  workerSource.includes('"X-Robots-Tag": "noindex, nofollow, noarchive"'),
+  "JSON APIs must carry an explicit noindex header",
+);
 
-console.log("Landing SEO and use-case checks passed.");
+console.log("Primary landing SEO, attribution, and use-case checks passed.");
