@@ -36,12 +36,24 @@
       [
         {
           "@context": "https://schema.org",
+          "@type": "Organization",
+          "@id": "https://pilotprotocol.network/#organization",
+          "name": "Pilot Protocol",
+          "url": "https://pilotprotocol.network/",
+          "sameAs": "https://github.com/pilot-protocol",
+          "description": "Open-source infrastructure for connected software agents."
+        },
+        {
+          "@context": "https://schema.org",
           "@type": "WebSite",
           "@id": "https://shell.online/#website",
           "url": "https://shell.online/",
           "name": "shell.online",
           "alternateName": "shell online",
-          "description": "Share a live terminal process through an interactive browser link."
+          "description": "Share a live terminal process through an interactive browser link.",
+          "publisher": {
+            "@id": "https://pilotprotocol.network/#organization"
+          }
         },
         {
           "@context": "https://schema.org",
@@ -53,6 +65,9 @@
           "screenshot": "https://shell.online/screenshots/codex-working-mobile.png",
           "sameAs": "https://github.com/TeoSlayer/shell.online",
           "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive browser link.",
+          "creator": {
+            "@id": "https://pilotprotocol.network/#organization"
+          },
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "macOS, Linux",
           "softwareVersion": "0.3.9",
@@ -94,6 +109,7 @@
             <h1>Share a live terminal in any browser.</h1>
             <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer.</p>
             <p>Use shell.online for coding agents, builds and test suites, development servers, training jobs, deployments, SSH sessions, terminal dashboards, and pair debugging.</p>
+            <p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>.</p>
             <p><code>curl -fsSL https://shell.online/install | sh</code></p>
             <p><a href="https://github.com/TeoSlayer/shell.online">Read the source and installation guide on GitHub</a>.</p>
           </div>

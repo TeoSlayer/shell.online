@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, landingSource, sitemap, robots] = await Promise.all([
+const [indexHtml, landingSource, sitemap, robots, readme] = await Promise.all([
   readSource("index.html"),
   readSource("web/main.ts"),
   readSource("public/sitemap.xml"),
   readSource("public/robots.txt"),
+  readSource("README.md"),
 ]);
 
 const check = (condition, message) => {
@@ -26,13 +27,21 @@ const structuredDataSource = indexHtml.match(
 )?.[1];
 check(structuredDataSource, "JSON-LD is missing");
 const structuredData = JSON.parse(structuredDataSource);
+const organization = structuredData.find((entry) => entry["@type"] === "Organization");
 const website = structuredData.find((entry) => entry["@type"] === "WebSite");
 const application = structuredData.find((entry) => entry["@type"] === "SoftwareApplication");
+check(organization?.name === "Pilot Protocol", "Pilot Protocol Organization schema is missing");
+check(organization?.url === "https://pilotprotocol.network/", "Pilot Protocol schema URL is invalid");
 check(website?.url === "https://shell.online/", "WebSite schema URL is invalid");
+check(website?.publisher?.["@id"] === organization?.["@id"], "WebSite publisher is not Pilot Protocol");
 check(application?.name === "shell.online", "SoftwareApplication name is invalid");
+check(application?.creator?.["@id"] === organization?.["@id"], "Software creator is not Pilot Protocol");
 check(application?.offers?.price === "0", "Free software offer is missing");
 check(application?.operatingSystem === "macOS, Linux", "Supported operating systems are missing");
 check(application?.sameAs === "https://github.com/TeoSlayer/shell.online", "Source repository is missing from schema");
+check(landingSource.includes("Developed by"), "Visible Pilot Protocol attribution is missing");
+check(landingSource.includes("https://pilotprotocol.network/"), "Visible Pilot Protocol link is missing");
+check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");
 
 const useCaseCards = landingSource.match(/class="use-case-card"/gu) ?? [];
 check(useCaseCards.length === 8, `Expected 8 visible use-case cards, found ${useCaseCards.length}`);

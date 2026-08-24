@@ -4,6 +4,8 @@
 [![CodeQL](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml/badge.svg)](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-53658c.svg)](LICENSE)
 
+shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents.
+
 Turn a terminal command into an interactive browser link. The command and PTY stay on your machine; anyone with the link can watch or type. Cloudflare only relays terminal input and output while the session is active.
 
 ## Install

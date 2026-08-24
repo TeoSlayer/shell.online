@@ -138,7 +138,26 @@
   letter-spacing: 0.11em;
   text-transform: uppercase;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.hero-kicker > span {
+  margin-left: 4px;
+  color: #858a80;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+.hero-kicker a {
+  color: #4d62a8;
+  text-decoration: none;
+}
+
+.hero-kicker a:hover {
+  color: #294ec8;
 }
 
 .hero-kicker i {
@@ -1619,6 +1638,21 @@
   margin: 0;
   color: #7b8076;
   font-size: 10px;
+}
+
+.marketing-footer p span {
+  display: block;
+  margin-top: 5px;
+}
+
+.marketing-footer p a {
+  color: #415aaf;
+  font-weight: 570;
+  text-decoration: none;
+}
+
+.marketing-footer p a:hover {
+  color: #294ec8;
 }
 
 .marketing-footer nav {
