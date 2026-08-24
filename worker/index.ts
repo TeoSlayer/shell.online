@@ -413,7 +413,14 @@ async function recordEvent(
 
   if (
     body.event !== "copy" ||
-    (body.target !== "install" && body.target !== "run" && body.target !== "share" && body.target !== "skill")
+    (
+      body.target !== "install" &&
+      body.target !== "brew_install" &&
+      body.target !== "source_build" &&
+      body.target !== "run" &&
+      body.target !== "share" &&
+      body.target !== "skill"
+    )
   ) {
     return json({ error: "invalid event" }, 400);
   }

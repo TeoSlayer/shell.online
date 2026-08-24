@@ -6,12 +6,36 @@
 
 Turn a terminal command into an interactive browser link. The command and PTY stay on your machine; anyone with the link can watch or type. Cloudflare only relays terminal input and output while the session is active.
 
+## Install
+
+Homebrew is not required. The verified installer supports macOS and Linux on arm64 and amd64:
+
 ```sh
 curl -fsSL https://shell.online/install | sh
 shell claude
 ```
 
-The installer uses `/usr/local/bin` when writable and otherwise installs to `~/.local/bin`. If that directory is not already on `PATH`, it prints the exact command for the user’s shell; it never silently edits shell configuration.
+The installer uses `/usr/local/bin` when writable, `$XDG_BIN_HOME` when set, and otherwise `~/.local/bin`. It detects Rosetta, verifies the binary checksum before writing it, never invokes `sudo`, and never silently edits shell configuration. If the destination is not on `PATH` or another `shell` command shadows it, the installer prints specific repair instructions. Set `SHELL_ONLINE_INSTALL_DIR` to choose an absolute writable destination.
+
+Homebrew users can tap this repository directly once, then use the short formula name:
+
+```sh
+brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
+brew install shell-online
+```
+
+Afterward, use `brew upgrade shell-online` or `brew uninstall shell-online`. If Homebrew asks for an explicitly trusted formula, use `brew install teoslayer/shell-online/shell-online`. Confirm the command selected by your `PATH` with `command -v shell` and `shell --version`.
+
+Homebrew and the curl installer both use the checksum-pinned release binary. To compile the tagged source yourself and run it without installing it globally:
+
+```sh
+git clone --depth 1 --branch v0.3.9 https://github.com/TeoSlayer/shell.online.git
+cd shell.online
+go build -trimpath -ldflags="-X main.version=0.3.9" -o ./shell ./cmd/shell
+./shell --version
+```
+
+This path requires Go 1.27 or newer. Keep using `./shell`, or move that binary to any directory already on your `PATH`.
 
 Every release publishes one canonical [`SHA256SUMS`](https://shell.online/downloads/SHA256SUMS) manifest and machine-readable [`release.json`](https://shell.online/downloads/release.json). The manifest covers every platform binary plus the installer, agent skill, and metadata file. The installer verifies the selected binary before installing it, prints its SHA-256 digest, and the same artifacts and manifest are attached to the corresponding GitHub release.
 

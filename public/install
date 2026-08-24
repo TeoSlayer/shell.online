@@ -1,35 +1,60 @@
 #!/bin/sh
 set -eu
 
-base_url=${SHELL_ONLINE_BASE_URL:-https://shell.online}
+fail() {
+  printf 'shell.online: %s\n' "$1" >&2
+  exit 1
+}
 
-case "$(uname -s)" in
+base_url=${SHELL_ONLINE_BASE_URL:-https://shell.online}
+system_name=$(uname -s 2>/dev/null || true)
+machine_name=$(uname -m 2>/dev/null || true)
+
+case "$system_name" in
   Darwin) platform=darwin ;;
   Linux) platform=linux ;;
-  *)
-    printf 'shell.online: unsupported operating system: %s\n' "$(uname -s)" >&2
-    exit 1
-    ;;
+  *) fail "unsupported operating system: ${system_name:-unknown} (supported: macOS and Linux)" ;;
 esac
 
-case "$(uname -m)" in
+case "$machine_name" in
   arm64|aarch64) architecture=arm64 ;;
-  x86_64|amd64) architecture=amd64 ;;
-  *)
-    printf 'shell.online: unsupported architecture: %s\n' "$(uname -m)" >&2
-    exit 1
+  x86_64|amd64)
+    if [ "$platform" = darwin ] && command -v sysctl >/dev/null 2>&1 &&
+      [ "$(sysctl -in sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
+      architecture=arm64
+    else
+      architecture=amd64
+    fi
     ;;
+  *) fail "unsupported architecture: ${machine_name:-unknown} (supported: arm64 and amd64)" ;;
 esac
 
 if [ -n "${SHELL_ONLINE_INSTALL_DIR:-}" ]; then
   install_dir=$SHELL_ONLINE_INSTALL_DIR
 elif [ -d /usr/local/bin ] && [ -w /usr/local/bin ]; then
   install_dir=/usr/local/bin
+elif [ -n "${XDG_BIN_HOME:-}" ]; then
+  install_dir=$XDG_BIN_HOME
+elif [ -n "${HOME:-}" ]; then
+  install_dir=$HOME/.local/bin
 else
-  install_dir=${XDG_BIN_HOME:-"$HOME/.local/bin"}
+  fail 'HOME is not set; set SHELL_ONLINE_INSTALL_DIR to an absolute writable directory'
 fi
 
-temporary_dir=$(mktemp -d "${TMPDIR:-/tmp}/shell-online.XXXXXX")
+case "$install_dir" in
+  /*) ;;
+  *) fail "install directory must be absolute: $install_dir" ;;
+esac
+case "$install_dir" in
+  *:*) fail "install directory cannot contain a colon: $install_dir" ;;
+esac
+
+temporary_root=${TMPDIR:-/tmp}
+if [ ! -d "$temporary_root" ] || [ ! -w "$temporary_root" ]; then
+  fail "temporary directory is not writable: $temporary_root"
+fi
+temporary_dir=$(mktemp -d "$temporary_root/shell-online.XXXXXX") ||
+  fail "could not create a temporary directory under $temporary_root"
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 binary_name="shell-$platform-$architecture"
 binary_url="$base_url/downloads/$binary_name"
@@ -38,12 +63,15 @@ download() {
   source_url=$1
   destination=$2
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$source_url" -o "$destination"
+    if ! curl -fsSL "$source_url" -o "$destination"; then
+      fail "download failed: $source_url"
+    fi
   elif command -v wget >/dev/null 2>&1; then
-    wget -q "$source_url" -O "$destination"
+    if ! wget -q "$source_url" -O "$destination"; then
+      fail "download failed: $source_url"
+    fi
   else
-    printf 'shell.online: curl or wget is required\n' >&2
-    exit 1
+    fail 'curl or wget is required; install either tool and run the installer again'
   fi
 }
 
@@ -53,13 +81,11 @@ expected=$(awk -v filename="$binary_name" '$2 == filename { print $1; exit }' "$
 
 case "$expected" in
   *[!0-9a-f]*|'')
-    printf 'shell.online: release manifest has no valid checksum for %s\n' "$binary_name" >&2
-    exit 1
+    fail "release manifest has no valid checksum for $binary_name"
     ;;
 esac
 if [ "${#expected}" -ne 64 ]; then
-  printf 'shell.online: release manifest has an invalid checksum for %s\n' "$binary_name" >&2
-  exit 1
+  fail "release manifest has an invalid checksum for $binary_name"
 fi
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -67,53 +93,96 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
   actual=$(shasum -a 256 "$temporary_dir/shell" | awk '{print $1}')
 else
-  printf 'shell.online: sha256sum or shasum is required\n' >&2
-  exit 1
+  fail 'sha256sum or shasum is required to verify the downloaded binary'
 fi
 
 if [ "$actual" != "$expected" ]; then
-  printf 'shell.online: downloaded binary failed checksum verification\n' >&2
-  exit 1
+  fail "downloaded binary failed checksum verification (expected $expected, received $actual)"
 fi
 
-mkdir -p "$install_dir"
+if ! mkdir -p "$install_dir"; then
+  fail "could not create install directory: $install_dir"
+fi
+if [ ! -d "$install_dir" ] || [ ! -w "$install_dir" ]; then
+  fail "install directory is not writable: $install_dir (set SHELL_ONLINE_INSTALL_DIR to another directory)"
+fi
+
+target=$install_dir/shell
+if [ -x "$target" ]; then
+  previous_version=$($target --version 2>/dev/null || true)
+  if [ -n "$previous_version" ]; then
+    printf 'Updating %s at %s\n' "$previous_version" "$target"
+  else
+    printf 'Replacing the existing executable at %s\n' "$target"
+  fi
+fi
+
 if command -v install >/dev/null 2>&1; then
-  install -m 0755 "$temporary_dir/shell" "$install_dir/shell"
+  if ! install -m 0755 "$temporary_dir/shell" "$target"; then
+    fail "could not write executable: $target"
+  fi
 else
-  cp "$temporary_dir/shell" "$install_dir/shell"
-  chmod 0755 "$install_dir/shell"
+  if ! cp "$temporary_dir/shell" "$target" || ! chmod 0755 "$target"; then
+    fail "could not write executable: $target"
+  fi
 fi
 
-printf 'Installed shell to %s/shell\n' "$install_dir"
+printf 'Installed shell to %s\n' "$target"
 printf 'Verified SHA-256: %s\n' "$actual"
-case ":$PATH:" in
+path_value=${PATH:-}
+case ":$path_value:" in
   *":$install_dir:"*) ;;
   *)
-    shell_name=${SHELL##*/}
+    shell_name=${SHELL:-}
+    shell_name=${shell_name##*/}
     printf '\n%s is not on your PATH yet.\n' "$install_dir"
     case "$shell_name" in
       fish)
         printf 'Run this once in fish:\n  fish_add_path "%s"\n' "$install_dir"
         ;;
       *)
+        profile=
         case "$shell_name" in
-          zsh) profile=${ZDOTDIR:-"$HOME"}/.zshrc ;;
-          bash)
-            if [ "$platform" = darwin ]; then
-              profile=$HOME/.bash_profile
-            else
-              profile=$HOME/.bashrc
+          zsh)
+            if [ -n "${ZDOTDIR:-}" ]; then
+              profile=$ZDOTDIR/.zshrc
+            elif [ -n "${HOME:-}" ]; then
+              profile=$HOME/.zshrc
             fi
             ;;
-          *) profile=$HOME/.profile ;;
+          bash)
+            if [ -n "${HOME:-}" ]; then
+              if [ "$platform" = darwin ]; then
+                profile=$HOME/.bash_profile
+              else
+                profile=$HOME/.bashrc
+              fi
+            fi
+            ;;
+          *)
+            if [ -n "${HOME:-}" ]; then
+              profile=$HOME/.profile
+            fi
+            ;;
         esac
         printf 'For this terminal, run:\n  export PATH="%s:$PATH"\n' "$install_dir"
-        printf 'To keep it after restart, run:\n  echo '\''export PATH="%s:$PATH"'\'' >> "%s"\n' "$install_dir" "$profile"
+        if [ -n "$profile" ]; then
+          printf 'To keep it after restart, add this line to %s:\n  export PATH="%s:$PATH"\n' "$profile" "$install_dir"
+        else
+          printf 'To keep it after restart, add that export line to your shell startup file.\n'
+        fi
         ;;
     esac
     ;;
 esac
-"$install_dir/shell" --version
+
+resolved_shell=$(command -v shell 2>/dev/null || true)
+if [ -n "$resolved_shell" ] && [ "$resolved_shell" != "$target" ]; then
+  printf '\nWarning: shell currently resolves to %s, not the new %s.\n' "$resolved_shell" "$target" >&2
+  printf 'Put %s earlier on PATH, remove the older install, or run %s directly.\n' "$install_dir" "$target" >&2
+fi
+
+"$target" --version
 printf '\nNext:\n'
 printf '  shell <your-command>   Run it in the background and print its browser link\n'
 printf '  shell help             See the guided start, share, and stop flow\n'

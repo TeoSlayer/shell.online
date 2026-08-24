@@ -6,7 +6,23 @@ shell.online wraps a local terminal process and produces an unguessable browser 
 
 curl -fsSL https://shell.online/install | sh
 
-Supported platforms: macOS and Linux on arm64 or amd64. The installer never prompts, invokes sudo, or silently edits shell configuration. It uses /usr/local/bin when writable and otherwise ~/.local/bin. If the destination is not on PATH, it prints the exact command for the user’s shell. Set SHELL_ONLINE_INSTALL_DIR to choose another destination.
+Supported platforms: macOS and Linux on arm64 or amd64. The installer never prompts, invokes sudo, or silently edits shell configuration. It uses /usr/local/bin when writable, XDG_BIN_HOME when set, and otherwise ~/.local/bin. If the destination is not on PATH or another shell executable shadows it, the installer prints specific repair instructions. Set SHELL_ONLINE_INSTALL_DIR to choose another absolute writable destination.
+
+Optional Homebrew installation (the tap lives in this repository):
+
+brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
+brew install shell-online
+
+After the one-time tap, use `brew upgrade shell-online` for upgrades. If Homebrew requests a fully qualified formula, use `brew install teoslayer/shell-online/shell-online`. Homebrew is not required; use the verified installer above on machines without it.
+
+Homebrew and the installer both use a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
+
+git clone --depth 1 --branch v0.3.9 https://github.com/TeoSlayer/shell.online.git
+cd shell.online
+go build -trimpath -ldflags="-X main.version=0.3.9" -o ./shell ./cmd/shell
+./shell --version
+
+The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
 
 Agent skill file: https://shell.online/skill
 Current release metadata: https://shell.online/downloads/release.json

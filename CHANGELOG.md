@@ -2,6 +2,18 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.3.9] — 2026-08-24
+
+### Added
+
+- Add a Homebrew formula directly to this repository. After a one-time direct tap, install, upgrade, or uninstall with the short `shell-online` formula name.
+- Add real phone-form-factor Codex captures and clear Homebrew, standalone installer, and build-it-yourself paths to the landing page.
+
+### Changed
+
+- Harden the no-Homebrew installer with Rosetta detection, writable-path validation, actionable download and checksum errors, safer shell-profile guidance, and warnings when an older `shell` executable shadows the new installation.
+- Track Homebrew command copies separately while preserving the existing privacy-limited analytics and stored statistics.
+
 ## [0.3.8] — 2026-08-22
 
 ### Security
@@ -21,5 +33,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Reject stale private background flags with a parent-bound startup handshake.
 - Support safe Claude Code conversation handoffs through a forked process.
 
+[0.3.9]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.9
 [0.3.8]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.8
 [0.3.7]: https://github.com/TeoSlayer/shell.online/commits/main

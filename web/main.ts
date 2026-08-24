@@ -40,6 +40,7 @@ import {
   type TouchSample,
 } from "./touch-scroll";
 import "./style.css";
+import "./landing.css";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -140,144 +141,247 @@ if (statsDashboard) {
 }
 
 function renderLanding(): void {
-  document.title = "shell.online — A live browser link for your terminal process";
+  document.title = "shell.online — Put any terminal in a browser";
+  document.documentElement.classList.add("marketing-root");
+  document.body.classList.add("marketing-body");
   app!.innerHTML = `
-    <section class="landing">
-      <nav class="nav">
-        <div class="nav-brand">
-          <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
-          <a class="release-link" href="${RELEASE_CHECKSUMS_PATH}" target="_blank" rel="noreferrer" title="Open SHA-256 checksums">v${RELEASE_VERSION} · SHA-256</a>
-        </div>
-        <div class="nav-agents">
-          <div class="agent-marks" aria-label="Works with major terminal agents">
-            ${renderAgentMarks()}
-          </div>
-          <a class="github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Open shell.online on GitHub">
-            <svg class="github-mark" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path d="${GITHUB_MARK_PATH}"></path>
-            </svg>
-            <span class="github-label">GitHub</span>
-            <span class="github-stars" title="GitHub stars">
-              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                <path d="M8 1.1l2.12 4.3 4.75.69-3.44 3.35.81 4.73L8 11.94l-4.24 2.23.81-4.73L1.13 6.09l4.75-.69L8 1.1z"></path>
-              </svg>
-              <span id="github-star-count" aria-live="polite">—</span>
-            </span>
-          </a>
-          <button class="agents-link" type="button" data-copy-target="skill" data-copy-value="https://shell.online/skill" aria-label="Copy the shell.online agent skill URL">
-            <span aria-live="polite">Copy skill</span>
+    <section class="marketing">
+      <header class="marketing-nav">
+        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
+        <nav class="marketing-links" aria-label="Main navigation">
+          <a href="#how">How it works</a>
+          <a href="#security">Security</a>
+          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
+          <button class="nav-install" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy the shell.online install command">
+            <span data-copy-label aria-live="polite">Copy install</span>
           </button>
-        </div>
-      </nav>
-      <div class="landing-stage">
-        <div class="home-layout">
-          <div class="hero">
-          <h1>A live terminal. One browser link.</h1>
-          <div class="lede use-case-reel" aria-label="Watch, share, control, hand off, or rejoin a terminal process from any device while it keeps running on your machine">
-            <div class="use-case-track" aria-hidden="true">
-              <span>Watch progress from your phone.</span>
-              <span>Let someone you trust watch or type.</span>
-              <span>Hand off Claude, Codex, or any TUI.</span>
-              <span>Rejoin the same process locally.</span>
-              <span>Share a fresh shell.</span>
-              <span>Keep long-running work within reach.</span>
-              <span>Google Docs for a live terminal.</span>
-              <span>The process stays on your machine.</span>
-              <span>Watch progress from your phone.</span>
+        </nav>
+      </header>
+
+      <main>
+        <section class="marketing-hero">
+          <div class="hero-copy">
+            <p class="hero-kicker"><i aria-hidden="true"></i> Live browser terminals</p>
+            <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
+            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It keeps running on your computer and opens as a live, interactive link in any browser.</p>
+            <div class="hero-actions">
+              <button class="install-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
+                <span class="command-prompt" aria-hidden="true">$</span>
+                <code>curl -fsSL https://shell.online/install | sh</code>
+                <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
+              </button>
+              <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
             </div>
+            <ul class="trust-list" aria-label="Product highlights">
+              <li>No account</li>
+              <li>No SSH setup</li>
+              <li>Nothing retained when the process ends</li>
+            </ul>
           </div>
-          <section class="story-panel" aria-label="How shell.online works">
-            <div class="story-heading">
-              <span>How it works</span>
-              <strong>Runs locally. Closes when the task exits.</strong>
-            </div>
-            <div class="story-grid">
-              <article class="story-card">
-                <div class="story-title"><span>1</span><strong>Get link</strong></div>
-                <p>Prefix it with shell.</p>
-              </article>
-              <article class="story-card">
-                <div class="story-title"><span>2</span><strong>Share</strong></div>
-                <p>Link holders can view + type.</p>
-              </article>
-              <article class="story-card">
-                <div class="story-title"><span>3</span><strong>Type</strong></div>
-                <p>One person types at a time.</p>
-              </article>
-              <article class="story-card">
-                <div class="story-title"><span>4</span><strong>Watch</strong></div>
-                <p>Watch from any device.</p>
-              </article>
-            </div>
-          </section>
-          </div>
-          <div class="setup-card">
-          <div class="setup-step">
-            <span class="step-number">1</span>
-            <div>
-              <h2>Install the CLI <small>macOS + Linux · no sudo</small></h2>
-              <div class="command-line">
-                <code><span>curl -fsSL</span> <span>https://shell.online/install</span> <span>| sh</span></code>
-                <button class="copy-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
-                  <span aria-live="polite">Copy</span>
-                </button>
+
+          <div class="product-demo phone-product-demo" aria-label="A live shell.online Codex session viewed on a phone">
+            <div class="demo-aura" aria-hidden="true"></div>
+            <figure class="real-phone-demo">
+              <div class="phone-device">
+                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing Go heartbeat test in a live shell.online session on a phone" fetchpriority="high" />
               </div>
-            </div>
+              <figcaption><span><i></i> Actual phone capture</span><strong>Codex · live via shell.online</strong></figcaption>
+            </figure>
           </div>
-          <div class="setup-step">
-            <span class="step-number">2</span>
-            <div>
-              <h2>Prefix your command</h2>
-              <div class="command-line">
-                <code><span>shell</span> <span class="replaceable">&lt;your-command&gt;</span></code>
-                <button class="copy-command" type="button" data-copy-target="run" data-copy-value="shell " aria-label="Copy the shell command prefix">
-                  <span aria-live="polite">Copy prefix</span>
-                </button>
+        </section>
+
+        <section class="use-strip" aria-label="Use shell.online with any terminal process">
+          <p>One prefix. Whatever you already run.</p>
+          <div>
+            <code>shell claude</code>
+            <code>shell codex</code>
+            <code>shell python train.py</code>
+            <code>shell docker compose up</code>
+            <code>shell ssh my-server</code>
+            <code>shell htop</code>
+          </div>
+        </section>
+
+        <section class="install-paths" id="install">
+          <div class="install-paths-heading">
+            <p>Install your way</p>
+            <h2>Use Brew.<br />Or build it.</h2>
+            <span>Already use Homebrew? Let it manage shell.online. No Brew? Use the verified installer—or compile the tagged source and keep the binary wherever you want.</span>
+          </div>
+          <div class="install-path-grid">
+            <article class="install-path-card install-path-primary">
+              <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
+              <h3>Let Brew manage the binary.</h3>
+              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online &amp;&amp; brew install shell-online" aria-label="Copy the Homebrew tap and install commands">
+                <code><span>brew tap teoslayer/shell-online …</span><span>brew install shell-online</span></code>
+                <span data-copy-label aria-live="polite">Copy both</span>
+              </button>
+              <ul>
+                <li>The formula lives directly in the shell.online repository.</li>
+                <li>Installs the same checksum-pinned release binary.</li>
+                <li>After the one-time tap, upgrades are simply <code>brew upgrade shell-online</code>.</li>
+              </ul>
+            </article>
+            <article class="install-path-card">
+              <div class="install-path-meta"><span>No Brew</span><strong>Verified download</strong></div>
+              <h3>Use the standalone installer.</h3>
+              <button class="method-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy the shell.online curl installer command">
+                <code>curl -fsSL https://shell.online/install | sh</code>
+                <span data-copy-label aria-live="polite">Copy</span>
+              </button>
+              <ul>
+                <li>Detects macOS or Linux and arm64 or amd64.</li>
+                <li>Verifies SHA-256 before installing.</li>
+                <li>Never invokes sudo or edits your shell files.</li>
+              </ul>
+            </article>
+            <article class="install-path-card install-path-source">
+              <div class="install-path-meta"><span>Source</span><strong>Go 1.27+</strong></div>
+              <h3>Build it yourself. Run it anywhere.</h3>
+              <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
+                <code><span>git clone … shell.online.git</span><span>go build -o ./shell ./cmd/shell</span></code>
+                <span data-copy-label aria-live="polite">Copy build</span>
+              </button>
+              <ul>
+                <li>Checks out the exact tagged release source.</li>
+                <li>Produces <code>./shell</code> inside your clone.</li>
+                <li>Run it there or move it to any directory on your PATH.</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="demo-proof">
+          <div class="demo-proof-heading">
+            <p>Captured live—not a mockup</p>
+            <h2>Follow the work.<br />See the result.</h2>
+            <span>The same real Codex session, captured on a phone while it diagnosed and fixed a heartbeat timeout, then passed the package tests and Go’s race detector.</span>
+          </div>
+          <div class="demo-proof-grid">
+            <figure class="phone-proof">
+              <div class="phone-proof-screen">
+                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing heartbeat test through shell.online on a phone" loading="lazy" />
               </div>
-              <p class="replace-hint">Replace &lt;your-command&gt;. Runs in the background. Help: shell help.</p>
-              <div class="command-examples" aria-label="Rotating examples of agents, training jobs, development servers, tests, containers, logs, remote shells, and terminal interfaces">
-                <span class="examples-label">Examples</span>
-                <div class="example-reel" aria-hidden="true">
-                  <div class="example-track">
-                    <span>shell python train.py</span>
-                    <span>shell claude</span>
-                    <span>shell codex</span>
-                    <span>shell npm run dev</span>
-                    <span>shell docker compose up</span>
-                    <span>shell cargo test</span>
-                    <span>shell pytest -x</span>
-                    <span>shell tail -f app.log</span>
-                    <span>shell ssh my-server</span>
-                    <span>shell htop</span>
-                    <span>shell vim README.md</span>
-                    <span>shell</span>
-                    <span>shell python train.py</span>
-                  </div>
-                </div>
+              <figcaption><b>Working</b><span>Follow the diagnosis and live test output.</span></figcaption>
+            </figure>
+            <figure class="phone-proof">
+              <div class="phone-proof-screen">
+                <img src="/screenshots/codex-complete-mobile.png" width="780" height="1688" alt="The completed Codex fix with passing tests viewed through shell.online on a phone" loading="lazy" />
               </div>
-            </div>
+              <figcaption><b>Complete</b><span>Review the fix and the passing test suite.</span></figcaption>
+            </figure>
           </div>
-          <div class="share-result">
-            <span>It prints a link like</span>
-            <strong>shell.online/s/&lt;share-ID&gt;</strong>
+        </section>
+
+        <section class="numbers" aria-label="shell.online at a glance">
+          <article><strong>1</strong><span>command prefix</span></article>
+          <article><strong>0</strong><span>accounts required</span></article>
+          <article><strong>0</strong><span>retained terminal logs</span></article>
+          <article><strong>Any</strong><span>modern browser</span></article>
+        </section>
+
+        <section class="how-section" id="how">
+          <div class="section-heading">
+            <p>How it works</p>
+            <h2>A share link,<br />not a remote machine.</h2>
+            <span>The command and PTY stay where you started them. shell.online relays the live input and output to people holding the link.</span>
           </div>
-          <div class="command-reference" aria-label="Command reference">
-            <div><code>shell</code><span>share a fresh shell</span></div>
-            <div><code>shell list</code><span>list local shares</span></div>
-            <div><code>shell attach &lt;ID&gt;</code><span>take over locally</span></div>
-            <div><code>shell kill &lt;ID&gt;</code><span>stop process + link</span></div>
-            <div><code>shell --foreground &lt;your-command&gt;</code><span>mirror it here too</span></div>
-            <div><code>shell --auto-close 5m &lt;your-command&gt;</code><span>set an earlier close</span></div>
+          <div class="steps-grid">
+            <article class="step-card">
+              <span class="step-index">01</span>
+              <div class="step-visual step-command" aria-hidden="true"><code><i>$</i> shell python train.py</code><b></b></div>
+              <h3>Prefix the command</h3>
+              <p>Start any CLI, agent, server, job, TUI, or fresh shell exactly where it already lives.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-index">02</span>
+              <div class="step-visual step-share" aria-hidden="true">
+                <div><i>↗</i><code>shell.online/s/k9f…</code></div>
+                <span>Copy link</span>
+              </div>
+              <h3>Send the link</h3>
+              <p>No signup or SSH keys. The unguessable link is the access, so share it like a secret.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-index">03</span>
+              <div class="step-visual step-collab" aria-hidden="true">
+                <div><span>Y</span><span>M</span><span>R</span></div>
+                <p><i></i> Maya is typing</p>
+              </div>
+              <h3>Watch or type together</h3>
+              <p>Follow progress from a phone, take control from a laptop, or pair in the same live terminal.</p>
+            </article>
           </div>
+        </section>
+
+        <section class="security-section" id="security">
+          <div class="security-copy">
+            <p>Built to disappear</p>
+            <h2>Your process<br />stays put.</h2>
+            <span>The browser gets a window into the terminal—not a copy of your machine.</span>
           </div>
-        </div>
-      </div>
+          <div class="relay-diagram" aria-label="Data flows from your local terminal through a relay to a browser">
+            <div class="relay-node local-node"><i aria-hidden="true">⌘</i><span><b>Your machine</b><small>Process + PTY</small></span></div>
+            <div class="relay-line"><span>live I/O</span><i></i></div>
+            <div class="relay-node cloud-node"><i aria-hidden="true">↝</i><span><b>Relay</b><small>No retained output</small></span></div>
+            <div class="relay-line"><span>HTTPS / WSS</span><i></i></div>
+            <div class="relay-node browser-node"><i aria-hidden="true">◫</i><span><b>Any browser</b><small>Watch + type</small></span></div>
+          </div>
+          <div class="security-points">
+            <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
+            <article><i>02</i><h3>The link is the key</h3><p>No accounts or login prompts. Anyone with the unguessable link can interact, so you stay in control of who gets it.</p></article>
+            <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
+          </div>
+        </section>
+
+        <section class="agents-section">
+          <div class="agents-copy">
+            <p>Made for terminal-native work</p>
+            <h2>Give long-running work<br />a window back to you.</h2>
+            <span>Keep an eye on agents, builds, training runs, servers, and remote shells without staying glued to the terminal that started them.</span>
+          </div>
+          <div class="agents-card">
+            <div class="marketing-agent-marks" aria-label="Works with major terminal agents">${renderAgentMarks()}</div>
+            <h3>Agents can share their own work, too.</h3>
+            <p>Install the shell.online skill so your coding agent knows how to start, list, rejoin, and stop shared processes.</p>
+            <button class="skill-button" type="button" data-copy-target="skill" data-copy-value="https://shell.online/skill" aria-label="Copy the shell.online agent skill URL">
+              <code>https://shell.online/skill</code>
+              <span data-copy-label aria-live="polite">Copy skill URL</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="final-cta">
+          <p>Ready when your terminal isn’t finished.</p>
+          <h2>Your next command<br />can be a link.</h2>
+          <button class="install-command final-install" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
+            <span class="command-prompt" aria-hidden="true">$</span>
+            <code>curl -fsSL https://shell.online/install | sh</code>
+            <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
+          </button>
+          <span class="platform-note">macOS and Linux · arm64 and amd64 · Homebrew optional · free to use</span>
+          <div class="github-star-request">
+            <span aria-hidden="true">★</span>
+            <p><strong>Like what we’re building?</strong>A GitHub star helps more developers find shell.online.</p>
+            <a class="github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star the repo <span id="github-star-count" aria-live="polite">—</span> <i aria-hidden="true">↗</i></a>
+          </div>
+        </section>
+      </main>
+
+      <footer class="marketing-footer">
+        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
+        <p>A live browser link for any terminal process.</p>
+        <nav aria-label="Footer navigation">
+          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
+          <a href="/skill">Agent skill</a>
+          <a href="/llms.txt">llms.txt</a>
+        </nav>
+      </footer>
     </section>
   `;
 
   wireLandingCopyButtons();
   void wireGitHubStarCount();
-  wireLandingFit();
 }
 
 async function wireGitHubStarCount(): Promise<void> {
@@ -383,10 +487,10 @@ function wireLandingFit(): void {
   fit();
 }
 
-type CopyTarget = "install" | "run" | "share" | "skill";
+type CopyTarget = "install" | "brew_install" | "source_build" | "run" | "share" | "skill";
 
 function wireLandingCopyButtons(): void {
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".copy-command, .agents-link");
+  const buttons = document.querySelectorAll<HTMLButtonElement>("button[data-copy-target][data-copy-value]");
   const resetTimers = new WeakMap<HTMLButtonElement, number>();
   const copyAttempts = new WeakMap<HTMLButtonElement, number>();
   const defaultLabels = new WeakMap<HTMLButtonElement, string>();
@@ -394,8 +498,16 @@ function wireLandingCopyButtons(): void {
     button.addEventListener("click", async () => {
       const target = button.dataset.copyTarget;
       const command = button.dataset.copyValue;
-      const label = button.querySelector("span");
-      if ((target !== "install" && target !== "run" && target !== "skill") || !command || !label) return;
+      const label = button.querySelector<HTMLElement>("[data-copy-label]");
+      if (
+        (target !== "install" &&
+          target !== "brew_install" &&
+          target !== "source_build" &&
+          target !== "run" &&
+          target !== "skill") ||
+        !command ||
+        !label
+      ) return;
       const defaultLabel = defaultLabels.get(button) ?? label.textContent ?? "Copy";
       defaultLabels.set(button, defaultLabel);
       const attempt = (copyAttempts.get(button) ?? 0) + 1;
