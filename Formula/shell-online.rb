@@ -1,7 +1,6 @@
 class ShellOnline < Formula
   desc "Turn any terminal process into an interactive browser link"
   homepage "https://shell.online"
-  version "0.3.9"
   license "MIT"
 
   on_macos do
