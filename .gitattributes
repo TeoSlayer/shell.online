@@ -1,3 +1,9 @@
 * text=auto eol=lf
 *.png binary
 *.woff2 binary
+
+# Classify the repo by its product language (the Go CLI); the Worker/site
+# TypeScript otherwise outweighs it in linguist stats.
+web/** -linguist-detectable
+worker/** -linguist-detectable
+shared/** -linguist-detectable
