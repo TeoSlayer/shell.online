@@ -2,6 +2,17 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-08-27
+
+### Added
+
+- Add `shell --read-only <command>` for view-only browser links.
+- Label read-only terminals in the browser and report access mode in CLI output, `shell list`, and JSON events.
+
+### Security
+
+- Store access mode as immutable session metadata and reject browser input for read-only sessions inside the Worker.
+
 ## [0.3.9] — 2026-08-24
 
 ### Added
@@ -34,6 +45,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Reject stale private background flags with a parent-bound startup handshake.
 - Support safe Claude Code conversation handoffs through a forked process.
 
+[0.4.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.4.0
 [0.3.9]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.9
 [0.3.8]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.8
 [0.3.7]: https://github.com/TeoSlayer/shell.online/commits/main

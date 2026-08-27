@@ -14,9 +14,11 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 	}
 	for _, expected := range []string{
 		"shell <command>",
+		"shell --read-only <command>",
+		"browser input is blocked",
 		"shell claude",
 		"fork of this conversation",
-		"Anyone with the link can view",
+		"Links are interactive by default",
 		"shell list",
 		"shell attach <ID>",
 		"Press Ctrl-X, then D to detach",
@@ -38,7 +40,7 @@ func TestStartHelpExplainsLocalBackgroundExecution(t *testing.T) {
 	for _, expected := range []string{
 		"stays on this machine",
 		"background by default",
-		"anyone holding it can view and type",
+		"view-only link whose browser input is blocked",
 		"shareable fork with its history",
 		"original Claude process",
 	} {

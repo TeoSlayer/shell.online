@@ -11,6 +11,7 @@ import {
 } from "./analytics";
 import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
+import { viewerFrameAction } from "../shared/session-access";
 import {
   GITHUB_REPOSITORY_API_URL,
   GITHUB_REPOSITORY_URL,
@@ -73,6 +74,7 @@ interface Env {
 
 interface SessionMeta {
   hostTokenHash: string;
+  readOnly: boolean;
   label: string;
   createdAt: number;
   expiresAt: number;
@@ -106,6 +108,7 @@ interface TrafficWindow {
 
 interface CreateSessionBody {
   label?: unknown;
+  read_only?: unknown;
 }
 
 interface EventBody {
@@ -119,6 +122,7 @@ interface StatsLoginBody {
 
 interface InitializeSessionBody {
   hostTokenHash: string;
+  readOnly: boolean;
   label: string;
   createdAt: number;
   expiresAt: number;
@@ -461,7 +465,12 @@ async function createSession(
     // An empty or malformed body simply uses the default label.
   }
 
+  if (body.read_only !== undefined && typeof body.read_only !== "boolean") {
+    return json({ error: "read_only must be a boolean" }, 400);
+  }
+
   const label = sanitizeLabel(body.label);
+  const readOnly = body.read_only === true;
   const sessionId = randomToken(24);
   const hostToken = randomToken(32);
   const createdAt = Date.now();
@@ -472,7 +481,13 @@ async function createSession(
   const initializeResponse = await stub.fetch("https://session.internal/internal/init", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ hostTokenHash, label, createdAt, expiresAt } satisfies InitializeSessionBody),
+    body: JSON.stringify({
+      hostTokenHash,
+      readOnly,
+      label,
+      createdAt,
+      expiresAt,
+    } satisfies InitializeSessionBody),
   });
 
   if (!initializeResponse.ok) {
@@ -499,6 +514,7 @@ async function createSession(
       share_url: shareUrl,
       websocket_url: websocketUrl,
       host_token: hostToken,
+      read_only: readOnly,
       expires_at: new Date(expiresAt).toISOString(),
     },
     201,
@@ -537,7 +553,7 @@ export class TerminalSession extends DurableObject<Env> {
         return json({ exists: false }, 404, { "Cache-Control": "no-store" });
       }
       return json(
-        { exists: true, status: this.meta.status },
+        { exists: true, status: this.meta.status, read_only: this.isReadOnly() },
         200,
         { "Cache-Control": "no-store" },
       );
@@ -562,6 +578,7 @@ export class TerminalSession extends DurableObject<Env> {
 
     if (
       !/^[a-f0-9]{64}$/.test(body.hostTokenHash) ||
+      typeof body.readOnly !== "boolean" ||
       !Number.isSafeInteger(body.createdAt) ||
       !Number.isSafeInteger(body.expiresAt) ||
       body.expiresAt <= body.createdAt
@@ -571,6 +588,7 @@ export class TerminalSession extends DurableObject<Env> {
 
     this.meta = {
       hostTokenHash: body.hostTokenHash,
+      readOnly: body.readOnly,
       label: sanitizeLabel(body.label),
       createdAt: body.createdAt,
       expiresAt: body.expiresAt,
@@ -666,7 +684,11 @@ export class TerminalSession extends DurableObject<Env> {
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
       sendJson(server, this.statusMessage());
-      sendJson(server, { type: "welcome", viewerId: attachment.id });
+      sendJson(server, {
+        type: "welcome",
+        viewerId: attachment.id,
+        readOnly: this.isReadOnly(),
+      });
       for (const host of this.state.getWebSockets("host")) {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
       }
@@ -730,6 +752,7 @@ export class TerminalSession extends DurableObject<Env> {
         safeClose(socket, 4002, "unknown viewer control message");
         return;
       }
+      if (this.isReadOnly()) return;
       this.claimInputLease(socket, attachment);
       return;
     }
@@ -826,7 +849,13 @@ export class TerminalSession extends DurableObject<Env> {
     frame: Uint8Array,
   ): void {
     this.deferPresenceRefresh();
-    if (frame[0] === Opcode.Input) {
+    const action = viewerFrameAction(frame[0], this.isReadOnly());
+    if (action === "blocked-input") {
+      sendJson(socket, { type: "access_denied", reason: "read_only" });
+      return;
+    }
+
+    if (action === "input") {
       if (frame.byteLength > MAX_INPUT_FRAME_BYTES) {
         safeClose(socket, 4009, "input frame too large");
         return;
@@ -837,7 +866,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
 
-    if (frame[0] === Opcode.Resize) {
+    if (action === "resize") {
       const size = decodeResize(frame);
       if (!size || size.cols < 10 || size.cols > 500 || size.rows < 4 || size.rows > 300) {
         safeClose(socket, 4002, "invalid terminal size");
@@ -847,7 +876,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
 
-    if (frame[0] === Opcode.Ping) {
+    if (action === "ping") {
       if (frame.byteLength !== 5) {
         safeClose(socket, 4002, "invalid latency probe");
         return;
@@ -1059,9 +1088,14 @@ export class TerminalSession extends DurableObject<Env> {
       type: "status",
       status: this.meta?.status ?? "disconnected",
       label: this.meta?.label ?? "terminal",
+      readOnly: this.isReadOnly(),
       exitCode: this.meta?.exitCode,
       expiresAt: this.meta ? new Date(this.meta.expiresAt).toISOString() : undefined,
     };
+  }
+
+  private isReadOnly(): boolean {
+    return this.meta?.readOnly === true;
   }
 
   private broadcastStatus(): void {

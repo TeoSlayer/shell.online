@@ -79,6 +79,7 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 			"type":       "session",
 			"session_id": result.ID,
 			"share_url":  result.ShareURL,
+			"read_only":  result.ReadOnly,
 			"auto_close": "task",
 			"expires_at": result.ExpiresAt.Format(time.RFC3339),
 			"background": true,
@@ -96,7 +97,11 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	}
 
 	fmt.Fprintf(stderr, "\n  Share: %s\n", result.ShareURL)
-	fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
+	if result.ReadOnly {
+		fmt.Fprintln(stderr, "  Access: view only (browser input is blocked)")
+	} else {
+		fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
+	}
 	fmt.Fprintf(stderr, "  Session: %s (running in background)\n", shortSessionID(result.ID))
 	if result.Handoff == claudeConversationHandoff {
 		fmt.Fprintln(stderr, "  Handoff: fork of the current Claude conversation")

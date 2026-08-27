@@ -36,6 +36,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	jsonOutput := flags.Bool("json", false, "emit the session event as JSON on stderr")
 	showVersion := flags.Bool("version", false, "print version and exit")
 	foreground := flags.Bool("foreground", false, "stay attached and mirror the process locally")
+	readOnly := flags.Bool("read-only", false, "create a view-only link that rejects browser input")
 	autoClose := newAutoCloseFlag()
 	flags.Var(autoClose, "auto-close", "close on task exit, or earlier at a duration/date (for example 5m, 2h, tomorrow 09:00)")
 	flags.Usage = func() {
@@ -104,7 +105,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	defer cancelProcess()
 
 	client := api.NewClient(strings.TrimRight(*server, "/"), "shell/"+version)
-	session, err := client.CreateSession(processContext, filepath.Base(command[0]))
+	session, err := client.CreateSession(processContext, filepath.Base(command[0]), *readOnly)
 	if err != nil {
 		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
 		fmt.Fprintf(stderr, "shell: %v\n", err)
@@ -119,6 +120,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	control, controlError := startLocalSession(localSessionRecord{
 		ID:        session.ID,
 		ShareURL:  session.ShareURL,
+		ReadOnly:  session.ReadOnly,
 		Command:   displayCommand(launch.DisplayArguments),
 		PID:       os.Getpid(),
 		StartedAt: now,
@@ -146,6 +148,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			"type":       "session",
 			"session_id": session.ID,
 			"share_url":  session.ShareURL,
+			"read_only":  session.ReadOnly,
 			"auto_close": "task",
 			"expires_at": session.ExpiresAt.Format(time.RFC3339),
 			"background": false,
@@ -158,7 +161,11 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "%s\n", encoded)
 	} else if !isBackgroundChild() {
 		fmt.Fprintf(stderr, "\n  Share: %s\n", session.ShareURL)
-		fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
+		if session.ReadOnly {
+			fmt.Fprintln(stderr, "  Access: view only (browser input is blocked)")
+		} else {
+			fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
+		}
 		if closesAt == nil {
 			fmt.Fprintln(stderr, "  Closes: when the task exits")
 		} else {
@@ -174,6 +181,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				OK:        true,
 				ID:        session.ID,
 				ShareURL:  session.ShareURL,
+				ReadOnly:  session.ReadOnly,
 				ExpiresAt: session.ExpiresAt,
 				ClosesAt:  closesAt,
 				Handoff:   launch.Handoff,

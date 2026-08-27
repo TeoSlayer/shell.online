@@ -18,6 +18,7 @@ import {
   MAX_INPUT_CHUNK,
   Opcode,
 } from "../shared/protocol";
+import { readOnlyFromControlMessage } from "../shared/session-access";
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import {
   formatGitHubStarCount,
@@ -164,7 +165,7 @@ function renderLanding(): void {
           <div class="hero-copy">
             <p class="hero-kicker"><i aria-hidden="true"></i> Live browser terminals <span>· Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a></span></p>
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It keeps running on your computer and opens as a live, interactive link in any browser.</p>
+            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It keeps running on your computer and opens as a live browser link. Links are interactive by default; add <code>--read-only</code> when people should only watch.</p>
             <div class="hero-actions">
               <button class="install-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">$</span>
@@ -201,7 +202,7 @@ function renderLanding(): void {
             <code>shell terraform apply</code>
             <code>shell ssh my-server</code>
             <code>shell htop</code>
-            <code>shell psql</code>
+            <code>shell --read-only python train.py</code>
           </div>
         </section>
 
@@ -288,7 +289,7 @@ function renderLanding(): void {
           <div class="section-heading use-cases-heading">
             <p>Use cases</p>
             <h2>One live link.<br />Plenty to keep moving.</h2>
-            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Anyone holding the link can interact, so share it only with people you trust.</span>
+            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Links are interactive by default; add <code>--read-only</code> when recipients should only watch.</span>
           </div>
           <div class="use-cases-grid">
             <article class="use-case-card">
@@ -306,8 +307,8 @@ function renderLanding(): void {
             <article class="use-case-card">
               <header><span>03</span><i>ML + data</i></header>
               <h3>Follow training and data jobs</h3>
-              <p>Check progress logs for model training, ETL jobs, migrations, and batch scripts without keeping the original terminal in front of you.</p>
-              <code><b>$</b> shell python train.py</code>
+              <p>Check progress logs for model training, ETL jobs, migrations, and batch scripts without granting browser control.</p>
+              <code><b>$</b> shell --read-only python train.py</code>
             </article>
             <article class="use-case-card">
               <header><span>04</span><i>Local servers</i></header>
@@ -362,7 +363,7 @@ function renderLanding(): void {
                 <span>Copy link</span>
               </div>
               <h3>Send the link</h3>
-              <p>No signup or SSH keys. The unguessable link is the access, so share it like a secret.</p>
+              <p>No signup or SSH keys. Choose interactive or server-enforced view-only access, then share the unguessable link like a secret.</p>
             </article>
             <article class="step-card">
               <span class="step-index">03</span>
@@ -370,8 +371,8 @@ function renderLanding(): void {
                 <div><span>Y</span><span>M</span><span>R</span></div>
                 <p><i></i> Maya is typing</p>
               </div>
-              <h3>Watch or type together</h3>
-              <p>Follow progress from a phone, take control from a laptop, or pair in the same live terminal.</p>
+              <h3>Watch—or type together</h3>
+              <p>Use read-only to follow progress safely, or keep the default interactive mode to take control and pair in the same terminal.</p>
             </article>
           </div>
         </section>
@@ -387,11 +388,11 @@ function renderLanding(): void {
             <div class="relay-line"><span>live I/O</span><i></i></div>
             <div class="relay-node cloud-node"><i aria-hidden="true">↝</i><span><b>Relay</b><small>No retained output</small></span></div>
             <div class="relay-line"><span>HTTPS / WSS</span><i></i></div>
-            <div class="relay-node browser-node"><i aria-hidden="true">◫</i><span><b>Any browser</b><small>Watch + type</small></span></div>
+            <div class="relay-node browser-node"><i aria-hidden="true">◫</i><span><b>Any browser</b><small>Chosen access</small></span></div>
           </div>
           <div class="security-points">
             <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
-            <article><i>02</i><h3>The link is the key</h3><p>No accounts or login prompts. Anyone with the unguessable link can interact, so you stay in control of who gets it.</p></article>
+            <article><i>02</i><h3>You choose the access</h3><p>No accounts or login prompts. Default links are interactive; <code>--read-only</code> links reject browser input inside the relay.</p></article>
             <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
           </div>
         </section>
@@ -405,7 +406,7 @@ function renderLanding(): void {
           <div class="agents-card">
             <div class="marketing-agent-marks" aria-label="Works with major terminal agents">${renderAgentMarks()}</div>
             <h3>Agents can share their own work, too.</h3>
-            <p>Install the shell.online skill so your coding agent knows how to start, list, rejoin, and stop shared processes.</p>
+            <p>Install the shell.online skill so your coding agent knows how to start, monitor with read-only access, rejoin, and stop shared processes.</p>
             <button class="skill-button" type="button" data-copy-target="skill" data-copy-value="https://shell.online/skill" aria-label="Copy the shell.online agent skill URL">
               <code>https://shell.online/skill</code>
               <span data-copy-label aria-live="polite">Copy skill URL</span>
@@ -439,6 +440,7 @@ function renderLanding(): void {
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
           <a href="/skill">Agent skill</a>
           <a href="/llms.txt">llms.txt</a>
+          <a href="${RELEASE_CHECKSUMS_PATH}" target="_blank" rel="noreferrer">v${RELEASE_VERSION} · SHA-256</a>
         </nav>
       </footer>
     </section>
@@ -656,6 +658,7 @@ function renderTerminal(sessionId: string): void {
         <a class="wordmark compact" href="/" target="_blank" rel="noreferrer"><span>shell</span><i>.</i>online</a>
         <div class="session-identity">
           <span id="session-label">terminal</span>
+          <span id="session-access" class="session-access" hidden>View only</span>
           <span id="session-status" class="status offline"><i></i><b>Offline</b></span>
           <span id="typing-status" class="typing-status" hidden></span>
         </div>
@@ -740,7 +743,7 @@ function renderTerminal(sessionId: string): void {
           <footer class="settings-footer">
             <button id="settings-copy-link" class="settings-copy" type="button">Copy sharing link</button>
             <div>
-              <span>Anyone with the link can view and type.</span>
+              <span id="session-access-description">Anyone with the link can view and type.</span>
               <a href="${RELEASE_CHECKSUMS_PATH}" target="_blank" rel="noreferrer">v${RELEASE_VERSION} · SHA-256 checksums</a>
             </div>
           </footer>
@@ -759,6 +762,8 @@ function renderTerminal(sessionId: string): void {
   const identityElement = document.querySelector<HTMLElement>(".session-identity");
   if (!identityElement) throw new Error("Missing session identity");
   const labelElement = requiredElement("session-label");
+  const accessBadge = requiredElement("session-access");
+  const accessDescription = requiredElement("session-access-description");
   const typingElement = requiredElement("typing-status");
   const presenceElement = requiredElement("presence");
   const copyButton = requiredElement<HTMLButtonElement>("settings-copy-link");
@@ -852,6 +857,29 @@ function renderTerminal(sessionId: string): void {
   let participants: PresenceParticipant[] = [];
   let localTypingAt: number | undefined;
   let presenceTimer: number | undefined;
+  let readOnly = false;
+
+  const defaultCopyLabel = (): string =>
+    readOnly ? "Copy read-only link" : "Copy sharing link";
+
+  const applyReadOnly = (nextReadOnly: boolean): void => {
+    readOnly = nextReadOnly;
+    sessionPage.classList.toggle("read-only", readOnly);
+    accessBadge.hidden = !readOnly;
+    accessDescription.textContent = readOnly
+      ? "This link is view only. Browser input is blocked."
+      : "Anyone with the link can view and type.";
+    terminalElement.setAttribute("aria-label", readOnly
+      ? "Shared read-only terminal"
+      : "Shared interactive terminal");
+    terminalElement.setAttribute("aria-readonly", String(readOnly));
+    terminal.options.disableStdin = stopped || readOnly || terminalElement.classList.contains("input-locked");
+    if (copyButton.dataset.state === undefined) copyButton.textContent = defaultCopyLabel();
+    if (readOnly) {
+      terminal.blur();
+      helperTextarea?.blur();
+    }
+  };
 
   try {
     latencySamples = parseLatencyHistory(localStorage.getItem(latencyStorageKey));
@@ -958,7 +986,7 @@ function renderTerminal(sessionId: string): void {
     typingElement.hidden = !inputIsLocked;
     identityElement.classList.toggle("has-typing", inputIsLocked);
     terminalElement.classList.toggle("input-locked", inputIsLocked);
-    terminal.options.disableStdin = stopped || inputIsLocked;
+    terminal.options.disableStdin = stopped || readOnly || inputIsLocked;
 
     presenceElement.replaceChildren();
     const visibleCount = compactPresenceQuery.matches ? 1 : 4;
@@ -1221,7 +1249,7 @@ function renderTerminal(sessionId: string): void {
       retryAttempt = 0;
       lastResizeSocket = null;
       scheduleFit();
-      if (!compactSessionQuery.matches) terminal.focus();
+      if (!compactSessionQuery.matches && !readOnly) terminal.focus();
     });
 
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
@@ -1273,10 +1301,20 @@ function renderTerminal(sessionId: string): void {
       viewerId?: unknown;
       viewers?: unknown;
       localTypingAt?: unknown;
+      readOnly?: unknown;
+      reason?: unknown;
     };
     try {
       message = JSON.parse(raw) as typeof message;
     } catch {
+      return;
+    }
+
+    const messageReadOnly = readOnlyFromControlMessage(message);
+    if (messageReadOnly !== null) applyReadOnly(messageReadOnly);
+
+    if (message.type === "access_denied" && message.reason === "read_only") {
+      applyReadOnly(true);
       return;
     }
 
@@ -1324,7 +1362,7 @@ function renderTerminal(sessionId: string): void {
   };
 
   const sendInput = (bytes: Uint8Array): void => {
-    if (socket?.readyState !== WebSocket.OPEN) return;
+    if (readOnly || socket?.readyState !== WebSocket.OPEN) return;
     for (let offset = 0; offset < bytes.byteLength; offset += MAX_INPUT_CHUNK) {
       socket.send(encodeFrame(Opcode.Input, bytes.subarray(offset, offset + MAX_INPUT_CHUNK)));
     }
@@ -1360,7 +1398,7 @@ function renderTerminal(sessionId: string): void {
       copyButton.dataset.state = "copied";
       copyResetTimer = window.setTimeout(() => {
         if (copyAttempt !== attempt) return;
-        copyButton.textContent = "Copy sharing link";
+        copyButton.textContent = defaultCopyLabel();
         delete copyButton.dataset.state;
       }, 1_500);
     } catch {
@@ -1369,7 +1407,7 @@ function renderTerminal(sessionId: string): void {
       copyButton.dataset.state = "failed";
       copyResetTimer = window.setTimeout(() => {
         if (copyAttempt !== attempt) return;
-        copyButton.textContent = "Copy sharing link";
+        copyButton.textContent = defaultCopyLabel();
         delete copyButton.dataset.state;
       }, 1_500);
     }
@@ -1434,7 +1472,7 @@ function renderTerminal(sessionId: string): void {
   themeButton.addEventListener("click", () => {
     applyColorMode(colorMode === "dark" ? "light" : "dark", true);
     scheduleFit();
-    if (!compactSessionQuery.matches) terminal.focus();
+    if (!compactSessionQuery.matches && !readOnly) terminal.focus();
   });
 
   systemTheme.addEventListener("change", (event) => {
@@ -1444,7 +1482,7 @@ function renderTerminal(sessionId: string): void {
   const resizeObserver = new ResizeObserver(scheduleFit);
   resizeObserver.observe(terminalWrap);
   terminalElement.addEventListener("pointerdown", (event) => {
-    if (event.pointerType === "mouse") terminal.focus();
+    if (event.pointerType === "mouse" && !readOnly) terminal.focus();
   });
   sessionHeader.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "mouse") terminal.blur();

@@ -31,6 +31,7 @@ check(indexHtml.includes('<link rel="canonical" href="https://shell.online/"'), 
 check((indexHtml.match(/rel="canonical"/gu) ?? []).length === 1, "Homepage must have exactly one canonical URL");
 check(!indexHtml.includes("seo-fallback"), "Landing content must not use visually hidden SEO fallback text");
 check(indexHtml.includes("coding agents, builds, servers, remote shells"), "Visible loading copy should describe real use cases");
+check(indexHtml.includes("read-only browser link"), "Read-only access should be present in crawlable copy");
 check(indexHtml.includes("<noscript>"), "Crawlable no-script product summary is missing");
 check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Landing page must have exactly one primary heading");
 check(landingMarkup.includes('id="use-cases"'), "Visible use-case section is missing");
@@ -80,6 +81,8 @@ check(application?.image === "https://shell.online/social-card.png", "Applicatio
 check(application?.screenshot === "https://shell.online/screenshots/codex-working-mobile.png", "Application screenshot is missing from schema");
 check(landingSource.includes("Developed by"), "Visible Pilot Protocol attribution is missing");
 check(landingSource.includes("https://pilotprotocol.network/"), "Visible Pilot Protocol link is missing");
+check(landingSource.includes("shell --read-only python train.py"), "Visible read-only example is missing");
+check(landingSource.includes("v${RELEASE_VERSION} · SHA-256"), "Visible release integrity link is missing");
 check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");
 
 const useCaseCards = landingSource.match(/class="use-case-card"/gu) ?? [];
@@ -98,7 +101,7 @@ for (const example of [
 }
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
-check(sitemap.includes("<lastmod>2026-08-24</lastmod>"), "Sitemap lastmod is missing");
+check(sitemap.includes("<lastmod>2026-08-27</lastmod>"), "Sitemap lastmod is missing");
 check((sitemap.match(/<loc>/gu) ?? []).length === 1, "Only the canonical homepage should be listed in the sitemap");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");

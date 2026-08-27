@@ -12,7 +12,8 @@ You should receive an acknowledgement within three business days. We will valida
 
 ## Scope and intended behavior
 
-- A share URL intentionally grants anonymous view and input access. A recipient typing into the shared process is not an authorization bypass.
+- An interactive share URL intentionally grants anonymous view and input access. A recipient typing into that shared process is not an authorization bypass.
+- A session created with `--read-only` grants anonymous view access only. Browser input that reaches a read-only session must be rejected by the Worker; any bypass is in scope.
 - Reports about leaked links are actionable when shell.online itself disclosed or made them predictable; links forwarded or published by their owner are not a product vulnerability.
 - Availability reports should demonstrate a way to bypass the configured rate, frame-size, audience, or lifetime limits.
 - The statistics dashboard is private and password-protected. Do not test it with credential stuffing or high-volume traffic.

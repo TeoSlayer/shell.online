@@ -1,6 +1,6 @@
 # shell.online
 
-shell.online wraps a local terminal process and produces an unguessable browser link. The process remains on the local machine. Anyone who receives the link can view the terminal and send input to it.
+shell.online wraps a local terminal process and produces an unguessable browser link. The process remains on the local machine. Links can be interactive or server-enforced read-only.
 
 ## Noninteractive installation
 
@@ -20,9 +20,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.3.9 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.4.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.3.9" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.4.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
@@ -37,11 +37,15 @@ Start a long-running process under shell.online:
 
 shell --json -- your-command --its-arguments
 
+For monitoring without browser input:
+
+shell --read-only --json -- your-command --its-arguments
+
 The first stderr line is a JSON event:
 
-{"type":"session","session_id":"...","share_url":"https://shell.online/s/...","background":true,...}
+{"type":"session","session_id":"...","share_url":"https://shell.online/s/...","read_only":false,"background":true,...}
 
-Send share_url to the human operator through the agent's normal communication channel. The command runs in the background by default, while the wrapper stays attached for the process lifetime, reconnects after transient network failures, and keeps the share link active while the process runs.
+Send share_url and its read_only access mode to the human operator through the agent's normal communication channel. Prefer --read-only when the operator only needs to monitor progress. Read-only is fixed at session creation and enforced by the Worker. The command runs in the background by default, while the wrapper stays attached for the process lifetime, reconnects after transient network failures, and keeps the share link active while the process runs.
 
 Inside Claude Code, use `shell --json -- claude` to hand off the current conversation. shell.online detects CLAUDE_CODE_SESSION_ID and starts `claude --resume <current-session> --fork-session` inside the shared process. The new process keeps the conversation history and workspace; the original Claude process remains open, and new messages do not synchronize between them. Report this as a conversation fork, not as adoption of the original PID.
 
@@ -68,4 +72,4 @@ Run `shell --version` to print the installed CLI version. The installer validate
 
 ## Security model
 
-The share URL is a capability granting interactive terminal access. Only send it to an intended operator. There are no accounts. Sessions are encrypted in transit. Cloudflare relays terminal bytes while active and deletes session state when the task closes; an old link reports that the session no longer exists.
+The share URL is a bearer capability. Interactive links grant terminal input; --read-only links grant viewing only and reject browser input server-side. Only send either link to an intended operator. There are no accounts. Sessions are encrypted in transit. Cloudflare relays terminal bytes while active and deletes session state when the task closes; an old link reports that the session no longer exists.

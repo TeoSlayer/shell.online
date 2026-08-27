@@ -849,6 +849,32 @@ a {
   gap: 12px;
 }
 
+.session-access {
+  display: inline-flex;
+  min-height: 18px;
+  padding: 0 7px;
+  border: 1px solid #3a4559;
+  border-radius: 999px;
+  background: #1a202b;
+  color: #aebbd1;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.session-access[hidden] {
+  display: none;
+}
+
+.theme-light .session-access {
+  border-color: #cad2e1;
+  background: #eef1f7;
+  color: #52617d;
+}
+
 #session-label {
   max-width: 220px;
   overflow: hidden;

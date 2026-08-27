@@ -6,7 +6,7 @@
 
 shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents.
 
-Turn a terminal command into an interactive browser link. The command and PTY stay on your machine; anyone with the link can watch or type. Cloudflare only relays terminal input and output while the session is active.
+Turn a terminal command into an interactive or read-only browser link. The command and PTY stay on your machine; Cloudflare only relays terminal input and output while the session is active.
 
 ## Install
 
@@ -34,9 +34,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.3.9 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.4.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.3.9" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.4.0" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -46,7 +46,7 @@ Every release publishes one canonical [`SHA256SUMS`](https://shell.online/downlo
 
 Agent operators can download the ready-to-install skill from `https://shell.online/skill` as `SKILL.md`.
 
-`shell` prints the link and detaches by default. The browser link grants interactive access to anyone who has it. There are no accounts or login prompts.
+`shell` prints the link and detaches by default. Links are interactive unless you pass `--read-only`; there are no accounts or login prompts.
 
 When an already-running Claude Code session invokes `shell claude` through its Bash tool, the CLI detects Claude's current session ID and starts a shareable fork of that conversation under shell.online. The fork keeps the conversation history and workspace, while the original Claude process remains open; new messages after the handoff do not synchronize between them. This is a safe handoff to a new process, not a claim that macOS can retroactively move the original PID to another PTY.
 
@@ -57,6 +57,14 @@ Omit the command to share a fresh instance of your default shell:
 ```sh
 shell
 ```
+
+Create a view-only link when people should be able to monitor output but never type:
+
+```sh
+shell --read-only python train.py
+```
+
+The access mode is fixed when the session is created. Read-only input is rejected by the Worker, so changing the page or WebSocket frames cannot turn that link into an interactive one. The terminal clearly labels view-only sessions; scrolling, responsive TUI sizing, themes, zoom, and latency measurement still work.
 
 Sessions run in the background. Inspect or stop them locally:
 
@@ -90,7 +98,7 @@ The task exiting is always the final upper bound, including when no deadline is 
 
 ## Security model
 
-The share URL is a bearer credential. Anyone who has it can see terminal output and send input with the same operating-system permissions as the wrapped process. Share links only with people you trust, avoid displaying secrets in a shared terminal, and run the process with the least privilege it needs. Use `shell kill <session-id>` if a link reaches the wrong person.
+The share URL is a bearer credential. Anyone who has an interactive link can see terminal output and send input with the same operating-system permissions as the wrapped process. A `--read-only` link can see output but its browser input is rejected server-side. In either mode, avoid displaying secrets and share the link only with intended viewers. Run interactive processes with the least privilege they need, and use `shell kill <session-id>` if a link reaches the wrong person.
 
 Transport is encrypted with HTTPS/WSS between each client and Cloudflare. Terminal bytes pass through the Worker and Durable Object in memory, so this is not end-to-end encryption and Cloudflare is part of the trust boundary. shell.online does not persist terminal contents server-side; the CLI keeps a bounded in-memory replay buffer while the process is alive.
 
@@ -106,13 +114,19 @@ Installation is noninteractive and does not invoke `sudo`. Agents can request st
 shell --json -- your-long-running-command --flag value
 ```
 
-The single stderr line is a JSON object containing `share_url`, `session_id`, and `background: true`. The agent can pass that URL to its operator through its existing communication channel. The CLI reconnects after transient network failures, and Cloudflare renews the session while the process remains connected.
+For monitoring without browser control, add `--read-only` before the command:
+
+```sh
+shell --read-only --json -- your-long-running-command --flag value
+```
+
+The single stderr line is a JSON object containing `share_url`, `session_id`, `read_only`, and `background: true`. The agent can pass that URL and its access mode to its operator through its existing communication channel. The CLI reconnects after transient network failures, and Cloudflare renews the session while the process remains connected.
 
 ## Architecture
 
 - Go CLI owns the local PTY and mirrors input/output locally.
 - A Cloudflare Worker handles session creation, rate limiting, and static assets.
-- One hibernatable Durable Object coordinates each terminal's host and viewers.
+- One hibernatable Durable Object coordinates each terminal's host and viewers and enforces its immutable interactive or read-only access mode.
 - The xterm.js browser renders ANSI attributes, 256-color and 24-bit color, alternate screens, mouse/input sequences, and continuously fits the PTY to the browser viewport. Terminal pages follow the system light/dark preference and include a manual switch; the cloudy landing remains light.
 - Anonymous collaborator chips show who has the link open. A short renewable typing lease prevents browser keystrokes from interleaving; local attached input takes priority briefly without disconnecting remote viewers.
 - A 512 KiB local ring buffer restores newly connected viewers. Terminal output is not retained by Cloudflare after the task closes.

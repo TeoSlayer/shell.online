@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#e9eef9" />
-    <meta name="description" content="Share a live terminal through a browser link. Watch coding agents, builds, servers, and long-running commands from your phone—without an account or SSH." />
+    <meta name="description" content="Share a live terminal through an interactive or read-only browser link. Watch coding agents, builds, servers, and long-running commands from any device." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://shell.online/" />
 
@@ -50,7 +50,7 @@
           "url": "https://shell.online/",
           "name": "shell.online",
           "alternateName": "shell online",
-          "description": "Share a live terminal process through an interactive browser link.",
+          "description": "Share a live terminal process through an interactive or read-only browser link.",
           "publisher": {
             "@id": "https://pilotprotocol.network/#organization"
           }
@@ -64,18 +64,19 @@
           "image": "https://shell.online/social-card.png",
           "screenshot": "https://shell.online/screenshots/codex-working-mobile.png",
           "sameAs": "https://github.com/TeoSlayer/shell.online",
-          "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive browser link.",
+          "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive or read-only browser link.",
           "creator": {
             "@id": "https://pilotprotocol.network/#organization"
           },
           "applicationCategory": "DeveloperApplication",
           "operatingSystem": "macOS, Linux",
-          "softwareVersion": "0.3.9",
+          "softwareVersion": "0.4.0",
           "softwareRequirements": "macOS or Linux on arm64 or amd64; Homebrew is optional",
           "isAccessibleForFree": true,
           "downloadUrl": "https://shell.online/install",
           "featureList": [
             "Share terminal processes through an interactive browser link",
+            "Create server-enforced read-only links for safe monitoring",
             "Monitor coding agents and long-running commands from a phone",
             "Share builds, test suites, development servers, and training jobs",
             "Open SSH sessions and terminal dashboards in a browser",
@@ -100,14 +101,14 @@
     <div id="app">
       <section class="boot-screen" aria-label="Loading shell.online">
         <div class="boot-mark"><span>shell</span><i>.</i>online</div>
-        <p class="boot-summary">Live browser links for coding agents, builds, servers, remote shells, and long-running terminal commands.</p>
+        <p class="boot-summary">Interactive or read-only browser links for coding agents, builds, servers, remote shells, and long-running terminal commands.</p>
         <span class="boot-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       </section>
       <noscript>
         <section class="no-script">
           <div>
             <h1>Share a live terminal in any browser.</h1>
-            <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer.</p>
+            <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer. Add <code>--read-only</code> to block browser input.</p>
             <p>Use shell.online for coding agents, builds and test suites, development servers, training jobs, deployments, SSH sessions, terminal dashboards, and pair debugging.</p>
             <p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>.</p>
             <p><code>curl -fsSL https://shell.online/install | sh</code></p>

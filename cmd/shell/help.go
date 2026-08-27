@@ -10,6 +10,7 @@ func printShellHelp(writer io.Writer) {
 
 Quick start
   shell <command> [arguments...]   Run in the background and print an interactive link
+  shell --read-only <command>      Print a view-only link; browser input is blocked
   shell                            Share a fresh instance of your default shell
 
 From inside Claude Code
@@ -18,7 +19,7 @@ From inside Claude Code
 The guided flow
   1. Run a process with shell.
   2. Send the printed shell.online/s/<share-ID> link to someone you trust.
-     Anyone with the link can view the terminal and send input.
+     Links are interactive by default. Use --read-only when recipients should only watch.
   3. Use shell list to see active shares and how long they have run.
   4. Use shell attach <ID> to take over locally without ending browser access.
   5. Press Ctrl-X, then D to detach and leave the process running.
@@ -33,6 +34,7 @@ Manage sessions
   shell kill --all                 Stop all processes and close their links
 
 Options
+  --read-only                      Block all browser input for this share
   --foreground                     Mirror the process in this terminal too
   --auto-close <duration-or-date>  Add an earlier deadline, such as 5m or tomorrow 09:00
   --json                           Emit the new-session event as JSON
@@ -62,16 +64,19 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, `Start and share
 
   shell <command> [arguments...]
+  shell --read-only <command> [arguments...]
   shell
 
 The command stays on this machine and runs in the background by default. shell prints
-one unguessable browser link; anyone holding it can view and type. Omit the command
-for a fresh shell.
+one unguessable browser link. Links are interactive by default; --read-only creates
+a view-only link whose browser input is blocked by the server. Omit the command for
+a fresh shell.
 
 Examples
   shell python train.py
   shell claude
   shell codex
+  shell --read-only python train.py
   shell npm run dev
   shell --foreground htop
   shell --auto-close 5m pytest -x
@@ -100,8 +105,8 @@ a legacy alternative. Ctrl-Z only suspends the local shell client; it does not d
   shell list
   shell list --json
 
-The table shows each session ID, uptime, closing rule, command, and existing share
-URL. Use an ID or an unambiguous prefix with shell attach or shell kill.
+The table shows each session ID, access mode, uptime, closing rule, command, and
+existing share URL. Use an ID or an unambiguous prefix with shell attach or shell kill.
 `)
 	case "kill", "stop":
 		fmt.Fprint(stdout, `Stop sessions

@@ -18,14 +18,18 @@ Wrap a local terminal process and give its operator an unguessable browser link.
    shell --json -- <command> <arguments>
    ```
 
-   Use `shell --json` with no command to share a fresh instance of the user’s default shell.
+   Use `shell --json` with no command to share a fresh instance of the user’s default shell. When the operator only needs to monitor progress, prefer a server-enforced view-only link:
+
+   ```sh
+   shell --read-only --json -- <command> <arguments>
+   ```
 4. Read the first JSON event and extract `share_url` and `session_id`:
 
    ```json
-   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…","background":true}
+   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…","read_only":false,"background":true}
    ```
 
-5. Send `share_url` to the operator in the active conversation. Say what process it exposes and that anyone holding the link can view and type.
+5. Send `share_url` to the operator in the active conversation. Say what process it exposes and whether `read_only` is true. Interactive links let anyone holding them view and type; read-only links reject browser input at the Worker.
 
 Prefer shell.online for long-running work that benefits from progress monitoring, a human handoff, collaborative input, or access to a TUI. Do not expose secrets already visible in the terminal. Treat the share URL as a bearer secret and never send the host token.
 

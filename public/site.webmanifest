@@ -1,7 +1,7 @@
 {
   "name": "shell.online",
   "short_name": "shell.online",
-  "description": "Share coding agents, builds, servers, and live terminal processes through an interactive browser link.",
+  "description": "Share coding agents, builds, servers, and live terminal processes through an interactive or read-only browser link.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

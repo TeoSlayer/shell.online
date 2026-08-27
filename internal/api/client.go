@@ -19,6 +19,7 @@ type Session struct {
 	ShareURL     string    `json:"share_url"`
 	WebSocketURL string    `json:"websocket_url"`
 	HostToken    string    `json:"host_token"`
+	ReadOnly     bool      `json:"read_only"`
 	ExpiresAt    time.Time `json:"expires_at"`
 }
 
@@ -36,7 +37,7 @@ func NewClient(baseURL, userAgent string) *Client {
 	}
 }
 
-func (client *Client) CreateSession(ctx context.Context, label string) (Session, error) {
+func (client *Client) CreateSession(ctx context.Context, label string, readOnly bool) (Session, error) {
 	var session Session
 	baseURL, err := url.ParseRequestURI(client.baseURL)
 	if err != nil {
@@ -47,8 +48,9 @@ func (client *Client) CreateSession(ctx context.Context, label string) (Session,
 	}
 
 	body, err := json.Marshal(struct {
-		Label string `json:"label"`
-	}{Label: label})
+		Label    string `json:"label"`
+		ReadOnly bool   `json:"read_only"`
+	}{Label: label, ReadOnly: readOnly})
 	if err != nil {
 		return session, err
 	}
@@ -82,6 +84,9 @@ func (client *Client) CreateSession(ctx context.Context, label string) (Session,
 	}
 	if !sessionIDPattern.MatchString(session.ID) || session.HostToken == "" || session.ExpiresAt.IsZero() {
 		return Session{}, fmt.Errorf("create session: incomplete server response")
+	}
+	if session.ReadOnly != readOnly {
+		return Session{}, fmt.Errorf("create session: server returned the wrong access mode")
 	}
 
 	// Session sockets and share pages are deliberately same-origin. Deriving these

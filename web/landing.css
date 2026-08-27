@@ -200,6 +200,7 @@
   color: #262a23;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 0.88em;
+  white-space: nowrap;
 }
 
 .hero-actions {
