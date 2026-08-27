@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -95,7 +96,13 @@ func TestDiscardPendingTerminalInputWaitsForLateReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	descriptors := []unix.PollFd{{Fd: int32(input.Fd()), Events: unix.POLLIN}}
-	ready, err := unix.Poll(descriptors, 0)
+	var ready int
+	for {
+		ready, err = unix.Poll(descriptors, 0)
+		if !errors.Is(err, unix.EINTR) {
+			break
+		}
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
