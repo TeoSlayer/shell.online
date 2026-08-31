@@ -2,8 +2,12 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource] = await Promise.all([
+const [indexHtml, docsHtml, mobileHtml, reliabilityHtml, securityHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource] = await Promise.all([
   readSource("index.html"),
+  readSource("docs/index.html"),
+  readSource("mobile/index.html"),
+  readSource("reliability/index.html"),
+  readSource("security/index.html"),
   readSource("web/main.ts"),
   readSource("public/sitemap.xml"),
   readSource("public/robots.txt"),
@@ -101,8 +105,16 @@ for (const example of [
 }
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
-check(sitemap.includes("<lastmod>2026-08-27</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 1, "Only the canonical homepage should be listed in the sitemap");
+check(sitemap.includes("<lastmod>2026-08-31</lastmod>"), "Sitemap lastmod is missing");
+check((sitemap.match(/<loc>/gu) ?? []).length === 5, "Sitemap should list the homepage and knowledge base");
+for (const [html, path] of [[docsHtml, "docs"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"]]) {
+  check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
+  check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
+  check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
+}
+for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "Cloudflare is in the trust boundary"]) {
+  check(readme.includes(guarantee), `README reliability guarantee is missing: ${guarantee}`);
+}
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
 check(

@@ -3,13 +3,14 @@ package protocol
 import "encoding/binary"
 
 const (
-	Output        byte = 0x01
-	Input         byte = 0x02
-	Snapshot      byte = 0x03
-	Resize        byte = 0x04
-	FinalSnapshot byte = 0x05
-	Ping          byte = 0x06
-	Pong          byte = 0x07
+	Output            byte = 0x01
+	Input             byte = 0x02
+	Snapshot          byte = 0x03
+	Resize            byte = 0x04
+	FinalSnapshot     byte = 0x05
+	Ping              byte = 0x06
+	Pong              byte = 0x07
+	BroadcastSnapshot byte = 0x08
 )
 
 func Frame(opcode byte, payload []byte) []byte {

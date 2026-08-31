@@ -11,14 +11,26 @@ interface PendingTerminalWrite {
 export class TerminalWriteQueue {
   private readonly pending: PendingTerminalWrite[] = [];
   private writing = false;
+  private pendingBytes = 0;
+  private desynchronized = false;
 
   constructor(
     private readonly target: TerminalWriteTarget,
     private readonly maximumBatchBytes: number,
+    private readonly maximumPendingBytes = 1024 * 1024,
   ) {}
 
-  enqueue(data: Uint8Array, reset = false): void {
-    if (reset) this.pending.length = 0;
+  enqueue(data: Uint8Array, reset = false): boolean {
+    if (reset) {
+      this.pending.length = 0;
+      this.pendingBytes = 0;
+      this.desynchronized = false;
+    } else if (this.desynchronized || this.pendingBytes + data.byteLength > this.maximumPendingBytes) {
+      this.pending.length = 0;
+      this.pendingBytes = 0;
+      this.desynchronized = true;
+      return false;
+    }
 
     if (data.byteLength === 0) {
       this.pending.push({ data: new Uint8Array(), reset });
@@ -29,16 +41,19 @@ export class TerminalWriteQueue {
           data: new Uint8Array(data.subarray(offset, end)),
           reset: reset && offset === 0,
         });
+        this.pendingBytes += end - offset;
       }
     }
 
     this.flush();
+    return true;
   }
 
   private flush(): void {
     if (this.writing || this.pending.length === 0) return;
 
     const first = this.pending.shift()!;
+    this.pendingBytes -= first.data.byteLength;
     if (first.reset) this.target.reset();
 
     const chunks = [first.data];
@@ -49,6 +64,7 @@ export class TerminalWriteQueue {
       byteLength + this.pending[0].data.byteLength <= this.maximumBatchBytes
     ) {
       const next = this.pending.shift()!;
+      this.pendingBytes -= next.data.byteLength;
       chunks.push(next.data);
       byteLength += next.data.byteLength;
     }

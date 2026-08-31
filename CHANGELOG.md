@@ -2,6 +2,19 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-08-31
+
+### Added
+
+- Add a structured website knowledge base covering setup, mobile terminal behavior, reliability, and the precise security/trust model.
+- Add bounded browser paste and render queues, snapshot recovery after output pressure, and explicit tests for iOS terminal-key anomalies and large paste framing.
+
+### Changed
+
+- Give exactly one browser deterministic ownership of PTY sizing; transfer it to an active collaborator and suspend browser sizing while a local terminal is attached.
+- Keep PTY reads independent of relay speed, add WebSocket write deadlines, and recover slow or reconnected viewers from the CLI's bounded terminal snapshot.
+- Expand README reliability guarantees and clearly document mobile, multi-viewer, lifecycle, high-output, reconnect, bearer-link, and Cloudflare trust behavior.
+
 ## [0.4.0] — 2026-08-27
 
 ### Added
@@ -45,6 +58,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Reject stale private background flags with a parent-bound startup handshake.
 - Support safe Claude Code conversation handoffs through a forked process.
 
+[0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.4.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.4.0
 [0.3.9]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.9
 [0.3.8]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.8

@@ -29,6 +29,7 @@ type unixLocalSession struct {
 	terminalOutput localTerminalOutput
 	terminalResize func(cols, rows uint16) error
 	onLocalInput   func()
+	onAttachChange func(bool)
 	attached       net.Conn
 }
 
@@ -82,12 +83,14 @@ func (session *unixLocalSession) BindTerminal(
 	output localTerminalOutput,
 	resize func(cols, rows uint16) error,
 	onInput func(),
+	onAttachChange func(bool),
 ) {
 	session.terminalMu.Lock()
 	session.terminalInput = input
 	session.terminalOutput = output
 	session.terminalResize = resize
 	session.onLocalInput = onInput
+	session.onAttachChange = onAttachChange
 	session.terminalMu.Unlock()
 }
 
@@ -200,6 +203,7 @@ func (session *unixLocalSession) handleAttach(connection net.Conn) {
 
 	input := session.terminalInput
 	onInput := session.onLocalInput
+	onAttachChange := session.onAttachChange
 	snapshot := session.terminalOutput.Bytes()
 	_ = connection.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	response := localControlResponse{OK: true, ID: session.record.ID, PID: session.record.PID}
@@ -214,6 +218,9 @@ func (session *unixLocalSession) handleAttach(connection net.Conn) {
 	session.attached = connection
 	_ = connection.SetDeadline(time.Time{})
 	session.terminalMu.Unlock()
+	if onAttachChange != nil {
+		onAttachChange(true)
+	}
 
 	buffer := make([]byte, 32*1024)
 	for {
@@ -236,6 +243,9 @@ func (session *unixLocalSession) handleAttach(connection net.Conn) {
 		session.attached = nil
 	}
 	session.terminalMu.Unlock()
+	if onAttachChange != nil {
+		onAttachChange(false)
+	}
 }
 
 func writeAll(writer io.Writer, value []byte) error {

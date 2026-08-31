@@ -60,4 +60,17 @@ describe("mobile terminal write queue", () => {
     expect(terminal.resets).toBe(1);
     expect(terminal.writes).toEqual([[1], [9, 9]]);
   });
+
+  it("bounds a slow renderer and requires a fresh snapshot to recover", () => {
+    const terminal = new FakeTerminal();
+    const queue = new TerminalWriteQueue(terminal, 8, 4);
+
+    expect(queue.enqueue(new Uint8Array([1]))).toBe(true);
+    expect(queue.enqueue(new Uint8Array([2, 3, 4, 5, 6]))).toBe(false);
+    expect(queue.enqueue(new Uint8Array([7]))).toBe(false);
+    expect(queue.enqueue(new Uint8Array([9, 9]), true)).toBe(true);
+    terminal.completeNext();
+
+    expect(terminal.writes).toEqual([[1], [9, 9]]);
+  });
 });

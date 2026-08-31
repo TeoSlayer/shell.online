@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml/badge.svg)](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-53658c.svg)](LICENSE)
 
-shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents.
+shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents. Start with the [knowledge base](https://shell.online/docs/) for the guided product, terminal, reliability, and trust documentation.
 
 Turn a terminal command into an interactive or read-only browser link. The command and PTY stay on your machine; Cloudflare only relays terminal input and output while the session is active.
 
@@ -34,9 +34,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.4.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.5.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.4.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.5.0" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -127,12 +127,30 @@ The single stderr line is a JSON object containing `share_url`, `session_id`, `r
 - Go CLI owns the local PTY and mirrors input/output locally.
 - A Cloudflare Worker handles session creation, rate limiting, and static assets.
 - One hibernatable Durable Object coordinates each terminal's host and viewers and enforces its immutable interactive or read-only access mode.
-- The xterm.js browser renders ANSI attributes, 256-color and 24-bit color, alternate screens, mouse/input sequences, and continuously fits the PTY to the browser viewport. Terminal pages follow the system light/dark preference and include a manual switch; the cloudy landing remains light.
+- The xterm.js browser renders ANSI attributes, 256-color and 24-bit color, alternate screens, mouse/input sequences, and fits the real PTY—not only a CSS box—to the active browser viewport. Terminal pages follow the system light/dark preference and include a manual switch; the cloudy landing remains light.
 - Anonymous collaborator chips show who has the link open. A short renewable typing lease prevents browser keystrokes from interleaving; local attached input takes priority briefly without disconnecting remote viewers.
 - A 512 KiB local ring buffer restores newly connected viewers. Terminal output is not retained by Cloudflare after the task closes.
 - A relay ping/pong measures browser-to-machine round-trip latency; the UI reports `Offline` when the local CLI cannot answer.
 
 An active process renews its lease indefinitely. A disconnected process has a 15-minute reconnect grace period. A completed process closes its sockets and deletes its Durable Object state immediately. Opening an old link shows that the session no longer exists.
+
+## Terminal reliability guarantees
+
+Shared terminals fail in ways that ordinary responsive pages do not. These behaviors are part of the protocol and test surface, not cosmetic promises. The matching website guides are [Mobile terminals](https://shell.online/mobile/), [Reliability](https://shell.online/reliability/), and [Security and trust](https://shell.online/security/).
+
+| Concern | shell.online behavior |
+| --- | --- |
+| Mobile terminals crop, jump, or start at the wrong size | The browser tracks the visual viewport through keyboard, browser-chrome, and rotation changes, then sends actual PTY rows and columns. Mobile uses a denser default grid so TUIs expose more content. |
+| Several viewers fight over terminal dimensions | Exactly one connected browser owns PTY resizing. Ownership stays stable, follows the active collaborator when appropriate, and is suspended while a local terminal is attached. Read-only viewers may observe but cannot independently resize the shared process. |
+| Mobile keyboards and browser shortcuts break controls | Input uses xterm’s terminal events plus explicit paths for raw binary replies, selected-text copy, the iOS hardware-keyboard Ctrl-C anomaly, and Ctrl-W when the browser delivers it. VisualViewport sampling follows keyboard open and dismiss transitions. Browser-reserved shortcuts that the operating system never delivers cannot be overridden by a web page. |
+| Selection, copy, and large paste are unreliable | Ctrl/Cmd-C copies a terminal selection instead of sending SIGINT. Paste is split into frames no larger than 16 KiB, waits for WebSocket backpressure, and has a 1 MiB pending-input ceiling. |
+| Temporary network loss destroys or strands a session | The CLI-owned process and PTY keep running when the relay disappears. CLI and browser reconnect automatically; the browser requests a bounded local replay snapshot after reconnect. Relay loss never signals or kills the child process. |
+| Large output breaks WebSockets or loses terminal state | PTY reads never wait on the network. Relay and rendering queues are bounded, WebSocket writes time out, and overflow marks the display stale. A fresh snapshot from the CLI’s 512 KiB ring buffer replaces stale queued output once capacity returns. |
+| Permissions and lifecycle are unclear | Links are interactive by default and immutable read-only with `--read-only`. `shell list`, `shell attach`, and `shell kill` expose local lifecycle; sessions run in the background and close automatically when the task exits. |
+| Users distrust relay and bearer links | The URL is explicitly a bearer capability. HTTPS/WSS is transport encryption, not end-to-end encryption; Cloudflare is in the trust boundary and terminal bytes pass through it in memory. Terminal contents are not persisted server-side. |
+| Sharing does not yield an immediately usable result | `shell <command>` prints the browser URL as soon as the relay session exists, then returns control to the local shell while the task continues in the background. |
+
+Automated tests cover viewport calculations, touch-scroll translation, deterministic resize ownership, read-only input enforcement, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, and session cleanup. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
 
 ## Development
 

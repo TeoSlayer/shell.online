@@ -18,6 +18,11 @@ describe("terminal wire protocol", () => {
     expect([...encodeFrame(Opcode.Input, payload)]).toEqual([Opcode.Input, ...payload]);
   });
 
+  it("reserves a recovery snapshot opcode distinct from targeted snapshots", () => {
+    expect(Opcode.BroadcastSnapshot).toBe(0x08);
+    expect(Opcode.BroadcastSnapshot).not.toBe(Opcode.Snapshot);
+  });
+
   it("rejects malformed resize messages", () => {
     expect(decodeResize(new Uint8Array([Opcode.Resize, 0]))).toBeNull();
     expect(decodeResize(new Uint8Array([Opcode.Input, 0, 80, 0, 24]))).toBeNull();

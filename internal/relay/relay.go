@@ -152,7 +152,9 @@ func (connection *Connection) serve(socket *websocket.Conn) {
 	for {
 		select {
 		case message := <-connection.outgoing:
-			err := socket.Write(socketContext, websocket.MessageType(message.typeID), message.data)
+			writeContext, cancelWrite := context.WithTimeout(socketContext, 10*time.Second)
+			err := socket.Write(writeContext, websocket.MessageType(message.typeID), message.data)
+			cancelWrite()
 			if message.done != nil {
 				message.done <- err
 			}
@@ -171,6 +173,17 @@ func (connection *Connection) serve(socket *websocket.Conn) {
 		case <-socketContext.Done():
 			return
 		}
+	}
+}
+
+// TrySend queues a frame without allowing a slow relay to block the local PTY.
+func (connection *Connection) TrySend(messageType MessageType, data []byte) bool {
+	message := outgoingMessage{typeID: messageType, data: append([]byte(nil), data...)}
+	select {
+	case connection.outgoing <- message:
+		return true
+	default:
+		return false
 	}
 }
 

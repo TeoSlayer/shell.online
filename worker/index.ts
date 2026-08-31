@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { decodeResize, Opcode } from "../shared/protocol";
+import { chooseResizeOwner } from "../shared/resize-control";
 import {
   binaryDownloadTarget,
   isDocumentNavigation,
@@ -43,9 +44,9 @@ const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
 const TRAFFIC_WINDOW_MS = 10_000;
-const HOST_WINDOW_BYTES = 8 * 1024 * 1024;
+const HOST_WINDOW_BYTES = 40 * 1024 * 1024;
 const VIEWER_WINDOW_BYTES = 1024 * 1024;
-const MAX_FRAMES_PER_WINDOW = 1_200;
+const MAX_FRAMES_PER_WINDOW = 2_000;
 const TYPING_LEASE_MS = 1_800;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{32}$/;
 
@@ -85,6 +86,7 @@ interface SessionMeta {
   collaborationStartedAt?: number;
   peakViewers?: number;
   presenceKey?: string;
+  localAttached?: boolean;
 }
 
 interface SocketAttachment {
@@ -98,6 +100,10 @@ interface SocketAttachment {
   client?: string;
   referrer?: string;
   ended?: boolean;
+  resizeOwner?: boolean;
+  cols?: number;
+  rows?: number;
+  snapshotRequestedAt?: number;
 }
 
 interface TrafficWindow {
@@ -380,11 +386,18 @@ function recordAssetAnalytics(
     recordAnalytics(env, executionContext, "stats_view", "dashboard", context);
     return;
   }
-  const target = url.pathname === "/"
-    ? "landing"
-    : SESSION_ID_PATTERN.test(url.pathname.replace(/^\/s\//, "").replace(/\/$/, ""))
+  const documentTarget = new Map([
+    ["/", "landing"],
+    ["/docs/", "docs"],
+    ["/mobile/", "docs_mobile"],
+    ["/reliability/", "docs_reliability"],
+    ["/security/", "docs_security"],
+  ]).get(url.pathname);
+  const target = documentTarget ?? (
+    SESSION_ID_PATTERN.test(url.pathname.replace(/^\/s\//, "").replace(/\/$/, ""))
       ? "session"
-      : "not_found";
+      : "not_found"
+  );
   recordAnalytics(env, executionContext, "page_view", target, context);
 }
 
@@ -693,6 +706,7 @@ export class TerminalSession extends DurableObject<Env> {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
       }
       this.broadcastPresence();
+      this.rebalanceResizeOwner();
     }
 
     return new Response(null, { status: 101, webSocket: client });
@@ -739,7 +753,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
 
-    let event: { type?: unknown; code?: unknown };
+    let event: { type?: unknown; code?: unknown; attached?: unknown };
     try {
       event = JSON.parse(message) as { type?: unknown; code?: unknown };
     } catch {
@@ -748,6 +762,16 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (attachment.role === "viewer") {
+      if (event.type === "snapshot_request") {
+        const now = Date.now();
+        if (now - (attachment.snapshotRequestedAt ?? 0) < 1_000) return;
+        attachment.snapshotRequestedAt = now;
+        socket.serializeAttachment(attachment);
+        for (const host of this.state.getWebSockets("host")) {
+          sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
+        }
+        return;
+      }
       if (event.type !== "typing") {
         safeClose(socket, 4002, "unknown viewer control message");
         return;
@@ -763,6 +787,14 @@ export class TerminalSession extends DurableObject<Env> {
       attachment.localTypingAt = now;
       socket.serializeAttachment(attachment);
       this.broadcastPresence();
+      return;
+    }
+
+    if (event.type === "local_attached" && typeof event.attached === "boolean") {
+      if (!this.meta) return;
+      this.meta.localAttached = event.attached;
+      await this.persistMeta();
+      this.rebalanceResizeOwner();
       return;
     }
 
@@ -830,6 +862,19 @@ export class TerminalSession extends DurableObject<Env> {
         }
         return;
 
+      case Opcode.BroadcastSnapshot:
+        if (frame.byteLength > MAX_SNAPSHOT_BYTES + 1) {
+          safeClose(socket, 4009, "broadcast snapshot too large");
+          return;
+        }
+        {
+          const snapshot = new Uint8Array(frame.byteLength);
+          snapshot[0] = Opcode.Snapshot;
+          snapshot.set(frame.subarray(1), 1);
+          this.broadcastBinary(snapshot, "viewer");
+        }
+        return;
+
       case Opcode.Pong:
         if (frame.byteLength !== 5) {
           safeClose(socket, 4002, "invalid latency response");
@@ -872,7 +917,10 @@ export class TerminalSession extends DurableObject<Env> {
         safeClose(socket, 4002, "invalid terminal size");
         return;
       }
-      this.broadcastBinary(frame, "host");
+      attachment.cols = size.cols;
+      attachment.rows = size.rows;
+      socket.serializeAttachment(attachment);
+      if (attachment.resizeOwner === true) this.broadcastBinary(frame, "host");
       return;
     }
 
@@ -921,6 +969,7 @@ export class TerminalSession extends DurableObject<Env> {
       await this.refreshLivePresence(true, socket);
       await this.scheduleNextAlarm();
       this.broadcastPresence(socket);
+      this.rebalanceResizeOwner(socket);
       return;
     }
     if (attachment?.role !== "host" || !this.meta || this.meta.status === "exited") return;
@@ -1147,6 +1196,7 @@ export class TerminalSession extends DurableObject<Env> {
 
     attachment.typingAt = now;
     socket.serializeAttachment(attachment);
+    this.rebalanceResizeOwner();
     if (deferPresence) {
       queueMicrotask(() => this.broadcastPresence());
     } else {
@@ -1180,6 +1230,40 @@ export class TerminalSession extends DurableObject<Env> {
 
   private broadcastBinary(frame: Uint8Array, role: SocketRole): void {
     for (const socket of this.state.getWebSockets(role)) safeSend(socket, frame);
+  }
+
+  private rebalanceResizeOwner(excluded?: WebSocket): void {
+    const viewers = this.state
+      .getWebSockets("viewer")
+      .filter((socket) => socket !== excluded && socket.readyState === 1);
+    const currentOwnerId = viewers
+      .map((socket) => readAttachment(socket))
+      .find((attachment) => attachment?.resizeOwner === true)?.id ?? null;
+    const ownerId = this.meta?.localAttached === true
+      ? null
+      : chooseResizeOwner(
+        viewers.map((socket) => {
+          const attachment = readAttachment(socket)!;
+          return {
+            id: attachment.id,
+            connected: true,
+            guestNumber: attachment.guestNumber,
+            typingAt: attachment.typingAt,
+          };
+        }),
+        currentOwnerId,
+        Date.now(),
+        TYPING_LEASE_MS,
+      );
+    for (const viewer of viewers) {
+      const attachment = readAttachment(viewer);
+      if (!attachment) continue;
+      const allowed = attachment.id === ownerId;
+      if (attachment.resizeOwner === allowed) continue;
+      attachment.resizeOwner = allowed;
+      viewer.serializeAttachment(attachment);
+      sendJson(viewer, { type: "resize_control", allowed });
+    }
   }
 }
 
@@ -1238,7 +1322,7 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
     pathname === "/skill" ||
     pathname === "/skill/" ||
     pathname === "/llms.txt" ||
-    (isHtmlDocument && (pathname !== "/" || hostname !== "shell.online")) ||
+    (isHtmlDocument && (!isPublicDocumentPath(pathname) || hostname !== "shell.online")) ||
     isStatsHostname(hostname)
   ) {
     headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
@@ -1250,10 +1334,14 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
     headers.set("Content-Disposition", "attachment; filename=\"SKILL.md\"");
     headers.set("Cache-Control", "public, max-age=300");
   }
-  if (pathname === "/" || pathname.startsWith("/s/") || isStatsHostname(hostname)) {
+  if (isPublicDocumentPath(pathname) || pathname.startsWith("/s/") || isStatsHostname(hostname)) {
     headers.set("Cache-Control", "no-store");
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function isPublicDocumentPath(pathname: string): boolean {
+  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/";
 }
 
 function secureStatsResponse(response: Response): Response {

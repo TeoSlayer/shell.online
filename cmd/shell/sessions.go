@@ -33,6 +33,7 @@ type localSessionControl interface {
 		output localTerminalOutput,
 		resize func(cols, rows uint16) error,
 		onInput func(),
+		onAttachChange func(bool),
 	)
 	PublishOutput([]byte)
 	Close() error

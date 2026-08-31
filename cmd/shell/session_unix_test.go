@@ -82,10 +82,11 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	output := ringbuffer.New(1024)
 	input := &capturedInput{values: make(chan []byte, 1)}
 	resizes := make(chan [2]uint16, 1)
+	attachChanges := make(chan bool, 2)
 	control.BindTerminal(input, output, func(cols, rows uint16) error {
 		resizes <- [2]uint16{cols, rows}
 		return nil
-	}, nil)
+	}, nil, func(attached bool) { attachChanges <- attached })
 	control.PublishOutput([]byte("existing\r\n"))
 
 	directory, _ := localSessionDirectory()
@@ -114,6 +115,14 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	}
 	if string(replayed) != "existing\r\n" {
 		t.Fatalf("replayed output = %q", replayed)
+	}
+	select {
+	case attached := <-attachChanges:
+		if !attached {
+			t.Fatal("local attachment did not claim PTY sizing")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("local attachment change was not reported")
 	}
 
 	if err := writeAll(connection, []byte("local input")); err != nil {
@@ -147,5 +156,16 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("resize was not forwarded")
+	}
+	if err := connection.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case attached := <-attachChanges:
+		if attached {
+			t.Fatal("local detachment did not release PTY sizing")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("local detachment change was not reported")
 	}
 }

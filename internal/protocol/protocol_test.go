@@ -23,3 +23,9 @@ func TestDecodeResizeRejectsInvalidDimensions(t *testing.T) {
 		t.Fatal("DecodeResize accepted invalid dimensions")
 	}
 }
+
+func TestBroadcastSnapshotOpcode(t *testing.T) {
+	if BroadcastSnapshot != 0x08 || BroadcastSnapshot == Snapshot {
+		t.Fatalf("BroadcastSnapshot opcode = %#x", BroadcastSnapshot)
+	}
+}

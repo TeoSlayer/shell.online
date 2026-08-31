@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -89,6 +90,13 @@ func runSharedProcess(
 		_ = connection.Send(relay.TextMessage, localTypingMessage)
 	}
 	if control != nil {
+		notifyAttachChange := func(attached bool) {
+			message, _ := json.Marshal(struct {
+				Type     string `json:"type"`
+				Attached bool   `json:"attached"`
+			}{Type: "local_attached", Attached: attached})
+			_ = connection.Send(relay.TextMessage, message)
+		}
 		control.BindTerminal(
 			ptmx,
 			outputRing,
@@ -96,12 +104,14 @@ func runSharedProcess(
 				return pty.Setsize(ptmx, &pty.Winsize{Cols: cols, Rows: rows})
 			},
 			notifyLocalTyping,
+			notifyAttachChange,
 		)
 	}
 
 	outputChunks := make(chan []byte, 64)
+	var outputDirty atomic.Bool
 	batchDone := make(chan struct{})
-	go batchOutput(relayContext, connection, outputChunks, batchDone)
+	go batchOutput(relayContext, connection, outputChunks, outputRing, &outputDirty, batchDone)
 
 	readDone := make(chan struct{})
 	go func() {
@@ -119,8 +129,9 @@ func runSharedProcess(
 				}
 				select {
 				case outputChunks <- chunk:
-				case <-connection.Done():
-					// Keep mirroring locally if the network share disconnects.
+				default:
+					// The replay ring remains authoritative when the relay is slower than the PTY.
+					outputDirty.Store(true)
 				}
 			}
 			if readError != nil {
@@ -259,6 +270,8 @@ func batchOutput(
 	ctx context.Context,
 	connection *relay.Connection,
 	chunks <-chan []byte,
+	output *ringbuffer.Buffer,
+	dirty *atomic.Bool,
 	done chan<- struct{},
 ) {
 	defer close(done)
@@ -266,19 +279,33 @@ func batchOutput(
 	defer ticker.Stop()
 	buffer := make([]byte, 0, outputBatchBytes)
 	lastFlush := time.Time{}
+	lastRecoveryAttempt := time.Time{}
 
 	flush := func() {
 		if len(buffer) == 0 {
 			return
 		}
 		if !connection.Active() {
+			dirty.Store(true)
 			buffer = buffer[:0]
 			return
 		}
 		lastFlush = time.Now()
 		frame := protocol.Frame(protocol.Output, buffer)
-		_ = connection.Send(relay.BinaryMessage, frame)
+		if !connection.TrySend(relay.BinaryMessage, frame) {
+			dirty.Store(true)
+		}
 		buffer = buffer[:0]
+	}
+	recoverSnapshot := func() {
+		if !dirty.Load() || !connection.Active() || time.Since(lastRecoveryAttempt) < 250*time.Millisecond {
+			return
+		}
+		lastRecoveryAttempt = time.Now()
+		frame := protocol.Frame(protocol.BroadcastSnapshot, output.Bytes())
+		if connection.TrySend(relay.BinaryMessage, frame) {
+			dirty.Store(false)
+		}
 	}
 
 	for {
@@ -303,6 +330,7 @@ func batchOutput(
 			}
 		case <-ticker.C:
 			flush()
+			recoverSnapshot()
 		case <-ctx.Done():
 			return
 		}

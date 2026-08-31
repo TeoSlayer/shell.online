@@ -12,10 +12,8 @@ import {
 import "@xterm/xterm/css/xterm.css";
 import {
   decodeLatencyProbe,
-  encodeFrame,
   encodeLatencyProbe,
   encodeResize,
-  MAX_INPUT_CHUNK,
   Opcode,
 } from "../shared/protocol";
 import { readOnlyFromControlMessage } from "../shared/session-access";
@@ -26,6 +24,8 @@ import {
   readGitHubSummaryStarCount,
 } from "../shared/github";
 import { TerminalWriteQueue } from "./terminal-writes";
+import { TerminalInputQueue } from "./terminal-input";
+import { terminalKeyAction } from "./terminal-keyboard";
 import {
   appendLatencySample,
   buildLatencyPlot,
@@ -138,8 +138,100 @@ if (statsDashboard) {
   renderTerminal(sessionMatch[1]);
 } else if (window.location.pathname === "/" || window.location.pathname === "") {
   renderLanding();
+} else if (["/docs", "/docs/", "/mobile", "/mobile/", "/reliability", "/reliability/", "/security", "/security/"].includes(window.location.pathname)) {
+  renderAssurancePage(window.location.pathname.split("/")[1] as keyof ReturnType<typeof getAssurancePages>);
 } else {
   renderNotFound();
+}
+
+function getAssurancePages() { return {
+  docs: {
+    eyebrow: "Documentation",
+    title: "Share any terminal process with one link.",
+    intro: "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL.",
+    cards: [
+      ["Install", "Run curl -fsSL https://shell.online/install | sh on macOS or Linux. The installer verifies SHA-256 before writing the binary and prints PATH instructions when needed."],
+      ["Start a share", "Prefix an existing command: shell claude, shell codex, or shell python train.py. Omit the command for a fresh shell. The usable URL prints immediately."],
+      ["Choose access", "Links are interactive by default. Add --read-only before the command when viewers should monitor without being able to send terminal input."],
+      ["Manage locally", "Use shell list to see active shares, shell attach &lt;ID&gt; to take over locally, and shell kill &lt;ID&gt; to stop one. Task exit always closes the share."],
+    ],
+  },
+  mobile: {
+    eyebrow: "Terminal fidelity",
+    title: "A real terminal, fitted to the device in your hand.",
+    intro: "A phone is not a smaller desktop. shell.online measures the visual viewport, accounts for the on-screen keyboard, and resizes the PTY—not merely its CSS box.",
+    cards: [
+      ["Deterministic sizing", "One connected viewer owns the shared PTY size at a time. Active input can transfer ownership; a local attachment takes priority. Other viewers never make the TUI jump."],
+      ["Touch that scrolls", "Single-finger gestures scroll normal terminal history. When an application enables mouse tracking or its alternate screen, the same gesture is translated into terminal wheel input."],
+      ["Keyboard-aware", "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths."],
+      ["Large paste, bounded", "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."],
+    ],
+  },
+  reliability: {
+    eyebrow: "Process continuity",
+    title: "The link can disappear. Your process should not.",
+    intro: "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
+    cards: [
+      ["Automatic reconnect", "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and disconnected sessions retain a 15-minute relay grace window."],
+      ["Screen recovery", "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."],
+      ["Backpressure by design", "PTY reads never wait indefinitely for Cloudflare. WebSocket writes time out, queues are bounded, frames have size and traffic limits, and high-output processes keep running locally."],
+      ["Explicit lifecycle", "The URL prints immediately. shell list shows active work; shell attach rejoins it; shell kill stops it. The share and all server state disappear when the task exits."],
+    ],
+  },
+  security: {
+    eyebrow: "Trust model",
+    title: "Know exactly what the link grants—and what the relay sees.",
+    intro: "shell.online uses encrypted transport, not end-to-end encryption. Cloudflare is part of the trust boundary. We prefer a precise model over a vague secure badge.",
+    cards: [
+      ["The URL is a bearer capability", "Anyone holding an interactive URL can view and type with the wrapped process’s operating-system permissions. Share it only with intended collaborators and run with least privilege."],
+      ["Read-only is server-enforced", "With --read-only, browser input is rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session."],
+      ["Cloudflare relays bytes", "HTTPS/WSS encrypts each hop. Terminal bytes pass through the Worker and Durable Object in memory, so Cloudflare can technically observe them. Do not display secrets you would not entrust to that path."],
+      ["No terminal transcript retained", "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; task exit deletes the session state and closes every socket."],
+    ],
+  },
+} as const; }
+
+function renderAssurancePage(kind: keyof ReturnType<typeof getAssurancePages>): void {
+  const page = getAssurancePages()[kind];
+  document.title = `${page.eyebrow} | shell.online`;
+  document.documentElement.classList.add("marketing-root");
+  document.body.classList.add("marketing-body");
+  app!.innerHTML = `
+    <section class="marketing assurance-page">
+      <header class="marketing-nav knowledge-nav">
+        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
+        <nav class="marketing-links" aria-label="Documentation navigation">
+          <a href="/docs/">Documentation</a><a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">GitHub ↗</a>
+        </nav>
+      </header>
+      <main class="knowledge-layout">
+        <aside class="knowledge-sidebar" aria-label="Knowledge base">
+          <a class="knowledge-home" href="/docs/">shell.online docs</a>
+          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="/docs/">Overview</a></div>
+          <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="/mobile/">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="/reliability/">Reliability</a></div>
+          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="/security/">Security model</a><a href="${GITHUB_REPOSITORY_URL}#run-and-manage-sessions">CLI reference ↗</a></div>
+        </aside>
+        <article class="knowledge-article">
+          <div class="knowledge-breadcrumb"><a href="/docs/">Docs</a><span>/</span>${page.eyebrow}</div>
+          <p class="assurance-eyebrow">${page.eyebrow}</p>
+          <h1>${page.title}</h1>
+          <p class="assurance-intro">${page.intro}</p>
+          ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
+<span>$</span> shell --read-only python train.py</code></pre>` : ""}
+          <div class="knowledge-sections">
+            ${page.cards.map(([title, copy], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${title}</h2><p>${copy}</p></section>`).join("")}
+          </div>
+          <aside class="knowledge-note"><strong>The invariant</strong><p>The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events.</p></aside>
+          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${kind === "docs" ? "/mobile/" : kind === "mobile" ? "/reliability/" : kind === "reliability" ? "/security/" : "/docs/"}">${kind === "docs" ? "Mobile terminals" : kind === "mobile" ? "Reliability" : kind === "reliability" ? "Security model" : "Back to overview"} →</a></nav>
+        </article>
+        <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${title}</a>`).join("")}</aside>
+      </main>
+      <footer class="marketing-footer">
+        <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
+        <p>A live browser link for any terminal process.</p>
+        <nav><a href="/docs/">Docs</a><a href="/mobile/">Mobile</a><a href="/reliability/">Reliability</a><a href="/security/">Security</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
+      </footer>
+    </section>`;
 }
 
 function renderLanding(): void {
@@ -151,6 +243,7 @@ function renderLanding(): void {
       <header class="marketing-nav">
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Main navigation">
+          <a href="/docs/">Docs</a>
           <a href="#use-cases">Use cases</a>
           <a href="#how">How it works</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
@@ -435,8 +528,11 @@ function renderLanding(): void {
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <p>A live browser link for any terminal process.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
         <nav aria-label="Footer navigation">
+          <a href="/docs/">Docs</a>
           <a href="#use-cases">Use cases</a>
-          <a href="#security">Security</a>
+          <a href="/mobile/">Mobile</a>
+          <a href="/reliability/">Reliability</a>
+          <a href="/security/">Security</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
           <a href="/skill">Agent skill</a>
           <a href="/llms.txt">llms.txt</a>
@@ -827,6 +923,7 @@ function renderTerminal(sessionId: string): void {
   const terminalWrites = new TerminalWriteQueue(
     terminal,
     compactSessionQuery.matches ? 16 * 1024 : 32 * 1024,
+    768 * 1024,
   );
 
   let socket: WebSocket | null = null;
@@ -858,6 +955,9 @@ function renderTerminal(sessionId: string): void {
   let localTypingAt: number | undefined;
   let presenceTimer: number | undefined;
   let readOnly = false;
+  let resizeAllowed = false;
+  let snapshotRequestPending = false;
+  const terminalInput = new TerminalInputQueue(() => socket);
 
   const defaultCopyLabel = (): string =>
     readOnly ? "Copy read-only link" : "Copy sharing link";
@@ -1098,7 +1198,7 @@ function renderTerminal(sessionId: string): void {
   };
 
   const sendResize = (): void => {
-    if (socket?.readyState !== WebSocket.OPEN) return;
+    if (!resizeAllowed || socket?.readyState !== WebSocket.OPEN) return;
     if (
       socket === lastResizeSocket &&
       terminal.cols === lastResizeColumns &&
@@ -1248,6 +1348,8 @@ function renderTerminal(sessionId: string): void {
     socket.addEventListener("open", () => {
       retryAttempt = 0;
       lastResizeSocket = null;
+      resizeAllowed = false;
+      terminalInput.flush();
       scheduleFit();
       if (!compactSessionQuery.matches && !readOnly) terminal.focus();
     });
@@ -1263,13 +1365,21 @@ function renderTerminal(sessionId: string): void {
       if (receiveLatencyResponse(frame)) return;
       if (frame[0] === Opcode.Snapshot) {
         terminalWrites.enqueue(frame.subarray(1), true);
+        snapshotRequestPending = false;
       } else if (frame[0] === Opcode.Output) {
-        terminalWrites.enqueue(frame.subarray(1));
+        if (!terminalWrites.enqueue(frame.subarray(1)) && !snapshotRequestPending) {
+          snapshotRequestPending = true;
+          if (socket?.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "snapshot_request" }));
+          }
+        }
       }
     });
 
     socket.addEventListener("close", (event) => {
       socket = null;
+      resizeAllowed = false;
+      terminalInput.clear();
       stopLatencyProbe();
       selfViewerId = null;
       participants = [];
@@ -1303,6 +1413,7 @@ function renderTerminal(sessionId: string): void {
       localTypingAt?: unknown;
       readOnly?: unknown;
       reason?: unknown;
+      allowed?: unknown;
     };
     try {
       message = JSON.parse(raw) as typeof message;
@@ -1315,6 +1426,15 @@ function renderTerminal(sessionId: string): void {
 
     if (message.type === "access_denied" && message.reason === "read_only") {
       applyReadOnly(true);
+      return;
+    }
+
+    if (message.type === "resize_control" && typeof message.allowed === "boolean") {
+      resizeAllowed = message.allowed;
+      if (resizeAllowed) {
+        lastResizeSocket = null;
+        scheduleFit();
+      }
       return;
     }
 
@@ -1363,10 +1483,16 @@ function renderTerminal(sessionId: string): void {
 
   const sendInput = (bytes: Uint8Array): void => {
     if (readOnly || socket?.readyState !== WebSocket.OPEN) return;
-    for (let offset = 0; offset < bytes.byteLength; offset += MAX_INPUT_CHUNK) {
-      socket.send(encodeFrame(Opcode.Input, bytes.subarray(offset, offset + MAX_INPUT_CHUNK)));
-    }
+    terminalInput.enqueue(bytes);
   };
+
+  terminal.attachCustomKeyEventHandler((event) => {
+    const action = terminalKeyAction(event, terminal.hasSelection());
+    if (action.kind === "default") return true;
+    if (action.kind === "copy-selection") void copyToClipboard(terminal.getSelection());
+    if (action.kind === "send") sendInput(action.bytes);
+    return false;
+  });
 
   terminal.onData((data) => {
     sendInput(textEncoder.encode(data));
