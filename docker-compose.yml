@@ -1,10 +1,10 @@
 services:
   shell-online:
-    image: ghcr.io/teoslayer/shell.online:0.6.0
+    image: ghcr.io/teoslayer/shell.online:0.6.1
     build:
       context: .
       args:
-        VERSION: "0.6.0"
+        VERSION: "0.6.1"
     restart: unless-stopped
     environment:
       SHELL_ONLINE_E2EE_PASSWORD: "${SHELL_ONLINE_E2EE_PASSWORD:-}"

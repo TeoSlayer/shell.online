@@ -36,9 +36,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.6.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.6.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.6.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.6.1" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -81,6 +81,8 @@ shell kill --all
 
 `shell help` provides a guided start/share/attach/detach/stop flow; `shell help attach` explains local takeover and detaching in detail.
 
+`shell list` checks both sides of every share. Its `RELAY` column reports `online`, `reconnecting`, `expired`, or `unknown`; `shell list --json` exposes the corresponding raw `relay_status`. An `expired` relay means the local process is still running but its public link no longer exists. `unknown` means the status check itself could not complete and is not treated as proof that the link died.
+
 `attach` takes the existing process over in the local terminal and replays its current screen. While attached, the terminal title keeps the `Ctrl-X D to detach` reminder visible. Press `Ctrl-X`, release it, then press `D` to detach without stopping the process (`Ctrl-]` remains a legacy alternative). Local input and resulting terminal output remain visible to connected browsers.
 
 The session closes and disappears automatically when its task exits. Use `--foreground` when you also want the process mirrored in the local terminal:
@@ -122,7 +124,7 @@ See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and
 
 ## Persistent Docker terminal
 
-The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.6.0` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.6.1` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
 
 ```sh
 docker compose up --build -d
@@ -132,11 +134,11 @@ docker compose logs shell-online
 Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
 
 ```sh
-docker pull ghcr.io/teoslayer/shell.online:0.6.0
+docker pull ghcr.io/teoslayer/shell.online:0.6.1
 docker run -d --name shell-online --restart unless-stopped \
   -v shell-online-state:/var/lib/shell-online \
   -v shell-online-workspace:/workspace \
-  ghcr.io/teoslayer/shell.online:0.6.0
+  ghcr.io/teoslayer/shell.online:0.6.1
 docker logs shell-online
 ```
 
@@ -208,7 +210,7 @@ Shared terminals fail in ways that ordinary responsive pages do not. These behav
 | Selection, copy, and large paste are unreliable | Ctrl/Cmd-C copies a terminal selection instead of sending SIGINT. Paste is split into frames no larger than 16 KiB, waits for WebSocket backpressure, and has a 1 MiB pending-input ceiling. |
 | Temporary network loss destroys or strands a session | The CLI-owned process and PTY keep running when the relay disappears. CLI and browser reconnect automatically; the browser requests a bounded local replay snapshot after reconnect. Relay loss never signals or kills the child process. |
 | Large output breaks WebSockets or loses terminal state | PTY reads never wait on the network. Relay and rendering queues are bounded, WebSocket writes time out, and overflow marks the display stale. A fresh snapshot from the CLI’s 512 KiB ring buffer replaces stale queued output once capacity returns. |
-| Permissions and lifecycle are unclear | Links are interactive by default and immutable read-only with `--read-only`. `shell list`, `shell attach`, and `shell kill` expose local lifecycle; sessions run in the background and close automatically when the task exits. |
+| Permissions and lifecycle are unclear | Links are interactive by default and immutable read-only with `--read-only`. `shell list` reports local process uptime and independently checks whether the relay is online, reconnecting, expired, or temporarily unknown; `shell attach` and `shell kill` expose local control. Sessions run in the background and close automatically when the task exits. |
 | Users distrust relay and bearer links | The URL is explicitly a bearer capability. Ordinary sessions use HTTPS/WSS and include Cloudflare in the content trust boundary. Optional `--e2ee` keeps terminal payloads opaque to Cloudflare while still exposing traffic and lifecycle metadata. Terminal contents are not persisted server-side. |
 | Sharing does not yield an immediately usable result | `shell <command>` prints the browser URL as soon as the relay session exists, then returns control to the local shell while the task continues in the background. |
 

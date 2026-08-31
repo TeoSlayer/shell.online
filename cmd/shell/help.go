@@ -30,8 +30,8 @@ The guided flow
      A share also closes automatically when its task exits.
 
 Manage sessions
-  shell list                       Show active sessions, uptime, command, and URL
-  shell list --json                Emit active sessions as JSON
+  shell list                       Show local uptime, relay status, command, and URL
+  shell list --json                Emit sessions and relay status as JSON
   shell attach <ID>                Open an active session in this terminal
   shell kill <ID>                  Stop its process and close its link
   shell kill --all                 Stop all processes and close their links
@@ -118,8 +118,9 @@ a legacy alternative. Ctrl-Z only suspends the local shell client; it does not d
   shell list
   shell list --json
 
-The table shows each session ID, access mode, uptime, closing rule, command, and
-existing share URL. Use an ID or an unambiguous prefix with shell attach or shell kill.
+The table shows each session ID, access mode, uptime, closing rule, command, share
+URL, and whether the relay is online, reconnecting, expired, or temporarily unknown.
+Use an ID or an unambiguous prefix with shell attach or shell kill.
 `)
 	case "kill", "stop":
 		fmt.Fprint(stdout, `Stop sessions

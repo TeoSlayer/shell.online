@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 )
@@ -50,7 +54,19 @@ type listedSession struct {
 	localSessionRecord
 	UptimeSeconds   int64  `json:"uptime_seconds"`
 	ClosesInSeconds *int64 `json:"closes_in_seconds,omitempty"`
+	RelayStatus     string `json:"relay_status"`
 }
+
+type relaySessionStatus string
+
+const (
+	relayStatusConnected    relaySessionStatus = "connected"
+	relayStatusWaiting      relaySessionStatus = "waiting"
+	relayStatusDisconnected relaySessionStatus = "disconnected"
+	relayStatusExpired      relaySessionStatus = "expired"
+	relayStatusUnknown      relaySessionStatus = "unknown"
+	relayStatusTimeout                         = 3 * time.Second
+)
 
 func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool) {
 	if len(arguments) == 0 {
@@ -139,6 +155,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 	sort.Slice(sessions, func(left, right int) bool {
 		return sessions[left].StartedAt.Before(sessions[right].StartedAt)
 	})
+	relayStatuses := resolveRelayStatuses(sessions)
 
 	if *jsonOutput {
 		now := time.Now()
@@ -147,6 +164,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 			item := listedSession{
 				localSessionRecord: session,
 				UptimeSeconds:      max(0, int64(now.Sub(session.StartedAt).Seconds())),
+				RelayStatus:        string(relayStatuses[session.ID]),
 			}
 			if session.ClosesAt != nil {
 				seconds := max(0, int64(time.Until(*session.ClosesAt).Seconds()))
@@ -170,7 +188,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 
 	now := time.Now()
 	table := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(table, "ID\tUPTIME\tCLOSES\tACCESS\tCOMMAND\tSHARE URL")
+	fmt.Fprintln(table, "ID\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL")
 	for _, session := range sessions {
 		closes := "on exit"
 		if session.ClosesAt != nil {
@@ -186,9 +204,10 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 		if session.Persistent {
 			access += "+stable"
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			shortSessionID(session.ID),
 			compactDuration(now.Sub(session.StartedAt)),
+			relayStatusLabel(relayStatuses[session.ID]),
 			closes,
 			access,
 			truncateText(session.Command, 48),
@@ -197,6 +216,92 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 	}
 	_ = table.Flush()
 	return 0
+}
+
+func resolveRelayStatuses(sessions []localSessionRecord) map[string]relaySessionStatus {
+	statuses := make(map[string]relaySessionStatus, len(sessions))
+	if len(sessions) == 0 {
+		return statuses
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), relayStatusTimeout)
+	defer cancel()
+	client := &http.Client{Timeout: relayStatusTimeout}
+	var mutex sync.Mutex
+	var wait sync.WaitGroup
+	for _, session := range sessions {
+		session := session
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			status := fetchRelaySessionStatus(ctx, client, session)
+			mutex.Lock()
+			statuses[session.ID] = status
+			mutex.Unlock()
+		}()
+	}
+	wait.Wait()
+	return statuses
+}
+
+func fetchRelaySessionStatus(ctx context.Context, client *http.Client, session localSessionRecord) relaySessionStatus {
+	shareURL, err := url.Parse(session.ShareURL)
+	if err != nil || (shareURL.Scheme != "http" && shareURL.Scheme != "https") || shareURL.Host == "" {
+		return relayStatusUnknown
+	}
+	shareURL.Path = "/api/sessions/" + session.ID
+	shareURL.RawPath = ""
+	shareURL.RawQuery = ""
+	shareURL.Fragment = ""
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, shareURL.String(), nil)
+	if err != nil {
+		return relayStatusUnknown
+	}
+	request.Header.Set("Accept", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		return relayStatusUnknown
+	}
+	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusGone {
+		return relayStatusExpired
+	}
+	if response.StatusCode != http.StatusOK {
+		return relayStatusUnknown
+	}
+
+	var result struct {
+		Exists bool   `json:"exists"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 8*1024)).Decode(&result); err != nil {
+		return relayStatusUnknown
+	}
+	if !result.Exists {
+		return relayStatusExpired
+	}
+	switch relaySessionStatus(result.Status) {
+	case relayStatusConnected, relayStatusWaiting, relayStatusDisconnected:
+		return relaySessionStatus(result.Status)
+	default:
+		return relayStatusUnknown
+	}
+}
+
+func relayStatusLabel(status relaySessionStatus) string {
+	switch status {
+	case relayStatusConnected:
+		return "online"
+	case relayStatusWaiting:
+		return "starting"
+	case relayStatusDisconnected:
+		return "reconnecting"
+	case relayStatusExpired:
+		return "expired"
+	default:
+		return "unknown"
+	}
 }
 
 func truncateText(value string, maximumRunes int) string {

@@ -2,6 +2,13 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-08-31
+
+### Fixed
+
+- Make `shell list` independently check each public relay session instead of equating a living local process with a working share link.
+- Report relay state as online, reconnecting, expired, or temporarily unknown in the table and expose the raw `relay_status` in JSON without sending E2EE URL fragments.
+
 ## [0.6.0] — 2026-08-31
 
 ### Added
@@ -77,6 +84,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Reject stale private background flags with a parent-bound startup handshake.
 - Support safe Claude Code conversation handoffs through a forked process.
 
+[0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0
 [0.4.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.4.0
