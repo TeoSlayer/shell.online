@@ -232,11 +232,23 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
   const docsLink = (target: DocumentationKind): string => documentationHref(version, target);
   document.title = `${page.eyebrow} | shell.online`;
   document.documentElement.classList.add("marketing-root");
-  document.body.classList.add("marketing-body");
+  document.body.classList.add("marketing-body", "knowledge-body");
   app!.innerHTML = `
     <section class="marketing assurance-page">
       <header class="marketing-nav knowledge-nav">
-        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
+        <a class="wordmark knowledge-wordmark" href="/docs/" aria-label="shell.online documentation"><span>shell</span><i>.</i>online<b>Docs</b></a>
+        <details class="knowledge-mobile-menu">
+          <summary aria-label="Open documentation navigation"><span aria-hidden="true"></span>Menu</summary>
+          <nav aria-label="Mobile documentation navigation">
+            <label>Version<select class="docs-version-select" id="docs-version-mobile" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></label>
+            <a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a>
+            <a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a>
+            <a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a>
+            <a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a>
+            <a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a>
+            <a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a>
+          </nav>
+        </details>
         <nav class="marketing-links" aria-label="Documentation navigation">
           <label class="knowledge-search"><span aria-hidden="true">⌕</span><input id="docs-search" type="search" placeholder="Search docs" autocomplete="off" aria-label="Search documentation" /><kbd>⌘ K</kbd></label>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">GitHub ↗</a>
@@ -244,7 +256,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
       </header>
       <main class="knowledge-layout">
         <aside class="knowledge-sidebar" aria-label="Knowledge base">
-          <div class="knowledge-version"><span>Documentation</span><select id="docs-version" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></div>
+          <div class="knowledge-version"><span>Documentation</span><select class="docs-version-select" id="docs-version" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></div>
           <a class="knowledge-home" href="${docsLink("docs")}">shell.online docs</a>
           <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a></div>
           <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a></div>
@@ -277,13 +289,15 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
 }
 
 function wireDocumentationControls(kind: DocumentationKind, version: string, content: DocumentationContent): void {
-  const selector = document.querySelector<HTMLSelectElement>("#docs-version");
+  const selectors = Array.from(document.querySelectorAll<HTMLSelectElement>(".docs-version-select"));
   const searchInput = document.querySelector<HTMLInputElement>("#docs-search");
   const searchShell = searchInput?.closest<HTMLElement>(".knowledge-search");
-  if (selector) {
+  for (const selector of selectors) {
     selector.addEventListener("change", () => {
       window.location.href = documentationHref(selector.value, kind);
     });
+  }
+  if (selectors.length > 0) {
     void fetch("/api/docs/releases", { headers: { Accept: "application/json" } })
       .then(async (response) => response.ok ? response.json() as Promise<unknown> : null)
       .then((payload) => {
@@ -297,13 +311,15 @@ function wireDocumentationControls(kind: DocumentationKind, version: string, con
           if (typeof candidate === "string" && /^\d+\.\d+\.\d+$/.test(candidate)) versions.add(candidate);
         }
         const ordered = Array.from(versions).sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
-        selector.replaceChildren(...ordered.map((candidate) => {
-          const option = document.createElement("option");
-          option.value = candidate;
-          option.textContent = `v${candidate}${candidate === documentationContent.version ? " · current" : ""}`;
-          option.selected = candidate === version;
-          return option;
-        }));
+        for (const selector of selectors) {
+          selector.replaceChildren(...ordered.map((candidate) => {
+            const option = document.createElement("option");
+            option.value = candidate;
+            option.textContent = `v${candidate}${candidate === documentationContent.version ? " · current" : ""}`;
+            option.selected = candidate === version;
+            return option;
+          }));
+        }
       })
       .catch(() => undefined);
   }
