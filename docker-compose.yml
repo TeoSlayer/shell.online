@@ -1,0 +1,17 @@
+services:
+  shell-online:
+    image: ghcr.io/teoslayer/shell.online:0.6.0
+    build:
+      context: .
+      args:
+        VERSION: "0.6.0"
+    restart: unless-stopped
+    environment:
+      SHELL_ONLINE_E2EE_PASSWORD: "${SHELL_ONLINE_E2EE_PASSWORD:-}"
+    volumes:
+      - shell-online-state:/var/lib/shell-online
+      - shell-online-workspace:/workspace
+
+volumes:
+  shell-online-state:
+  shell-online-workspace:

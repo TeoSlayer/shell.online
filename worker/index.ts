@@ -13,6 +13,7 @@ import {
 import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
 import { viewerFrameAction } from "../shared/session-access";
+import { persistentSessionID } from "../shared/persistent-session";
 import {
   GITHUB_REPOSITORY_API_URL,
   GITHUB_REPOSITORY_URL,
@@ -39,16 +40,20 @@ export { StatsStore };
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const DISCONNECTED_GRACE_MS = 15 * 60 * 1000;
+const PERSISTENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_VIEWERS = 16;
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
+const MAX_ENCRYPTION_OVERHEAD_BYTES = 29;
 const TRAFFIC_WINDOW_MS = 10_000;
 const HOST_WINDOW_BYTES = 40 * 1024 * 1024;
 const VIEWER_WINDOW_BYTES = 1024 * 1024;
 const MAX_FRAMES_PER_WINDOW = 2_000;
 const TYPING_LEASE_MS = 1_800;
 const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{32}$/;
+const DOCUMENTATION_VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
+const FIRST_DYNAMIC_DOCUMENTATION_VERSION = "0.6.0";
 
 type SessionStatus = "waiting" | "connected" | "disconnected" | "exited";
 type SocketRole = "host" | "viewer";
@@ -76,17 +81,20 @@ interface Env {
 interface SessionMeta {
   hostTokenHash: string;
   readOnly: boolean;
+  encrypted: boolean;
   label: string;
   createdAt: number;
   expiresAt: number;
   status: SessionStatus;
   exitCode?: number;
   startedAt?: number;
+  runStartedAt?: number;
   shareOpenedAt?: number;
   collaborationStartedAt?: number;
   peakViewers?: number;
   presenceKey?: string;
   localAttached?: boolean;
+  persistent: boolean;
 }
 
 interface SocketAttachment {
@@ -115,6 +123,8 @@ interface TrafficWindow {
 interface CreateSessionBody {
   label?: unknown;
   read_only?: unknown;
+  encrypted?: unknown;
+  persistent?: unknown;
 }
 
 interface EventBody {
@@ -129,6 +139,8 @@ interface StatsLoginBody {
 interface InitializeSessionBody {
   hostTokenHash: string;
   readOnly: boolean;
+  encrypted: boolean;
+  persistent: boolean;
   label: string;
   createdAt: number;
   expiresAt: number;
@@ -146,12 +158,24 @@ export default {
       return githubRepositorySummary();
     }
 
+    if (url.pathname === "/api/docs/releases" && request.method === "GET") {
+      return documentationReleases();
+    }
+
+    if (url.pathname === "/api/docs/content" && request.method === "GET") {
+      return documentationContent(url);
+    }
+
     if (url.pathname === "/api/stats" || url.pathname.startsWith("/api/stats/")) {
       return handleStatsRequest(request, env, url);
     }
 
     if (url.pathname === "/api/sessions" && request.method === "POST") {
       return createSession(request, env, url, executionContext);
+    }
+
+    if (url.pathname === "/api/sessions/resume" && request.method === "POST") {
+      return resumeSession(request, env, url, executionContext);
     }
 
     const sessionStatusRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{32})$/);
@@ -250,6 +274,80 @@ async function githubRepositorySummary(): Promise<Response> {
       { "Cache-Control": "no-store" },
     );
   }
+}
+
+async function documentationReleases(): Promise<Response> {
+  try {
+    const response = await fetch(`${GITHUB_REPOSITORY_API_URL}/releases?per_page=50`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "shell.online",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cf: { cacheEverything: true, cacheTtl: 300 },
+    });
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const payload: unknown = await response.json();
+    if (!Array.isArray(payload)) throw new Error("GitHub returned invalid releases");
+    const releases = payload.flatMap((item): { version: string; publishedAt: string | null }[] => {
+      if (typeof item !== "object" || item === null) return [];
+      const release = item as Record<string, unknown>;
+      if (release.draft === true || release.prerelease === true || typeof release.tag_name !== "string") return [];
+      const match = release.tag_name.match(/^v(\d+\.\d+\.\d+)$/);
+      if (!match || compareDocumentationVersions(match[1], FIRST_DYNAMIC_DOCUMENTATION_VERSION) < 0) return [];
+      return [{
+        version: match[1],
+        publishedAt: typeof release.published_at === "string" ? release.published_at : null,
+      }];
+    });
+    return json({ releases }, 200, {
+      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=86400",
+    });
+  } catch {
+    return json({ releases: [{ version: RELEASE_VERSION, publishedAt: null }] }, 200, {
+      "Cache-Control": "public, max-age=30, s-maxage=60",
+    });
+  }
+}
+
+async function documentationContent(url: URL): Promise<Response> {
+  const version = url.searchParams.get("version") ?? "";
+  if (!DOCUMENTATION_VERSION_PATTERN.test(version) || compareDocumentationVersions(version, FIRST_DYNAMIC_DOCUMENTATION_VERSION) < 0) {
+    return json({ error: "documentation version not found" }, 404);
+  }
+  const source = `https://raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json`;
+  try {
+    const response = await fetch(source, {
+      headers: { Accept: "application/json", "User-Agent": "shell.online" },
+      cf: { cacheEverything: true, cacheTtl: 3_600 },
+    });
+    if (!response.ok) return json({ error: "documentation version not found" }, 404);
+    const body = await response.text();
+    if (body.length > 128 * 1024) return json({ error: "documentation is too large" }, 502);
+    const parsed = JSON.parse(body) as { version?: unknown; pages?: unknown };
+    if (parsed.version !== version || typeof parsed.pages !== "object" || parsed.pages === null) {
+      return json({ error: "invalid documentation release" }, 502);
+    }
+    return new Response(body, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+        "X-Content-Type-Options": "nosniff",
+        "X-Robots-Tag": "noindex, nofollow, noarchive",
+      },
+    });
+  } catch {
+    return json({ error: "documentation version unavailable" }, 502);
+  }
+}
+
+function compareDocumentationVersions(left: string, right: string): number {
+  const leftParts = left.split(".").map(Number);
+  const rightParts = right.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (leftParts[index] !== rightParts[index]) return leftParts[index] - rightParts[index];
+  }
+  return 0;
 }
 
 async function handleStatsRequest(request: Request, env: Env, url: URL): Promise<Response> {
@@ -392,6 +490,8 @@ function recordAssetAnalytics(
     ["/mobile/", "docs_mobile"],
     ["/reliability/", "docs_reliability"],
     ["/security/", "docs_security"],
+    ["/e2ee/", "docs_e2ee"],
+    ["/docker/", "docs_docker"],
   ]).get(url.pathname);
   const target = documentTarget ?? (
     SESSION_ID_PATTERN.test(url.pathname.replace(/^\/s\//, "").replace(/\/$/, ""))
@@ -481,13 +581,24 @@ async function createSession(
   if (body.read_only !== undefined && typeof body.read_only !== "boolean") {
     return json({ error: "read_only must be a boolean" }, 400);
   }
+  if (body.encrypted !== undefined && typeof body.encrypted !== "boolean") {
+    return json({ error: "encrypted must be a boolean" }, 400);
+  }
+  if (body.persistent !== undefined && typeof body.persistent !== "boolean") {
+    return json({ error: "persistent must be a boolean" }, 400);
+  }
 
   const label = sanitizeLabel(body.label);
   const readOnly = body.read_only === true;
+  const encrypted = body.encrypted === true;
+  const persistent = body.persistent === true;
+  if (persistent) {
+    return json({ error: "persistent sessions require saved client credentials" }, 400);
+  }
   const sessionId = randomToken(24);
   const hostToken = randomToken(32);
   const createdAt = Date.now();
-  const expiresAt = createdAt + SESSION_TTL_MS;
+  const expiresAt = createdAt + (persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
   const hostTokenHash = await sha256Hex(hostToken);
 
   const stub = env.SESSIONS.getByName(sessionId);
@@ -497,6 +608,8 @@ async function createSession(
     body: JSON.stringify({
       hostTokenHash,
       readOnly,
+      encrypted,
+      persistent,
       label,
       createdAt,
       expiresAt,
@@ -528,11 +641,71 @@ async function createSession(
       websocket_url: websocketUrl,
       host_token: hostToken,
       read_only: readOnly,
+      encrypted,
+      persistent,
       expires_at: new Date(expiresAt).toISOString(),
     },
     201,
     { "Cache-Control": "no-store" },
   );
+}
+
+async function resumeSession(
+  request: Request,
+  env: Env,
+  url: URL,
+  executionContext: ExecutionContext,
+): Promise<Response> {
+  const contentLength = Number(request.headers.get("Content-Length") ?? "0");
+  if (contentLength > 4_096) return json({ error: "request too large" }, 413);
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const allowed = await env.SESSION_CREATION_LIMITER.limit({ key: ip });
+  if (!allowed.success) return json({ error: "too many sessions resumed" }, 429, { "Retry-After": "60" });
+  let body: Record<string, unknown>;
+  try { body = await request.json() as Record<string, unknown>; } catch { return json({ error: "invalid session" }, 400); }
+  const sessionId = body.session_id;
+  const hostToken = body.host_token;
+  if (
+    typeof sessionId !== "string" || !SESSION_ID_PATTERN.test(sessionId) ||
+    typeof hostToken !== "string" || hostToken.length < 32 || hostToken.length > 128 ||
+    typeof body.read_only !== "boolean" || typeof body.encrypted !== "boolean"
+  ) return json({ error: "invalid persistent session" }, 400);
+  const expectedSessionId = await persistentSessionID(hostToken);
+  if (!constantTimeEqual(sessionId, expectedSessionId)) {
+    return json({ error: "persistent credentials rejected" }, 403);
+  }
+  const createdAt = Date.now();
+  const expiresAt = createdAt + PERSISTENT_TTL_MS;
+  const stub = env.SESSIONS.getByName(sessionId);
+  const resumed = await stub.fetch("https://session.internal/internal/resume", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      hostTokenHash: await sha256Hex(hostToken),
+      readOnly: body.read_only,
+      encrypted: body.encrypted,
+      persistent: true,
+      label: sanitizeLabel(body.label),
+      createdAt,
+      expiresAt,
+    } satisfies InitializeSessionBody),
+  });
+  if (!resumed.ok) return json({ error: resumed.status === 403 ? "persistent credentials rejected" : "could not resume session" }, resumed.status);
+  const resumeResult = await resumed.json<{ created?: unknown }>();
+  if (resumeResult.created === true) {
+    recordAnalytics(env, executionContext, "session_created", "persistent_cli", requestAnalyticsContext(request));
+  }
+  const origin = requestOrigin(request, url);
+  return json({
+    session_id: sessionId,
+    share_url: `${origin}/s/${sessionId}`,
+    websocket_url: `${url.protocol === "https:" ? "wss:" : "ws:"}//${url.host}/api/sessions/${sessionId}/ws`,
+    host_token: hostToken,
+    read_only: body.read_only,
+    encrypted: body.encrypted,
+    persistent: true,
+    expires_at: new Date(expiresAt).toISOString(),
+  }, 201, { "Cache-Control": "no-store" });
 }
 
 export class TerminalSession extends DurableObject<Env> {
@@ -556,6 +729,9 @@ export class TerminalSession extends DurableObject<Env> {
     if (url.pathname === "/internal/init" && request.method === "POST") {
       return this.initialize(request);
     }
+    if (url.pathname === "/internal/resume" && request.method === "POST") {
+      return this.resume(request);
+    }
 
     if (url.pathname === "/internal/status" && request.method === "GET") {
       if (this.meta === undefined) {
@@ -566,7 +742,7 @@ export class TerminalSession extends DurableObject<Env> {
         return json({ exists: false }, 404, { "Cache-Control": "no-store" });
       }
       return json(
-        { exists: true, status: this.meta.status, read_only: this.isReadOnly() },
+        { exists: true, status: this.meta.status, read_only: this.isReadOnly(), encrypted: this.isEncrypted() },
         200,
         { "Cache-Control": "no-store" },
       );
@@ -592,6 +768,8 @@ export class TerminalSession extends DurableObject<Env> {
     if (
       !/^[a-f0-9]{64}$/.test(body.hostTokenHash) ||
       typeof body.readOnly !== "boolean" ||
+      typeof body.encrypted !== "boolean" ||
+      typeof body.persistent !== "boolean" ||
       !Number.isSafeInteger(body.createdAt) ||
       !Number.isSafeInteger(body.expiresAt) ||
       body.expiresAt <= body.createdAt
@@ -602,6 +780,8 @@ export class TerminalSession extends DurableObject<Env> {
     this.meta = {
       hostTokenHash: body.hostTokenHash,
       readOnly: body.readOnly,
+      encrypted: body.encrypted,
+      persistent: body.persistent,
       label: sanitizeLabel(body.label),
       createdAt: body.createdAt,
       expiresAt: body.expiresAt,
@@ -611,6 +791,39 @@ export class TerminalSession extends DurableObject<Env> {
     await this.state.storage.put("meta", this.meta);
     await this.state.storage.setAlarm(this.meta.expiresAt);
     return json({ ok: true });
+  }
+
+  private async resume(request: Request): Promise<Response> {
+    let body: InitializeSessionBody;
+    try { body = await request.json() as InitializeSessionBody; } catch { return json({ error: "invalid session" }, 400); }
+    if (!/^[a-f0-9]{64}$/.test(body.hostTokenHash) || !body.persistent) return json({ error: "invalid session" }, 400);
+    if (this.meta && (
+      !constantTimeEqual(this.meta.hostTokenHash, body.hostTokenHash) ||
+      this.meta.readOnly !== body.readOnly || this.meta.encrypted !== body.encrypted || !this.meta.persistent
+    )) return json({ error: "persistent credentials rejected" }, 403);
+    const created = !this.meta;
+    if (!this.meta) {
+      this.meta = {
+        hostTokenHash: body.hostTokenHash,
+        readOnly: body.readOnly,
+        encrypted: body.encrypted,
+        persistent: true,
+        label: sanitizeLabel(body.label),
+        createdAt: body.createdAt,
+        runStartedAt: body.createdAt,
+        expiresAt: body.expiresAt,
+        status: "waiting",
+        presenceKey: randomToken(16),
+      };
+    } else {
+      this.meta.expiresAt = body.expiresAt;
+      this.meta.label = sanitizeLabel(body.label);
+      this.meta.runStartedAt = body.createdAt;
+      if (this.meta.status === "exited") this.meta.status = "waiting";
+    }
+    await this.persistMeta();
+    await this.state.storage.setAlarm(this.meta.expiresAt);
+    return json({ ok: true, created });
   }
 
   private async acceptSocket(request: Request): Promise<Response> {
@@ -666,7 +879,7 @@ export class TerminalSession extends DurableObject<Env> {
       const firstStart = this.meta.startedAt === undefined;
       if (firstStart) this.meta.startedAt = Date.now();
       this.meta.status = "connected";
-      this.meta.expiresAt = Date.now() + SESSION_TTL_MS;
+      this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
       delete this.meta.exitCode;
       await this.persistMeta();
       if (firstStart) {
@@ -701,6 +914,7 @@ export class TerminalSession extends DurableObject<Env> {
         type: "welcome",
         viewerId: attachment.id,
         readOnly: this.isReadOnly(),
+        encrypted: this.isEncrypted(),
       });
       for (const host of this.state.getWebSockets("host")) {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
@@ -804,6 +1018,17 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     const exitCode = Number(event.code);
+    if (this.meta!.persistent) {
+      this.meta!.status = "disconnected";
+      this.meta!.expiresAt = Date.now() + PERSISTENT_TTL_MS;
+      this.recordSessionEnd("persistent_task_exit");
+      await this.persistMeta();
+      await this.scheduleNextAlarm();
+      this.broadcastStatus();
+      sendJson(socket, { type: "exit_ack" });
+      safeClose(socket, 4000, "task finished");
+      return;
+    }
     this.meta!.status = "exited";
     this.meta!.exitCode = Number.isInteger(exitCode) && exitCode >= 0 && exitCode <= 255 ? exitCode : 1;
     const presenceKey = this.meta!.presenceKey;
@@ -822,7 +1047,7 @@ export class TerminalSession extends DurableObject<Env> {
     this.deferPresenceRefresh();
     switch (frame[0]) {
       case Opcode.Output:
-        if (frame.byteLength > MAX_LIVE_FRAME_BYTES + 1) {
+        if (frame.byteLength > MAX_LIVE_FRAME_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
           safeClose(socket, 4009, "output frame too large");
           return;
         }
@@ -830,7 +1055,7 @@ export class TerminalSession extends DurableObject<Env> {
         return;
 
       case Opcode.Snapshot: {
-        if (frame.byteLength < 5 || frame.byteLength > MAX_SNAPSHOT_BYTES + 5) {
+        if (frame.byteLength < 5 || frame.byteLength > MAX_SNAPSHOT_BYTES + 5 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
           safeClose(socket, 4009, "snapshot frame too large");
           return;
         }
@@ -848,22 +1073,17 @@ export class TerminalSession extends DurableObject<Env> {
       }
 
       case Opcode.FinalSnapshot:
-        if (frame.byteLength > MAX_SNAPSHOT_BYTES + 1) {
+        if (frame.byteLength > MAX_SNAPSHOT_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
           safeClose(socket, 4009, "final snapshot too large");
           return;
         }
-        // Refresh every currently connected viewer from a complete stream just
-        // before the task closes. Nothing is retained after task exit.
-        {
-          const snapshot = new Uint8Array(frame.byteLength);
-          snapshot[0] = Opcode.Snapshot;
-          snapshot.set(frame.subarray(1), 1);
-          this.broadcastBinary(snapshot, "viewer");
-        }
+        // Preserve the opcode because E2EE authenticates it as associated data.
+        // The browser treats FinalSnapshot as a full screen replacement too.
+        this.broadcastBinary(frame, "viewer");
         return;
 
       case Opcode.BroadcastSnapshot:
-        if (frame.byteLength > MAX_SNAPSHOT_BYTES + 1) {
+        if (frame.byteLength > MAX_SNAPSHOT_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
           safeClose(socket, 4009, "broadcast snapshot too large");
           return;
         }
@@ -876,7 +1096,7 @@ export class TerminalSession extends DurableObject<Env> {
         return;
 
       case Opcode.Pong:
-        if (frame.byteLength !== 5) {
+        if (frame.byteLength !== (this.isEncrypted() ? 34 : 5)) {
           safeClose(socket, 4002, "invalid latency response");
           return;
         }
@@ -901,7 +1121,7 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (action === "input") {
-      if (frame.byteLength > MAX_INPUT_FRAME_BYTES) {
+      if (frame.byteLength > MAX_INPUT_FRAME_BYTES + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
         safeClose(socket, 4009, "input frame too large");
         return;
       }
@@ -912,6 +1132,14 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (action === "resize") {
+      if (this.isEncrypted()) {
+        if (frame.byteLength !== 34) {
+          safeClose(socket, 4002, "invalid encrypted terminal size");
+          return;
+        }
+        if (attachment.resizeOwner === true) this.broadcastBinary(frame, "host");
+        return;
+      }
       const size = decodeResize(frame);
       if (!size || size.cols < 10 || size.cols > 500 || size.rows < 4 || size.rows > 300) {
         safeClose(socket, 4002, "invalid terminal size");
@@ -925,7 +1153,7 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (action === "ping") {
-      if (frame.byteLength !== 5) {
+      if (frame.byteLength !== (this.isEncrypted() ? 34 : 5)) {
         safeClose(socket, 4002, "invalid latency probe");
         return;
       }
@@ -982,7 +1210,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
     this.meta.status = "disconnected";
-    this.meta.expiresAt = Date.now() + DISCONNECTED_GRACE_MS;
+    this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : DISCONNECTED_GRACE_MS);
     await this.persistMeta();
     await this.refreshLivePresence(true, socket);
     await this.scheduleNextAlarm();
@@ -996,7 +1224,20 @@ export class TerminalSession extends DurableObject<Env> {
       .some((socket) => socket.readyState === 1);
     if (hostIsOpen) {
       this.meta.status = "connected";
-      this.meta.expiresAt = Date.now() + SESSION_TTL_MS;
+      this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
+      await this.persistMeta();
+      await this.refreshLivePresence(true);
+      await this.scheduleNextAlarm();
+      this.broadcastStatus();
+      return;
+    }
+
+    if (this.meta.persistent) {
+      if (Date.now() >= this.meta.expiresAt) {
+        await this.expire();
+        return;
+      }
+      this.meta.status = "disconnected";
       await this.persistMeta();
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1122,7 +1363,7 @@ export class TerminalSession extends DurableObject<Env> {
 
   private recordSessionEnd(outcome: string): void {
     if (!this.meta) return;
-    const durationSeconds = Math.max(0, (Date.now() - this.meta.createdAt) / 1_000);
+    const durationSeconds = Math.max(0, (Date.now() - (this.meta.runStartedAt ?? this.meta.createdAt)) / 1_000);
     recordAnalytics(this.env, this.state, "session_ended", outcome, {
       device: "cli",
       client: "shell",
@@ -1138,6 +1379,8 @@ export class TerminalSession extends DurableObject<Env> {
       status: this.meta?.status ?? "disconnected",
       label: this.meta?.label ?? "terminal",
       readOnly: this.isReadOnly(),
+      encrypted: this.isEncrypted(),
+      persistent: this.meta?.persistent === true,
       exitCode: this.meta?.exitCode,
       expiresAt: this.meta ? new Date(this.meta.expiresAt).toISOString() : undefined,
     };
@@ -1145,6 +1388,10 @@ export class TerminalSession extends DurableObject<Env> {
 
   private isReadOnly(): boolean {
     return this.meta?.readOnly === true;
+  }
+
+  private isEncrypted(): boolean {
+    return this.meta?.encrypted === true;
   }
 
   private broadcastStatus(): void {
@@ -1341,7 +1588,7 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
 }
 
 function isPublicDocumentPath(pathname: string): boolean {
-  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/";
+  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/" || pathname === "/e2ee/" || pathname === "/docker/";
 }
 
 function secureStatsResponse(response: Response): Response {

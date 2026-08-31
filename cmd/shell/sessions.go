@@ -17,13 +17,15 @@ import (
 var localSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 
 type localSessionRecord struct {
-	ID        string     `json:"id"`
-	ShareURL  string     `json:"share_url"`
-	ReadOnly  bool       `json:"read_only"`
-	Command   string     `json:"command"`
-	PID       int        `json:"pid"`
-	StartedAt time.Time  `json:"started_at"`
-	ClosesAt  *time.Time `json:"closes_at,omitempty"`
+	ID         string     `json:"id"`
+	ShareURL   string     `json:"share_url"`
+	ReadOnly   bool       `json:"read_only"`
+	Encrypted  bool       `json:"encrypted,omitempty"`
+	Persistent bool       `json:"persistent,omitempty"`
+	Command    string     `json:"command"`
+	PID        int        `json:"pid"`
+	StartedAt  time.Time  `json:"started_at"`
+	ClosesAt   *time.Time `json:"closes_at,omitempty"`
 }
 
 type localSessionControl interface {
@@ -177,6 +179,12 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 		access := "interactive"
 		if session.ReadOnly {
 			access = "view-only"
+		}
+		if session.Encrypted {
+			access += "+e2ee"
+		}
+		if session.Persistent {
+			access += "+stable"
 		}
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			shortSessionID(session.ID),

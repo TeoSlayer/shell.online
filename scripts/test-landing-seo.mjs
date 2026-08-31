@@ -2,18 +2,22 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, docsHtml, mobileHtml, reliabilityHtml, securityHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource] = await Promise.all([
+const [indexHtml, docsHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
   readSource("docs/index.html"),
   readSource("mobile/index.html"),
   readSource("reliability/index.html"),
   readSource("security/index.html"),
+  readSource("e2ee/index.html"),
+  readSource("docker/index.html"),
   readSource("web/main.ts"),
   readSource("public/sitemap.xml"),
   readSource("public/robots.txt"),
   readSource("public/site.webmanifest"),
   readSource("README.md"),
   readSource("worker/index.ts"),
+  readSource("docs/content.json"),
+  readSource("package.json"),
 ]);
 
 const check = (condition, message) => {
@@ -24,6 +28,8 @@ const title = indexHtml.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
 const description = indexHtml.match(/<meta name="description" content="([^"]+)"/u)?.[1] ?? "";
 const landingMarkup = landingSource.match(/function renderLanding\(\): void \{([\s\S]*?)\n\}\n\nasync function wireGitHubStarCount/u)?.[1] ?? "";
 const manifest = JSON.parse(manifestSource);
+const docsContent = JSON.parse(docsSource);
+const packageMetadata = JSON.parse(packageSource);
 
 check(indexHtml.includes('<html lang="en">'), "Document language is missing");
 check(indexHtml.includes('<meta charset="UTF-8"'), "UTF-8 declaration is missing");
@@ -106,15 +112,24 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-08-31</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 5, "Sitemap should list the homepage and knowledge base");
-for (const [html, path] of [[docsHtml, "docs"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"]]) {
+check((sitemap.match(/<loc>/gu) ?? []).length === 7, "Sitemap should list the homepage and knowledge base");
+for (const [html, path] of [[docsHtml, "docs"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
   check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "Cloudflare is in the trust boundary"]) {
+for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "Cloudflare in the content trust boundary"]) {
   check(readme.includes(guarantee), `README reliability guarantee is missing: ${guarantee}`);
 }
+check(readme.includes("shell --e2ee"), "README E2EE instructions are missing");
+check(readme.includes("docker compose up --build -d"), "README Docker instructions are missing");
+check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
+for (const page of ["docs", "mobile", "reliability", "security", "e2ee", "docker"]) {
+  check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);
+}
+check(landingSource.includes('import documentationContent from "../docs/content.json"'), "Website must render from the repository documentation source");
+check(workerSource.includes('url.pathname === "/api/docs/releases"'), "Dynamic documentation release endpoint is missing");
+check(workerSource.includes("raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json"), "Tagged documentation source endpoint is missing");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
 check(

@@ -12,6 +12,8 @@ export default defineConfig({
         mobile: resolve(import.meta.dirname, "mobile/index.html"),
         reliability: resolve(import.meta.dirname, "reliability/index.html"),
         security: resolve(import.meta.dirname, "security/index.html"),
+        e2ee: resolve(import.meta.dirname, "e2ee/index.html"),
+        docker: resolve(import.meta.dirname, "docker/index.html"),
       },
     },
   },

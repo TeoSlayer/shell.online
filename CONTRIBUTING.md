@@ -26,3 +26,5 @@ go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 ## Pull requests
 
 Keep changes focused, add regression tests for fixes, and describe the user-visible behavior and security implications. By contributing, you agree that your contribution is licensed under the repository's MIT License.
+
+Documentation copy lives in [`docs/content.json`](docs/content.json) and renders both the current site and tagged, release-selectable docs. Keep its version equal to `package.json`, preserve the schema, and run the SEO test through `npm run check` after editing it.

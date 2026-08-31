@@ -6,6 +6,8 @@
 
 shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents. Start with the [knowledge base](https://shell.online/docs/) for the guided product, terminal, reliability, and trust documentation.
 
+The website documentation is rendered from [`docs/content.json`](docs/content.json), the same versioned source shipped in each Git tag. Starting with v0.6.0, the documentation version selector discovers GitHub releases and loads the selected tag's source through a cached same-origin endpoint. A release therefore preserves its exact documentation without copying prose into a separate CMS.
+
 Turn a terminal command into an interactive or read-only browser link. The command and PTY stay on your machine; Cloudflare only relays terminal input and output while the session is active.
 
 ## Install
@@ -34,9 +36,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.5.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.6.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.5.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.6.0" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -96,11 +98,71 @@ shell --auto-close "tomorrow 09:00" your-command
 
 The task exiting is always the final upper bound, including when no deadline is supplied.
 
+## Optional end-to-end encryption
+
+Add `--e2ee` to encrypt terminal frames on the CLI before they enter Cloudflare. The browser decrypts them locally:
+
+```sh
+shell --e2ee your-command
+```
+
+By default the CLI generates a fresh 256-bit key and appends it to the link as a `#key=...` fragment. URL fragments are used by the browser but are not included in HTTP or WebSocket requests, so Cloudflare never receives that key. Share the complete URL; removing the fragment makes the terminal unreadable.
+
+For a separately communicated password, set it only in the process environment that starts the CLI:
+
+```sh
+SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell --e2ee your-command
+```
+
+The URL then carries a random salt, not the password. The CLI and browser derive an AES-256-GCM key with PBKDF2-HMAC-SHA256 using 600,000 iterations. Password entry and derivation happen in the browser. shell.online cannot recover a lost random-key URL or password.
+
+E2EE protects terminal input, output, snapshots, resize frames, and latency probes from relay inspection or undetected modification. It does not hide connection IPs, timing, encrypted frame sizes, frame opcodes, the command label, access mode, or lifecycle metadata. It also cannot stop the relay from dropping, delaying, or replaying a previously valid encrypted frame. Read-only remains independently enforced by the Worker because the authenticated frame opcode is intentionally visible for routing and policy.
+
+See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and recovery limits.
+
+## Persistent Docker terminal
+
+The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.6.0` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+
+```sh
+docker compose up --build -d
+docker compose logs shell-online
+```
+
+Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
+
+```sh
+docker pull ghcr.io/teoslayer/shell.online:0.6.0
+docker run -d --name shell-online --restart unless-stopped \
+  -v shell-online-state:/var/lib/shell-online \
+  -v shell-online-workspace:/workspace \
+  ghcr.io/teoslayer/shell.online:0.6.0
+docker logs shell-online
+```
+
+The first launch prints the stable share URL and an automatically generated password. Enter that password in the browser. To supply your own instead, set `SHELL_ONLINE_E2EE_PASSWORD` before starting Compose. Do not place a valuable password directly in a committed Compose file or shell history.
+
+Two named volumes are created:
+
+- `shell-online-state` contains the stable session ID, host credential, E2EE key material, and generated password. Anyone who can read it can control the host identity and decrypt the session.
+- `shell-online-workspace` contains `/workspace`, the persistent working directory presented by the container shell.
+
+Restarting the container reconnects the same URL. A browser already on that URL reports offline while the container is away, then resumes when it returns. An offline persistent relay identity expires after 30 days; the saved state volume can recreate that identity and URL on the next start. Deleting the state volume creates a new identity and makes the old password/link unrecoverable.
+
+The same mechanism is available outside Docker for deliberate integrations:
+
+```sh
+SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' \
+  shell --foreground --e2ee --persistent ./shell-online-state.json your-command
+```
+
+The state file is written owner-only and rejected if group or other users can read it. See the [Docker guide](https://shell.online/docker/) for restart and backup behavior.
+
 ## Security model
 
 The share URL is a bearer credential. Anyone who has an interactive link can see terminal output and send input with the same operating-system permissions as the wrapped process. A `--read-only` link can see output but its browser input is rejected server-side. In either mode, avoid displaying secrets and share the link only with intended viewers. Run interactive processes with the least privilege they need, and use `shell kill <session-id>` if a link reaches the wrong person.
 
-Transport is encrypted with HTTPS/WSS between each client and Cloudflare. Terminal bytes pass through the Worker and Durable Object in memory, so this is not end-to-end encryption and Cloudflare is part of the trust boundary. shell.online does not persist terminal contents server-side; the CLI keeps a bounded in-memory replay buffer while the process is alive.
+Ordinary sessions use HTTPS/WSS transport encryption between each endpoint and Cloudflare. Their terminal bytes pass through the Worker and Durable Object in memory, so Cloudflare is part of their content trust boundary. Optional `--e2ee` sessions instead expose only authenticated ciphertext and the metadata listed above to Cloudflare. shell.online does not persist terminal contents server-side in either mode; the CLI keeps a bounded in-memory replay buffer while the process is alive.
 
 The public session ID grants viewer/input access but not host access. A separate 256-bit host token authenticates the local CLI and is never placed in the share URL. Session creation and connection attempts are IP-rate-limited, WebSocket origins are checked for browsers, frames and audiences are bounded, and local control files/sockets are owner-only.
 
@@ -129,10 +191,10 @@ The single stderr line is a JSON object containing `share_url`, `session_id`, `r
 - One hibernatable Durable Object coordinates each terminal's host and viewers and enforces its immutable interactive or read-only access mode.
 - The xterm.js browser renders ANSI attributes, 256-color and 24-bit color, alternate screens, mouse/input sequences, and fits the real PTY—not only a CSS box—to the active browser viewport. Terminal pages follow the system light/dark preference and include a manual switch; the cloudy landing remains light.
 - Anonymous collaborator chips show who has the link open. A short renewable typing lease prevents browser keystrokes from interleaving; local attached input takes priority briefly without disconnecting remote viewers.
-- A 512 KiB local ring buffer restores newly connected viewers. Terminal output is not retained by Cloudflare after the task closes.
+- A 512 KiB local ring buffer restores newly connected viewers. In E2EE mode, snapshots are encrypted before leaving the CLI. Terminal output is not retained by Cloudflare after the task closes.
 - A relay ping/pong measures browser-to-machine round-trip latency; the UI reports `Offline` when the local CLI cannot answer.
 
-An active process renews its lease indefinitely. A disconnected process has a 15-minute reconnect grace period. A completed process closes its sockets and deletes its Durable Object state immediately. Opening an old link shows that the session no longer exists.
+An active ordinary process renews its lease indefinitely. A disconnected ordinary process has a 15-minute reconnect grace period. Its completed process closes sockets and deletes Durable Object state immediately. Persistent Docker sessions are the explicit exception: the relay keeps their non-content identity for up to 30 offline days so the same state volume can reconnect the same URL. Opening an expired ordinary link shows that the session no longer exists.
 
 ## Terminal reliability guarantees
 
@@ -147,10 +209,10 @@ Shared terminals fail in ways that ordinary responsive pages do not. These behav
 | Temporary network loss destroys or strands a session | The CLI-owned process and PTY keep running when the relay disappears. CLI and browser reconnect automatically; the browser requests a bounded local replay snapshot after reconnect. Relay loss never signals or kills the child process. |
 | Large output breaks WebSockets or loses terminal state | PTY reads never wait on the network. Relay and rendering queues are bounded, WebSocket writes time out, and overflow marks the display stale. A fresh snapshot from the CLI’s 512 KiB ring buffer replaces stale queued output once capacity returns. |
 | Permissions and lifecycle are unclear | Links are interactive by default and immutable read-only with `--read-only`. `shell list`, `shell attach`, and `shell kill` expose local lifecycle; sessions run in the background and close automatically when the task exits. |
-| Users distrust relay and bearer links | The URL is explicitly a bearer capability. HTTPS/WSS is transport encryption, not end-to-end encryption; Cloudflare is in the trust boundary and terminal bytes pass through it in memory. Terminal contents are not persisted server-side. |
+| Users distrust relay and bearer links | The URL is explicitly a bearer capability. Ordinary sessions use HTTPS/WSS and include Cloudflare in the content trust boundary. Optional `--e2ee` keeps terminal payloads opaque to Cloudflare while still exposing traffic and lifecycle metadata. Terminal contents are not persisted server-side. |
 | Sharing does not yield an immediately usable result | `shell <command>` prints the browser URL as soon as the relay session exists, then returns control to the local shell while the task continues in the background. |
 
-Automated tests cover viewport calculations, touch-scroll translation, deterministic resize ownership, read-only input enforcement, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, and session cleanup. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
+Automated tests cover viewport calculations, touch-scroll translation, deterministic resize ownership, read-only input enforcement, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, session cleanup, Go/browser cryptographic compatibility, authentication-tag tampering, persistent credential permissions, and stable-session resume. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
 
 ## Development
 
@@ -162,6 +224,8 @@ npm run check
 npm run build:web
 go test -race ./...
 ```
+
+Edit product documentation in [`docs/content.json`](docs/content.json) and keep its `version` equal to `package.json`. The current bundle renders it directly; after a GitHub release is published, the website can also render that immutable tagged copy at `/docs/v<version>/`.
 
 ## Privacy-limited product analytics
 

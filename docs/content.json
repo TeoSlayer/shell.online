@@ -1,0 +1,72 @@
+{
+  "version": "0.6.0",
+  "pages": {
+    "docs": {
+      "eyebrow": "Documentation",
+      "title": "Share any terminal process with one link.",
+      "intro": "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL.",
+      "cards": [
+        ["Install", "Run curl -fsSL https://shell.online/install | sh on macOS or Linux. The installer verifies SHA-256 before writing the binary and prints PATH instructions when needed."],
+        ["Start a share", "Prefix an existing command: shell claude, shell codex, or shell python train.py. Omit the command for a fresh shell. The usable URL prints immediately."],
+        ["Choose access", "Links are interactive by default. Add --read-only before the command when viewers should monitor without being able to send terminal input."],
+        ["Choose privacy", "Add --e2ee to encrypt terminal input and output between the CLI and browsers. Use Docker when the same encrypted shell and URL should survive container restarts."],
+        ["Manage locally", "Use shell list to see active shares, shell attach <ID> to take over locally, and shell kill <ID> to stop one. Task exit always closes an ordinary share."]
+      ]
+    },
+    "mobile": {
+      "eyebrow": "Terminal fidelity",
+      "title": "A real terminal, fitted to the device in your hand.",
+      "intro": "A phone is not a smaller desktop. shell.online measures the visual viewport, accounts for the on-screen keyboard, and resizes the PTY—not merely its CSS box.",
+      "cards": [
+        ["Deterministic sizing", "One connected viewer owns the shared PTY size at a time. Active input can transfer ownership; a local attachment takes priority. Other viewers never make the TUI jump."],
+        ["Touch that scrolls", "Single-finger gestures scroll normal terminal history. When an application enables mouse tracking or its alternate screen, the same gesture is translated into terminal wheel input."],
+        ["Keyboard-aware", "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths."],
+        ["Large paste, bounded", "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."]
+      ]
+    },
+    "reliability": {
+      "eyebrow": "Process continuity",
+      "title": "The link can disappear. Your process should not.",
+      "intro": "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
+      "cards": [
+        ["Automatic reconnect", "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and disconnected ordinary sessions retain a 15-minute relay grace window."],
+        ["Screen recovery", "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."],
+        ["Backpressure by design", "PTY reads never wait indefinitely for Cloudflare. WebSocket writes time out, queues are bounded, frames have size and traffic limits, and high-output processes keep running locally."],
+        ["Explicit lifecycle", "The URL prints immediately. shell list shows active work; shell attach rejoins it; shell kill stops it. Ordinary shares and server state disappear when the task exits."]
+      ]
+    },
+    "security": {
+      "eyebrow": "Trust model",
+      "title": "Know exactly what the link grants—and what the relay sees.",
+      "intro": "Ordinary sessions use encrypted transport and include Cloudflare in the content trust boundary. Optional --e2ee sessions encrypt terminal payloads on the CLI and browser. Both modes have explicit limits.",
+      "cards": [
+        ["The URL is a bearer capability", "Anyone holding an interactive URL can view and type with the wrapped process’s operating-system permissions. Share it only with intended collaborators and run with least privilege."],
+        ["Read-only is server-enforced", "With --read-only, browser input is rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session."],
+        ["Cloudflare relays bytes", "Without --e2ee, HTTPS/WSS encrypts each hop but terminal bytes pass through Cloudflare in memory. With --e2ee, Cloudflare routes authenticated ciphertext while frame type, size, timing, IP, and session metadata remain visible."],
+        ["No terminal transcript retained", "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; ordinary task exit deletes the session state and closes every socket."]
+      ]
+    },
+    "e2ee": {
+      "eyebrow": "End-to-end encryption",
+      "title": "Terminal contents only the machine and its browsers can read.",
+      "intro": "Add --e2ee to encrypt every terminal payload with AES-256-GCM before it enters the relay. Keys are generated locally, URL fragments never reach Cloudflare, and password derivation happens on-device.",
+      "cards": [
+        ["Random-key mode", "shell --e2ee <command> generates a fresh 256-bit key and puts it after #key= in the share URL. Browsers import that fragment locally; browsers never send URL fragments in HTTP or WebSocket requests."],
+        ["Password mode", "Set SHELL_ONLINE_E2EE_PASSWORD before starting the CLI. The URL contains only a random salt, and the browser derives the same key with PBKDF2-HMAC-SHA256 after the recipient enters the password."],
+        ["Protected and visible data", "Terminal input, output, snapshots, resizes, and latency probes are authenticated ciphertext. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, and lifecycle metadata."],
+        ["Limits and recovery", "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. A lost random-key URL or Docker password cannot be recovered. Anyone with the complete URL—or password plus salted URL—can decrypt."]
+      ]
+    },
+    "docker": {
+      "eyebrow": "Persistent Docker terminal",
+      "title": "One encrypted shell and one stable link across restarts.",
+      "intro": "The Docker client keeps its workspace, host credential, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
+      "cards": [
+        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.6.0 or run docker compose up --build -d, then docker compose logs shell-online. The tagged amd64/arm64 image includes an SBOM and build provenance."],
+        ["Two durable volumes", "shell-online-state stores the host credential, share identity, and E2EE material. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."],
+        ["Restart behavior", "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."],
+        ["What persistence is not", "This image is a persistent client for the hosted shell.online relay, not a self-hosted relay. It does not make the container immortal, publish ports, or recover a deleted volume or forgotten password."]
+      ]
+    }
+  }
+}

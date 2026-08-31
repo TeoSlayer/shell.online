@@ -11,6 +11,9 @@ func printShellHelp(writer io.Writer) {
 Quick start
   shell <command> [arguments...]   Run in the background and print an interactive link
   shell --read-only <command>      Print a view-only link; browser input is blocked
+  shell --e2ee <command>           Encrypt terminal contents; key stays in URL fragment
+  SHELL_ONLINE_E2EE_PASSWORD='…' shell --e2ee <command>
+                                   Ask browsers for a separately shared password
   shell                            Share a fresh instance of your default shell
 
 From inside Claude Code
@@ -35,6 +38,8 @@ Manage sessions
 
 Options
   --read-only                      Block all browser input for this share
+  --e2ee                           Encrypt terminal payloads between CLI and browsers
+  --persistent <state-file>        Reuse one E2EE URL across process/container restarts
   --foreground                     Mirror the process in this terminal too
   --auto-close <duration-or-date>  Add an earlier deadline, such as 5m or tomorrow 09:00
   --json                           Emit the new-session event as JSON
@@ -77,6 +82,7 @@ Examples
   shell claude
   shell codex
   shell --read-only python train.py
+  shell --e2ee claude
   shell npm run dev
   shell --foreground htop
   shell --auto-close 5m pytest -x
@@ -85,6 +91,13 @@ When Claude Code runs "shell claude" through its Bash tool, shell detects the cu
 conversation and starts a shareable fork with its history. The original Claude process
 stays open and the two conversations then diverge; shell does not claim to move the
 already-running PID into another terminal.
+
+E2EE notes
+  --e2ee generates a random key in the URL fragment by default. URL fragments do
+  not reach the relay. Set SHELL_ONLINE_E2EE_PASSWORD to put only a random salt
+  in the URL and ask each browser for that password. Lost keys and passwords cannot
+  be recovered. --persistent requires --e2ee and stores host and decryption secrets
+  in an owner-only state file so the same URL can reconnect after a restart.
 `)
 	case "attach":
 		fmt.Fprint(stdout, `Attach locally

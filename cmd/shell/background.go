@@ -14,14 +14,16 @@ const (
 )
 
 type backgroundLaunchResult struct {
-	OK        bool       `json:"ok"`
-	Error     string     `json:"error,omitempty"`
-	ID        string     `json:"session_id,omitempty"`
-	ShareURL  string     `json:"share_url,omitempty"`
-	ReadOnly  bool       `json:"read_only,omitempty"`
-	ExpiresAt time.Time  `json:"expires_at,omitempty"`
-	ClosesAt  *time.Time `json:"closes_at,omitempty"`
-	Handoff   string     `json:"handoff,omitempty"`
+	OK         bool       `json:"ok"`
+	Error      string     `json:"error,omitempty"`
+	ID         string     `json:"session_id,omitempty"`
+	ShareURL   string     `json:"share_url,omitempty"`
+	ReadOnly   bool       `json:"read_only,omitempty"`
+	Encrypted  bool       `json:"encrypted,omitempty"`
+	Persistent bool       `json:"persistent,omitempty"`
+	ExpiresAt  time.Time  `json:"expires_at,omitempty"`
+	ClosesAt   *time.Time `json:"closes_at,omitempty"`
+	Handoff    string     `json:"handoff,omitempty"`
 }
 
 func isBackgroundChild() bool {

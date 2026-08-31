@@ -12,6 +12,7 @@ import {
 import "@xterm/xterm/css/xterm.css";
 import {
   decodeLatencyProbe,
+  encodeFrame,
   encodeLatencyProbe,
   encodeResize,
   Opcode,
@@ -26,6 +27,8 @@ import {
 import { TerminalWriteQueue } from "./terminal-writes";
 import { TerminalInputQueue } from "./terminal-input";
 import { terminalKeyAction } from "./terminal-keyboard";
+import { BrowserFrameCipher, parseEncryptionFragment } from "./e2ee";
+import documentationContent from "../docs/content.json";
 import {
   appendLatencySample,
   buildLatencyPlot,
@@ -128,6 +131,7 @@ const terminalThemes: Record<TerminalColorMode, ITheme> = {
 };
 
 const sessionMatch = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]{32})\/?$/);
+const documentationRoute = resolveDocumentationRoute(window.location.pathname);
 const statsDashboard = window.location.hostname === "stats.shell.online" ||
   ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
     window.location.pathname === "/stats");
@@ -138,61 +142,94 @@ if (statsDashboard) {
   renderTerminal(sessionMatch[1]);
 } else if (window.location.pathname === "/" || window.location.pathname === "") {
   renderLanding();
-} else if (["/docs", "/docs/", "/mobile", "/mobile/", "/reliability", "/reliability/", "/security", "/security/"].includes(window.location.pathname)) {
-  renderAssurancePage(window.location.pathname.split("/")[1] as keyof ReturnType<typeof getAssurancePages>);
+} else if (documentationRoute) {
+  void renderAssurancePage(documentationRoute.kind, documentationRoute.version);
 } else {
   renderNotFound();
 }
 
-function getAssurancePages() { return {
-  docs: {
-    eyebrow: "Documentation",
-    title: "Share any terminal process with one link.",
-    intro: "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL.",
-    cards: [
-      ["Install", "Run curl -fsSL https://shell.online/install | sh on macOS or Linux. The installer verifies SHA-256 before writing the binary and prints PATH instructions when needed."],
-      ["Start a share", "Prefix an existing command: shell claude, shell codex, or shell python train.py. Omit the command for a fresh shell. The usable URL prints immediately."],
-      ["Choose access", "Links are interactive by default. Add --read-only before the command when viewers should monitor without being able to send terminal input."],
-      ["Manage locally", "Use shell list to see active shares, shell attach &lt;ID&gt; to take over locally, and shell kill &lt;ID&gt; to stop one. Task exit always closes the share."],
-    ],
-  },
-  mobile: {
-    eyebrow: "Terminal fidelity",
-    title: "A real terminal, fitted to the device in your hand.",
-    intro: "A phone is not a smaller desktop. shell.online measures the visual viewport, accounts for the on-screen keyboard, and resizes the PTY—not merely its CSS box.",
-    cards: [
-      ["Deterministic sizing", "One connected viewer owns the shared PTY size at a time. Active input can transfer ownership; a local attachment takes priority. Other viewers never make the TUI jump."],
-      ["Touch that scrolls", "Single-finger gestures scroll normal terminal history. When an application enables mouse tracking or its alternate screen, the same gesture is translated into terminal wheel input."],
-      ["Keyboard-aware", "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths."],
-      ["Large paste, bounded", "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."],
-    ],
-  },
-  reliability: {
-    eyebrow: "Process continuity",
-    title: "The link can disappear. Your process should not.",
-    intro: "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
-    cards: [
-      ["Automatic reconnect", "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and disconnected sessions retain a 15-minute relay grace window."],
-      ["Screen recovery", "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."],
-      ["Backpressure by design", "PTY reads never wait indefinitely for Cloudflare. WebSocket writes time out, queues are bounded, frames have size and traffic limits, and high-output processes keep running locally."],
-      ["Explicit lifecycle", "The URL prints immediately. shell list shows active work; shell attach rejoins it; shell kill stops it. The share and all server state disappear when the task exits."],
-    ],
-  },
-  security: {
-    eyebrow: "Trust model",
-    title: "Know exactly what the link grants—and what the relay sees.",
-    intro: "shell.online uses encrypted transport, not end-to-end encryption. Cloudflare is part of the trust boundary. We prefer a precise model over a vague secure badge.",
-    cards: [
-      ["The URL is a bearer capability", "Anyone holding an interactive URL can view and type with the wrapped process’s operating-system permissions. Share it only with intended collaborators and run with least privilege."],
-      ["Read-only is server-enforced", "With --read-only, browser input is rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session."],
-      ["Cloudflare relays bytes", "HTTPS/WSS encrypts each hop. Terminal bytes pass through the Worker and Durable Object in memory, so Cloudflare can technically observe them. Do not display secrets you would not entrust to that path."],
-      ["No terminal transcript retained", "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; task exit deletes the session state and closes every socket."],
-    ],
-  },
-} as const; }
+type DocumentationKind = keyof typeof documentationContent.pages;
 
-function renderAssurancePage(kind: keyof ReturnType<typeof getAssurancePages>): void {
-  const page = getAssurancePages()[kind];
+interface DocumentationPage {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  cards: [string, string][];
+}
+
+interface DocumentationContent {
+  version: string;
+  pages: Partial<Record<DocumentationKind, DocumentationPage>>;
+}
+
+interface DocumentationRoute {
+  kind: DocumentationKind;
+  version: string;
+}
+
+const DOCUMENTATION_KINDS = ["docs", "mobile", "reliability", "security", "e2ee", "docker"] as const;
+
+function resolveDocumentationRoute(pathname: string): DocumentationRoute | null {
+  const shortRoute = pathname.match(/^\/(docs|mobile|reliability|security|e2ee|docker)\/?$/);
+  if (shortRoute) {
+    return { kind: shortRoute[1] as DocumentationKind, version: documentationContent.version };
+  }
+  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(mobile|reliability|security|e2ee|docker))?\/?$/);
+  if (!versionedRoute) return null;
+  return {
+    kind: (versionedRoute[2] ?? "docs") as DocumentationKind,
+    version: versionedRoute[1],
+  };
+}
+
+function documentationHref(version: string, kind: DocumentationKind): string {
+  return `/docs/v${version}/${kind === "docs" ? "" : `${kind}/`}`;
+}
+
+function isDocumentationContent(value: unknown, version: string): value is DocumentationContent {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as { version?: unknown; pages?: unknown };
+  if (candidate.version !== version || typeof candidate.pages !== "object" || candidate.pages === null) return false;
+  return DOCUMENTATION_KINDS.every((kind) => {
+    const page = (candidate.pages as Record<string, unknown>)[kind];
+    if (page === undefined) return true;
+    if (typeof page !== "object" || page === null) return false;
+    const fields = page as Record<string, unknown>;
+    return typeof fields.eyebrow === "string" && typeof fields.title === "string" &&
+      typeof fields.intro === "string" && Array.isArray(fields.cards) &&
+      fields.cards.every((card) => Array.isArray(card) && card.length === 2 && card.every((item) => typeof item === "string"));
+  });
+}
+
+async function loadDocumentationContent(version: string): Promise<DocumentationContent | null> {
+  if (version === documentationContent.version) return documentationContent as DocumentationContent;
+  try {
+    const response = await fetch(`/api/docs/content?version=${encodeURIComponent(version)}`, {
+      headers: { Accept: "application/json" },
+      cache: "force-cache",
+    });
+    if (!response.ok) return null;
+    const content: unknown = await response.json();
+    return isDocumentationContent(content, version) ? content : null;
+  } catch {
+    return null;
+  }
+}
+
+function escapeDocumentationText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]!);
+}
+
+async function renderAssurancePage(kind: DocumentationKind, version: string): Promise<void> {
+  const content = await loadDocumentationContent(version);
+  const page = content?.pages[kind];
+  if (!content || !page) {
+    renderNotFound();
+    return;
+  }
+  const docsLink = (target: DocumentationKind): string => documentationHref(version, target);
   document.title = `${page.eyebrow} | shell.online`;
   document.documentElement.classList.add("marketing-root");
   document.body.classList.add("marketing-body");
@@ -201,37 +238,120 @@ function renderAssurancePage(kind: keyof ReturnType<typeof getAssurancePages>): 
       <header class="marketing-nav knowledge-nav">
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Documentation navigation">
-          <a href="/docs/">Documentation</a><a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">GitHub ↗</a>
+          <label class="knowledge-search"><span aria-hidden="true">⌕</span><input id="docs-search" type="search" placeholder="Search docs" autocomplete="off" aria-label="Search documentation" /><kbd>⌘ K</kbd></label>
+          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">GitHub ↗</a>
         </nav>
       </header>
       <main class="knowledge-layout">
         <aside class="knowledge-sidebar" aria-label="Knowledge base">
-          <a class="knowledge-home" href="/docs/">shell.online docs</a>
-          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="/docs/">Overview</a></div>
-          <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="/mobile/">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="/reliability/">Reliability</a></div>
-          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="/security/">Security model</a><a href="${GITHUB_REPOSITORY_URL}#run-and-manage-sessions">CLI reference ↗</a></div>
+          <div class="knowledge-version"><span>Documentation</span><select id="docs-version" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></div>
+          <a class="knowledge-home" href="${docsLink("docs")}">shell.online docs</a>
+          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a></div>
+          <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a></div>
+          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a><a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a><a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a><a href="${GITHUB_REPOSITORY_URL}#run-and-manage-sessions">CLI reference ↗</a></div>
         </aside>
         <article class="knowledge-article">
-          <div class="knowledge-breadcrumb"><a href="/docs/">Docs</a><span>/</span>${page.eyebrow}</div>
-          <p class="assurance-eyebrow">${page.eyebrow}</p>
-          <h1>${page.title}</h1>
-          <p class="assurance-intro">${page.intro}</p>
+          <div class="knowledge-breadcrumb"><a href="${docsLink("docs")}">Docs</a><span>/</span>v${escapeDocumentationText(version)}<span>/</span>${escapeDocumentationText(page.eyebrow)}</div>
+          <p class="assurance-eyebrow">${escapeDocumentationText(page.eyebrow)}</p>
+          <h1>${escapeDocumentationText(page.title)}</h1>
+          <p class="assurance-intro">${escapeDocumentationText(page.intro)}</p>
           ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
-<span>$</span> shell --read-only python train.py</code></pre>` : ""}
+<span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell --e2ee &lt;command&gt;
+<span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell --e2ee &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
+<span>$</span> docker compose logs shell-online</code></pre>` : ""}
           <div class="knowledge-sections">
-            ${page.cards.map(([title, copy], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${title}</h2><p>${copy}</p></section>`).join("")}
+            ${page.cards.map(([title, copy], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p></section>`).join("")}
           </div>
-          <aside class="knowledge-note"><strong>The invariant</strong><p>The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events.</p></aside>
-          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${kind === "docs" ? "/mobile/" : kind === "mobile" ? "/reliability/" : kind === "reliability" ? "/security/" : "/docs/"}">${kind === "docs" ? "Mobile terminals" : kind === "mobile" ? "Reliability" : kind === "reliability" ? "Security model" : "Back to overview"} →</a></nav>
+          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The decryption secret is created and used on endpoints. Cloudflare never receives the random key or password." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as both a host credential and a decryption secret." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
+          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(kind === "docs" ? "mobile" : kind === "mobile" ? "reliability" : kind === "reliability" ? "security" : kind === "security" ? "e2ee" : kind === "e2ee" ? "docker" : "docs")}">${kind === "docs" ? "Mobile terminals" : kind === "mobile" ? "Reliability" : kind === "reliability" ? "Security model" : kind === "security" ? "End-to-end encryption" : kind === "e2ee" ? "Persistent Docker" : "Back to overview"} →</a></nav>
         </article>
-        <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${title}</a>`).join("")}</aside>
+        <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${escapeDocumentationText(title)}</a>`).join("")}<div class="knowledge-release"><span>Release</span><strong>v${escapeDocumentationText(version)}</strong><a href="${GITHUB_REPOSITORY_URL}/releases/tag/v${escapeDocumentationText(version)}">View release notes ↗</a></div></aside>
       </main>
       <footer class="marketing-footer">
         <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
         <p>A live browser link for any terminal process.</p>
-        <nav><a href="/docs/">Docs</a><a href="/mobile/">Mobile</a><a href="/reliability/">Reliability</a><a href="/security/">Security</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
+        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
       </footer>
     </section>`;
+  wireDocumentationControls(kind, version, content);
+}
+
+function wireDocumentationControls(kind: DocumentationKind, version: string, content: DocumentationContent): void {
+  const selector = document.querySelector<HTMLSelectElement>("#docs-version");
+  const searchInput = document.querySelector<HTMLInputElement>("#docs-search");
+  const searchShell = searchInput?.closest<HTMLElement>(".knowledge-search");
+  if (selector) {
+    selector.addEventListener("change", () => {
+      window.location.href = documentationHref(selector.value, kind);
+    });
+    void fetch("/api/docs/releases", { headers: { Accept: "application/json" } })
+      .then(async (response) => response.ok ? response.json() as Promise<unknown> : null)
+      .then((payload) => {
+        if (typeof payload !== "object" || payload === null) return;
+        const releases = (payload as { releases?: unknown }).releases;
+        if (!Array.isArray(releases)) return;
+        const versions = new Set([version]);
+        for (const release of releases) {
+          if (typeof release !== "object" || release === null) continue;
+          const candidate = (release as { version?: unknown }).version;
+          if (typeof candidate === "string" && /^\d+\.\d+\.\d+$/.test(candidate)) versions.add(candidate);
+        }
+        const ordered = Array.from(versions).sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+        selector.replaceChildren(...ordered.map((candidate) => {
+          const option = document.createElement("option");
+          option.value = candidate;
+          option.textContent = `v${candidate}${candidate === documentationContent.version ? " · current" : ""}`;
+          option.selected = candidate === version;
+          return option;
+        }));
+      })
+      .catch(() => undefined);
+  }
+
+  if (!searchInput || !searchShell) return;
+  const results = document.createElement("div");
+  results.className = "knowledge-search-results";
+  results.hidden = true;
+  searchShell.append(results);
+  const closeResults = (): void => { results.hidden = true; };
+  const renderResults = (): void => {
+    const query = searchInput.value.trim().toLocaleLowerCase();
+    if (query.length < 2) {
+      closeResults();
+      return;
+    }
+    const matches: { kind: DocumentationKind; title: string; section: number }[] = [];
+    for (const candidateKind of DOCUMENTATION_KINDS) {
+      const candidatePage = content.pages[candidateKind];
+      if (!candidatePage) continue;
+      candidatePage.cards.forEach(([title, copy], index) => {
+        if (`${title} ${copy}`.toLocaleLowerCase().includes(query)) {
+          matches.push({ kind: candidateKind, title, section: index + 1 });
+        }
+      });
+    }
+    results.innerHTML = matches.length === 0
+      ? `<span>No results in v${escapeDocumentationText(version)}</span>`
+      : matches.slice(0, 8).map((match) => `<a href="${documentationHref(version, match.kind)}#section-${match.section}"><small>${escapeDocumentationText(content.pages[match.kind]?.eyebrow ?? match.kind)}</small>${escapeDocumentationText(match.title)}</a>`).join("");
+    results.hidden = false;
+  };
+  searchInput.addEventListener("input", renderResults);
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      searchInput.value = "";
+      closeResults();
+      searchInput.blur();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
+      event.preventDefault();
+      searchInput.focus();
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!searchShell.contains(event.target as Node)) closeResults();
+  });
 }
 
 function renderLanding(): void {
@@ -485,7 +605,7 @@ function renderLanding(): void {
           </div>
           <div class="security-points">
             <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
-            <article><i>02</i><h3>You choose the access</h3><p>No accounts or login prompts. Default links are interactive; <code>--read-only</code> links reject browser input inside the relay.</p></article>
+            <article><i>02</i><h3>You choose access and privacy</h3><p>Use <code>--read-only</code> to reject browser input or <code>--e2ee</code> to keep terminal payloads opaque to the relay.</p></article>
             <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
           </div>
         </section>
@@ -533,6 +653,8 @@ function renderLanding(): void {
           <a href="/mobile/">Mobile</a>
           <a href="/reliability/">Reliability</a>
           <a href="/security/">Security</a>
+          <a href="/e2ee/">E2EE</a>
+          <a href="/docker/">Docker</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
           <a href="/skill">Agent skill</a>
           <a href="/llms.txt">llms.txt</a>
@@ -731,6 +853,7 @@ function trackCopy(target: CopyTarget): void {
 
 function renderTerminal(sessionId: string): void {
   document.title = "Shared terminal — shell.online";
+  const encryptionDescriptor = parseEncryptionFragment(window.location.hash);
   const systemTheme = window.matchMedia("(prefers-color-scheme: light)");
   let followsSystemTheme = true;
   let colorMode: TerminalColorMode = systemTheme.matches ? "light" : "dark";
@@ -755,6 +878,7 @@ function renderTerminal(sessionId: string): void {
         <div class="session-identity">
           <span id="session-label">terminal</span>
           <span id="session-access" class="session-access" hidden>View only</span>
+          <span id="session-encryption" class="session-access encryption" hidden>End-to-end encrypted</span>
           <span id="session-status" class="status offline"><i></i><b>Offline</b></span>
           <span id="typing-status" class="typing-status" hidden></span>
         </div>
@@ -779,6 +903,16 @@ function renderTerminal(sessionId: string): void {
       </header>
       <div id="terminal-wrap" class="terminal-wrap">
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
+      </div>
+      <div id="encryption-gate" class="encryption-gate" hidden>
+        <form id="encryption-form" class="encryption-panel">
+          <span class="settings-kicker">Private terminal</span>
+          <h2>Enter the session password</h2>
+          <p id="encryption-message">The password is processed on this device and is never sent to shell.online.</p>
+          <label for="encryption-password">Password</label>
+          <input id="encryption-password" type="password" required autocomplete="new-password" autocapitalize="off" spellcheck="false" />
+          <button type="submit">Decrypt terminal</button>
+        </form>
       </div>
       <dialog id="terminal-settings" class="settings-dialog" aria-labelledby="settings-title">
         <div class="settings-panel">
@@ -859,12 +993,17 @@ function renderTerminal(sessionId: string): void {
   if (!identityElement) throw new Error("Missing session identity");
   const labelElement = requiredElement("session-label");
   const accessBadge = requiredElement("session-access");
+  const encryptionBadge = requiredElement("session-encryption");
   const accessDescription = requiredElement("session-access-description");
   const typingElement = requiredElement("typing-status");
   const presenceElement = requiredElement("presence");
   const copyButton = requiredElement<HTMLButtonElement>("settings-copy-link");
   const settingsButton = requiredElement<HTMLButtonElement>("settings-open");
   const settingsDialog = requiredElement<HTMLDialogElement>("terminal-settings");
+  const encryptionGate = requiredElement("encryption-gate");
+  const encryptionForm = requiredElement<HTMLFormElement>("encryption-form");
+  const encryptionPassword = requiredElement<HTMLInputElement>("encryption-password");
+  const encryptionMessage = requiredElement("encryption-message");
   const settingsCloseButton = requiredElement<HTMLButtonElement>("settings-close");
   const themeButton = requiredElement<HTMLButtonElement>("theme-toggle");
   const zoomInput = requiredElement<HTMLInputElement>("terminal-zoom");
@@ -958,6 +1097,46 @@ function renderTerminal(sessionId: string): void {
   let resizeAllowed = false;
   let snapshotRequestPending = false;
   const terminalInput = new TerminalInputQueue(() => socket);
+  let frameCipher: BrowserFrameCipher | null = null;
+  let encryptedSession = false;
+  let persistentSession = false;
+  let waitingForEncryptionKey = false;
+  let outgoingFrames = Promise.resolve();
+  let incomingFrames = Promise.resolve();
+
+  terminalInput.setEncoder((chunk) => {
+    const frame = encodeFrame(Opcode.Input, chunk);
+    return frameCipher ? frameCipher.seal(frame) : frame;
+  });
+
+  const sendBinaryFrame = (frame: Uint8Array): void => {
+    outgoingFrames = outgoingFrames.then(async () => {
+      const current = socket;
+      if (current?.readyState !== WebSocket.OPEN) return;
+      current.send(frameCipher ? await frameCipher.seal(frame) : new Uint8Array(frame));
+    }).catch(() => undefined);
+  };
+
+  const showEncryptionGate = (message: string, allowPassword: boolean): void => {
+    waitingForEncryptionKey = true;
+    encryptionGate.hidden = false;
+    encryptionMessage.textContent = message;
+    encryptionPassword.hidden = !allowPassword;
+    encryptionForm.querySelector<HTMLLabelElement>("label")!.hidden = !allowPassword;
+    encryptionForm.querySelector<HTMLButtonElement>("button")!.hidden = !allowPassword;
+    terminal.options.disableStdin = true;
+    if (allowPassword) encryptionPassword.focus();
+  };
+
+  const applyEncryptionMode = (encrypted: boolean): void => {
+    encryptedSession = encrypted;
+    encryptionBadge.hidden = !encrypted;
+    encryptionBadge.textContent = persistentSession ? "Persistent E2EE" : "End-to-end encrypted";
+    if (encrypted && !frameCipher && !encryptionDescriptor) {
+      showEncryptionGate("This E2EE link is missing its decryption fragment. Ask the sender for the complete URL, including everything after #.", false);
+      socket?.close(4003, "missing encryption key");
+    }
+  };
 
   const defaultCopyLabel = (): string =>
     readOnly ? "Copy read-only link" : "Copy sharing link";
@@ -1173,7 +1352,7 @@ function renderTerminal(sessionId: string): void {
     const token = crypto.getRandomValues(new Uint32Array(1))[0];
     pendingLatencyToken = token;
     pendingLatencyStarted = performance.now();
-    socket.send(encodeLatencyProbe(token));
+    sendBinaryFrame(encodeLatencyProbe(token));
     window.clearTimeout(latencyTimeout);
     latencyTimeout = window.setTimeout(() => {
       if (pendingLatencyToken !== token) return;
@@ -1204,7 +1383,7 @@ function renderTerminal(sessionId: string): void {
       terminal.cols === lastResizeColumns &&
       terminal.rows === lastResizeRows
     ) return;
-    socket.send(encodeResize(terminal.cols, terminal.rows));
+    sendBinaryFrame(encodeResize(terminal.cols, terminal.rows));
     lastResizeSocket = socket;
     lastResizeColumns = terminal.cols;
     lastResizeRows = terminal.rows;
@@ -1360,20 +1539,34 @@ function renderTerminal(sessionId: string): void {
         return;
       }
 
-      const frame = new Uint8Array(event.data);
-      if (frame.byteLength === 0) return;
-      if (receiveLatencyResponse(frame)) return;
-      if (frame[0] === Opcode.Snapshot) {
-        terminalWrites.enqueue(frame.subarray(1), true);
-        snapshotRequestPending = false;
-      } else if (frame[0] === Opcode.Output) {
-        if (!terminalWrites.enqueue(frame.subarray(1)) && !snapshotRequestPending) {
-          snapshotRequestPending = true;
-          if (socket?.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "snapshot_request" }));
+      const received = new Uint8Array(event.data);
+      incomingFrames = incomingFrames.then(async () => {
+        let frame = received;
+        if (encryptedSession) {
+          if (!frameCipher) return;
+          try {
+            frame = await frameCipher.open(received);
+          } catch {
+            frameCipher = null;
+            socket?.close(4003, "decryption failed");
+            showEncryptionGate("That password could not decrypt this session. Check it and try again.", encryptionDescriptor?.kind === "password");
+            return;
           }
         }
-      }
+        if (frame.byteLength === 0) return;
+        if (receiveLatencyResponse(frame)) return;
+        if (frame[0] === Opcode.Snapshot || frame[0] === Opcode.FinalSnapshot) {
+          terminalWrites.enqueue(frame.subarray(1), true);
+          snapshotRequestPending = false;
+        } else if (frame[0] === Opcode.Output) {
+          if (!terminalWrites.enqueue(frame.subarray(1)) && !snapshotRequestPending) {
+            snapshotRequestPending = true;
+            if (socket?.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: "snapshot_request" }));
+            }
+          }
+        }
+      }).catch(() => undefined);
     });
 
     socket.addEventListener("close", (event) => {
@@ -1393,7 +1586,7 @@ function renderTerminal(sessionId: string): void {
         showEndedSession();
         return;
       }
-      if (stopped || lastStatus === "exited") return;
+      if (waitingForEncryptionKey || stopped || lastStatus === "exited") return;
       setStatus("disconnected");
       void retryOrShowMissing();
     });
@@ -1412,6 +1605,8 @@ function renderTerminal(sessionId: string): void {
       viewers?: unknown;
       localTypingAt?: unknown;
       readOnly?: unknown;
+      encrypted?: unknown;
+      persistent?: unknown;
       reason?: unknown;
       allowed?: unknown;
     };
@@ -1423,6 +1618,11 @@ function renderTerminal(sessionId: string): void {
 
     const messageReadOnly = readOnlyFromControlMessage(message);
     if (messageReadOnly !== null) applyReadOnly(messageReadOnly);
+    if (typeof message.encrypted === "boolean") applyEncryptionMode(message.encrypted);
+    if (typeof message.persistent === "boolean") {
+      persistentSession = message.persistent;
+      if (encryptedSession) encryptionBadge.textContent = persistentSession ? "Persistent E2EE" : "End-to-end encrypted";
+    }
 
     if (message.type === "access_denied" && message.reason === "read_only") {
       applyReadOnly(true);
@@ -1696,12 +1896,38 @@ function renderTerminal(sessionId: string): void {
     socket?.close(1000, "page closed");
   });
 
+  encryptionForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (encryptionDescriptor?.kind !== "password") return;
+    const password = encryptionPassword.value;
+    if (!password) return;
+    encryptionPassword.disabled = true;
+    encryptionMessage.textContent = "Deriving the decryption key on this device…";
+    void BrowserFrameCipher.fromPassword(password, encryptionDescriptor.salt).then((cipher) => {
+      frameCipher = cipher;
+      encryptionPassword.value = "";
+      waitingForEncryptionKey = false;
+      encryptionGate.hidden = true;
+      encryptionPassword.disabled = false;
+      connect();
+    }).catch(() => {
+      encryptionPassword.disabled = false;
+      encryptionMessage.textContent = "Could not derive the key. Try again.";
+    });
+  });
+
   handleViewportResize();
   void document.fonts?.ready.then(scheduleFit);
-  requestAnimationFrame(() => {
+  requestAnimationFrame(() => void (async () => {
     fitTerminal();
+    if (encryptionDescriptor?.kind === "key") {
+      frameCipher = await BrowserFrameCipher.fromKey(encryptionDescriptor.key);
+    } else if (encryptionDescriptor?.kind === "password") {
+      showEncryptionGate("The password is processed on this device and is never sent to shell.online.", true);
+      return;
+    }
     connect();
-  });
+  })());
 }
 
 function renderNotFound(): void {

@@ -1,0 +1,149 @@
+package main
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+
+	"shell.online/internal/api"
+	"shell.online/internal/e2ee"
+)
+
+type persistentSessionState struct {
+	Version       int    `json:"version"`
+	ID            string `json:"session_id"`
+	HostToken     string `json:"host_token"`
+	ReadOnly      bool   `json:"read_only"`
+	Encrypted     bool   `json:"encrypted"`
+	Fragment      string `json:"fragment"`
+	EncryptionKey string `json:"encryption_key"`
+}
+
+var persistentFragmentPattern = regexp.MustCompile(`^#(?:key=[A-Za-z0-9_-]{43}|salt=[A-Za-z0-9_-]{22})$`)
+
+func preparePersistentSession(ctx context.Context, client *api.Client, path, label string, readOnly, encrypted bool, password string) (api.Session, error) {
+	state, err := readPersistentState(path)
+	if err != nil && !os.IsNotExist(err) {
+		return api.Session{}, err
+	}
+	created := os.IsNotExist(err)
+	if created {
+		state = persistentSessionState{Version: 1, ReadOnly: readOnly, Encrypted: encrypted}
+		state.HostToken, err = randomPersistentToken(32)
+		if err != nil {
+			return api.Session{}, err
+		}
+		state.ID = persistentSessionID(state.HostToken)
+		if encrypted {
+			var key []byte
+			var keyError error
+			_, state.Fragment, key, keyError = e2ee.GenerateMaterial(password)
+			if keyError != nil {
+				return api.Session{}, keyError
+			}
+			state.EncryptionKey = base64.RawURLEncoding.EncodeToString(key)
+		}
+	} else if state.Version != 1 || state.ReadOnly != readOnly || state.Encrypted != encrypted {
+		return api.Session{}, fmt.Errorf("persistent state access/encryption mode does not match the requested flags")
+	}
+	seed := api.Session{ID: state.ID, HostToken: state.HostToken, ReadOnly: state.ReadOnly, Encrypted: state.Encrypted, Persistent: true}
+	session, err := client.ResumeSession(ctx, label, seed)
+	if err != nil {
+		return api.Session{}, err
+	}
+	if encrypted {
+		key, decodeError := base64.RawURLEncoding.DecodeString(state.EncryptionKey)
+		if decodeError != nil {
+			return api.Session{}, fmt.Errorf("decode persistent E2EE key: %w", decodeError)
+		}
+		session.Cipher, err = e2ee.New(key)
+		if err != nil {
+			return api.Session{}, err
+		}
+		session.ShareURL += state.Fragment
+	}
+	if created {
+		if err := writePersistentState(path, state); err != nil {
+			return api.Session{}, err
+		}
+	}
+	return session, nil
+}
+
+func persistentSessionID(hostToken string) string {
+	digest := sha256.Sum256([]byte("shell.online persistent session\x00" + hostToken))
+	return base64.RawURLEncoding.EncodeToString(digest[:24])
+}
+
+func readPersistentState(path string) (persistentSessionState, error) {
+	var state persistentSessionState
+	file, err := os.Open(path)
+	if err != nil {
+		return state, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return state, err
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return state, fmt.Errorf("persistent state must not be accessible by group or other users")
+	}
+	if err := json.NewDecoder(io.LimitReader(file, 16*1024)).Decode(&state); err != nil {
+		return state, fmt.Errorf("decode persistent state: %w", err)
+	}
+	if !localSessionIDPattern.MatchString(state.ID) || len(state.HostToken) < 32 || len(state.HostToken) > 128 || state.ID != persistentSessionID(state.HostToken) {
+		return state, fmt.Errorf("persistent state contains invalid credentials")
+	}
+	if state.Encrypted && (!persistentFragmentPattern.MatchString(state.Fragment) || state.EncryptionKey == "") {
+		return state, fmt.Errorf("persistent state contains invalid E2EE material")
+	}
+	return state, nil
+}
+
+func writePersistentState(path string, state persistentSessionState) error {
+	directory := filepath.Dir(path)
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return fmt.Errorf("create persistent state directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(directory, ".shell-online-state-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o600); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := json.NewEncoder(temporary).Encode(state); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func randomPersistentToken(length int) (string, error) {
+	value := make([]byte, length)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
+}

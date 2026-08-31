@@ -48,3 +48,14 @@ jobs:
         with:
           go-version-file: go.mod
           go-package: ./...
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build --build-arg VERSION=test -t shell-online:test .
+      - run: test "$(docker run --rm --entrypoint shell shell-online:test --version)" = "shell test"
+      - run: test "$(docker image inspect shell-online:test --format '{{.Config.User}}')" = "shellonline"

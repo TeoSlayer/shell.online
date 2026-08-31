@@ -2,6 +2,25 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-08-31
+
+### Added
+
+- Add optional `--e2ee` terminal-frame encryption with locally generated URL-fragment keys or separately shared passwords derived on each endpoint.
+- Add a persistent multi-architecture GHCR Docker client with durable state and workspace volumes, an automatically generated browser password, one stable share URL across restarts, an SBOM, and build provenance.
+- Add dedicated E2EE and Docker knowledge-base guides, cryptographic compatibility vectors, ciphertext tamper tests, persistent-state permission tests, and resume API coverage.
+
+### Security
+
+- Encrypt terminal input, output, snapshots, resize messages, and latency probes with AES-256-GCM while authenticating relay-visible frame opcodes.
+- Keep random keys in URL fragments that are not sent to Cloudflare; password mode sends only a random salt and derives the key locally with PBKDF2-HMAC-SHA256.
+- Store persistent host credentials and decryption material in owner-only state, reject overly broad file permissions, and bind relay resume to the saved host credential and immutable access/encryption mode.
+
+### Changed
+
+- Preserve persistent relay identity for up to 30 offline days while keeping ordinary task-bound session deletion unchanged.
+- Document E2EE metadata exposure, bearer-link implications, replay/drop limitations, unrecoverable keys, and Docker volume trust boundaries without vague security claims.
+
 ## [0.5.0] — 2026-08-31
 
 ### Added
@@ -59,6 +78,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Support safe Claude Code conversation handoffs through a forked process.
 
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
+[0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0
 [0.4.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.4.0
 [0.3.9]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.9
 [0.3.8]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.3.8

@@ -20,9 +20,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.5.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.6.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.5.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.6.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
@@ -40,6 +40,12 @@ shell --json -- your-command --its-arguments
 For monitoring without browser input:
 
 shell --read-only --json -- your-command --its-arguments
+
+For end-to-end encrypted terminal payloads:
+
+shell --e2ee --json -- your-command --its-arguments
+
+The default E2EE mode places a random decryption key in the URL fragment, which is not sent to Cloudflare. Set SHELL_ONLINE_E2EE_PASSWORD before starting shell to use a separately shared password; the URL then carries only a random salt. Lost keys and passwords cannot be recovered. Cloudflare still sees traffic and lifecycle metadata.
 
 The first stderr line is a JSON event:
 
@@ -65,6 +71,8 @@ shell kill --all
 `shell attach` opens the existing PTY locally. Its terminal title keeps a Ctrl-X D to detach reminder visible even when a full-screen TUI redraws the terminal. Press Ctrl-X, release it, then press D to detach without stopping it (Ctrl-] remains a legacy alternative); the wrapper intercepts the sequence before the child process receives it. Input and output remain mirrored to browser viewers. Anonymous presence and a brief per-typist input lease prevent remote keystrokes from interleaving.
 
 Sessions close immediately when their task exits. `--auto-close 5m` or an absolute/local date adds an earlier deadline; supported duration units are ms, s, m, h, d, w, mo, and y.
+
+The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated browser password. Its state and workspace live in separate named volumes; the state volume is a host credential and decryption secret. This is a client for the hosted shell.online relay, not self-hosting documentation.
 
 ## Release integrity
 

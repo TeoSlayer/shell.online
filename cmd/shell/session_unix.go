@@ -22,6 +22,7 @@ import (
 	"golang.org/x/term"
 
 	"shell.online/internal/api"
+	"shell.online/internal/e2ee"
 	"shell.online/internal/protocol"
 	"shell.online/internal/relay"
 	"shell.online/internal/ringbuffer"
@@ -61,7 +62,7 @@ func runSharedProcess(
 	if terminal := os.Stdin; term.IsTerminal(int(terminal.Fd())) {
 		previousState, rawError := term.MakeRaw(int(terminal.Fd()))
 		if rawError != nil {
-			sendFinalState(connection, outputRing, 1, nil)
+			sendFinalState(connection, outputRing, session.Cipher, 1, nil)
 			return 1, fmt.Errorf("enter raw terminal mode: %w", rawError)
 		}
 		defer func() { _ = term.Restore(int(terminal.Fd()), previousState) }()
@@ -71,7 +72,7 @@ func runSharedProcess(
 	command.Env = terminalEnvironment(commandEnvironment)
 	ptmx, err := pty.StartWithSize(command, localTerminalSize())
 	if err != nil {
-		sendFinalState(connection, outputRing, 1, nil)
+		sendFinalState(connection, outputRing, session.Cipher, 1, nil)
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
 	}
 	defer ptmx.Close()
@@ -111,7 +112,7 @@ func runSharedProcess(
 	outputChunks := make(chan []byte, 64)
 	var outputDirty atomic.Bool
 	batchDone := make(chan struct{})
-	go batchOutput(relayContext, connection, outputChunks, outputRing, &outputDirty, batchDone)
+	go batchOutput(relayContext, connection, outputChunks, outputRing, session.Cipher, &outputDirty, batchDone)
 
 	readDone := make(chan struct{})
 	go func() {
@@ -167,7 +168,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, outputRing, exitAcknowledged)
+		err := readRelay(connection, ptmx, outputRing, session.Cipher, exitAcknowledged)
 		select {
 		case <-sharingFinished:
 			return
@@ -191,7 +192,7 @@ func runSharedProcess(
 	close(sharingFinished)
 
 	exitCode := processExitCode(waitError)
-	sendFinalState(connection, outputRing, exitCode, exitAcknowledged)
+	sendFinalState(connection, outputRing, session.Cipher, exitCode, exitAcknowledged)
 
 	if waitError != nil {
 		var exitError *exec.ExitError
@@ -236,6 +237,7 @@ func signalProcessGroup(command *exec.Cmd, signal syscall.Signal) {
 func sendFinalState(
 	connection *relay.Connection,
 	output *ringbuffer.Buffer,
+	frameCipher *e2ee.Cipher,
 	exitCode int,
 	exitAcknowledged <-chan struct{},
 ) {
@@ -245,7 +247,10 @@ func sendFinalState(
 		return
 	}
 
-	finalSnapshot := protocol.Frame(protocol.FinalSnapshot, output.Bytes())
+	finalSnapshot, err := sealFrame(frameCipher, protocol.Frame(protocol.FinalSnapshot, output.Bytes()))
+	if err != nil {
+		return
+	}
 	if connection.SendSyncContext(finalContext, relay.BinaryMessage, finalSnapshot) != nil {
 		return
 	}
@@ -271,6 +276,7 @@ func batchOutput(
 	connection *relay.Connection,
 	chunks <-chan []byte,
 	output *ringbuffer.Buffer,
+	frameCipher *e2ee.Cipher,
 	dirty *atomic.Bool,
 	done chan<- struct{},
 ) {
@@ -291,7 +297,12 @@ func batchOutput(
 			return
 		}
 		lastFlush = time.Now()
-		frame := protocol.Frame(protocol.Output, buffer)
+		frame, err := sealFrame(frameCipher, protocol.Frame(protocol.Output, buffer))
+		if err != nil {
+			dirty.Store(true)
+			buffer = buffer[:0]
+			return
+		}
 		if !connection.TrySend(relay.BinaryMessage, frame) {
 			dirty.Store(true)
 		}
@@ -302,7 +313,10 @@ func batchOutput(
 			return
 		}
 		lastRecoveryAttempt = time.Now()
-		frame := protocol.Frame(protocol.BroadcastSnapshot, output.Bytes())
+		frame, err := sealFrame(frameCipher, protocol.Frame(protocol.BroadcastSnapshot, output.Bytes()))
+		if err != nil {
+			return
+		}
 		if connection.TrySend(relay.BinaryMessage, frame) {
 			dirty.Store(false)
 		}
@@ -341,6 +355,7 @@ func readRelay(
 	connection *relay.Connection,
 	ptmx *os.File,
 	output *ringbuffer.Buffer,
+	frameCipher *e2ee.Cipher,
 	exitAcknowledged chan<- struct{},
 ) error {
 	for {
@@ -370,13 +385,22 @@ func readRelay(
 				frame[0] = protocol.Snapshot
 				binary.BigEndian.PutUint32(frame[1:5], event.ViewerID)
 				copy(frame[5:], snapshot)
-				_ = connection.Send(relay.BinaryMessage, frame)
+				sealed, sealError := sealFrame(frameCipher, frame)
+				if sealError == nil {
+					_ = connection.Send(relay.BinaryMessage, sealed)
+				}
 			}
 			continue
 		}
 
 		if len(message) == 0 {
 			continue
+		}
+		if frameCipher != nil {
+			message, err = frameCipher.OpenFrame(message)
+			if err != nil {
+				continue
+			}
 		}
 		switch message[0] {
 		case protocol.Input:
@@ -391,10 +415,20 @@ func readRelay(
 			if len(message) == 5 {
 				response := append([]byte(nil), message...)
 				response[0] = protocol.Pong
-				_ = connection.Send(relay.BinaryMessage, response)
+				sealed, sealError := sealFrame(frameCipher, response)
+				if sealError == nil {
+					_ = connection.Send(relay.BinaryMessage, sealed)
+				}
 			}
 		}
 	}
+}
+
+func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
+	if frameCipher == nil {
+		return frame, nil
+	}
+	return frameCipher.SealFrame(frame)
 }
 
 func localTerminalSize() *pty.Winsize {

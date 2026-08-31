@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"shell.online/internal/api"
+	"shell.online/internal/e2ee"
 )
 
 var version = "dev"
@@ -37,6 +38,8 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	showVersion := flags.Bool("version", false, "print version and exit")
 	foreground := flags.Bool("foreground", false, "stay attached and mirror the process locally")
 	readOnly := flags.Bool("read-only", false, "create a view-only link that rejects browser input")
+	encrypted := flags.Bool("e2ee", false, "encrypt terminal contents end-to-end; the URL fragment carries the key")
+	persistentState := flags.String("persistent", "", "reuse a stable encrypted session identity from this state file")
 	autoClose := newAutoCloseFlag()
 	flags.Var(autoClose, "auto-close", "close on task exit, or earlier at a duration/date (for example 5m, 2h, tomorrow 09:00)")
 	flags.Usage = func() {
@@ -105,7 +108,28 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	defer cancelProcess()
 
 	client := api.NewClient(strings.TrimRight(*server, "/"), "shell/"+version)
-	session, err := client.CreateSession(processContext, filepath.Base(command[0]), *readOnly)
+	var session api.Session
+	if *persistentState != "" {
+		if !*encrypted {
+			fmt.Fprintln(stderr, "shell: --persistent requires --e2ee")
+			return 2
+		}
+		session, err = preparePersistentSession(
+			processContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true,
+			os.Getenv("SHELL_ONLINE_E2EE_PASSWORD"),
+		)
+	} else {
+		var frameCipher *e2ee.Cipher
+		var encryptionFragment string
+		if *encrypted {
+			frameCipher, encryptionFragment, err = e2ee.Generate(os.Getenv("SHELL_ONLINE_E2EE_PASSWORD"))
+		}
+		if err == nil {
+			session, err = client.CreateSession(processContext, filepath.Base(command[0]), *readOnly, *encrypted, false)
+			session.Cipher = frameCipher
+			session.ShareURL += encryptionFragment
+		}
+	}
 	if err != nil {
 		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
 		fmt.Fprintf(stderr, "shell: %v\n", err)
@@ -118,13 +142,15 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		closesAt = &deadline
 	}
 	control, controlError := startLocalSession(localSessionRecord{
-		ID:        session.ID,
-		ShareURL:  session.ShareURL,
-		ReadOnly:  session.ReadOnly,
-		Command:   displayCommand(launch.DisplayArguments),
-		PID:       os.Getpid(),
-		StartedAt: now,
-		ClosesAt:  closesAt,
+		ID:         session.ID,
+		ShareURL:   session.ShareURL,
+		ReadOnly:   session.ReadOnly,
+		Encrypted:  session.Encrypted,
+		Persistent: session.Persistent,
+		Command:    displayCommand(launch.DisplayArguments),
+		PID:        os.Getpid(),
+		StartedAt:  now,
+		ClosesAt:   closesAt,
 	})
 	if controlError != nil {
 		if isBackgroundChild() {
@@ -149,6 +175,8 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			"session_id": session.ID,
 			"share_url":  session.ShareURL,
 			"read_only":  session.ReadOnly,
+			"encrypted":  session.Encrypted,
+			"persistent": session.Persistent,
 			"auto_close": "task",
 			"expires_at": session.ExpiresAt.Format(time.RFC3339),
 			"background": false,
@@ -166,6 +194,12 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
 		}
+		if session.Encrypted {
+			fmt.Fprintln(stderr, "  Privacy: end-to-end encrypted; keep the complete URL private")
+		}
+		if session.Persistent {
+			fmt.Fprintln(stderr, "  Persistence: stable link; reconnects from the saved state file")
+		}
 		if closesAt == nil {
 			fmt.Fprintln(stderr, "  Closes: when the task exits")
 		} else {
@@ -178,13 +212,15 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	if isBackgroundChild() {
 		onStarted = func() {
 			sendBackgroundResult(backgroundLaunchResult{
-				OK:        true,
-				ID:        session.ID,
-				ShareURL:  session.ShareURL,
-				ReadOnly:  session.ReadOnly,
-				ExpiresAt: session.ExpiresAt,
-				ClosesAt:  closesAt,
-				Handoff:   launch.Handoff,
+				OK:         true,
+				ID:         session.ID,
+				ShareURL:   session.ShareURL,
+				ReadOnly:   session.ReadOnly,
+				Encrypted:  session.Encrypted,
+				Persistent: session.Persistent,
+				ExpiresAt:  session.ExpiresAt,
+				ClosesAt:   closesAt,
+				Handoff:    launch.Handoff,
 			})
 		}
 	}
