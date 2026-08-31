@@ -9,6 +9,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         docs: resolve(import.meta.dirname, "docs/index.html"),
+        cli: resolve(import.meta.dirname, "cli/index.html"),
         mobile: resolve(import.meta.dirname, "mobile/index.html"),
         reliability: resolve(import.meta.dirname, "reliability/index.html"),
         security: resolve(import.meta.dirname, "security/index.html"),

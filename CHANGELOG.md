@@ -2,6 +2,13 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] — 2026-08-31
+
+### Added
+
+- Add a complete built-in CLI reference through `shell help reference`, covering commands, flags, environment variables, structured output, relay states, auto-close grammar, aliases, and exit status.
+- Add the same full reference as a first-class, searchable, versioned documentation page rendered from the repository source.
+
 ## [0.6.1] — 2026-08-31
 
 ### Fixed
@@ -84,6 +91,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Reject stale private background flags with a parent-bound startup handshake.
 - Support safe Claude Code conversation handoffs through a forked process.
 
+[0.6.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.2
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

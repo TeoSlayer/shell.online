@@ -216,6 +216,12 @@
 .knowledge-sections section > span { display: none; }
 .knowledge-sections h2 { margin: 0 0 11px; color: #0a2540; font-size: 22px; font-weight: 650; letter-spacing: -.022em; }
 .knowledge-sections p { max-width: 650px; margin: 0; color: #425466; font-size: 15px; line-height: 1.72; }
+.knowledge-reference-list { display: grid; margin: 22px 0 0; border-top: 1px solid #e6ebf1; }
+.knowledge-reference-list > div { display: grid; padding: 14px 0; border-bottom: 1px solid #e6ebf1; grid-template-columns: minmax(180px, .8fr) minmax(0, 1.2fr); gap: 20px; }
+.knowledge-reference-list dt,
+.knowledge-reference-list dd { margin: 0; }
+.knowledge-reference-list dt code { color: #4f46e5; font: 600 12px/1.55 ui-monospace, monospace; overflow-wrap: anywhere; }
+.knowledge-reference-list dd { color: #425466; font-size: 13px; line-height: 1.55; }
 
 .knowledge-note { margin: 38px 0; padding: 20px 22px; border: 1px solid #d9d6ff; border-radius: 8px; background: #f7f5ff; }
 .knowledge-note strong { color: #4f46e5; font-size: 13px; }
@@ -231,7 +237,14 @@
 .knowledge-release strong { margin: 6px 0 4px; font-size: 12px; font-weight: 650; }
 .knowledge-release a { color: #635bff; font-size: 10px; }
 
-.assurance-page .marketing-footer { border-top-color: var(--line); background: #f6f9fc; }
+.assurance-page .marketing-footer {
+  box-sizing: border-box;
+  width: 100%;
+  padding-right: max(32px, calc((100vw - 1240px) / 2));
+  padding-left: max(32px, calc((100vw - 1240px) / 2));
+  border-top-color: var(--line);
+  background: #f6f9fc;
+}
 
 @media (max-width: 1040px) {
   .knowledge-layout { grid-template-columns: 210px minmax(0, 680px); justify-content: start; }
@@ -239,6 +252,7 @@
 }
 
 @media (max-width: 720px) {
+  .assurance-page .marketing-footer { padding-right: 18px; padding-left: 18px; }
   .marketing-nav.knowledge-nav { display: grid; height: 58px; padding: 0 18px; grid-template-columns: auto auto minmax(0, 1fr); gap: 14px; }
   .knowledge-wordmark b { display: none; }
   .knowledge-nav .marketing-links { min-width: 0; justify-content: flex-end; }
@@ -267,6 +281,7 @@
   .knowledge-command { margin-bottom: 30px; padding: 16px 17px; font-size: 12px; }
   .knowledge-sections section { padding: 29px 0 32px; }
   .knowledge-sections h2 { font-size: 21px; }
+  .knowledge-reference-list > div { grid-template-columns: 1fr; gap: 6px; }
   .knowledge-next { align-items: flex-start; flex-direction: column; gap: 13px; }
 }
 

@@ -62,3 +62,33 @@ func TestAttachHelpExplainsChildCannotCaptureDetach(t *testing.T) {
 		}
 	}
 }
+
+func TestCompleteCLIReferenceCoversPublicInterface(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := run([]string{"help", "reference"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run(help reference) = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, expected := range []string{
+		"shell [options] [--] [command]",
+		"--read-only",
+		"--e2ee",
+		"--persistent <state-file>",
+		"--foreground",
+		"--auto-close",
+		"--json",
+		"--server <URL>",
+		"--version",
+		"shell list --json",
+		"relay_status",
+		"shell attach <session-id-or-prefix>",
+		"shell kill --all",
+		"SHELL_ONLINE_SERVER",
+		"SHELL_ONLINE_E2EE_PASSWORD",
+		"invalid CLI usage",
+	} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Errorf("complete CLI reference does not contain %q", expected)
+		}
+	}
+}

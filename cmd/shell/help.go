@@ -51,6 +51,7 @@ More guidance
   shell help attach
   shell help list
   shell help kill
+  shell help reference             Print the complete CLI reference
 `)
 }
 
@@ -60,7 +61,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|reference]")
 		return 2
 	}
 
@@ -131,10 +132,91 @@ Use an ID or an unambiguous prefix with shell attach or shell kill.
 Stopping a session terminates its wrapped process and makes the browser link offline.
 You do not need to stop completed work: the share closes automatically when its task exits.
 `)
+	case "reference", "cli", "commands":
+		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, kill")
+		fmt.Fprintln(stderr, "Available topics: start, attach, list, kill, reference")
 		return 2
 	}
 	return 0
+}
+
+func printCLIReference(writer io.Writer) {
+	fmt.Fprint(writer, `Complete CLI reference
+
+SYNOPSIS
+  shell [options] [--] [command] [arguments...]
+  shell list [--json]
+  shell attach <session-id-or-prefix>
+  shell kill <session-id-or-prefix>
+  shell kill --all
+  shell help [start|attach|list|kill|reference]
+
+START AND SHARE
+  shell [command] [arguments...]
+      Wrap a command in a PTY, print its browser URL, and leave it running in
+      the background. With no command, start the program named by $SHELL or
+      /bin/sh. Use -- before a command when argument boundaries are ambiguous.
+
+START OPTIONS
+  --read-only
+      Create an immutable view-only session. The relay rejects browser input.
+  --e2ee
+      Encrypt terminal frames between the CLI and browser. Without a password,
+      the generated key is carried in the URL fragment.
+  --persistent <state-file>
+      Reuse a stable session identity and URL. Requires --e2ee. The owner-only
+      state file contains host credentials and decryption material.
+  --foreground
+      Mirror and control the process in the launching terminal instead of
+      returning immediately.
+  --auto-close[=<duration-or-date>]
+      Always close when the task exits; optionally add an earlier deadline.
+      Units: ms, s, m, h, d, w, mo, y. Units may be combined, such as 1h30m.
+      Dates: RFC3339, YYYY-MM-DD[ HH:MM[:SS]], HH:MM, today, or tomorrow HH:MM.
+  --json
+      Emit the new-session event as one JSON object on stderr.
+  --server <URL>
+      Override the relay URL. Defaults to $SHELL_ONLINE_SERVER, then
+      https://shell.online.
+  --version
+      Print the CLI version and exit.
+  -h, --help
+      Print the guided top-level help and exit.
+
+SESSION COMMANDS
+  shell list
+      List local processes with uptime, closing rule, access mode, command,
+      share URL, and independently checked relay status. Relay values shown in
+      the table are online, starting, reconnecting, expired, and unknown.
+  shell list --json
+      Emit the same sessions as a JSON array on stdout. relay_status contains
+      the raw connected, waiting, disconnected, expired, or unknown value.
+  shell attach <session-id-or-prefix>
+      Attach this terminal to one local session. Prefixes require at least six
+      characters and must be unambiguous. Press Ctrl-X, then D to detach;
+      Ctrl-] is the legacy alternative. Detaching does not stop the process.
+  shell kill <session-id-or-prefix>
+      Stop one wrapped process and close its browser session.
+  shell kill --all
+      Stop every locally managed shell.online process.
+  shell help [topic]
+      Print guided help. Topic aliases include run/share, ps, stop, and cli.
+
+ENVIRONMENT
+  SHELL
+      Program used when no command is supplied.
+  SHELL_ONLINE_SERVER
+      Default relay URL; overridden by --server.
+  SHELL_ONLINE_E2EE_PASSWORD
+      Derive the E2EE key from this password and a random URL salt instead of
+      placing a random key in the URL fragment. The password is never sent.
+
+OUTPUT AND EXIT STATUS
+  A background start returns 0 after the share is ready. --foreground returns
+  the wrapped process status. Session commands return 0 on success, 1 on an
+  operational failure, and 2 for invalid CLI usage. Start failures return 1;
+  invalid flags or auto-close values return 2.
+`)
 }

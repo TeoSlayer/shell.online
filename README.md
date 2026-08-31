@@ -36,9 +36,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.6.1 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.6.2 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.6.1" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.6.2" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -72,6 +72,7 @@ Sessions run in the background. Inspect or stop them locally:
 
 ```sh
 shell help
+shell help reference
 shell list
 shell list --json
 shell attach <session-id-or-prefix>
@@ -80,6 +81,8 @@ shell kill --all
 ```
 
 `shell help` provides a guided start/share/attach/detach/stop flow; `shell help attach` explains local takeover and detaching in detail.
+
+The complete command, option, environment, structured-output, and exit-status reference is available both as `shell help reference` inside the executable and in the versioned [CLI reference](https://shell.online/cli/).
 
 `shell list` checks both sides of every share. Its `RELAY` column reports `online`, `reconnecting`, `expired`, or `unknown`; `shell list --json` exposes the corresponding raw `relay_status`. An `expired` relay means the local process is still running but its public link no longer exists. `unknown` means the status check itself could not complete and is not treated as proof that the link died.
 
@@ -124,7 +127,7 @@ See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and
 
 ## Persistent Docker terminal
 
-The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.6.1` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.6.2` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
 
 ```sh
 docker compose up --build -d
@@ -134,11 +137,11 @@ docker compose logs shell-online
 Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
 
 ```sh
-docker pull ghcr.io/teoslayer/shell.online:0.6.1
+docker pull ghcr.io/teoslayer/shell.online:0.6.2
 docker run -d --name shell-online --restart unless-stopped \
   -v shell-online-state:/var/lib/shell-online \
   -v shell-online-workspace:/workspace \
-  ghcr.io/teoslayer/shell.online:0.6.1
+  ghcr.io/teoslayer/shell.online:0.6.2
 docker logs shell-online
 ```
 

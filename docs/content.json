@@ -1,5 +1,5 @@
 {
-  "version": "0.6.1",
+  "version": "0.6.2",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -57,12 +57,28 @@
         ["Limits and recovery", "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. A lost random-key URL or Docker password cannot be recovered. Anyone with the complete URL—or password plus salted URL—can decrypt."]
       ]
     },
+    "cli": {
+      "eyebrow": "CLI reference",
+      "title": "Every command and option, in one place.",
+      "intro": "The shell CLI starts shares, reports their real relay state, attaches to local PTYs, and stops them. Run shell help reference to keep this complete reference available in the terminal too.",
+      "cards": [
+        ["Start and share", "Wrap a command in a local PTY, print its browser URL, and run it in the background. With no command, shell starts $SHELL or /bin/sh. Put -- before the command when argument boundaries are ambiguous.", [["shell <command> [arguments...]", "Share a command in the background."], ["shell", "Share a fresh default shell."], ["shell -- <command> [arguments...]", "End shell.online option parsing explicitly."]]],
+        ["Start options", "Options apply when a new share is created. Access and encryption modes cannot be weakened after creation.", [["--read-only", "Create an immutable view-only link; the relay rejects browser input."], ["--e2ee", "Encrypt terminal frames between CLI and browser."], ["--persistent <state-file>", "Reuse one stable E2EE identity and URL; requires --e2ee."], ["--foreground", "Mirror and control the process in the launching terminal."], ["--auto-close[=<value>]", "Add an earlier deadline; task exit remains the maximum lifetime."], ["--json", "Emit the new-session event as JSON on stderr."], ["--server <URL>", "Override the shell.online service URL."], ["--version", "Print the CLI version and exit."], ["-h, --help", "Print guided top-level help."]]],
+        ["List sessions", "List locally managed processes and independently check the relay. Table states are online, starting, reconnecting, expired, and unknown; unknown means the check was inconclusive, not that the link died.", [["shell list", "Print ID, uptime, relay, closing rule, access, command, and URL."], ["shell list --json", "Print a JSON array on stdout with raw relay_status values: connected, waiting, disconnected, expired, or unknown."]]],
+        ["Attach locally", "Attach to an existing local PTY without disabling browser access. IDs may be complete or unambiguous prefixes of at least six characters. Local input and resulting output remain visible online.", [["shell attach <ID>", "Attach to one local session."], ["Ctrl-X, then D", "Detach while leaving the process and share running."], ["Ctrl-]", "Legacy detach alternative; Ctrl-Z is not detach."]]],
+        ["Stop sessions", "Stopping sends termination to the wrapped process and closes its browser session. Completed tasks already close themselves automatically.", [["shell kill <ID>", "Stop one session by full ID or unambiguous prefix."], ["shell kill --all", "Stop every locally managed shell.online process."], ["shell stop <ID>", "Alias for shell kill."]]],
+        ["Help and aliases", "Guided help is built into the executable, including this full reference. Command aliases do not change behavior.", [["shell help", "Show the guided workflow and common options."], ["shell help <topic>", "Topics: start, attach, list, kill, reference."], ["shell help reference", "Print the complete built-in CLI reference."], ["shell ps", "Alias for shell list."], ["shell run / shell share", "Help-topic aliases for start; starting a process remains shell <command>."]]],
+        ["Auto-close grammar", "A share always closes when its task exits. --auto-close can only add an earlier deadline. Bare --auto-close means task-bound closure, which is already the default.", [["5m · 2h · 3d · 1w · 2mo · 1y", "Relative units: ms, s, m, h, d, w, mo, and y."], ["1h30m", "Compatible relative units can be combined."], ["tomorrow 09:00 · today 18:30", "Natural local-day forms."], ["2026-09-01 14:30 · RFC3339", "Local ISO-like dates and full RFC3339 timestamps."], ["HH:MM", "The next occurrence of that local time."]]],
+        ["Environment", "Only public configuration variables are listed here. Private background-handshake variables are internal implementation details and are not supported configuration.", [["SHELL", "Program used when shell is run without a command."], ["SHELL_ONLINE_SERVER", "Default relay URL; overridden by --server."], ["SHELL_ONLINE_E2EE_PASSWORD", "Derive E2EE material locally from a password and random URL salt."], ["SHELL_ONLINE_INSTALL_DIR", "Installer-only absolute writable destination for the shell binary."]]],
+        ["Output and exit status", "Normal starts print the share URL and lifecycle details. Structured starts emit one JSON event on stderr so the wrapped process keeps stdout. Background start returns after the share is ready; foreground mode returns the wrapped process status.", [["0", "Successful start or session-management command."], ["1", "Operational failure such as relay, process, or local-control failure."], ["2", "Invalid flags, arguments, or auto-close value."], ["shell list --json", "Structured session arrays are written to stdout; start --json events are written to stderr."]]]
+      ]
+    },
     "docker": {
       "eyebrow": "Persistent Docker terminal",
       "title": "One encrypted shell and one stable link across restarts.",
       "intro": "The Docker client keeps its workspace, host credential, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
       "cards": [
-        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.6.1 or run docker compose up --build -d, then docker compose logs shell-online. The tagged amd64/arm64 image includes an SBOM and build provenance."],
+        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.6.2 or run docker compose up --build -d, then docker compose logs shell-online. The tagged amd64/arm64 image includes an SBOM and build provenance."],
         ["Two durable volumes", "shell-online-state stores the host credential, share identity, and E2EE material. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."],
         ["Restart behavior", "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."],
         ["What persistence is not", "This image is a persistent client for the hosted shell.online relay, not a self-hosted relay. It does not make the container immortal, publish ports, or recover a deleted volume or forgotten password."]

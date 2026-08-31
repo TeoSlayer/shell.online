@@ -154,7 +154,7 @@ interface DocumentationPage {
   eyebrow: string;
   title: string;
   intro: string;
-  cards: [string, string][];
+  cards: [string, string, [string, string][]?][];
 }
 
 interface DocumentationContent {
@@ -167,14 +167,14 @@ interface DocumentationRoute {
   version: string;
 }
 
-const DOCUMENTATION_KINDS = ["docs", "mobile", "reliability", "security", "e2ee", "docker"] as const;
+const DOCUMENTATION_KINDS = ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"] as const;
 
 function resolveDocumentationRoute(pathname: string): DocumentationRoute | null {
-  const shortRoute = pathname.match(/^\/(docs|mobile|reliability|security|e2ee|docker)\/?$/);
+  const shortRoute = pathname.match(/^\/(docs|cli|mobile|reliability|security|e2ee|docker)\/?$/);
   if (shortRoute) {
     return { kind: shortRoute[1] as DocumentationKind, version: documentationContent.version };
   }
-  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(mobile|reliability|security|e2ee|docker))?\/?$/);
+  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(cli|mobile|reliability|security|e2ee|docker))?\/?$/);
   if (!versionedRoute) return null;
   return {
     kind: (versionedRoute[2] ?? "docs") as DocumentationKind,
@@ -197,7 +197,10 @@ function isDocumentationContent(value: unknown, version: string): value is Docum
     const fields = page as Record<string, unknown>;
     return typeof fields.eyebrow === "string" && typeof fields.title === "string" &&
       typeof fields.intro === "string" && Array.isArray(fields.cards) &&
-      fields.cards.every((card) => Array.isArray(card) && card.length === 2 && card.every((item) => typeof item === "string"));
+      fields.cards.every((card) => Array.isArray(card) && (card.length === 2 || card.length === 3) &&
+        typeof card[0] === "string" && typeof card[1] === "string" &&
+        (card[2] === undefined || (Array.isArray(card[2]) && card[2].every((entry) =>
+          Array.isArray(entry) && entry.length === 2 && entry.every((item) => typeof item === "string")))));
   });
 }
 
@@ -230,6 +233,16 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
     return;
   }
   const docsLink = (target: DocumentationKind): string => documentationHref(version, target);
+  const nextPage: Record<DocumentationKind, [DocumentationKind, string]> = {
+    docs: ["cli", "CLI reference"],
+    cli: ["mobile", "Mobile terminals"],
+    mobile: ["reliability", "Reliability"],
+    reliability: ["security", "Security model"],
+    security: ["e2ee", "End-to-end encryption"],
+    e2ee: ["docker", "Persistent Docker"],
+    docker: ["docs", "Back to overview"],
+  };
+  const [nextKind, nextLabel] = nextPage[kind];
   document.title = `${page.eyebrow} | shell.online`;
   document.documentElement.classList.add("marketing-root");
   document.body.classList.add("marketing-body", "knowledge-body");
@@ -242,6 +255,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
           <nav aria-label="Mobile documentation navigation">
             <label>Version<select class="docs-version-select" id="docs-version-mobile" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></label>
             <a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a>
+            <a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a>
             <a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a>
             <a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a>
             <a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a>
@@ -260,7 +274,8 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
           <a class="knowledge-home" href="${docsLink("docs")}">shell.online docs</a>
           <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a></div>
           <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a></div>
-          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a><a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a><a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a><a href="${GITHUB_REPOSITORY_URL}#run-and-manage-sessions">CLI reference ↗</a></div>
+          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a><a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a><a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a></div>
+          <div><p>Reference</p><a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a><a href="${GITHUB_REPOSITORY_URL}">Source ↗</a></div>
         </aside>
         <article class="knowledge-article">
           <div class="knowledge-breadcrumb"><a href="${docsLink("docs")}">Docs</a><span>/</span>v${escapeDocumentationText(version)}<span>/</span>${escapeDocumentationText(page.eyebrow)}</div>
@@ -270,19 +285,20 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
           ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
 <span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell --e2ee &lt;command&gt;
 <span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell --e2ee &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
-<span>$</span> docker compose logs shell-online</code></pre>` : ""}
+<span>$</span> docker compose logs shell-online</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
+<span>$</span> shell [options] -- &lt;command&gt; [arguments...]</code></pre>` : ""}
           <div class="knowledge-sections">
-            ${page.cards.map(([title, copy], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p></section>`).join("")}
+            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
           </div>
-          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The decryption secret is created and used on endpoints. Cloudflare never receives the random key or password." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as both a host credential and a decryption secret." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
-          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(kind === "docs" ? "mobile" : kind === "mobile" ? "reliability" : kind === "reliability" ? "security" : kind === "security" ? "e2ee" : kind === "e2ee" ? "docker" : "docs")}">${kind === "docs" ? "Mobile terminals" : kind === "mobile" ? "Reliability" : kind === "reliability" ? "Security model" : kind === "security" ? "End-to-end encryption" : kind === "e2ee" ? "Persistent Docker" : "Back to overview"} →</a></nav>
+          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The decryption secret is created and used on endpoints. Cloudflare never receives the random key or password." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as both a host credential and a decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
+          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${nextLabel} →</a></nav>
         </article>
         <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${escapeDocumentationText(title)}</a>`).join("")}<div class="knowledge-release"><span>Release</span><strong>v${escapeDocumentationText(version)}</strong><a href="${GITHUB_REPOSITORY_URL}/releases/tag/v${escapeDocumentationText(version)}">View release notes ↗</a></div></aside>
       </main>
       <footer class="marketing-footer">
         <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
         <p>A live browser link for any terminal process.</p>
-        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
+        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("cli")}">CLI</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
       </footer>
     </section>`;
   wireDocumentationControls(kind, version, content);
@@ -340,8 +356,9 @@ function wireDocumentationControls(kind: DocumentationKind, version: string, con
     for (const candidateKind of DOCUMENTATION_KINDS) {
       const candidatePage = content.pages[candidateKind];
       if (!candidatePage) continue;
-      candidatePage.cards.forEach(([title, copy], index) => {
-        if (`${title} ${copy}`.toLocaleLowerCase().includes(query)) {
+      candidatePage.cards.forEach(([title, copy, entries], index) => {
+        const referenceCopy = entries?.flat().join(" ") ?? "";
+        if (`${title} ${copy} ${referenceCopy}`.toLocaleLowerCase().includes(query)) {
           matches.push({ kind: candidateKind, title, section: index + 1 });
         }
       });

@@ -2,9 +2,10 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, docsHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
+const [indexHtml, docsHtml, cliHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
   readSource("docs/index.html"),
+  readSource("cli/index.html"),
   readSource("mobile/index.html"),
   readSource("reliability/index.html"),
   readSource("security/index.html"),
@@ -112,8 +113,8 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-08-31</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 7, "Sitemap should list the homepage and knowledge base");
-for (const [html, path] of [[docsHtml, "docs"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
+check((sitemap.match(/<loc>/gu) ?? []).length === 8, "Sitemap should list the homepage and knowledge base");
+for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
   check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
@@ -124,7 +125,7 @@ for (const guarantee of ["deterministic resize ownership", "large-paste chunking
 check(readme.includes("shell --e2ee"), "README E2EE instructions are missing");
 check(readme.includes("docker compose up --build -d"), "README Docker instructions are missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
-for (const page of ["docs", "mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const page of ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"]) {
   check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);
 }
 check(landingSource.includes('import documentationContent from "../docs/content.json"'), "Website must render from the repository documentation source");
