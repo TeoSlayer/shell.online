@@ -2,6 +2,10 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] — 2026-09-02
+
+- Match xterm's unused viewport area to the active terminal theme, removing the separate black rectangle beneath a fitted 80×24 screen on mobile.
+
 ## [0.7.1] — 2026-09-02
 
 - Keep every shared process on one immutable 80×24 PTY grid so desktop, mobile, read-only, and local viewers cannot resize or deform one another's TUI.
@@ -114,6 +118,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 [0.6.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.2
 [0.7.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.0
 [0.7.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.1
+[0.7.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.2
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

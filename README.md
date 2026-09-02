@@ -36,9 +36,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.7.1 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.7.2 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.7.1" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.7.2" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -135,7 +135,7 @@ See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and
 
 ## Persistent Docker terminal
 
-The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.7.1` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.7.2` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
 
 ```sh
 docker compose up --build -d
@@ -145,11 +145,11 @@ docker compose logs shell-online
 Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
 
 ```sh
-docker pull ghcr.io/teoslayer/shell.online:0.7.1
+docker pull ghcr.io/teoslayer/shell.online:0.7.2
 docker run -d --name shell-online --restart unless-stopped \
   -v shell-online-state:/var/lib/shell-online \
   -v shell-online-workspace:/workspace \
-  ghcr.io/teoslayer/shell.online:0.7.1
+  ghcr.io/teoslayer/shell.online:0.7.2
 docker logs shell-online
 ```
 

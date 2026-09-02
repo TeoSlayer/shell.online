@@ -1,5 +1,5 @@
 {
-  "version": "0.7.1",
+  "version": "0.7.2",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -79,7 +79,7 @@
       "title": "One encrypted shell and one stable link across restarts.",
       "intro": "The Docker client keeps its workspace, host credential, browser password, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
       "cards": [
-        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.7.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
+        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.7.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
         ["Two durable volumes", "shell-online-state stores the browser password, host credential, share identity, and E2EE key. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."],
         ["Password continuity", "Set a longer SHELL_ONLINE_E2EE_PASSWORD only before first launch if desired. Restarts reuse the saved password. A conflicting configured password is refused; create a new state volume to rotate both password and URL."],
         ["Restart behavior", "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."],

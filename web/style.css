@@ -1513,6 +1513,7 @@ a {
 
 .terminal .xterm-viewport,
 .terminal .xterm-scrollable-element {
+  background-color: #0b0d12 !important;
   overscroll-behavior: contain;
   overscroll-behavior-y: contain;
   scrollbar-color: #313846 transparent;
@@ -1724,7 +1725,9 @@ a {
   background: #f8f9fb;
 }
 
-.session-page.theme-light .terminal .xterm-viewport {
+.session-page.theme-light .terminal .xterm-viewport,
+.session-page.theme-light .terminal .xterm-scrollable-element {
+  background-color: #f8f9fb !important;
   scrollbar-color: #c6ccd7 transparent;
 }
 

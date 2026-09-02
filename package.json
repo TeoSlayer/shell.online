@@ -1,6 +1,6 @@
 {
   "name": "shell-online",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Turn any terminal process into a collaborative browser link.",
   "private": true,
   "license": "MIT",
