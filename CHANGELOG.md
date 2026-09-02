@@ -2,6 +2,15 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] — 2026-09-02
+
+### Fixed
+
+- Suppress dead share URLs and impossible attach/kill instructions when a wrapped task exits during the startup handshake; report its real exit status instead.
+- Parse spaced and unquoted multi-token `--auto-close` values deterministically, and return status 2 for missing or invalid values instead of executing them as commands.
+- Require a deliberate second browser `Ctrl-D` within three seconds before sending an authenticated EOF frame; read-only sessions reject it.
+- Make terminal sizing phone-aware and session-wide: 120×36 with desktop viewers, 80×24 while any phone is connected, with each transition ordered ahead of viewer input so typing handoff cannot resize one command late.
+
 ## [0.7.2] — 2026-09-02
 
 - Match xterm's unused viewport area to the active terminal theme, removing the separate black rectangle beneath a fitted 80×24 screen on mobile.
@@ -119,6 +128,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 [0.7.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.0
 [0.7.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.1
 [0.7.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.2
+[0.7.3]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.3
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

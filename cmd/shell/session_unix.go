@@ -28,11 +28,14 @@ import (
 )
 
 const (
-	outputBatchInterval = 10 * time.Millisecond
-	outputBatchBytes    = 32 * 1024
-	snapshotBytes       = 512 * 1024
-	sharedTerminalCols  = 80
-	sharedTerminalRows  = 24
+	outputBatchInterval    = 10 * time.Millisecond
+	outputBatchBytes       = 32 * 1024
+	snapshotBytes          = 512 * 1024
+	desktopTerminalCols    = 120
+	desktopTerminalRows    = 36
+	mobileTerminalCols     = 80
+	mobileTerminalRows     = 24
+	backgroundStartupGrace = 250 * time.Millisecond
 )
 
 func runSharedProcess(
@@ -160,11 +163,20 @@ func runSharedProcess(
 			})
 		}
 	}()
-	if onStarted != nil {
-		onStarted()
-	}
+	processResult := make(chan error, 1)
+	go func() { processResult <- command.Wait() }()
 
-	waitError := waitForProcess(ctx, command)
+	var waitError error
+	if onStarted != nil {
+		var exited bool
+		waitError, exited = waitForBackgroundStartup(processResult, backgroundStartupGrace)
+		if !exited {
+			onStarted()
+			waitError = waitForProcess(ctx, command, processResult)
+		}
+	} else {
+		waitError = waitForProcess(ctx, command, processResult)
+	}
 	<-readDone
 	close(outputChunks)
 	<-batchDone
@@ -182,10 +194,18 @@ func runSharedProcess(
 	return exitCode, nil
 }
 
-func waitForProcess(ctx context.Context, command *exec.Cmd) error {
-	result := make(chan error, 1)
-	go func() { result <- command.Wait() }()
+func waitForBackgroundStartup(result <-chan error, grace time.Duration) (error, bool) {
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case err := <-result:
+		return err, true
+	case <-timer.C:
+		return nil, false
+	}
+}
 
+func waitForProcess(ctx context.Context, command *exec.Cmd, result <-chan error) error {
 	select {
 	case err := <-result:
 		return err
@@ -347,6 +367,8 @@ func readRelay(
 			var event struct {
 				Type     string `json:"type"`
 				ViewerID uint32 `json:"viewerId"`
+				Cols     uint16 `json:"cols"`
+				Rows     uint16 `json:"rows"`
 			}
 			if json.Unmarshal(message, &event) != nil {
 				continue
@@ -369,6 +391,12 @@ func readRelay(
 					_ = connection.Send(relay.BinaryMessage, sealed)
 				}
 			}
+			if event.Type == "terminal_size" {
+				if isCanonicalTerminalSize(event.Cols, event.Rows) {
+					_ = pty.Setsize(ptmx, &pty.Winsize{Cols: event.Cols, Rows: event.Rows})
+				}
+				continue
+			}
 			continue
 		}
 
@@ -383,9 +411,9 @@ func readRelay(
 		}
 		switch message[0] {
 		case protocol.Input:
-			if len(message) > 1 {
-				_, _ = ptmx.Write(message[1:])
-			}
+			_, _ = ptmx.Write(viewerInputPayload(message))
+		case protocol.ConfirmedEOF:
+			_, _ = ptmx.Write(viewerInputPayload(message))
 		case protocol.Resize:
 			// A shared PTY keeps one canonical grid. Browser and local viewport
 			// changes are presentation-only so simultaneous viewers cannot
@@ -403,6 +431,19 @@ func readRelay(
 	}
 }
 
+func viewerInputPayload(frame []byte) []byte {
+	if len(frame) > 1 && frame[0] == protocol.Input {
+		if len(frame) == 2 && frame[1] == 4 {
+			return nil
+		}
+		return frame[1:]
+	}
+	if len(frame) == 1 && frame[0] == protocol.ConfirmedEOF {
+		return []byte{4}
+	}
+	return nil
+}
+
 func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
 	if frameCipher == nil {
 		return frame, nil
@@ -411,7 +452,12 @@ func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
 }
 
 func sharedTerminalSize() *pty.Winsize {
-	return &pty.Winsize{Cols: sharedTerminalCols, Rows: sharedTerminalRows}
+	return &pty.Winsize{Cols: desktopTerminalCols, Rows: desktopTerminalRows}
+}
+
+func isCanonicalTerminalSize(cols, rows uint16) bool {
+	return (cols == desktopTerminalCols && rows == desktopTerminalRows) ||
+		(cols == mobileTerminalCols && rows == mobileTerminalRows)
 }
 
 func terminalEnvironment(environment []string) []string {

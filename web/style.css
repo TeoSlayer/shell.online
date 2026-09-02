@@ -1490,10 +1490,36 @@ a {
 .terminal-wrap {
   min-width: 0;
   min-height: 0;
+  position: relative;
   overflow: hidden;
   overscroll-behavior: none;
   padding: 12px 14px 10px;
   background: #0b0d12;
+}
+
+.terminal-input-warning {
+  position: absolute;
+  z-index: 4;
+  right: 18px;
+  bottom: 16px;
+  max-width: min(430px, calc(100% - 36px));
+  padding: 10px 13px;
+  border: 1px solid #6a5536;
+  border-radius: 8px;
+  background: #2d2418;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 30%);
+  color: #f2d39b;
+  font: 600 11px/1.45 "Uncut Sans", sans-serif;
+  pointer-events: none;
+}
+
+.terminal-input-warning[hidden] { display: none; }
+
+.theme-light .terminal-input-warning {
+  border-color: #dfc49c;
+  background: #fff8eb;
+  box-shadow: 0 12px 30px rgb(61 49 29 / 14%);
+  color: #735528;
 }
 
 .terminal,

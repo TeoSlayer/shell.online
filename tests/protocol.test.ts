@@ -18,6 +18,10 @@ describe("terminal wire protocol", () => {
     expect([...encodeFrame(Opcode.Input, payload)]).toEqual([Opcode.Input, ...payload]);
   });
 
+  it("keeps confirmed EOF distinct from ordinary input", () => {
+    expect([...encodeFrame(Opcode.ConfirmedEOF, new Uint8Array())]).toEqual([Opcode.ConfirmedEOF]);
+  });
+
   it("reserves a recovery snapshot opcode distinct from targeted snapshots", () => {
     expect(Opcode.BroadcastSnapshot).toBe(0x08);
     expect(Opcode.BroadcastSnapshot).not.toBe(Opcode.Snapshot);

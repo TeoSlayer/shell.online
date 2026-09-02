@@ -6,6 +6,8 @@ describe("session access enforcement", () => {
   it("blocks input for read-only viewers", () => {
     expect(viewerFrameAction(Opcode.Input, true)).toBe("blocked-input");
     expect(viewerFrameAction(Opcode.Input, false)).toBe("input");
+    expect(viewerFrameAction(Opcode.ConfirmedEOF, true)).toBe("blocked-input");
+    expect(viewerFrameAction(Opcode.ConfirmedEOF, false)).toBe("confirmed-eof");
   });
 
   it("keeps display sizing and latency probes available", () => {

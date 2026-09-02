@@ -213,10 +213,12 @@ START OPTIONS
   --foreground
       Mirror and control the process in the launching terminal instead of
       returning immediately.
-  --auto-close[=<duration-or-date>]
+  --auto-close <duration-or-date>
       Always close when the task exits; optionally add an earlier deadline.
       Units: ms, s, m, h, d, w, mo, y. Units may be combined, such as 1h30m.
       Dates: RFC3339, YYYY-MM-DD[ HH:MM[:SS]], HH:MM, today, or tomorrow HH:MM.
+      Multi-token dates may be written directly, for example: --auto-close tomorrow 09:00.
+      A missing or invalid value returns status 2 and never becomes the command.
   --json
       Emit the new-session event as one JSON object on stderr.
   --server <URL>
@@ -239,6 +241,8 @@ SESSION COMMANDS
       Attach this terminal to one local session. Prefixes require at least six
       characters and must be unambiguous. Press Ctrl-X, then D to detach;
       Ctrl-] is the legacy alternative. Detaching does not stop the process.
+      In a browser, Ctrl-D must be pressed twice within three seconds to send EOF;
+      the first press warns because EOF can end a shell. Read-only links block it.
   shell kill <session-id-or-prefix>
       Stop one wrapped process and close its browser session.
   shell kill --all
@@ -256,8 +260,9 @@ ENVIRONMENT
       The key is derived locally with a random URL salt; the password is never sent.
 
 OUTPUT AND EXIT STATUS
-  A background start returns 0 after the share is ready. --foreground returns
-  the wrapped process status. Session commands return 0 on success, 1 on an
+  A background start returns 0 after the share is ready. A task that exits during
+  the startup handshake prints its exit status and no dead URL or follow-up commands.
+  --foreground returns the wrapped process status. Session commands return 0 on success, 1 on an
   operational failure, and 2 for invalid CLI usage. Start failures return 1;
   invalid flags or auto-close values return 2.
 

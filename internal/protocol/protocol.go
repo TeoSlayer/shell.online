@@ -11,6 +11,7 @@ const (
 	Ping              byte = 0x06
 	Pong              byte = 0x07
 	BroadcastSnapshot byte = 0x08
+	ConfirmedEOF      byte = 0x09
 )
 
 func Frame(opcode byte, payload []byte) []byte {

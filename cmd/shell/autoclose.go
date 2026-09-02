@@ -36,29 +36,59 @@ func (flag *autoCloseFlag) Set(value string) error {
 	return nil
 }
 
-func (*autoCloseFlag) IsBoolFlag() bool {
-	return true
-}
-
-// normalizeAutoCloseArguments permits both --auto-close=5m and
-// --auto-close 5m while retaining bare --auto-close as "close on task exit".
-func normalizeAutoCloseArguments(arguments []string, now time.Time) []string {
+// normalizeAutoCloseArguments permits unquoted multi-token deadlines such as
+// --auto-close tomorrow 09:00. The longest valid prefix becomes the flag value;
+// a missing or invalid value is reported as a flag error instead of accidentally
+// becoming the command to execute.
+func normalizeAutoCloseArguments(arguments []string, now time.Time) ([]string, error) {
 	normalized := make([]string, 0, len(arguments))
 	for index := 0; index < len(arguments); index++ {
 		argument := arguments[index]
-		if argument == "--auto-close" && index+1 < len(arguments) {
-			candidate := arguments[index+1]
-			if !strings.HasPrefix(candidate, "-") {
-				if _, err := parseCloseDeadline(candidate, now); err == nil {
-					normalized = append(normalized, "--auto-close="+candidate)
-					index++
-					continue
-				}
-			}
+		if argument == "--" {
+			normalized = append(normalized, arguments[index:]...)
+			return normalized, nil
 		}
-		normalized = append(normalized, argument)
+		if argument != "--auto-close" {
+			normalized = append(normalized, argument)
+			if (argument == "--server" || argument == "--persistent") && index+1 < len(arguments) {
+				normalized = append(normalized, arguments[index+1])
+				index++
+				continue
+			}
+			if !strings.HasPrefix(argument, "-") {
+				normalized = append(normalized, arguments[index+1:]...)
+				return normalized, nil
+			}
+			continue
+		}
+		if index+1 >= len(arguments) || strings.HasPrefix(arguments[index+1], "-") {
+			return nil, fmt.Errorf("--auto-close requires a duration or date")
+		}
+
+		lastValid := -1
+		for end := index + 1; end < len(arguments); end++ {
+			candidate := strings.Join(arguments[index+1:end+1], " ")
+			if _, err := parseCloseDeadline(candidate, now); err == nil {
+				lastValid = end
+				continue
+			}
+			if lastValid >= 0 {
+				break
+			}
+			// "in 15m" first becomes valid after its second token. Other invalid
+			// first tokens cannot become a supported deadline by consuming a command.
+			if end == index+1 && strings.EqualFold(arguments[end], "in") {
+				continue
+			}
+			break
+		}
+		if lastValid < 0 {
+			return nil, fmt.Errorf("invalid auto-close value %q", arguments[index+1])
+		}
+		normalized = append(normalized, "--auto-close="+strings.Join(arguments[index+1:lastValid+1], " "))
+		index = lastValid
 	}
-	return normalized
+	return normalized, nil
 }
 
 func parseCloseDeadline(value string, now time.Time) (time.Time, error) {

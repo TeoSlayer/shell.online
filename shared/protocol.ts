@@ -7,6 +7,7 @@ export const enum Opcode {
   Ping = 0x06,
   Pong = 0x07,
   BroadcastSnapshot = 0x08,
+  ConfirmedEOF = 0x09,
 }
 
 export const MAX_INPUT_CHUNK = 16 * 1024;

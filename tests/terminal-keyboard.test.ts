@@ -22,4 +22,9 @@ describe("mobile and browser terminal keyboard handling", () => {
     if (action.kind === "send") expect([...action.bytes]).toEqual([23]);
     expect(terminalKeyAction(key("w", false, true), false).kind).toBe("default");
   });
+
+  it("lets xterm emit Ctrl-D through the guarded byte-stream path", () => {
+    expect(terminalKeyAction(key("d", true), false).kind).toBe("default");
+    expect(terminalKeyAction(key("d", false, true), false).kind).toBe("default");
+  });
 });

@@ -12,6 +12,7 @@ import {
 import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
 import { viewerFrameAction } from "../shared/session-access";
+import { terminalGridForDevices } from "../shared/terminal-grid";
 import { persistentSessionID } from "../shared/persistent-session";
 import {
   GITHUB_REPOSITORY_API_URL,
@@ -108,6 +109,8 @@ interface SocketAttachment {
   referrer?: string;
   ended?: boolean;
   snapshotRequestedAt?: number;
+  terminalCols?: number;
+  terminalRows?: number;
 }
 
 interface TrafficWindow {
@@ -891,6 +894,7 @@ export class TerminalSession extends DurableObject<Env> {
           sendJson(server, { type: "snapshot_request", viewerId: viewerAttachment.id });
         }
       }
+      this.broadcastTerminalGrid();
     } else {
       const viewerCount = this.state
         .getWebSockets("viewer")
@@ -913,6 +917,7 @@ export class TerminalSession extends DurableObject<Env> {
         encrypted: this.isEncrypted(),
       });
       sendJson(server, { type: "resize_control", allowed: false });
+      this.broadcastTerminalGrid();
       for (const host of this.state.getWebSockets("host")) {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
       }
@@ -1121,6 +1126,19 @@ export class TerminalSession extends DurableObject<Env> {
         return;
       }
       if (!this.claimInputLease(socket, attachment, true)) return;
+      this.broadcastTerminalGrid();
+      this.broadcastBinary(frame, "host");
+      this.recordCollaborationStarted(attachment);
+      return;
+    }
+
+    if (action === "confirmed-eof") {
+      if (frame.byteLength !== (this.isEncrypted() ? 30 : 1)) {
+        safeClose(socket, 4002, "invalid confirmed EOF frame");
+        return;
+      }
+      if (!this.claimInputLease(socket, attachment, true)) return;
+      this.broadcastTerminalGrid();
       this.broadcastBinary(frame, "host");
       this.recordCollaborationStarted(attachment);
       return;
@@ -1188,6 +1206,7 @@ export class TerminalSession extends DurableObject<Env> {
       });
       await this.refreshLivePresence(true, socket);
       await this.scheduleNextAlarm();
+      this.broadcastTerminalGrid(socket);
       this.broadcastPresence(socket);
       return;
     }
@@ -1463,6 +1482,30 @@ export class TerminalSession extends DurableObject<Env> {
       .sort((left, right) => right - left)[0];
     const message = JSON.stringify({ type: "presence", viewers, localTypingAt });
     for (const viewer of this.state.getWebSockets("viewer")) safeSend(viewer, message);
+  }
+
+  private broadcastTerminalGrid(excluded?: WebSocket): void {
+    const devices = this.state
+      .getWebSockets("viewer")
+      .filter((socket) => socket !== excluded && socket.readyState === 1)
+      .map((socket) => readAttachment(socket)?.device ?? "unknown");
+    const grid = terminalGridForDevices(devices);
+    const message = JSON.stringify({ type: "terminal_size", ...grid });
+    for (const socket of this.state.getWebSockets()) {
+      if (socket === excluded) continue;
+      const attachment = readAttachment(socket);
+      if (attachment?.terminalCols === grid.cols && attachment.terminalRows === grid.rows) continue;
+      if (attachment) {
+        attachment.terminalCols = grid.cols;
+        attachment.terminalRows = grid.rows;
+        try {
+          socket.serializeAttachment(attachment);
+        } catch {
+          continue;
+        }
+      }
+      safeSend(socket, message);
+    }
   }
 
   private broadcastBinary(frame: Uint8Array, role: SocketRole): void {

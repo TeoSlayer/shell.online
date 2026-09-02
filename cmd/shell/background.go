@@ -25,6 +25,7 @@ type backgroundLaunchResult struct {
 	ExpiresAt  time.Time  `json:"expires_at,omitempty"`
 	ClosesAt   *time.Time `json:"closes_at,omitempty"`
 	Handoff    string     `json:"handoff,omitempty"`
+	ExitCode   *int       `json:"exit_code,omitempty"`
 }
 
 func isBackgroundChild() bool {

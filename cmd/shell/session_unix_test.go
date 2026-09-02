@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"shell.online/internal/protocol"
 	"shell.online/internal/ringbuffer"
 )
 
@@ -168,9 +169,52 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	}
 }
 
-func TestSharedTerminalSizeIsStableStandardGrid(t *testing.T) {
+func TestSharedTerminalUsesLargeGridUntilPhoneCompatibilityIsRequested(t *testing.T) {
 	size := sharedTerminalSize()
-	if size.Cols != 80 || size.Rows != 24 {
-		t.Fatalf("shared terminal size = %dx%d, want 80x24", size.Cols, size.Rows)
+	if size.Cols != 120 || size.Rows != 36 {
+		t.Fatalf("shared terminal size = %dx%d, want 120x36", size.Cols, size.Rows)
+	}
+	for _, candidate := range [][2]uint16{{120, 36}, {80, 24}} {
+		if !isCanonicalTerminalSize(candidate[0], candidate[1]) {
+			t.Fatalf("canonical terminal size %v was rejected", candidate)
+		}
+	}
+	for _, candidate := range [][2]uint16{{160, 50}, {79, 24}, {80, 25}} {
+		if isCanonicalTerminalSize(candidate[0], candidate[1]) {
+			t.Fatalf("arbitrary terminal size %v was accepted", candidate)
+		}
+	}
+}
+
+func TestBackgroundStartupWaitDetectsFastExit(t *testing.T) {
+	result := make(chan error, 1)
+	result <- nil
+	if err, exited := waitForBackgroundStartup(result, time.Second); err != nil || !exited {
+		t.Fatalf("fast exit = (%v, %v), want (nil, true)", err, exited)
+	}
+}
+
+func TestBackgroundStartupWaitReleasesLongRunningTask(t *testing.T) {
+	result := make(chan error)
+	started := time.Now()
+	if err, exited := waitForBackgroundStartup(result, 10*time.Millisecond); err != nil || exited {
+		t.Fatalf("long-running task = (%v, %v), want (nil, false)", err, exited)
+	}
+	if time.Since(started) < 8*time.Millisecond {
+		t.Fatal("startup grace returned before its deadline")
+	}
+}
+
+func TestViewerInputPayloadRequiresExplicitConfirmedEOF(t *testing.T) {
+	if got := viewerInputPayload([]byte{protocol.Input, 'o', 'k'}); string(got) != "ok" {
+		t.Fatalf("regular viewer input = %q, want ok", got)
+	}
+	if got := viewerInputPayload([]byte{protocol.ConfirmedEOF}); len(got) != 1 || got[0] != 4 {
+		t.Fatalf("confirmed EOF = %v, want [4]", got)
+	}
+	for _, frame := range [][]byte{{protocol.Input}, {protocol.Input, 4}, {protocol.ConfirmedEOF, 4}, {4}} {
+		if got := viewerInputPayload(frame); len(got) != 0 {
+			t.Fatalf("invalid frame %v produced input %v", frame, got)
+		}
 	}
 }

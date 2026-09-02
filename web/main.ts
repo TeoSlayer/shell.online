@@ -26,6 +26,7 @@ import {
 import { TerminalWriteQueue } from "./terminal-writes";
 import { TerminalInputQueue } from "./terminal-input";
 import { terminalKeyAction } from "./terminal-keyboard";
+import { DestructiveInputGuard } from "./destructive-input";
 import { BrowserFrameCipher, parseEncryptionFragment } from "./e2ee";
 import documentationContent from "../docs/content.json";
 import {
@@ -38,9 +39,8 @@ import {
 import { MobileViewportTracker, terminalTypography } from "./mobile-viewport";
 import {
   fittedTerminalFontSize,
-  SHARED_TERMINAL_COLS,
-  SHARED_TERMINAL_ROWS,
 } from "./terminal-fit";
+import { DESKTOP_TERMINAL_GRID } from "../shared/terminal-grid";
 import { renderStatsDashboard } from "./stats";
 import {
   TerminalLineScroller,
@@ -940,6 +940,7 @@ function renderTerminal(sessionId: string): void {
       </header>
       <div id="terminal-wrap" class="terminal-wrap">
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
+        <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
       <div id="encryption-gate" class="encryption-gate" hidden>
         <form id="encryption-form" class="encryption-panel">
@@ -1021,6 +1022,7 @@ function renderTerminal(sessionId: string): void {
 
   const terminalElement = requiredElement("terminal");
   const terminalWrap = requiredElement("terminal-wrap");
+  const terminalInputWarning = requiredElement("terminal-input-warning");
   const sessionHeader = requiredElement("session-header");
   const sessionPage = document.querySelector<HTMLElement>(".session-page");
   if (!sessionPage) throw new Error("Missing session page");
@@ -1104,6 +1106,8 @@ function renderTerminal(sessionId: string): void {
 
   let socket: WebSocket | null = null;
   let stopped = false;
+  let terminalColumns = DESKTOP_TERMINAL_GRID.cols;
+  let terminalRows = DESKTOP_TERMINAL_GRID.rows;
   let retryAttempt = 0;
   let retryTimer: number | undefined;
   let lastStatus = "waiting";
@@ -1130,6 +1134,8 @@ function renderTerminal(sessionId: string): void {
   let readOnly = false;
   let snapshotRequestPending = false;
   const terminalInput = new TerminalInputQueue(() => socket);
+  const destructiveInput = new DestructiveInputGuard();
+  let destructiveInputTimer: number | undefined;
   let frameCipher: BrowserFrameCipher | null = null;
   let encryptedSession = false;
   let persistentSession = false;
@@ -1437,12 +1443,14 @@ function renderTerminal(sessionId: string): void {
         available.cols,
         available.rows,
         terminalZoomPercent,
+        terminalColumns,
+        terminalRows,
       );
       if (terminal.options.fontSize !== scaledFontSize) {
         terminal.options.fontSize = scaledFontSize;
       }
-      if (terminal.cols !== SHARED_TERMINAL_COLS || terminal.rows !== SHARED_TERMINAL_ROWS) {
-        terminal.resize(SHARED_TERMINAL_COLS, SHARED_TERMINAL_ROWS);
+      if (terminal.cols !== terminalColumns || terminal.rows !== terminalRows) {
+        terminal.resize(terminalColumns, terminalRows);
       } else {
         terminal.refresh(0, terminal.rows - 1);
       }
@@ -1641,6 +1649,8 @@ function renderTerminal(sessionId: string): void {
       persistent?: unknown;
       reason?: unknown;
       allowed?: unknown;
+      cols?: unknown;
+      rows?: unknown;
     };
     try {
       message = JSON.parse(raw) as typeof message;
@@ -1664,6 +1674,15 @@ function renderTerminal(sessionId: string): void {
     if (message.type === "resize_control" && typeof message.allowed === "boolean") {
       // Older relays may still send resize-control messages. Sizing is now local to
       // each viewer and never changes the shared PTY.
+      return;
+    }
+    if (
+      message.type === "terminal_size" &&
+      ((message.cols === 80 && message.rows === 24) || (message.cols === 120 && message.rows === 36))
+    ) {
+      terminalColumns = message.cols;
+      terminalRows = message.rows;
+      scheduleFit();
       return;
     }
 
@@ -1715,6 +1734,24 @@ function renderTerminal(sessionId: string): void {
     terminalInput.enqueue(bytes);
   };
 
+  const clearDestructiveInputWarning = (): void => {
+    window.clearTimeout(destructiveInputTimer);
+    terminalInputWarning.hidden = true;
+  };
+
+  const confirmEOF = (): void => {
+    if (readOnly || terminal.options.disableStdin || socket?.readyState !== WebSocket.OPEN) return;
+    if (destructiveInput.confirm(performance.now())) {
+      clearDestructiveInputWarning();
+      sendBinaryFrame(new Uint8Array([Opcode.ConfirmedEOF]));
+      return;
+    }
+    terminalInputWarning.textContent = "Ctrl-D can end this process. Press Ctrl-D again within 3 seconds to send EOF.";
+    terminalInputWarning.hidden = false;
+    window.clearTimeout(destructiveInputTimer);
+    destructiveInputTimer = window.setTimeout(clearDestructiveInputWarning, 3_000);
+  };
+
   terminal.attachCustomKeyEventHandler((event) => {
     const action = terminalKeyAction(event, terminal.hasSelection());
     if (action.kind === "default") return true;
@@ -1723,14 +1760,24 @@ function renderTerminal(sessionId: string): void {
     return false;
   });
 
+  const sendTerminalData = (bytes: Uint8Array): void => {
+    if (bytes.byteLength === 1 && bytes[0] === 4) {
+      confirmEOF();
+      return;
+    }
+    destructiveInput.reset();
+    clearDestructiveInputWarning();
+    sendInput(bytes);
+  };
+
   terminal.onData((data) => {
-    sendInput(textEncoder.encode(data));
+    sendTerminalData(textEncoder.encode(data));
   });
 
   // Legacy mouse protocols and a few terminal query responses contain raw
   // bytes that must not pass through UTF-8 encoding.
   terminal.onBinary((data) => {
-    sendInput(Uint8Array.from(data, (character) => character.charCodeAt(0) & 0xff));
+    sendTerminalData(Uint8Array.from(data, (character) => character.charCodeAt(0) & 0xff));
   });
 
   terminal.onTitleChange((title) => {

@@ -59,12 +59,34 @@ func TestNormalizeAutoCloseArguments(t *testing.T) {
 		want  []string
 	}{
 		{input: []string{"--auto-close", "5m", "sleep", "30"}, want: []string{"--auto-close=5m", "sleep", "30"}},
-		{input: []string{"--auto-close", "echo"}, want: []string{"--auto-close", "echo"}},
+		{input: []string{"--auto-close", "tomorrow", "09:00", "sleep", "30"}, want: []string{"--auto-close=tomorrow 09:00", "sleep", "30"}},
+		{input: []string{"--auto-close", "in", "15m", "sleep", "30"}, want: []string{"--auto-close=in 15m", "sleep", "30"}},
+		{input: []string{"--auto-close", "2d", "3h", "sleep", "30"}, want: []string{"--auto-close=2d 3h", "sleep", "30"}},
 		{input: []string{"--auto-close=2h", "echo"}, want: []string{"--auto-close=2h", "echo"}},
+		{input: []string{"--server", "https://example.test", "--auto-close", "5m", "sleep"}, want: []string{"--server", "https://example.test", "--auto-close=5m", "sleep"}},
+		{input: []string{"echo", "--auto-close", "not-a-shell-flag"}, want: []string{"echo", "--auto-close", "not-a-shell-flag"}},
+		{input: []string{"--", "echo", "--auto-close", "not-a-shell-flag"}, want: []string{"--", "echo", "--auto-close", "not-a-shell-flag"}},
 	}
 	for _, test := range tests {
-		if got := normalizeAutoCloseArguments(test.input, now); !reflect.DeepEqual(got, test.want) {
+		got, err := normalizeAutoCloseArguments(test.input, now)
+		if err != nil {
+			t.Fatalf("normalizeAutoCloseArguments(%q): %v", test.input, err)
+		}
+		if !reflect.DeepEqual(got, test.want) {
 			t.Fatalf("normalizeAutoCloseArguments(%q) = %q, want %q", test.input, got, test.want)
+		}
+	}
+}
+
+func TestNormalizeAutoCloseArgumentsRejectsMissingAndInvalidValues(t *testing.T) {
+	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
+	for _, input := range [][]string{
+		{"--auto-close"},
+		{"--auto-close", "notatime", "sleep", "30"},
+		{"--auto-close", "5minutes", "sleep", "30"},
+	} {
+		if _, err := normalizeAutoCloseArguments(input, now); err == nil {
+			t.Fatalf("normalizeAutoCloseArguments(%q) unexpectedly succeeded", input)
 		}
 	}
 }

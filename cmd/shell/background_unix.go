@@ -67,11 +67,16 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 		return 1
 	}
 	if !result.OK {
-		_ = command.Process.Kill()
-		_, _ = command.Process.Wait()
 		if result.Error == "" {
 			result.Error = "unknown startup error"
 		}
+		if result.ExitCode != nil {
+			_, _ = command.Process.Wait()
+			fmt.Fprintf(stderr, "shell: %s\n", result.Error)
+			return *result.ExitCode
+		}
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
 		fmt.Fprintf(stderr, "shell: background session did not start: %s\n", result.Error)
 		return 1
 	}

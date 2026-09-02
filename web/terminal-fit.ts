@@ -1,16 +1,13 @@
-export const SHARED_TERMINAL_COLS = 80;
-export const SHARED_TERMINAL_ROWS = 24;
-
 /**
- * Scale one immutable terminal grid into an individual browser viewport.
- * The process keeps the same geometry while every viewer gets an independent
- * presentation size.
+ * Scale the current session-wide terminal grid into an individual viewport.
  */
 export function fittedTerminalFontSize(
   baseFontSize: number,
   availableColumns: number,
   availableRows: number,
   zoomPercent = 100,
+  terminalColumns = 80,
+  terminalRows = 24,
 ): number {
   if (
     !Number.isFinite(baseFontSize) ||
@@ -25,8 +22,8 @@ export function fittedTerminalFontSize(
   }
 
   const fitScale = Math.min(
-    availableColumns / SHARED_TERMINAL_COLS,
-    availableRows / SHARED_TERMINAL_ROWS,
+    availableColumns / terminalColumns,
+    availableRows / terminalRows,
   );
   const scaled = baseFontSize * fitScale * (zoomPercent / 100) * 0.985;
   return Math.min(32, Math.max(4, Math.floor(scaled * 4) / 4));

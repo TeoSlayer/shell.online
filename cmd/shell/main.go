@@ -30,7 +30,12 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 
 	now := time.Now()
-	arguments = normalizeAutoCloseArguments(arguments, now)
+	var err error
+	arguments, err = normalizeAutoCloseArguments(arguments, now)
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 2
+	}
 	flags := flag.NewFlagSet("shell", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	server := flags.String("server", defaultServer(), "shell.online service URL")
@@ -248,11 +253,14 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		control,
 	)
 	if readyFile != nil {
-		startupError := "task ended before startup completed"
+		startupError := fmt.Sprintf("task exited before its share became usable (exit code %d); no link was printed", exitCode)
+		var reportedExitCode *int
 		if err != nil {
 			startupError = err.Error()
+		} else {
+			reportedExitCode = &exitCode
 		}
-		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: startupError})
+		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: startupError, ExitCode: reportedExitCode})
 	}
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
