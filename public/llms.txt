@@ -20,9 +20,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.6.2 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.7.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.6.2" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.7.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
@@ -41,17 +41,19 @@ For monitoring without browser input:
 
 shell --read-only --json -- your-command --its-arguments
 
-For end-to-end encrypted terminal payloads:
+Every normal share is end-to-end encrypted automatically. When SHELL_ONLINE_E2EE_PASSWORD is unset, the CLI generates a cryptographically random eight-character base64url browser password. For sensitive or long-lived sessions, set a longer unique password before starting shell:
 
-shell --e2ee --json -- your-command --its-arguments
+SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell --json -- your-command --its-arguments
 
-The default E2EE mode places a random decryption key in the URL fragment, which is not sent to Cloudflare. Set SHELL_ONLINE_E2EE_PASSWORD before starting shell to use a separately shared password; the URL then carries only a random salt. Lost keys and passwords cannot be recovered. Cloudflare still sees traffic and lifecycle metadata.
+The URL contains only a random #salt= fragment; the CLI and browser derive the AES-256-GCM key locally with PBKDF2-HMAC-SHA256. The old --e2ee flag is accepted for compatibility but is redundant. Lost passwords cannot be recovered. Cloudflare sees authenticated ciphertext plus routing, traffic, IP, and lifecycle metadata.
+
+For deliberate compatibility or debugging only, `shell --no-e2ee <command>` disables payload E2EE. HTTPS/WSS still protects each transport hop, but Cloudflare can access terminal input and output while relaying it. This option conflicts with --e2ee, SHELL_ONLINE_E2EE_PASSWORD, and --persistent.
 
 The first stderr line is a JSON event:
 
-{"type":"session","session_id":"...","share_url":"https://shell.online/s/...","read_only":false,"background":true,...}
+{"type":"session","session_id":"...","share_url":"https://shell.online/s/...#salt=...","e2ee_password":"Ab3dE7-_","read_only":false,"encrypted":true,"background":true,...}
 
-Send share_url and its read_only access mode to the human operator through the agent's normal communication channel. Prefer --read-only when the operator only needs to monitor progress. Read-only is fixed at session creation and enforced by the Worker. The command runs in the background by default, while the wrapper stays attached for the process lifetime, reconnects after transient network failures, and keeps the share link active while the process runs.
+Send the complete share_url, including its fragment, and e2ee_password to the human operator through the agent's normal communication channel. For sensitive work, use separate operator-approved channels when possible. If the operator explicitly requested --no-e2ee, the event has encrypted=false and no e2ee_password; disclose that Cloudflare is then inside the content trust boundary. Prefer --read-only when the operator only needs to monitor progress. Read-only is fixed at session creation and enforced by the Worker.
 
 Inside Claude Code, use `shell --json -- claude` to hand off the current conversation. shell.online detects CLAUDE_CODE_SESSION_ID and starts `claude --resume <current-session> --fork-session` inside the shared process. The new process keeps the conversation history and workspace; the original Claude process remains open, and new messages do not synchronize between them. Report this as a conversation fork, not as adoption of the original PID.
 
@@ -72,7 +74,7 @@ shell kill --all
 
 Sessions close immediately when their task exits. `--auto-close 5m` or an absolute/local date adds an earlier deadline; supported duration units are ms, s, m, h, d, w, mo, and y.
 
-The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated browser password. Its state and workspace live in separate named volumes; the state volume is a host credential and decryption secret. This is a client for the hosted shell.online relay, not self-hosting documentation.
+The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated eight-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
 
 ## Release integrity
 
@@ -80,4 +82,4 @@ Run `shell --version` to print the installed CLI version. The installer validate
 
 ## Security model
 
-The share URL is a bearer capability. Interactive links grant terminal input; --read-only links grant viewing only and reject browser input server-side. Only send either link to an intended operator. There are no accounts. Sessions are encrypted in transit. Cloudflare relays terminal bytes while active and deletes session state when the task closes; an old link reports that the session no longer exists.
+The share URL and browser password together are a bearer capability. Interactive shares grant terminal input; --read-only shares grant viewing only and reject browser input server-side. Only send access to an intended operator. There are no accounts. Every current-CLI share encrypts terminal payloads end to end. Cloudflare relays ciphertext while active and deletes ordinary session state when the task closes; an old link reports that the session no longer exists.

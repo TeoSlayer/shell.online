@@ -1,6 +1,6 @@
 {
   "name": "shell-online",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Turn any terminal process into a collaborative browser link.",
   "private": true,
   "license": "MIT",
@@ -21,7 +21,7 @@
     "build:cli": "sh ./scripts/build-cli.sh",
     "build:web": "vite build",
     "check": "npm run typecheck && npm test",
-    "test": "vitest run && sh ./scripts/test-install.sh && node ./scripts/test-landing-seo.mjs",
+    "test": "vitest run && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && node ./scripts/test-landing-seo.mjs",
     "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
 interface:
   display_name: "shell.online"
-  short_description: "Share a live terminal through a browser link"
+  short_description: "Share an E2EE live terminal with an operator"
   default_prompt: "Use $shell-online to share this long-running process with my operator."

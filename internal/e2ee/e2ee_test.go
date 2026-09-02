@@ -78,12 +78,38 @@ func TestPasswordDerivationCompatibilityVector(t *testing.T) {
 	for index := range salt {
 		salt[index] = byte(index)
 	}
-	key, err := derivePasswordKey("test password", salt)
+	key, err := DerivePasswordKey("test password", salt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if hex.EncodeToString(key) != "1ad5d77f9a39c82adf8284238480beab5734a27bdf4c249cda309ade5f51df7d" {
 		t.Fatalf("derived key = %x", key)
+	}
+}
+
+func TestGeneratedBrowserPasswordIsEightCharacterBase64URL(t *testing.T) {
+	password, err := GenerateBrowserPassword()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(password) != BrowserPasswordLength {
+		t.Fatalf("password length = %d, want %d", len(password), BrowserPasswordLength)
+	}
+	for _, character := range password {
+		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", character) {
+			t.Fatalf("password contains non-base64url character %q", character)
+		}
+	}
+}
+
+func TestBrowserPasswordValidationRejectsUnsafeOutput(t *testing.T) {
+	for _, password := range []string{"", "line\nbreak", string([]byte{0xff}), strings.Repeat("x", MaxBrowserPasswordBytes+1)} {
+		if ValidateBrowserPassword(password) == nil {
+			t.Fatalf("accepted invalid browser password %q", password)
+		}
+	}
+	if err := ValidateBrowserPassword("correct horse battery staple"); err != nil {
+		t.Fatal(err)
 	}
 }
 

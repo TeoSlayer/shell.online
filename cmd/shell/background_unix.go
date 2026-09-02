@@ -53,11 +53,17 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	_ = null.Close()
 	_ = readyReader.SetReadDeadline(time.Now().Add(20 * time.Second))
 
+	stopAnimation := func() {}
+	if !jsonOutput {
+		stopAnimation = startSessionAnimation(stderr)
+	}
 	var result backgroundLaunchResult
-	if err := json.NewDecoder(io.LimitReader(readyReader, 16*1024)).Decode(&result); err != nil {
+	decodeError := json.NewDecoder(io.LimitReader(readyReader, 16*1024)).Decode(&result)
+	stopAnimation()
+	if decodeError != nil {
 		_ = command.Process.Kill()
 		_, _ = command.Process.Wait()
-		fmt.Fprintf(stderr, "shell: background session did not start: %v\n", err)
+		fmt.Fprintf(stderr, "shell: background session did not start: %v\n", decodeError)
 		return 1
 	}
 	if !result.OK {
@@ -86,6 +92,9 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 			"expires_at": result.ExpiresAt.Format(time.RFC3339),
 			"background": true,
 		}
+		if result.Password != "" {
+			event["e2ee_password"] = result.Password
+		}
 		if result.ClosesAt != nil {
 			event["auto_close"] = "deadline"
 			event["closes_at"] = result.ClosesAt.Format(time.RFC3339)
@@ -98,29 +107,6 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 		return 0
 	}
 
-	fmt.Fprintf(stderr, "\n  Share: %s\n", result.ShareURL)
-	if result.ReadOnly {
-		fmt.Fprintln(stderr, "  Access: view only (browser input is blocked)")
-	} else {
-		fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
-	}
-	if result.Encrypted {
-		fmt.Fprintln(stderr, "  Privacy: end-to-end encrypted; keep the complete URL private")
-	}
-	if result.Persistent {
-		fmt.Fprintln(stderr, "  Persistence: stable link; reconnects from the saved state file")
-	}
-	fmt.Fprintf(stderr, "  Session: %s (running in background)\n", shortSessionID(result.ID))
-	if result.Handoff == claudeConversationHandoff {
-		fmt.Fprintln(stderr, "  Handoff: fork of the current Claude conversation")
-		fmt.Fprintln(stderr, "  Original: stays open; new messages do not sync between the two")
-	}
-	if result.ClosesAt == nil {
-		fmt.Fprintln(stderr, "  Closes: when the task exits")
-	} else {
-		fmt.Fprintf(stderr, "  Closes: %s (or when the task exits)\n", result.ClosesAt.Format(time.RFC3339))
-	}
-	fmt.Fprintf(stderr, "  Open locally: shell attach %s\n", shortSessionID(result.ID))
-	fmt.Fprintf(stderr, "  Stop process: shell kill %s\n\n", shortSessionID(result.ID))
+	printSessionCard(stderr, result, true)
 	return 0
 }

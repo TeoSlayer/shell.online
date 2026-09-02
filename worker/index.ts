@@ -581,7 +581,7 @@ async function createSession(
   if (body.read_only !== undefined && typeof body.read_only !== "boolean") {
     return json({ error: "read_only must be a boolean" }, 400);
   }
-  if (body.encrypted !== undefined && typeof body.encrypted !== "boolean") {
+  if (typeof body.encrypted !== "boolean") {
     return json({ error: "encrypted must be a boolean" }, 400);
   }
   if (body.persistent !== undefined && typeof body.persistent !== "boolean") {

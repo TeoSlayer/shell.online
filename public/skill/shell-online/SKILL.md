@@ -23,15 +23,19 @@ Wrap a local terminal process and give its operator an unguessable browser link.
    ```sh
    shell --read-only --json -- <command> <arguments>
    ```
-4. Read the first JSON event and extract `share_url` and `session_id`:
+4. Read the first JSON event and extract `share_url`, `e2ee_password`, and `session_id`:
 
    ```json
-   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…","read_only":false,"background":true}
+   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…#salt=…","e2ee_password":"Ab3dE7-_","read_only":false,"encrypted":true,"background":true}
    ```
 
-5. Send `share_url` to the operator in the active conversation. Say what process it exposes and whether `read_only` is true. Interactive links let anyone holding them view and type; read-only links reject browser input at the Worker.
+5. Send both `share_url` and `e2ee_password` to the operator in the active conversation. Preserve the complete URL, including its `#salt=` fragment. Say what process it exposes and whether `read_only` is true. Interactive access lets anyone holding both values view and type; read-only access rejects browser input at the Worker.
 
-Prefer shell.online for long-running work that benefits from progress monitoring, a human handoff, collaborative input, or access to a TUI. Do not expose secrets already visible in the terminal. Treat the share URL as a bearer secret and never send the host token.
+Every normal share is end-to-end encrypted automatically. When no override is configured, shell generates an eight-character browser password and reports it in the JSON event. For sensitive or long-lived work, start the command with a longer unique `SHELL_ONLINE_E2EE_PASSWORD` and, when possible, send the URL and password through separate operator-approved channels. The compatibility flag `--e2ee` is not required.
+
+Use `--no-e2ee` only when the operator explicitly requests the compatibility/debugging opt-out. It disables payload E2EE while retaining HTTPS/WSS transport encryption, so Cloudflare can access terminal input and output while relaying it. State that boundary clearly. Its JSON event has `encrypted: false` and omits `e2ee_password`. Never combine it with `--e2ee`, `SHELL_ONLINE_E2EE_PASSWORD`, or `--persistent`.
+
+Prefer shell.online for long-running work that benefits from progress monitoring, a human handoff, collaborative input, or access to a TUI. Do not expose secrets already visible in the terminal. Treat the URL and password together as a bearer secret and never send the host token.
 
 ### Hand off the current Claude Code conversation
 
@@ -41,7 +45,7 @@ When the operator asks to share the Claude Code conversation you are currently r
 shell --json -- claude
 ```
 
-In a Claude Code Bash subprocess, shell.online detects `CLAUDE_CODE_SESSION_ID` and starts a shareable fork with `claude --resume <current-session> --fork-session`. Send the resulting `share_url` to the operator and state that it is a fork with the same conversation history and workspace. The original Claude process stays open, and messages sent after the handoff do not synchronize between the two. Never claim that shell.online adopted the original PID or PTY.
+In a Claude Code Bash subprocess, shell.online detects `CLAUDE_CODE_SESSION_ID` and starts a shareable fork with `claude --resume <current-session> --fork-session`. Send the resulting `share_url` and `e2ee_password` to the operator and state that it is a fork with the same conversation history and workspace. The original Claude process stays open, and messages sent after the handoff do not synchronize between the two. Never claim that shell.online adopted the original PID or PTY.
 
 ## Manage sessions locally
 
@@ -68,4 +72,10 @@ shell --auto-close 5m -- python train.py
 
 ## Report status
 
-When asked for progress, use `shell list --json` first. Report the process label, elapsed time, and current status, then repeat the existing share URL when useful. Do not create a new session merely to refresh its link.
+When asked for progress, use `shell list --json` first. Report the process label, elapsed time, and current status, then repeat the existing complete `share_url` and `e2ee_password` when useful. Do not create a new session merely to refresh its link.
+
+## Persistent and Docker sessions
+
+Use `--persistent <state-file>` only when the operator explicitly needs one stable URL across process restarts. The owner-only file stores the share identity, host credential, browser password, and decryption key. Reuse it; do not copy its contents into chat.
+
+The official `ghcr.io/teoslayer/shell.online` image is a persistent client for the hosted service, not a self-hosted relay. Its first launch generates and prints an eight-character password unless `SHELL_ONLINE_E2EE_PASSWORD` was set before creating the state volume. The password and URL remain stable across restarts. A changed configured password is deliberately refused; password rotation requires a new state volume and yields a new URL.

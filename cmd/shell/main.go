@@ -38,7 +38,8 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	showVersion := flags.Bool("version", false, "print version and exit")
 	foreground := flags.Bool("foreground", false, "stay attached and mirror the process locally")
 	readOnly := flags.Bool("read-only", false, "create a view-only link that rejects browser input")
-	encrypted := flags.Bool("e2ee", false, "encrypt terminal contents end-to-end; the URL fragment carries the key")
+	e2eeFlag := flags.Bool("e2ee", false, "compatibility flag; E2EE is enabled by default")
+	noE2EE := flags.Bool("no-e2ee", false, "disable payload E2EE and rely on transport encryption only")
 	persistentState := flags.String("persistent", "", "reuse a stable encrypted session identity from this state file")
 	autoClose := newAutoCloseFlag()
 	flags.Var(autoClose, "auto-close", "close on task exit, or earlier at a duration/date (for example 5m, 2h, tomorrow 09:00)")
@@ -56,10 +57,30 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "shell %s\n", version)
 		return 0
 	}
+	if *e2eeFlag && *noE2EE {
+		fmt.Fprintln(stderr, "shell: --e2ee and --no-e2ee cannot be used together")
+		return 2
+	}
 	closeDeadline, err := parseCloseDeadline(autoClose.value, now)
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 2
+	}
+	password := os.Getenv("SHELL_ONLINE_E2EE_PASSWORD")
+	encrypted := !*noE2EE
+	if !encrypted && password != "" {
+		fmt.Fprintln(stderr, "shell: SHELL_ONLINE_E2EE_PASSWORD cannot be used with --no-e2ee")
+		return 2
+	}
+	if !encrypted && *persistentState != "" {
+		fmt.Fprintln(stderr, "shell: --persistent cannot be used with --no-e2ee")
+		return 2
+	}
+	if password != "" {
+		if err = e2ee.ValidateBrowserPassword(password); err != nil {
+			fmt.Fprintf(stderr, "shell: SHELL_ONLINE_E2EE_PASSWORD: %v\n", err)
+			return 2
+		}
 	}
 	if !*foreground && !isBackgroundChild() {
 		return launchBackgroundProcess(arguments, *jsonOutput, stdout, stderr)
@@ -110,22 +131,22 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	client := api.NewClient(strings.TrimRight(*server, "/"), "shell/"+version)
 	var session api.Session
 	if *persistentState != "" {
-		if !*encrypted {
-			fmt.Fprintln(stderr, "shell: --persistent requires --e2ee")
-			return 2
-		}
-		session, err = preparePersistentSession(
-			processContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true,
-			os.Getenv("SHELL_ONLINE_E2EE_PASSWORD"),
+		session, password, err = preparePersistentSession(
+			processContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true, password,
 		)
 	} else {
-		var frameCipher *e2ee.Cipher
-		var encryptionFragment string
-		if *encrypted {
-			frameCipher, encryptionFragment, err = e2ee.Generate(os.Getenv("SHELL_ONLINE_E2EE_PASSWORD"))
+		if encrypted && password == "" {
+			password, err = e2ee.GenerateBrowserPassword()
 		}
 		if err == nil {
-			session, err = client.CreateSession(processContext, filepath.Base(command[0]), *readOnly, *encrypted, false)
+			var frameCipher *e2ee.Cipher
+			var encryptionFragment string
+			if encrypted {
+				frameCipher, encryptionFragment, err = e2ee.Generate(password)
+			}
+			if err == nil {
+				session, err = client.CreateSession(processContext, filepath.Base(command[0]), *readOnly, encrypted, false)
+			}
 			session.Cipher = frameCipher
 			session.ShareURL += encryptionFragment
 		}
@@ -146,6 +167,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		ShareURL:   session.ShareURL,
 		ReadOnly:   session.ReadOnly,
 		Encrypted:  session.Encrypted,
+		Password:   password,
 		Persistent: session.Persistent,
 		Command:    displayCommand(launch.DisplayArguments),
 		PID:        os.Getpid(),
@@ -181,6 +203,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			"expires_at": session.ExpiresAt.Format(time.RFC3339),
 			"background": false,
 		}
+		if password != "" {
+			event["e2ee_password"] = password
+		}
 		if closesAt != nil {
 			event["auto_close"] = "deadline"
 			event["closes_at"] = closesAt.Format(time.RFC3339)
@@ -188,24 +213,11 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		encoded, _ := json.Marshal(event)
 		fmt.Fprintf(stderr, "%s\n", encoded)
 	} else if !isBackgroundChild() {
-		fmt.Fprintf(stderr, "\n  Share: %s\n", session.ShareURL)
-		if session.ReadOnly {
-			fmt.Fprintln(stderr, "  Access: view only (browser input is blocked)")
-		} else {
-			fmt.Fprintln(stderr, "  Access: anyone with this link can view and type")
-		}
-		if session.Encrypted {
-			fmt.Fprintln(stderr, "  Privacy: end-to-end encrypted; keep the complete URL private")
-		}
-		if session.Persistent {
-			fmt.Fprintln(stderr, "  Persistence: stable link; reconnects from the saved state file")
-		}
-		if closesAt == nil {
-			fmt.Fprintln(stderr, "  Closes: when the task exits")
-		} else {
-			fmt.Fprintf(stderr, "  Closes: %s (or when the task exits)\n", closesAt.Format(time.RFC3339))
-		}
-		fmt.Fprintln(stderr)
+		printSessionCard(stderr, backgroundLaunchResult{
+			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
+			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
+			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,
+		}, false)
 	}
 
 	var onStarted func()
@@ -217,6 +229,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				ShareURL:   session.ShareURL,
 				ReadOnly:   session.ReadOnly,
 				Encrypted:  session.Encrypted,
+				Password:   password,
 				Persistent: session.Persistent,
 				ExpiresAt:  session.ExpiresAt,
 				ClosesAt:   closesAt,

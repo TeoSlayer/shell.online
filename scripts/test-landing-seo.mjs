@@ -112,17 +112,19 @@ for (const example of [
 }
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
-check(sitemap.includes("<lastmod>2026-08-31</lastmod>"), "Sitemap lastmod is missing");
+check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
 check((sitemap.match(/<loc>/gu) ?? []).length === 8, "Sitemap should list the homepage and knowledge base");
 for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
   check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "Cloudflare in the content trust boundary"]) {
+for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "authenticated ciphertext"]) {
   check(readme.includes(guarantee), `README reliability guarantee is missing: ${guarantee}`);
 }
-check(readme.includes("shell --e2ee"), "README E2EE instructions are missing");
+check(readme.includes("End-to-end encryption by default"), "README default E2EE instructions are missing");
+check(readme.includes("e2ee_password"), "README structured E2EE password output is missing");
+check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
 check(readme.includes("docker compose up --build -d"), "README Docker instructions are missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
 for (const page of ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"]) {

@@ -887,6 +887,18 @@ a {
   color: #28654f;
 }
 
+.session-access.encryption.unencrypted {
+  border-color: #684d32;
+  background: #2a2016;
+  color: #e8b77e;
+}
+
+.theme-light .session-access.encryption.unencrypted {
+  border-color: #dfc3a5;
+  background: #fbf1e6;
+  color: #87582a;
+}
+
 .encryption-gate {
   position: absolute;
   z-index: 8;

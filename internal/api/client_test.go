@@ -78,6 +78,36 @@ func TestCreateSessionRejectsAccessModeMismatch(t *testing.T) {
 	}
 }
 
+func TestCreateSessionPreservesExplicitE2EEOptOut(t *testing.T) {
+	const sessionID = "abcdefghijklmnopqrstuvwxyzABCDEF"
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Encrypted *bool `json:"encrypted"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Encrypted == nil || *body.Encrypted {
+			t.Fatalf("E2EE opt-out request = %#v", body.Encrypted)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(writer).Encode(Session{
+			ID: sessionID, HostToken: "host-token", Encrypted: false,
+			ExpiresAt: time.Now().UTC().Add(time.Hour),
+		})
+	}))
+	defer server.Close()
+
+	session, err := NewClient(server.URL, "shell/test").CreateSession(context.Background(), "bash", false, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.Encrypted {
+		t.Fatal("E2EE opt-out became encrypted")
+	}
+}
+
 func TestResumeSessionPreservesStableCredentials(t *testing.T) {
 	const sessionID = "abcdefghijklmnopqrstuvwxyzABCDEF"
 	const hostToken = "a-stable-host-token-that-is-long-enough"

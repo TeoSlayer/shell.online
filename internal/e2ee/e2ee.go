@@ -8,15 +8,42 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
-	KeyBytes              = 32
-	NonceBytes            = 12
-	SaltBytes             = 16
-	EnvelopeVersion  byte = 1
-	PBKDF2Iterations      = 600_000
+	KeyBytes                     = 32
+	NonceBytes                   = 12
+	SaltBytes                    = 16
+	BrowserPasswordBytes         = 6
+	BrowserPasswordLength        = 8
+	EnvelopeVersion         byte = 1
+	PBKDF2Iterations             = 600_000
+	MaxBrowserPasswordBytes      = 1_024
 )
+
+func GenerateBrowserPassword() (string, error) {
+	value := make([]byte, BrowserPasswordBytes)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(value), nil
+}
+
+func ValidateBrowserPassword(password string) error {
+	if password == "" {
+		return fmt.Errorf("browser password must not be empty")
+	}
+	if len(password) > MaxBrowserPasswordBytes {
+		return fmt.Errorf("browser password must not exceed %d bytes", MaxBrowserPasswordBytes)
+	}
+	if !utf8.ValidString(password) || strings.IndexFunc(password, unicode.IsControl) >= 0 {
+		return fmt.Errorf("browser password must be valid text without control characters")
+	}
+	return nil
+}
 
 type Cipher struct{ aead cipher.AEAD }
 
@@ -54,7 +81,7 @@ func GenerateMaterial(password string) (*Cipher, string, []byte, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return nil, "", nil, err
 	}
-	key, err := derivePasswordKey(password, salt)
+	key, err := DerivePasswordKey(password, salt)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -62,7 +89,7 @@ func GenerateMaterial(password string) (*Cipher, string, []byte, error) {
 	return result, "#salt=" + base64.RawURLEncoding.EncodeToString(salt), key, err
 }
 
-func derivePasswordKey(password string, salt []byte) ([]byte, error) {
+func DerivePasswordKey(password string, salt []byte) ([]byte, error) {
 	if len(salt) != SaltBytes {
 		return nil, fmt.Errorf("E2EE salt must be %d bytes", SaltBytes)
 	}

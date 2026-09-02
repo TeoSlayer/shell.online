@@ -2,6 +2,21 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-09-02
+
+### Changed
+
+- Make E2EE automatic for every new CLI share, with a cryptographically random eight-character browser password when `SHELL_ONLINE_E2EE_PASSWORD` is not set.
+- Add an explicit `--no-e2ee` compatibility/debugging opt-out, label its Cloudflare plaintext trust boundary in CLI output, and reject conflicting password or persistence options.
+- Include `e2ee_password` in structured session events so agents can give operators everything needed to open a share; keep `--e2ee` as a redundant compatibility flag.
+- Refresh human CLI output with an animated connection state and a compact colored session card while keeping JSON and non-TTY output deterministic.
+- Persist generated and configured browser passwords for stable CLI and Docker sessions, reuse them across restarts, and refuse mismatched replacement passwords rather than silently breaking an existing URL.
+
+### Security
+
+- Use password-derived AES-256-GCM keys for all new shares while continuing to expose the documented routing and traffic metadata to Cloudflare.
+- Document the generated password's 48-bit entropy, recommend longer unique passwords for sensitive or long-lived work, and treat persistent state volumes as browser-password, host-credential, and decryption secrets.
+
 ## [0.6.2] — 2026-08-31
 
 ### Added
@@ -92,6 +107,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Support safe Claude Code conversation handoffs through a forked process.
 
 [0.6.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.2
+[0.7.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.0
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

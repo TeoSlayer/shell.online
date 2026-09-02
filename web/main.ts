@@ -283,14 +283,14 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
           <h1>${escapeDocumentationText(page.title)}</h1>
           <p class="assurance-intro">${escapeDocumentationText(page.intro)}</p>
           ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
-<span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell --e2ee &lt;command&gt;
-<span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell --e2ee &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
+<span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell &lt;command&gt;
+<span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
 <span>$</span> docker compose logs shell-online</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
 <span>$</span> shell [options] -- &lt;command&gt; [arguments...]</code></pre>` : ""}
           <div class="knowledge-sections">
             ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
           </div>
-          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The decryption secret is created and used on endpoints. Cloudflare never receives the random key or password." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as both a host credential and a decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
+          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The browser password and derived key exist only at endpoints. Cloudflare receives neither and cannot read terminal payloads." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as a browser password, host credential, and decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
           <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${nextLabel} →</a></nav>
         </article>
         <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${escapeDocumentationText(title)}</a>`).join("")}<div class="knowledge-release"><span>Release</span><strong>v${escapeDocumentationText(version)}</strong><a href="${GITHUB_REPOSITORY_URL}/releases/tag/v${escapeDocumentationText(version)}">View release notes ↗</a></div></aside>
@@ -411,7 +411,7 @@ function renderLanding(): void {
           <div class="hero-copy">
             <p class="hero-kicker"><i aria-hidden="true"></i> Live browser terminals <span>· Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a></span></p>
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It keeps running on your computer and opens as a live browser link. Links are interactive by default; add <code>--read-only</code> when people should only watch.</p>
+            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It stays on your computer and opens as an end-to-end encrypted browser terminal. You get a link and password; add <code>--read-only</code> when people should only watch.</p>
             <div class="hero-actions">
               <button class="install-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">$</span>
@@ -423,7 +423,7 @@ function renderLanding(): void {
             <ul class="trust-list" aria-label="Product highlights">
               <li>No account</li>
               <li>No SSH setup</li>
-              <li>Nothing retained when the process ends</li>
+              <li>E2EE by default</li>
             </ul>
           </div>
 
@@ -535,7 +535,7 @@ function renderLanding(): void {
           <div class="section-heading use-cases-heading">
             <p>Use cases</p>
             <h2>One live link.<br />Plenty to keep moving.</h2>
-            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Links are interactive by default; add <code>--read-only</code> when recipients should only watch.</span>
+            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Access is interactive by default; add <code>--read-only</code> when recipients should only watch.</span>
           </div>
           <div class="use-cases-grid">
             <article class="use-case-card">
@@ -583,7 +583,7 @@ function renderLanding(): void {
             <article class="use-case-card">
               <header><span>08</span><i>Pairing</i></header>
               <h3>Debug and hand off together</h3>
-              <p>Give a teammate the link to watch, type, and help in the exact terminal session—without creating an account or exchanging SSH keys.</p>
+              <p>Give a teammate the link and password to watch, type, and help in the exact terminal session—without creating an account or exchanging SSH keys.</p>
               <code><b>$</b> shell bash</code>
             </article>
           </div>
@@ -593,7 +593,7 @@ function renderLanding(): void {
           <div class="section-heading">
             <p>How it works</p>
             <h2>A share link,<br />not a remote machine.</h2>
-            <span>The command and PTY stay where you started them. shell.online relays the live input and output to people holding the link.</span>
+            <span>The command and PTY stay where you started them. shell.online relays encrypted terminal frames to people holding the link and browser password.</span>
           </div>
           <div class="steps-grid">
             <article class="step-card">
@@ -606,10 +606,10 @@ function renderLanding(): void {
               <span class="step-index">02</span>
               <div class="step-visual step-share" aria-hidden="true">
                 <div><i>↗</i><code>shell.online/s/k9f…</code></div>
-                <span>Copy link</span>
+                <span>Password · Ab3dE7-_</span>
               </div>
-              <h3>Send the link</h3>
-              <p>No signup or SSH keys. Choose interactive or server-enforced view-only access, then share the unguessable link like a secret.</p>
+              <h3>Send the link and password</h3>
+              <p>No signup or SSH keys. Choose interactive or server-enforced view-only access, then send both values to the people you trust.</p>
             </article>
             <article class="step-card">
               <span class="step-index">03</span>
@@ -631,14 +631,14 @@ function renderLanding(): void {
           </div>
           <div class="relay-diagram" aria-label="Data flows from your local terminal through a relay to a browser">
             <div class="relay-node local-node"><i aria-hidden="true">⌘</i><span><b>Your machine</b><small>Process + PTY</small></span></div>
-            <div class="relay-line"><span>live I/O</span><i></i></div>
+            <div class="relay-line"><span>E2EE frames</span><i></i></div>
             <div class="relay-node cloud-node"><i aria-hidden="true">↝</i><span><b>Relay</b><small>No retained output</small></span></div>
-            <div class="relay-line"><span>HTTPS / WSS</span><i></i></div>
+            <div class="relay-line"><span>ciphertext</span><i></i></div>
             <div class="relay-node browser-node"><i aria-hidden="true">◫</i><span><b>Any browser</b><small>Chosen access</small></span></div>
           </div>
           <div class="security-points">
             <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
-            <article><i>02</i><h3>You choose access and privacy</h3><p>Use <code>--read-only</code> to reject browser input or <code>--e2ee</code> to keep terminal payloads opaque to the relay.</p></article>
+            <article><i>02</i><h3>Encrypted without setup</h3><p>E2EE is the default and prints a browser password. Add <code>--read-only</code> when people should watch without typing.</p></article>
             <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
           </div>
         </section>
@@ -1161,26 +1161,35 @@ function renderTerminal(sessionId: string): void {
     if (allowPassword) encryptionPassword.focus();
   };
 
+  const defaultCopyLabel = (): string =>
+    readOnly ? "Copy read-only link" : "Copy sharing link";
+
+  const renderAccessDescription = (): void => {
+    const credential = encryptedSession ? "link and password" : "link";
+    accessDescription.textContent = readOnly
+      ? `This ${credential} is view only. Browser input is blocked.`
+      : `Anyone with the ${credential} can view and type.`;
+  };
+
   const applyEncryptionMode = (encrypted: boolean): void => {
     encryptedSession = encrypted;
-    encryptionBadge.hidden = !encrypted;
-    encryptionBadge.textContent = persistentSession ? "Persistent E2EE" : "End-to-end encrypted";
+    encryptionBadge.hidden = false;
+    encryptionBadge.classList.toggle("unencrypted", !encrypted);
+    encryptionBadge.textContent = encrypted
+      ? persistentSession ? "Persistent E2EE" : "End-to-end encrypted"
+      : "Transport only";
+    renderAccessDescription();
     if (encrypted && !frameCipher && !encryptionDescriptor) {
       showEncryptionGate("This E2EE link is missing its decryption fragment. Ask the sender for the complete URL, including everything after #.", false);
       socket?.close(4003, "missing encryption key");
     }
   };
 
-  const defaultCopyLabel = (): string =>
-    readOnly ? "Copy read-only link" : "Copy sharing link";
-
   const applyReadOnly = (nextReadOnly: boolean): void => {
     readOnly = nextReadOnly;
     sessionPage.classList.toggle("read-only", readOnly);
     accessBadge.hidden = !readOnly;
-    accessDescription.textContent = readOnly
-      ? "This link is view only. Browser input is blocked."
-      : "Anyone with the link can view and type.";
+    renderAccessDescription();
     terminalElement.setAttribute("aria-label", readOnly
       ? "Shared read-only terminal"
       : "Shared interactive terminal");

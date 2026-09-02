@@ -25,6 +25,7 @@ type localSessionRecord struct {
 	ShareURL   string     `json:"share_url"`
 	ReadOnly   bool       `json:"read_only"`
 	Encrypted  bool       `json:"encrypted,omitempty"`
+	Password   string     `json:"e2ee_password,omitempty"`
 	Persistent bool       `json:"persistent,omitempty"`
 	Command    string     `json:"command"`
 	PID        int        `json:"pid"`
@@ -188,7 +189,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 
 	now := time.Now()
 	table := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(table, "ID\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL")
+	fmt.Fprintln(table, "ID\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL\tPASSWORD")
 	for _, session := range sessions {
 		closes := "on exit"
 		if session.ClosesAt != nil {
@@ -204,7 +205,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 		if session.Persistent {
 			access += "+stable"
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			shortSessionID(session.ID),
 			compactDuration(now.Sub(session.StartedAt)),
 			relayStatusLabel(relayStatuses[session.ID]),
@@ -212,6 +213,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 			access,
 			truncateText(session.Command, 48),
 			session.ShareURL,
+			session.Password,
 		)
 	}
 	_ = table.Flush()
