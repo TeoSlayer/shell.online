@@ -151,11 +151,9 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	}
 	select {
 	case size := <-resizes:
-		if size != [2]uint16{120, 42} {
-			t.Fatalf("resize = %v", size)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("resize was not forwarded")
+		t.Fatalf("shared terminal was resized to %v", size)
+	case <-time.After(50 * time.Millisecond):
+		// The compatibility request is acknowledged without deforming the PTY.
 	}
 	if err := connection.Close(); err != nil {
 		t.Fatal(err)
@@ -167,5 +165,12 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("local detachment change was not reported")
+	}
+}
+
+func TestSharedTerminalSizeIsStableStandardGrid(t *testing.T) {
+	size := sharedTerminalSize()
+	if size.Cols != 80 || size.Rows != 24 {
+		t.Fatalf("shared terminal size = %dx%d, want 80x24", size.Cols, size.Rows)
 	}
 }

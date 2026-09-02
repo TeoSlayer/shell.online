@@ -14,7 +14,6 @@ import {
   decodeLatencyProbe,
   encodeFrame,
   encodeLatencyProbe,
-  encodeResize,
   Opcode,
 } from "../shared/protocol";
 import { readOnlyFromControlMessage } from "../shared/session-access";
@@ -37,6 +36,11 @@ import {
   type LatencySample,
 } from "./latency-history";
 import { MobileViewportTracker, terminalTypography } from "./mobile-viewport";
+import {
+  fittedTerminalFontSize,
+  SHARED_TERMINAL_COLS,
+  SHARED_TERMINAL_ROWS,
+} from "./terminal-fit";
 import { renderStatsDashboard } from "./stats";
 import {
   TerminalLineScroller,
@@ -1112,9 +1116,6 @@ function renderTerminal(sessionId: string): void {
   const mobileViewport = new MobileViewportTracker();
   let copyAttempt = 0;
   let copyResetTimer: number | undefined;
-  let lastResizeSocket: WebSocket | null = null;
-  let lastResizeColumns = 0;
-  let lastResizeRows = 0;
   let latencyTimer: number | undefined;
   let latencyTimeout: number | undefined;
   let pendingLatencyToken: number | undefined;
@@ -1127,7 +1128,6 @@ function renderTerminal(sessionId: string): void {
   let localTypingAt: number | undefined;
   let presenceTimer: number | undefined;
   let readOnly = false;
-  let resizeAllowed = false;
   let snapshotRequestPending = false;
   const terminalInput = new TerminalInputQueue(() => socket);
   let frameCipher: BrowserFrameCipher | null = null;
@@ -1418,19 +1418,6 @@ function renderTerminal(sessionId: string): void {
     return true;
   };
 
-  const sendResize = (): void => {
-    if (!resizeAllowed || socket?.readyState !== WebSocket.OPEN) return;
-    if (
-      socket === lastResizeSocket &&
-      terminal.cols === lastResizeColumns &&
-      terminal.rows === lastResizeRows
-    ) return;
-    sendBinaryFrame(encodeResize(terminal.cols, terminal.rows));
-    lastResizeSocket = socket;
-    lastResizeColumns = terminal.cols;
-    lastResizeRows = terminal.rows;
-  };
-
   const fitTerminal = (): void => {
     if (terminalWrap.clientWidth === 0 || terminalWrap.clientHeight === 0) return;
     try {
@@ -1441,18 +1428,24 @@ function renderTerminal(sessionId: string): void {
         current.width,
         current.height,
       );
-      const scaledFontSize = Math.max(
-        4,
-        Math.round(typography.fontSize * (terminalZoomPercent / 100) * 4) / 4,
+      terminal.options.fontSize = typography.fontSize;
+      terminal.options.lineHeight = typography.lineHeight;
+      const available = fit.proposeDimensions();
+      if (!available) return;
+      const scaledFontSize = fittedTerminalFontSize(
+        typography.fontSize,
+        available.cols,
+        available.rows,
+        terminalZoomPercent,
       );
       if (terminal.options.fontSize !== scaledFontSize) {
         terminal.options.fontSize = scaledFontSize;
       }
-      if (terminal.options.lineHeight !== typography.lineHeight) {
-        terminal.options.lineHeight = typography.lineHeight;
+      if (terminal.cols !== SHARED_TERMINAL_COLS || terminal.rows !== SHARED_TERMINAL_ROWS) {
+        terminal.resize(SHARED_TERMINAL_COLS, SHARED_TERMINAL_ROWS);
+      } else {
+        terminal.refresh(0, terminal.rows - 1);
       }
-      fit.fit();
-      sendResize();
     } catch {
       // Layout can briefly be zero-sized during mobile viewport changes.
     }
@@ -1568,8 +1561,6 @@ function renderTerminal(sessionId: string): void {
 
     socket.addEventListener("open", () => {
       retryAttempt = 0;
-      lastResizeSocket = null;
-      resizeAllowed = false;
       terminalInput.flush();
       scheduleFit();
       if (!compactSessionQuery.matches && !readOnly) terminal.focus();
@@ -1613,7 +1604,6 @@ function renderTerminal(sessionId: string): void {
 
     socket.addEventListener("close", (event) => {
       socket = null;
-      resizeAllowed = false;
       terminalInput.clear();
       stopLatencyProbe();
       selfViewerId = null;
@@ -1672,11 +1662,8 @@ function renderTerminal(sessionId: string): void {
     }
 
     if (message.type === "resize_control" && typeof message.allowed === "boolean") {
-      resizeAllowed = message.allowed;
-      if (resizeAllowed) {
-        lastResizeSocket = null;
-        scheduleFit();
-      }
+      // Older relays may still send resize-control messages. Sizing is now local to
+      // each viewer and never changes the shared PTY.
       return;
     }
 

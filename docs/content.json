@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.7.1",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -16,9 +16,9 @@
     "mobile": {
       "eyebrow": "Terminal fidelity",
       "title": "A real terminal, fitted to the device in your hand.",
-      "intro": "A phone is not a smaller desktop. shell.online measures the visual viewport, accounts for the on-screen keyboard, and resizes the PTY—not merely its CSS box.",
+      "intro": "A phone is not a smaller desktop. shell.online keeps the process on one standard 80×24 grid, then fits that grid independently to each browser and its on-screen keyboard.",
       "cards": [
-        ["Deterministic sizing", "One connected viewer owns the shared PTY size at a time. Active input can transfer ownership; a local attachment takes priority. Other viewers never make the TUI jump."],
+        ["Deterministic sizing", "The process owns one immutable 80×24 terminal grid. Phone, desktop, read-only, and local viewers each fit it independently, so taking control never makes another screen jump."],
         ["Touch that scrolls", "Single-finger gestures scroll normal terminal history. When an application enables mouse tracking or its alternate screen, the same gesture is translated into terminal wheel input."],
         ["Keyboard-aware", "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths."],
         ["Large paste, bounded", "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."]
@@ -79,7 +79,7 @@
       "title": "One encrypted shell and one stable link across restarts.",
       "intro": "The Docker client keeps its workspace, host credential, browser password, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
       "cards": [
-        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.7.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
+        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.7.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
         ["Two durable volumes", "shell-online-state stores the browser password, host credential, share identity, and E2EE key. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."],
         ["Password continuity", "Set a longer SHELL_ONLINE_E2EE_PASSWORD only before first launch if desired. Restarts reuse the saved password. A conflicting configured password is refused; create a new state volume to rotate both password and URL."],
         ["Restart behavior", "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."],

@@ -10,8 +10,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -218,28 +216,6 @@ func attachLocalSession(id string, stdout, stderr io.Writer) error {
 		outputDone <- copyError
 	}()
 
-	resizeDone := make(chan struct{})
-	resizeSignals := make(chan os.Signal, 1)
-	signal.Notify(resizeSignals, syscall.SIGWINCH)
-	defer signal.Stop(resizeSignals)
-	sendSize := func() {
-		cols, rows, sizeError := term.GetSize(stdinFD)
-		if sizeError == nil {
-			_ = requestLocalSessionResize(id, cols, rows)
-		}
-	}
-	sendSize()
-	go func() {
-		for {
-			select {
-			case <-resizeSignals:
-				sendSize()
-			case <-resizeDone:
-				return
-			}
-		}
-	}()
-
 	detached := false
 	remoteEnded := false
 	buffer := make([]byte, 32*1024)
@@ -265,7 +241,6 @@ inputLoop:
 			if errors.Is(pollError, unix.EINTR) {
 				continue
 			}
-			close(resizeDone)
 			return pollError
 		}
 		if descriptors[0].Revents&unix.POLLIN == 0 {
@@ -288,14 +263,12 @@ inputLoop:
 		}
 		if readError != nil {
 			if !errors.Is(readError, io.EOF) {
-				close(resizeDone)
 				return readError
 			}
 			break inputLoop
 		}
 	}
 
-	close(resizeDone)
 	_ = connection.Close()
 	if !remoteEnded {
 		select {

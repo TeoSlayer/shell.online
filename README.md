@@ -36,9 +36,9 @@ The Homebrew formula does not install a prebuilt shell.online binary. Brew downl
 The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
 
 ```sh
-git clone --depth 1 --branch v0.7.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.7.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.7.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.7.1" -o ./shell ./cmd/shell
 ./shell --version
 ```
 
@@ -129,13 +129,13 @@ shell --no-e2ee your-command
 
 This mode still uses HTTPS/WSS for each transport hop, but Cloudflare can access terminal input and output while relaying it. The CLI labels that boundary prominently. `--no-e2ee` cannot be combined with `--e2ee`, `SHELL_ONLINE_E2EE_PASSWORD`, or `--persistent`.
 
-E2EE protects terminal input, output, snapshots, resize frames, and latency probes from relay inspection or undetected modification. It does not hide connection IPs, timing, encrypted frame sizes, frame opcodes, the command label, access mode, or lifecycle metadata. It also cannot stop the relay from dropping, delaying, or replaying a previously valid encrypted frame. Read-only remains independently enforced by the Worker because the authenticated frame opcode is intentionally visible for routing and policy.
+E2EE protects terminal input, output, snapshots, legacy resize frames, and latency probes from relay inspection or undetected modification. It does not hide connection IPs, timing, encrypted frame sizes, frame opcodes, the command label, access mode, or lifecycle metadata. It also cannot stop the relay from dropping, delaying, or replaying a previously valid encrypted frame. Read-only remains independently enforced by the Worker because the authenticated frame opcode is intentionally visible for routing and policy.
 
 See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and recovery limits.
 
 ## Persistent Docker terminal
 
-The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.7.0` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.7.1` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
 
 ```sh
 docker compose up --build -d
@@ -145,11 +145,11 @@ docker compose logs shell-online
 Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
 
 ```sh
-docker pull ghcr.io/teoslayer/shell.online:0.7.0
+docker pull ghcr.io/teoslayer/shell.online:0.7.1
 docker run -d --name shell-online --restart unless-stopped \
   -v shell-online-state:/var/lib/shell-online \
   -v shell-online-workspace:/workspace \
-  ghcr.io/teoslayer/shell.online:0.7.0
+  ghcr.io/teoslayer/shell.online:0.7.1
 docker logs shell-online
 ```
 
@@ -216,7 +216,7 @@ Shared terminals fail in ways that ordinary responsive pages do not. These behav
 | Concern | shell.online behavior |
 | --- | --- |
 | Mobile terminals crop, jump, or start at the wrong size | The browser tracks the visual viewport through keyboard, browser-chrome, and rotation changes, then sends actual PTY rows and columns. Mobile uses a denser default grid so TUIs expose more content. |
-| Several viewers fight over terminal dimensions | Exactly one connected browser owns PTY resizing. Ownership stays stable, follows the active collaborator when appropriate, and is suspended while a local terminal is attached. Read-only viewers may observe but cannot independently resize the shared process. |
+| Several viewers fight over terminal dimensions | The process owns one immutable 80×24 PTY grid. Desktop, mobile, read-only, and locally attached viewers scale that same grid independently; joining or taking control cannot deform another viewer's TUI. |
 | Mobile keyboards and browser shortcuts break controls | Input uses xterm’s terminal events plus explicit paths for raw binary replies, selected-text copy, the iOS hardware-keyboard Ctrl-C anomaly, and Ctrl-W when the browser delivers it. VisualViewport sampling follows keyboard open and dismiss transitions. Browser-reserved shortcuts that the operating system never delivers cannot be overridden by a web page. |
 | Selection, copy, and large paste are unreliable | Ctrl/Cmd-C copies a terminal selection instead of sending SIGINT. Paste is split into frames no larger than 16 KiB, waits for WebSocket backpressure, and has a 1 MiB pending-input ceiling. |
 | Temporary network loss destroys or strands a session | The CLI-owned process and PTY keep running when the relay disappears. CLI and browser reconnect automatically; the browser requests a bounded local replay snapshot after reconnect. Relay loss never signals or kills the child process. |
@@ -225,7 +225,7 @@ Shared terminals fail in ways that ordinary responsive pages do not. These behav
 | Users distrust relay and bearer links | The URL plus browser password is explicitly a bearer capability. E2EE is automatic, keeping terminal payloads opaque to Cloudflare while still exposing traffic and lifecycle metadata. Terminal contents are not persisted server-side. |
 | Sharing does not yield an immediately usable result | `shell <command>` prints the browser URL as soon as the relay session exists, then returns control to the local shell while the task continues in the background. |
 
-Automated tests cover viewport calculations, touch-scroll translation, deterministic resize ownership, read-only input enforcement, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, session cleanup, Go/browser cryptographic compatibility, authentication-tag tampering, persistent credential permissions, and stable-session resume. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
+Automated tests cover viewport calculations, independent fixed-grid fitting, touch-scroll translation, ignored legacy resize frames, read-only input enforcement, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, session cleanup, Go/browser cryptographic compatibility, authentication-tag tampering, persistent credential permissions, and stable-session resume. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
 
 ## Development
 

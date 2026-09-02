@@ -1,6 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
 import { decodeResize, Opcode } from "../shared/protocol";
-import { chooseResizeOwner } from "../shared/resize-control";
 import {
   binaryDownloadTarget,
   isDocumentNavigation,
@@ -108,9 +107,6 @@ interface SocketAttachment {
   client?: string;
   referrer?: string;
   ended?: boolean;
-  resizeOwner?: boolean;
-  cols?: number;
-  rows?: number;
   snapshotRequestedAt?: number;
 }
 
@@ -916,11 +912,11 @@ export class TerminalSession extends DurableObject<Env> {
         readOnly: this.isReadOnly(),
         encrypted: this.isEncrypted(),
       });
+      sendJson(server, { type: "resize_control", allowed: false });
       for (const host of this.state.getWebSockets("host")) {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
       }
       this.broadcastPresence();
-      this.rebalanceResizeOwner();
     }
 
     return new Response(null, { status: 101, webSocket: client });
@@ -1008,7 +1004,6 @@ export class TerminalSession extends DurableObject<Env> {
       if (!this.meta) return;
       this.meta.localAttached = event.attached;
       await this.persistMeta();
-      this.rebalanceResizeOwner();
       return;
     }
 
@@ -1137,7 +1132,6 @@ export class TerminalSession extends DurableObject<Env> {
           safeClose(socket, 4002, "invalid encrypted terminal size");
           return;
         }
-        if (attachment.resizeOwner === true) this.broadcastBinary(frame, "host");
         return;
       }
       const size = decodeResize(frame);
@@ -1145,10 +1139,8 @@ export class TerminalSession extends DurableObject<Env> {
         safeClose(socket, 4002, "invalid terminal size");
         return;
       }
-      attachment.cols = size.cols;
-      attachment.rows = size.rows;
-      socket.serializeAttachment(attachment);
-      if (attachment.resizeOwner === true) this.broadcastBinary(frame, "host");
+      // Older clients still send resize frames. Accept them as no-ops: the
+      // process keeps one stable grid and each viewer scales it locally.
       return;
     }
 
@@ -1197,7 +1189,6 @@ export class TerminalSession extends DurableObject<Env> {
       await this.refreshLivePresence(true, socket);
       await this.scheduleNextAlarm();
       this.broadcastPresence(socket);
-      this.rebalanceResizeOwner(socket);
       return;
     }
     if (attachment?.role !== "host" || !this.meta || this.meta.status === "exited") return;
@@ -1443,7 +1434,6 @@ export class TerminalSession extends DurableObject<Env> {
 
     attachment.typingAt = now;
     socket.serializeAttachment(attachment);
-    this.rebalanceResizeOwner();
     if (deferPresence) {
       queueMicrotask(() => this.broadcastPresence());
     } else {
@@ -1479,39 +1469,6 @@ export class TerminalSession extends DurableObject<Env> {
     for (const socket of this.state.getWebSockets(role)) safeSend(socket, frame);
   }
 
-  private rebalanceResizeOwner(excluded?: WebSocket): void {
-    const viewers = this.state
-      .getWebSockets("viewer")
-      .filter((socket) => socket !== excluded && socket.readyState === 1);
-    const currentOwnerId = viewers
-      .map((socket) => readAttachment(socket))
-      .find((attachment) => attachment?.resizeOwner === true)?.id ?? null;
-    const ownerId = this.meta?.localAttached === true
-      ? null
-      : chooseResizeOwner(
-        viewers.map((socket) => {
-          const attachment = readAttachment(socket)!;
-          return {
-            id: attachment.id,
-            connected: true,
-            guestNumber: attachment.guestNumber,
-            typingAt: attachment.typingAt,
-          };
-        }),
-        currentOwnerId,
-        Date.now(),
-        TYPING_LEASE_MS,
-      );
-    for (const viewer of viewers) {
-      const attachment = readAttachment(viewer);
-      if (!attachment) continue;
-      const allowed = attachment.id === ownerId;
-      if (attachment.resizeOwner === allowed) continue;
-      attachment.resizeOwner = allowed;
-      viewer.serializeAttachment(attachment);
-      sendJson(viewer, { type: "resize_control", allowed });
-    }
-  }
 }
 
 function sanitizeLabel(value: unknown): string {

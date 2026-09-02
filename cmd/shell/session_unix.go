@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,6 +31,8 @@ const (
 	outputBatchInterval = 10 * time.Millisecond
 	outputBatchBytes    = 32 * 1024
 	snapshotBytes       = 512 * 1024
+	sharedTerminalCols  = 80
+	sharedTerminalRows  = 24
 )
 
 func runSharedProcess(
@@ -70,7 +71,7 @@ func runSharedProcess(
 
 	command := exec.Command(commandArguments[0], commandArguments[1:]...)
 	command.Env = terminalEnvironment(commandEnvironment)
-	ptmx, err := pty.StartWithSize(command, localTerminalSize())
+	ptmx, err := pty.StartWithSize(command, sharedTerminalSize())
 	if err != nil {
 		sendFinalState(connection, outputRing, session.Cipher, 1, nil)
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
@@ -101,9 +102,7 @@ func runSharedProcess(
 		control.BindTerminal(
 			ptmx,
 			outputRing,
-			func(cols, rows uint16) error {
-				return pty.Setsize(ptmx, &pty.Winsize{Cols: cols, Rows: rows})
-			},
+			nil,
 			notifyLocalTyping,
 			notifyAttachChange,
 		)
@@ -145,25 +144,6 @@ func runSharedProcess(
 		_, _ = io.Copy(ptmx, os.Stdin)
 	}()
 
-	resizeSignals := make(chan os.Signal, 1)
-	signal.Notify(resizeSignals, syscall.SIGWINCH)
-	defer signal.Stop(resizeSignals)
-	processEnded := make(chan struct{})
-	go func() {
-		for {
-			select {
-			case <-resizeSignals:
-				if size := localTerminalSize(); size != nil {
-					_ = pty.Setsize(ptmx, size)
-				}
-			case <-ctx.Done():
-				return
-			case <-processEnded:
-				return
-			}
-		}
-	}()
-
 	sharingFinished := make(chan struct{})
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
@@ -185,7 +165,6 @@ func runSharedProcess(
 	}
 
 	waitError := waitForProcess(ctx, command)
-	close(processEnded)
 	<-readDone
 	close(outputChunks)
 	<-batchDone
@@ -408,9 +387,9 @@ func readRelay(
 				_, _ = ptmx.Write(message[1:])
 			}
 		case protocol.Resize:
-			if cols, rows, ok := protocol.DecodeResize(message); ok {
-				_ = pty.Setsize(ptmx, &pty.Winsize{Cols: cols, Rows: rows})
-			}
+			// A shared PTY keeps one canonical grid. Browser and local viewport
+			// changes are presentation-only so simultaneous viewers cannot
+			// deform each other's TUI.
 		case protocol.Ping:
 			if len(message) == 5 {
 				response := append([]byte(nil), message...)
@@ -431,16 +410,8 @@ func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
 	return frameCipher.SealFrame(frame)
 }
 
-func localTerminalSize() *pty.Winsize {
-	terminal := os.Stdin
-	if !term.IsTerminal(int(terminal.Fd())) {
-		return &pty.Winsize{Cols: 80, Rows: 24}
-	}
-	size, err := pty.GetsizeFull(terminal)
-	if err != nil || size.Cols == 0 || size.Rows == 0 {
-		return &pty.Winsize{Cols: 80, Rows: 24}
-	}
-	return size
+func sharedTerminalSize() *pty.Winsize {
+	return &pty.Winsize{Cols: sharedTerminalCols, Rows: sharedTerminalRows}
 }
 
 func terminalEnvironment(environment []string) []string {

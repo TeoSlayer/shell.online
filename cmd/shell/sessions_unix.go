@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,7 +26,6 @@ type unixLocalSession struct {
 	terminalMu     sync.Mutex
 	terminalInput  io.Writer
 	terminalOutput localTerminalOutput
-	terminalResize func(cols, rows uint16) error
 	onLocalInput   func()
 	onAttachChange func(bool)
 	attached       net.Conn
@@ -81,14 +79,13 @@ func (session *unixLocalSession) StopRequested() <-chan struct{} {
 func (session *unixLocalSession) BindTerminal(
 	input io.Writer,
 	output localTerminalOutput,
-	resize func(cols, rows uint16) error,
+	_ func(cols, rows uint16) error,
 	onInput func(),
 	onAttachChange func(bool),
 ) {
 	session.terminalMu.Lock()
 	session.terminalInput = input
 	session.terminalOutput = output
-	session.terminalResize = resize
 	session.onLocalInput = onInput
 	session.onAttachChange = onAttachChange
 	session.terminalMu.Unlock()
@@ -164,23 +161,8 @@ func (session *unixLocalSession) handleConnection(connection net.Conn) {
 	case len(fields) == 1 && fields[0] == "stop":
 		session.stopOnce.Do(func() { close(session.stop) })
 	case len(fields) == 3 && fields[0] == "resize":
-		cols, colsError := strconv.Atoi(fields[1])
-		rows, rowsError := strconv.Atoi(fields[2])
-		if colsError != nil || rowsError != nil || cols < 10 || cols > 500 || rows < 4 || rows > 300 {
-			response.OK = false
-			response.Error = "invalid terminal size"
-			break
-		}
-		session.terminalMu.Lock()
-		resize := session.terminalResize
-		session.terminalMu.Unlock()
-		if resize == nil {
-			response.OK = false
-			response.Error = "terminal is not ready"
-		} else if resizeError := resize(uint16(cols), uint16(rows)); resizeError != nil {
-			response.OK = false
-			response.Error = resizeError.Error()
-		}
+		// Accepted for compatibility with older attach clients, but ignored.
+		// The shared PTY grid is deliberately immutable.
 	default:
 		response.OK = false
 		response.Error = "unknown command"

@@ -119,7 +119,7 @@ for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [mobileHtml, "
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guarantee of ["deterministic resize ownership", "large-paste chunking", "authenticated ciphertext"]) {
+for (const guarantee of ["immutable 80×24 PTY grid", "large-paste chunking", "authenticated ciphertext"]) {
   check(readme.includes(guarantee), `README reliability guarantee is missing: ${guarantee}`);
 }
 check(readme.includes("End-to-end encryption by default"), "README default E2EE instructions are missing");
