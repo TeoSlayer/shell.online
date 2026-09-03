@@ -149,6 +149,15 @@ export default {
   async fetch(request, env, executionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // `go install shell.online/cmd/shell@latest` resolves the module by
+    // requesting any path with ?go-get=1 and reading this meta tag.
+    if (url.searchParams.get("go-get") === "1") {
+      return new Response(
+        '<!doctype html><meta name="go-import" content="shell.online git https://github.com/TeoSlayer/shell.online">\n',
+        { headers: { "Content-Type": "text/html; charset=utf-8" } },
+      );
+    }
+
     if (url.pathname === "/api/health" && request.method === "GET") {
       return json({ ok: true, service: "shell.online", version: RELEASE_VERSION });
     }
