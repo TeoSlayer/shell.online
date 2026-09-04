@@ -1,6 +1,8 @@
 module shell.online
 
-go 1.27.0
+// Go 1.27 has a MIPS64 epoll alignment regression (go.dev/issue/80978).
+// Keep release builds on the supported 1.26 line until the runtime fix ships.
+go 1.26.8
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
