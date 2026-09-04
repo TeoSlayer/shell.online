@@ -315,21 +315,17 @@ func truncateText(value string, maximumRunes int) string {
 }
 
 func runSessionKill(arguments []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("shell kill", flag.ContinueOnError)
-	flags.SetOutput(stderr)
-	all := flags.Bool("all", false, "stop every active local session")
-	flags.Usage = func() {
+	usage := func() {
 		fmt.Fprintln(stderr, "Usage: shell kill <session-id-or-prefix>")
 		fmt.Fprintln(stderr, "       shell kill --all")
 	}
-	if err := flags.Parse(arguments); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return 0
-		}
-		return 2
+	if len(arguments) == 1 && (arguments[0] == "-h" || arguments[0] == "--help") {
+		usage()
+		return 0
 	}
-	if (*all && flags.NArg() != 0) || (!*all && flags.NArg() != 1) {
-		flags.Usage()
+	query, all, valid := parseSessionKillArguments(arguments)
+	if !valid {
+		usage()
 		return 2
 	}
 
@@ -344,8 +340,7 @@ func runSessionKill(arguments []string, stdout, stderr io.Writer) int {
 	}
 
 	targets := sessions
-	if !*all {
-		query := flags.Arg(0)
+	if !all {
 		if len(query) < 6 {
 			fmt.Fprintln(stderr, "shell: session prefix must contain at least 6 characters")
 			return 2
@@ -383,6 +378,21 @@ func runSessionKill(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// parseSessionKillArguments deliberately does not use flag.FlagSet. Session IDs
+// may begin with a hyphen, and those IDs must remain usable exactly as printed.
+func parseSessionKillArguments(arguments []string) (query string, all, valid bool) {
+	switch {
+	case len(arguments) == 1 && arguments[0] == "--all":
+		return "", true, true
+	case len(arguments) == 1:
+		return arguments[0], false, true
+	case len(arguments) == 2 && arguments[0] == "--":
+		return arguments[1], false, true
+	default:
+		return "", false, false
+	}
 }
 
 func compactDuration(duration time.Duration) string {
