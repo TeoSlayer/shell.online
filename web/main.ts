@@ -499,7 +499,7 @@ function renderLanding(): void {
               </ul>
             </article>
             <article class="install-path-card install-path-source">
-              <div class="install-path-meta"><span>Source</span><strong>Go 1.27+</strong></div>
+              <div class="install-path-meta"><span>Source</span><strong>Go 1.26.8</strong></div>
               <h3>Build it yourself. Run it anywhere.</h3>
               <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
                 <code><span>git clone … shell.online.git</span><span>go build -o ./shell ./cmd/shell</span></code>

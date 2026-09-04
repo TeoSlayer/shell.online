@@ -2,6 +2,18 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] — 2026-09-04
+
+### Fixed
+
+- Build with Go 1.26.8 to avoid Go 1.27's MIPS64 `epoll` alignment regression, which could crash networked programs with `SIGBUS`.
+
+### Added
+
+- Execute the complete Go test suite under QEMU for all 15 Linux release artifacts, covering x86, ARM, MIPS, PowerPC, RISC-V, s390x, and LoongArch.
+- Exercise real PTY creation, input, output, and terminal resizing in every emulated architecture family.
+- Require the QEMU manifest to cover every Linux target in the authoritative release manifest.
+
 ## [0.8.0] — 2026-09-04
 
 ### Added
@@ -143,6 +155,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 [0.7.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.2
 [0.7.3]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.3
 [0.8.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.8.0
+[0.8.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.8.1
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

@@ -11,7 +11,7 @@ Thanks for helping improve shell.online.
 
 ## Local checks
 
-Install Go 1.27+, Node.js 22+, and npm, then run:
+Install Go 1.26.8, Node.js 22+, and npm, then run. The release toolchain is intentionally pinned because Go 1.27.x has a MIPS64 runtime regression:
 
 ```sh
 npm ci

@@ -137,7 +137,7 @@ The website documentation is generated from [`docs/content.json`](docs/content.j
 
 ## Development
 
-Requires Go 1.27+ and Node.js 22+.
+Requires the release toolchain Go 1.26.8 and Node.js 22+. Go 1.27.x must not be used for MIPS64 release binaries because of [Go issue 80978](https://go.dev/issue/80978).
 
 ```sh
 npm install

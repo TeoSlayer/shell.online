@@ -24,12 +24,12 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.8.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.8.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.8.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.8.1" -o ./shell ./cmd/shell
 ./shell --version
 
-The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
+The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
 
 Agent skill file: https://shell.online/skill
 Current release metadata: https://shell.online/downloads/release.json
