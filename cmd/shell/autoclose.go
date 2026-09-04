@@ -117,6 +117,30 @@ func parseCloseDeadline(value string, now time.Time) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid auto-close value %q (try 5m, 2h, 3d, 1w, 2mo, or an ISO date)", value)
 }
 
+// processCloseDeadline starts relative durations when the shared process is
+// ready to launch. Network/session setup must not consume a duration such as
+// --auto-close 5s. Absolute dates retain their original wall-clock meaning.
+func processCloseDeadline(value string, parsedDeadline, processStart time.Time) time.Time {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(value), "in ") {
+		value = strings.TrimSpace(value[3:])
+	}
+	if deadline, ok := parseRelativeDeadline(value, processStart); ok {
+		return deadline
+	}
+	return parsedDeadline
+}
+
+// boundedCloseDeadline prevents the local process from outliving a deadline
+// the relay has already declared. A zero requested deadline still means the
+// task itself controls its lifetime.
+func boundedCloseDeadline(requested, sessionExpiry time.Time) time.Time {
+	if requested.IsZero() || sessionExpiry.IsZero() || !sessionExpiry.Before(requested) {
+		return requested
+	}
+	return sessionExpiry
+}
+
 func parseRelativeDeadline(value string, now time.Time) (time.Time, bool) {
 	remainder := strings.ReplaceAll(strings.TrimSpace(value), " ", "")
 	if remainder == "" {

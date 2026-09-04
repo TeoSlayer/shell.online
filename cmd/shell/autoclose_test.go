@@ -52,6 +52,48 @@ func TestParseCloseDeadlineRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestProcessCloseDeadlineStartsRelativeDurationAfterSetup(t *testing.T) {
+	parsedAt := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
+	processStart := parsedAt.Add(12 * time.Second)
+	parsedDeadline, err := parseCloseDeadline("25ms", parsedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := processCloseDeadline("25ms", parsedDeadline, processStart)
+	want := processStart.Add(25 * time.Millisecond)
+	if !got.Equal(want) {
+		t.Fatalf("processCloseDeadline() = %v, want %v", got, want)
+	}
+}
+
+func TestProcessCloseDeadlinePreservesAbsoluteTime(t *testing.T) {
+	parsedAt := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
+	processStart := parsedAt.Add(12 * time.Second)
+	parsedDeadline := parsedAt.Add(time.Hour)
+
+	got := processCloseDeadline("2026-08-20T00:40:00Z", parsedDeadline, processStart)
+	if !got.Equal(parsedDeadline) {
+		t.Fatalf("processCloseDeadline() = %v, want %v", got, parsedDeadline)
+	}
+}
+
+func TestBoundedCloseDeadlineUsesRelayExpiry(t *testing.T) {
+	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
+	sessionExpiry := now.Add(12 * time.Hour)
+	requested := now.Add(30 * 24 * time.Hour)
+
+	if got := boundedCloseDeadline(requested, sessionExpiry); !got.Equal(sessionExpiry) {
+		t.Fatalf("boundedCloseDeadline() = %v, want %v", got, sessionExpiry)
+	}
+	if got := boundedCloseDeadline(now.Add(time.Hour), sessionExpiry); !got.Equal(now.Add(time.Hour)) {
+		t.Fatalf("boundedCloseDeadline() shortened a valid deadline to %v", got)
+	}
+	if got := boundedCloseDeadline(time.Time{}, sessionExpiry); !got.IsZero() {
+		t.Fatalf("boundedCloseDeadline() changed task-bound lifetime to %v", got)
+	}
+}
+
 func TestNormalizeAutoCloseArguments(t *testing.T) {
 	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
 	tests := []struct {
