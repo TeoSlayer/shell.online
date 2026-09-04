@@ -25,7 +25,7 @@ import {
 } from "../shared/github";
 import { TerminalWriteQueue } from "./terminal-writes";
 import { TerminalInputQueue } from "./terminal-input";
-import { terminalKeyAction } from "./terminal-keyboard";
+import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
 import { BrowserFrameCipher, parseEncryptionFragment } from "./e2ee";
 import documentationContent from "../docs/content.json";
@@ -942,6 +942,16 @@ function renderTerminal(sessionId: string): void {
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
         <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
+      <nav id="mobile-terminal-keys" class="mobile-terminal-keys" aria-label="Terminal navigation keys">
+        <button type="button" data-terminal-key="escape" aria-label="Escape">esc</button>
+        <button type="button" data-terminal-key="tab" aria-label="Tab">tab</button>
+        <button type="button" data-terminal-key="left" aria-label="Left arrow">←</button>
+        <button type="button" data-terminal-key="up" aria-label="Up arrow">↑</button>
+        <button type="button" data-terminal-key="down" aria-label="Down arrow">↓</button>
+        <button type="button" data-terminal-key="right" aria-label="Right arrow">→</button>
+        <button type="button" data-terminal-key="enter" aria-label="Enter">enter</button>
+        <button type="button" data-terminal-key="interrupt" aria-label="Control C">ctrl-c</button>
+      </nav>
       <div id="encryption-gate" class="encryption-gate" hidden>
         <form id="encryption-form" class="encryption-panel">
           <span class="settings-kicker">Private terminal</span>
@@ -1023,6 +1033,9 @@ function renderTerminal(sessionId: string): void {
   const terminalElement = requiredElement("terminal");
   const terminalWrap = requiredElement("terminal-wrap");
   const terminalInputWarning = requiredElement("terminal-input-warning");
+  const mobileKeyButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("#mobile-terminal-keys [data-terminal-key]"),
+  );
   const sessionHeader = requiredElement("session-header");
   const sessionPage = document.querySelector<HTMLElement>(".session-page");
   if (!sessionPage) throw new Error("Missing session page");
@@ -1143,6 +1156,15 @@ function renderTerminal(sessionId: string): void {
   let outgoingFrames = Promise.resolve();
   let incomingFrames = Promise.resolve();
 
+  const syncMobileKeys = (): void => {
+    const disabled = stopped || readOnly || waitingForEncryptionKey ||
+      lastStatus !== "connected" || socket?.readyState !== WebSocket.OPEN ||
+      terminalElement.classList.contains("input-locked");
+    for (const button of mobileKeyButtons) button.disabled = disabled;
+  };
+
+  syncMobileKeys();
+
   terminalInput.setEncoder((chunk) => {
     const frame = encodeFrame(Opcode.Input, chunk);
     return frameCipher ? frameCipher.seal(frame) : frame;
@@ -1164,6 +1186,7 @@ function renderTerminal(sessionId: string): void {
     encryptionForm.querySelector<HTMLLabelElement>("label")!.hidden = !allowPassword;
     encryptionForm.querySelector<HTMLButtonElement>("button")!.hidden = !allowPassword;
     terminal.options.disableStdin = true;
+    syncMobileKeys();
     if (allowPassword) encryptionPassword.focus();
   };
 
@@ -1201,6 +1224,7 @@ function renderTerminal(sessionId: string): void {
       : "Shared interactive terminal");
     terminalElement.setAttribute("aria-readonly", String(readOnly));
     terminal.options.disableStdin = stopped || readOnly || terminalElement.classList.contains("input-locked");
+    syncMobileKeys();
     if (copyButton.dataset.state === undefined) copyButton.textContent = defaultCopyLabel();
     if (readOnly) {
       terminal.blur();
@@ -1314,6 +1338,7 @@ function renderTerminal(sessionId: string): void {
     identityElement.classList.toggle("has-typing", inputIsLocked);
     terminalElement.classList.toggle("input-locked", inputIsLocked);
     terminal.options.disableStdin = stopped || readOnly || inputIsLocked;
+    syncMobileKeys();
 
     presenceElement.replaceChildren();
     const visibleCount = compactPresenceQuery.matches ? 1 : 4;
@@ -1387,6 +1412,7 @@ function renderTerminal(sessionId: string): void {
       scheduleLatencyProbe(0);
     }
     renderConnectionStatus();
+    syncMobileKeys();
   };
 
   const scheduleLatencyProbe = (delay = 2_500): void => {
@@ -1521,6 +1547,7 @@ function renderTerminal(sessionId: string): void {
 
   const showMissingSession = (): void => {
     stopped = true;
+    sessionPage.classList.add("session-stopped");
     terminal.options.disableStdin = true;
     terminalWrites.enqueue(textEncoder.encode(
       "\x1b[2J\x1b[H\r\n  \x1b[1;37mSession no longer exists.\x1b[0m" +
@@ -1531,6 +1558,7 @@ function renderTerminal(sessionId: string): void {
 
   const showEndedSession = (): void => {
     stopped = true;
+    sessionPage.classList.add("session-stopped");
     terminal.options.disableStdin = true;
     terminalWrites.enqueue(textEncoder.encode(
       "\r\n\r\n  \x1b[1;37mSession ended.\x1b[0m" +
@@ -1773,6 +1801,25 @@ function renderTerminal(sessionId: string): void {
   terminal.onData((data) => {
     sendTerminalData(textEncoder.encode(data));
   });
+
+  const activateMobileKey = (button: HTMLButtonElement): void => {
+    const bytes = mobileTerminalKeyBytes(button.dataset.terminalKey);
+    if (bytes === null || button.disabled || terminal.options.disableStdin) return;
+    terminal.focus();
+    sendTerminalData(bytes);
+  };
+
+  for (const button of mobileKeyButtons) {
+    button.addEventListener("pointerdown", (event) => {
+      if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault();
+      activateMobileKey(button);
+    });
+    button.addEventListener("click", (event) => {
+      if (event.detail !== 0) return;
+      activateMobileKey(button);
+    });
+  }
 
   // Legacy mouse protocols and a few terminal query responses contain raw
   // bytes that must not pass through UTF-8 encoding.
