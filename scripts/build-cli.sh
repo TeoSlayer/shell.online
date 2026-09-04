@@ -1,8 +1,15 @@
 #!/bin/sh
 set -eu
 
+release_go_toolchain="go1.26.8"
+export GOTOOLCHAIN="$release_go_toolchain"
+
 version="${npm_package_version:-$(node -p 'require("./package.json").version')}"
 go_version=$(go env GOVERSION)
+if [ "$go_version" != "$release_go_toolchain" ]; then
+  printf 'Expected release toolchain %s, got %s\n' "$release_go_toolchain" "$go_version" >&2
+  exit 1
+fi
 output_dir="dist/downloads"
 mkdir -p "$output_dir"
 find "$output_dir" -type f -delete

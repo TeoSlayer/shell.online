@@ -1,0 +1,16 @@
+# artifact	GOARCH	variant	emulator
+shell-linux-386	386	-	qemu-i386
+shell-linux-amd64	amd64	-	qemu-x86_64
+shell-linux-armv5	arm	GOARM=5	qemu-arm
+shell-linux-armv6	arm	GOARM=6	qemu-arm
+shell-linux-armv7	arm	GOARM=7	qemu-arm
+shell-linux-arm64	arm64	-	qemu-aarch64
+shell-linux-loong64	loong64	-	qemu-loongarch64
+shell-linux-mips	mips	GOMIPS=softfloat	qemu-mips
+shell-linux-mipsle	mipsle	GOMIPS=softfloat	qemu-mipsel
+shell-linux-mips64	mips64	GOMIPS64=softfloat	qemu-mips64
+shell-linux-mips64le	mips64le	GOMIPS64=softfloat	qemu-mips64el
+shell-linux-ppc64	ppc64	-	qemu-ppc64
+shell-linux-ppc64le	ppc64le	-	qemu-ppc64le
+shell-linux-riscv64	riscv64	-	qemu-riscv64
+shell-linux-s390x	s390x	-	qemu-s390x

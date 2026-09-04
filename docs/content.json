@@ -1,5 +1,5 @@
 {
-  "version": "0.8.0",
+  "version": "0.8.1",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -77,10 +77,11 @@
     "platforms": {
       "eyebrow": "Platforms and devices",
       "title": "From Windows workstations to ARM and MIPS routers.",
-      "intro": "Each advertised target gets a real PTY implementation, background execution, local session management, E2EE, persistent identity, and a SHA-256-verified release artifact. Windows uses the native ConPTY API.",
+      "intro": "Each advertised target gets a real PTY implementation, background execution, local session management, E2EE, persistent identity, and a SHA-256-verified release artifact. Every Linux artifact executes the full Go and PTY integration suite under QEMU; Windows uses the native ConPTY API.",
       "cards": [
         ["Install", "The POSIX installer selects from the release manifest using uname. Windows uses a checksum-verifying PowerShell installer. Neither installer invokes sudo or silently edits PATH.", [["curl -fsSL https://shell.online/install | sh", "macOS, Linux, BSD, and Solaris."], ["irm https://shell.online/install.ps1 | iex", "Windows PowerShell on x86, x64, or ARM64."], ["https://shell.online/downloads/SHA256SUMS", "Canonical checksums for every binary and installer."]]],
-        ["Support matrix", "Static release artifacts are built from one versioned target manifest and verified before deployment.", [["macOS", "amd64, arm64"], ["Windows 10 1809+ / 11", "386, amd64, arm64"], ["Linux", "386, amd64, armv5, armv6, armv7, arm64, loong64, mips, mipsle, mips64, mips64le, ppc64, ppc64le, riscv64, s390x"], ["FreeBSD", "386, amd64, armv7, arm64"], ["OpenBSD", "386, amd64, armv7, arm64, ppc64, riscv64"], ["NetBSD", "386, amd64, armv7, arm64"], ["DragonFly BSD", "amd64"], ["Solaris", "amd64"]]],
+        ["Support matrix", "Static release artifacts are built from one versioned target manifest and verified before deployment. Linux targets are runtime-tested under QEMU; native Windows amd64 is runtime-tested; the remaining targets are explicitly build-verified.", [["macOS · build-verified", "amd64, arm64"], ["Windows · amd64 native; others build-verified", "386, amd64, arm64"], ["Linux · QEMU runtime-tested", "386, amd64, armv5, armv6, armv7, arm64, loong64, mips, mipsle, mips64, mips64le, ppc64, ppc64le, riscv64, s390x"], ["FreeBSD · build-verified", "386, amd64, armv7, arm64"], ["OpenBSD · build-verified", "386, amd64, armv7, arm64, ppc64, riscv64"], ["NetBSD · build-verified", "386, amd64, armv7, arm64"], ["DragonFly BSD · build-verified", "amd64"], ["Solaris · build-verified", "amd64"]]],
+        ["What QEMU proves", "Every Linux release binary executes its complete Go suite under the corresponding QEMU user-mode emulator. The suite covers executable startup, CLI help, E2EE, networking, persistent state, local session control, and a real PTY round trip with input and resize. QEMU cannot reproduce vendor firmware restrictions, a specific kernel configuration, or physical CPU errata."],
         ["Windows is native", "Windows sessions use ConPTY for ANSI/VT fidelity and an owner-restricted named pipe for list, attach, kill, and local takeover. Background startup uses an authenticated loopback handshake. PowerShell is preferred when no command is supplied, then COMSPEC."],
         ["Routers and small Linux devices", "The Linux binaries are CGO-free and include ARMv5 through ARM64 plus big- and little-endian MIPS variants. This covers many OpenWrt and Ubiquiti-style devices when their kernel exposes PTYs and outbound HTTPS/WebSockets. Check uname -m and available storage before installing; vendor firmware may still impose its own execution restrictions."],
         ["ROS 1 and ROS 2", "shell.online transports terminal bytes, so ROS needs no plugin or protocol shim. Source the ROS environment first, then wrap roscore, roslaunch, ros2 run, ros2 launch, colcon build, or a node with the normal shell command. ROS itself supports fewer OS/architecture pairs than shell.online; follow the compatibility table for the ROS distribution you installed."],
@@ -92,7 +93,7 @@
       "title": "One encrypted shell and one stable link across restarts.",
       "intro": "The Docker client keeps its workspace, host credential, browser password, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
       "cards": [
-        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.8.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
+        ["Start once", "Pull ghcr.io/teoslayer/shell.online:0.8.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."],
         ["Two durable volumes", "shell-online-state stores the browser password, host credential, share identity, and E2EE key. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."],
         ["Password continuity", "Set a longer SHELL_ONLINE_E2EE_PASSWORD only before first launch if desired. Restarts reuse the saved password. A conflicting configured password is refused; create a new state volume to rotate both password and URL."],
         ["Restart behavior", "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."],
