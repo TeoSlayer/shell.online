@@ -15,6 +15,11 @@ import { viewerFrameAction } from "../shared/session-access";
 import { terminalGridForDevices } from "../shared/terminal-grid";
 import { persistentSessionID } from "../shared/persistent-session";
 import {
+  disconnectedSessionExpiry,
+  PERSISTENT_TTL_MS,
+  SESSION_TTL_MS,
+} from "../shared/session-lifetime";
+import {
   GITHUB_REPOSITORY_API_URL,
   GITHUB_REPOSITORY_URL,
   readGitHubApiStarCount,
@@ -38,9 +43,6 @@ import {
 
 export { StatsStore };
 
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const DISCONNECTED_GRACE_MS = 15 * 60 * 1000;
-const PERSISTENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_VIEWERS = 16;
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
@@ -1220,7 +1222,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
     this.meta.status = "disconnected";
-    this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : DISCONNECTED_GRACE_MS);
+    this.meta.expiresAt = disconnectedSessionExpiry(Date.now(), this.meta.persistent);
     await this.persistMeta();
     await this.refreshLivePresence(true, socket);
     await this.scheduleNextAlarm();
@@ -1257,7 +1259,7 @@ export class TerminalSession extends DurableObject<Env> {
 
     if (this.meta.status === "connected") {
       this.meta.status = "disconnected";
-      this.meta.expiresAt = Date.now() + DISCONNECTED_GRACE_MS;
+      this.meta.expiresAt = disconnectedSessionExpiry(Date.now(), false);
       await this.persistMeta();
       this.broadcastStatus();
     }

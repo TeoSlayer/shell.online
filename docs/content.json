@@ -29,7 +29,7 @@
       "title": "The link can disappear. Your process should not.",
       "intro": "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
       "cards": [
-        ["Automatic reconnect", "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and disconnected ordinary sessions retain a 15-minute relay grace window."],
+        ["Automatic reconnect", "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and the same ordinary share link remains recoverable for 12 hours after its host disconnects."],
         ["Screen recovery", "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."],
         ["Backpressure by design", "PTY reads never wait indefinitely for Cloudflare. WebSocket writes time out, queues are bounded, frames have size and traffic limits, and high-output processes keep running locally."],
         ["Explicit lifecycle", "The URL prints only after a short startup usability handshake. If the task has already exited, shell reports its status without printing a dead link or attach/kill instructions. shell list distinguishes local process liveness from relay status; shell attach rejoins locally and shell kill stops the process. Ordinary shares and server state disappear when the task exits."]

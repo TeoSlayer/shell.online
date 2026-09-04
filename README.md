@@ -209,7 +209,7 @@ The single stderr line normally contains `share_url`, `e2ee_password`, `session_
 - A 512 KiB local ring buffer restores newly connected viewers. In E2EE mode, snapshots are encrypted before leaving the CLI. Terminal output is not retained by Cloudflare after the task closes.
 - A relay ping/pong measures browser-to-machine round-trip latency; the UI reports `Offline` when the local CLI cannot answer.
 
-An active ordinary process renews its lease indefinitely. A disconnected ordinary process has a 15-minute reconnect grace period. Its completed process closes sockets and deletes Durable Object state immediately. Persistent Docker sessions are the explicit exception: the relay keeps their non-content identity for up to 30 offline days so the same state volume can reconnect the same URL. Opening an expired ordinary link shows that the session no longer exists.
+An active ordinary process renews its lease indefinitely. If its machine sleeps or loses the network, the same link remains recoverable for 12 hours while the CLI reconnects automatically. Its completed process closes sockets and deletes Durable Object state immediately. Persistent Docker sessions are the explicit exception: the relay keeps their non-content identity for up to 30 offline days so the same state volume can reconnect the same URL. Opening an expired ordinary link shows that the session no longer exists.
 
 ## Terminal reliability guarantees
 
