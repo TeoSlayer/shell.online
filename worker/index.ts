@@ -11,6 +11,7 @@ import {
 } from "./analytics";
 import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
+import { downloadAssetIsSpaFallback } from "../shared/download-assets";
 import { viewerFrameAction } from "../shared/session-access";
 import { terminalGridForDevices } from "../shared/terminal-grid";
 import { persistentSessionID } from "../shared/persistent-session";
@@ -236,7 +237,16 @@ export default {
       return json({ error: "not found" }, 404);
     }
 
-    const assetResponse = await env.ASSETS.fetch(request);
+    let assetResponse = await env.ASSETS.fetch(request);
+    if (downloadAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {
+      assetResponse = new Response("Download not found\n", {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store",
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
     const response = secureAssetResponse(assetResponse, url.pathname, url.hostname);
     recordAssetAnalytics(request, env, url, response, executionContext);
     return response;

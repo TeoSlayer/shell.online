@@ -86,6 +86,18 @@ fi
 assert_contains "$output" "downloaded binary failed checksum verification"
 test ! -e "$bad_install/shell"
 
+html_downloads=$test_root/html/downloads
+mkdir -p "$html_downloads"
+cp "$downloads/$binary_name" "$html_downloads/$binary_name"
+printf '%s\n' '<!doctype html>' '<title>shell.online</title>' > "$html_downloads/SHA256SUMS"
+if output=$(SHELL_ONLINE_BASE_URL=file://$test_root/html \
+  SHELL_ONLINE_INSTALL_DIR=$test_root/html-install sh "$installer" 2>&1); then
+  printf 'HTML manifest unexpectedly succeeded.\n' >&2
+  exit 1
+fi
+assert_contains "$output" "expected a checksum manifest, received HTML"
+test ! -e "$test_root/html-install/shell"
+
 if output=$(SHELL_ONLINE_INSTALL_DIR=relative/path sh "$installer" 2>&1); then
   printf 'Relative install directory unexpectedly succeeded.\n' >&2
   exit 1

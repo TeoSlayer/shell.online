@@ -77,6 +77,12 @@ download() {
 
 download "$binary_url" "$temporary_dir/shell"
 download "$base_url/downloads/SHA256SUMS" "$temporary_dir/SHA256SUMS"
+manifest_first_line=$(sed -n '1p' "$temporary_dir/SHA256SUMS")
+case "$manifest_first_line" in
+  '<!doctype html'*|'<html'*)
+    fail "expected a checksum manifest, received HTML from $base_url/downloads/SHA256SUMS"
+    ;;
+esac
 expected=$(awk -v filename="$binary_name" '$2 == filename { print $1; exit }' "$temporary_dir/SHA256SUMS")
 
 case "$expected" in

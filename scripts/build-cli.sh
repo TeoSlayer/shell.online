@@ -66,3 +66,4 @@ printf '%s  %s\n' "$release_checksum" "$(basename "$release_metadata")" >> "$che
 
 printf 'Release %s checksums:\n' "$version"
 cat "$checksum_manifest"
+node ./scripts/verify-downloads.mjs "$output_dir"
