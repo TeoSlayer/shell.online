@@ -70,17 +70,20 @@ func TestTerminalProcessRoundTripsInputAndResize(t *testing.T) {
 		_ = process.Close()
 	}()
 
-	lines := make(chan string, 4)
-	readErrors := make(chan error, 1)
+	type terminalReadEvent struct {
+		line string
+		err  error
+	}
+	events := make(chan terminalReadEvent, 4)
 	go func() {
 		reader := bufio.NewReader(process)
 		for {
 			line, readError := reader.ReadString('\n')
 			if line != "" {
-				lines <- strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+				events <- terminalReadEvent{line: strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")}
 			}
 			if readError != nil {
-				readErrors <- readError
+				events <- terminalReadEvent{err: readError}
 				return
 			}
 		}
@@ -89,10 +92,11 @@ func TestTerminalProcessRoundTripsInputAndResize(t *testing.T) {
 	nextLine := func() string {
 		t.Helper()
 		select {
-		case line := <-lines:
-			return line
-		case readError := <-readErrors:
-			t.Fatalf("read terminal output: %v", readError)
+		case event := <-events:
+			if event.err != nil {
+				t.Fatalf("read terminal output: %v", event.err)
+			}
+			return event.line
 		case <-time.After(5 * time.Second):
 			t.Fatal("timed out reading terminal output")
 		}
