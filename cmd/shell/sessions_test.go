@@ -44,6 +44,29 @@ func TestTruncateText(t *testing.T) {
 	}
 }
 
+func TestParseSessionKillArgumentsAcceptsLeadingHyphen(t *testing.T) {
+	query, all, valid := parseSessionKillArguments([]string{"-abcde-session-prefix"})
+	if !valid || all || query != "-abcde-session-prefix" {
+		t.Fatalf("parseSessionKillArguments() = (%q, %t, %t)", query, all, valid)
+	}
+
+	query, all, valid = parseSessionKillArguments([]string{"--", "-abcde-session-prefix"})
+	if !valid || all || query != "-abcde-session-prefix" {
+		t.Fatalf("parseSessionKillArguments() with separator = (%q, %t, %t)", query, all, valid)
+	}
+}
+
+func TestParseSessionKillArgumentsPreservesAll(t *testing.T) {
+	query, all, valid := parseSessionKillArguments([]string{"--all"})
+	if !valid || !all || query != "" {
+		t.Fatalf("parseSessionKillArguments() = (%q, %t, %t)", query, all, valid)
+	}
+
+	if _, _, valid := parseSessionKillArguments([]string{"--all", "unexpected"}); valid {
+		t.Fatal("parseSessionKillArguments() accepted --all with a session ID")
+	}
+}
+
 func TestFetchRelaySessionStatus(t *testing.T) {
 	tests := []struct {
 		name       string
