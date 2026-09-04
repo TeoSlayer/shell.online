@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -73,6 +74,9 @@ func TestPersistentSessionIDIsBoundToHostToken(t *testing.T) {
 }
 
 func TestPersistentStateRejectsLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses ACLs rather than Unix permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)

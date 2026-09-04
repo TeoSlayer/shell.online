@@ -2,6 +2,19 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] — 2026-09-04
+
+### Added
+
+- Add native Windows ConPTY execution, detached background startup, owner-restricted local control, PowerShell installation, and working `list`, `attach`, and `kill` commands on x86, x64, and ARM64.
+- Publish 36 checksummed binaries across macOS, Windows, Linux, FreeBSD, OpenBSD, NetBSD, DragonFly BSD, and Solaris, including ARMv5/6/7, big- and little-endian MIPS, PowerPC, RISC-V, s390x, and LoongArch targets for routers and small devices.
+- Document ROS 1/ROS 2 usage and the complete supported-platform matrix in the README, versioned web knowledge base, install scripts, agent material, and built-in CLI help.
+
+### Changed
+
+- Make `--persistent <state-file>` portable to Windows so a background process can recover the same encrypted URL and password after a restart; the Docker restart policy continues to provide automatic recovery.
+- Generate and verify every release artifact from one authoritative target manifest, and include Windows installer integrity metadata in the canonical SHA-256 bundle.
+
 ## [0.7.3] — 2026-09-02
 
 ### Fixed
@@ -129,6 +142,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 [0.7.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.1
 [0.7.2]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.2
 [0.7.3]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.7.3
+[0.8.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.8.0
 [0.6.1]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.1
 [0.5.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.5.0
 [0.6.0]: https://github.com/TeoSlayer/shell.online/releases/tag/v0.6.0

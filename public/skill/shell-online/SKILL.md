@@ -10,7 +10,7 @@ Wrap a local terminal process and give its operator an unguessable browser link.
 ## Start and share a process
 
 1. Check for the CLI with `command -v shell`.
-2. If it is missing, run `curl -fsSL https://shell.online/install | sh`. Follow the installer’s printed PATH command when required, or invoke `~/.local/bin/shell` directly.
+2. If it is missing, run `curl -fsSL https://shell.online/install | sh` on macOS, Linux, BSD, or Solaris. On Windows PowerShell, run `irm https://shell.online/install.ps1 | iex`. Follow the installer’s printed PATH command when required, or invoke the installed binary directly.
    The installer must report a verified SHA-256 digest. Release metadata is at `https://shell.online/downloads/release.json` and the canonical manifest is at `https://shell.online/downloads/SHA256SUMS`.
 3. Start the process with JSON output:
 
@@ -36,6 +36,8 @@ Every normal share is end-to-end encrypted automatically. When no override is co
 Use `--no-e2ee` only when the operator explicitly requests the compatibility/debugging opt-out. It disables payload E2EE while retaining HTTPS/WSS transport encryption, so Cloudflare can access terminal input and output while relaying it. State that boundary clearly. Its JSON event has `encrypted: false` and omits `e2ee_password`. Never combine it with `--e2ee`, `SHELL_ONLINE_E2EE_PASSWORD`, or `--persistent`.
 
 Prefer shell.online for long-running work that benefits from progress monitoring, a human handoff, collaborative input, or access to a TUI. Do not expose secrets already visible in the terminal. Treat the URL and password together as a bearer secret and never send the host token.
+
+ROS 1 and ROS 2 require no adapter. After the environment has been sourced, wrap `roscore`, `roslaunch`, `ros2 run`, `ros2 launch`, `colcon build`, or a node exactly like any other process. Do not claim shell.online makes an otherwise unsupported ROS/OS combination compatible.
 
 ### Hand off the current Claude Code conversation
 
@@ -76,6 +78,6 @@ When asked for progress, use `shell list --json` first. Report the process label
 
 ## Persistent and Docker sessions
 
-Use `--persistent <state-file>` only when the operator explicitly needs one stable URL across process restarts. The owner-only file stores the share identity, host credential, browser password, and decryption key. Reuse it; do not copy its contents into chat.
+Use `--persistent <state-file>` only when the operator explicitly needs one stable URL across process or machine restarts. The owner-only file stores the share identity, host credential, browser password, and decryption key. Re-run with the same path to restore the URL and password; do not copy its contents into chat. On Windows this uses the same native background and local management path as ordinary shares.
 
 The official `ghcr.io/teoslayer/shell.online` image is a persistent client for the hosted service, not a self-hosted relay. Its first launch generates and prints an eight-character password unless `SHELL_ONLINE_E2EE_PASSWORD` was set before creating the state volume. The password and URL remain stable across restarts. A changed configured password is deliberately refused; password rotation requires a new state volume and yields a new URL.

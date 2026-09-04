@@ -8,9 +8,34 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 	"time"
 )
+
+func openBackgroundReadyFile() (backgroundReadyWriter, error) {
+	if !isBackgroundChild() {
+		return nil, nil
+	}
+	fileDescriptor, err := strconv.Atoi(os.Getenv(backgroundReadyEnvironment))
+	if err != nil || fileDescriptor < 3 {
+		return nil, fmt.Errorf("invalid background readiness channel")
+	}
+	file := os.NewFile(uintptr(fileDescriptor), "shell-online-ready")
+	if file == nil {
+		return nil, fmt.Errorf("open background readiness channel")
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("open background readiness channel: %w", err)
+	}
+	if info.Mode()&os.ModeNamedPipe == 0 {
+		_ = file.Close()
+		return nil, fmt.Errorf("invalid background readiness channel")
+	}
+	return file, nil
+}
 
 func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr io.Writer) int {
 	_ = stdout

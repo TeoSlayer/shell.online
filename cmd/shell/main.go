@@ -112,11 +112,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 
 	command := flags.Args()
 	if len(command) == 0 {
-		defaultShell := os.Getenv("SHELL")
-		if defaultShell == "" {
-			defaultShell = "/bin/sh"
-		}
-		command = []string{defaultShell}
+		command = []string{defaultShellCommand()}
 	}
 	launch := prepareCommandLaunch(command, os.Environ(), !*foreground)
 	command = launch.Arguments

@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -8,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"time"
 
-	"golang.org/x/sys/unix"
 	"golang.org/x/term"
 )
 
@@ -163,11 +159,7 @@ func attachLocalSession(id string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("local attach requires an interactive terminal")
 	}
 
-	directory, err := localSessionDirectory()
-	if err != nil {
-		return err
-	}
-	connection, err := net.DialTimeout("unix", localSessionSocketPath(directory, id), time.Second)
+	connection, err := dialLocalControl(id, time.Second)
 	if err != nil {
 		return err
 	}
@@ -235,15 +227,11 @@ inputLoop:
 			}
 		}
 
-		descriptors := []unix.PollFd{{Fd: int32(stdinFD), Events: unix.POLLIN}}
-		_, pollError := unix.Poll(descriptors, 100)
+		ready, pollError := waitForTerminalInput(stdinFD, 100*time.Millisecond)
 		if pollError != nil {
-			if errors.Is(pollError, unix.EINTR) {
-				continue
-			}
 			return pollError
 		}
-		if descriptors[0].Revents&unix.POLLIN == 0 {
+		if !ready {
 			continue
 		}
 
@@ -300,16 +288,11 @@ func discardPendingTerminalInput(stdin *os.File, stdinFD int) {
 			return
 		}
 		wait := min(quietDeadline.Sub(now), finalDeadline.Sub(now))
-		timeout := max(1, int((wait+time.Millisecond-1)/time.Millisecond))
-		descriptors := []unix.PollFd{{Fd: int32(stdinFD), Events: unix.POLLIN}}
-		ready, err := unix.Poll(descriptors, timeout)
+		ready, err := waitForTerminalInput(stdinFD, wait)
 		if err != nil {
-			if errors.Is(err, unix.EINTR) {
-				continue
-			}
 			return
 		}
-		if ready == 0 || descriptors[0].Revents&unix.POLLIN == 0 {
+		if !ready {
 			return
 		}
 		if _, err := stdin.Read(buffer); err != nil {

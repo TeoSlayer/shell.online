@@ -171,14 +171,14 @@ interface DocumentationRoute {
   version: string;
 }
 
-const DOCUMENTATION_KINDS = ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"] as const;
+const DOCUMENTATION_KINDS = ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"] as const;
 
 function resolveDocumentationRoute(pathname: string): DocumentationRoute | null {
-  const shortRoute = pathname.match(/^\/(docs|cli|mobile|reliability|security|e2ee|docker)\/?$/);
+  const shortRoute = pathname.match(/^\/(docs|cli|platforms|mobile|reliability|security|e2ee|docker)\/?$/);
   if (shortRoute) {
     return { kind: shortRoute[1] as DocumentationKind, version: documentationContent.version };
   }
-  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(cli|mobile|reliability|security|e2ee|docker))?\/?$/);
+  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(cli|platforms|mobile|reliability|security|e2ee|docker))?\/?$/);
   if (!versionedRoute) return null;
   return {
     kind: (versionedRoute[2] ?? "docs") as DocumentationKind,
@@ -239,7 +239,8 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
   const docsLink = (target: DocumentationKind): string => documentationHref(version, target);
   const nextPage: Record<DocumentationKind, [DocumentationKind, string]> = {
     docs: ["cli", "CLI reference"],
-    cli: ["mobile", "Mobile terminals"],
+    cli: ["platforms", "Platforms and devices"],
+    platforms: ["mobile", "Mobile terminals"],
     mobile: ["reliability", "Reliability"],
     reliability: ["security", "Security model"],
     security: ["e2ee", "End-to-end encryption"],
@@ -260,6 +261,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
             <label>Version<select class="docs-version-select" id="docs-version-mobile" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></label>
             <a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a>
             <a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a>
+            <a class="${kind === "platforms" ? "active" : ""}" href="${docsLink("platforms")}">Platforms and devices</a>
             <a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a>
             <a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a>
             <a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a>
@@ -276,7 +278,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
         <aside class="knowledge-sidebar" aria-label="Knowledge base">
           <div class="knowledge-version"><span>Documentation</span><select class="docs-version-select" id="docs-version" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></div>
           <a class="knowledge-home" href="${docsLink("docs")}">shell.online docs</a>
-          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a></div>
+          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a><a class="${kind === "platforms" ? "active" : ""}" href="${docsLink("platforms")}">Platforms and devices</a></div>
           <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a></div>
           <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a><a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a><a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a></div>
           <div><p>Reference</p><a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a><a href="${GITHUB_REPOSITORY_URL}">Source ↗</a></div>
@@ -289,12 +291,13 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
           ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
 <span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell &lt;command&gt;
 <span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
-<span>$</span> docker compose logs shell-online</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
+<span>$</span> docker compose logs shell-online</code></pre>` : kind === "platforms" ? `<pre class="knowledge-command"><code><span>$</span> shell ros2 launch &lt;package&gt; &lt;launch-file&gt;
+<span>PS&gt;</span> irm https://shell.online/install.ps1 | iex</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
 <span>$</span> shell [options] -- &lt;command&gt; [arguments...]</code></pre>` : ""}
           <div class="knowledge-sections">
             ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
           </div>
-          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The browser password and derived key exist only at endpoints. Cloudflare receives neither and cannot read terminal payloads." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as a browser password, host credential, and decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
+          <aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The browser password and derived key exist only at endpoints. Cloudflare receives neither and cannot read terminal payloads." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as a browser password, host credential, and decryption secret." : kind === "platforms" ? "An artifact is advertised only when the same CLI behavior compiles for that target; Windows uses ConPTY rather than a no-op compatibility stub." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>
           <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${nextLabel} →</a></nav>
         </article>
         <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${escapeDocumentationText(title)}</a>`).join("")}<div class="knowledge-release"><span>Release</span><strong>v${escapeDocumentationText(version)}</strong><a href="${GITHUB_REPOSITORY_URL}/releases/tag/v${escapeDocumentationText(version)}">View release notes ↗</a></div></aside>
@@ -302,7 +305,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
       <footer class="marketing-footer">
         <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
         <p>A live browser link for any terminal process.</p>
-        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("cli")}">CLI</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
+        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("cli")}">CLI</a><a href="${docsLink("platforms")}">Platforms</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
       </footer>
     </section>`;
   wireDocumentationControls(kind, version, content);
@@ -392,6 +395,11 @@ function wireDocumentationControls(kind: DocumentationKind, version: string, con
 }
 
 function renderLanding(): void {
+  const windowsVisitor = /Windows/i.test(navigator.userAgent);
+  const installCommand = windowsVisitor
+    ? "irm https://shell.online/install.ps1 | iex"
+    : "curl -fsSL https://shell.online/install | sh";
+  const installPrompt = windowsVisitor ? "PS>" : "$";
   document.title = "Share a Live Terminal in Any Browser | shell.online";
   document.documentElement.classList.add("marketing-root");
   document.body.classList.add("marketing-body");
@@ -404,7 +412,7 @@ function renderLanding(): void {
           <a href="#use-cases">Use cases</a>
           <a href="#how">How it works</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
-          <button class="nav-install" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy the shell.online install command">
+          <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
           </button>
         </nav>
@@ -417,9 +425,9 @@ function renderLanding(): void {
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
             <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It stays on your computer and opens as an end-to-end encrypted browser terminal. You get a link and password; add <code>--read-only</code> when people should only watch.</p>
             <div class="hero-actions">
-              <button class="install-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
-                <span class="command-prompt" aria-hidden="true">$</span>
-                <code>curl -fsSL https://shell.online/install | sh</code>
+              <button class="install-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
+                <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
+                <code>${installCommand}</code>
                 <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
               </button>
               <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
@@ -480,12 +488,12 @@ function renderLanding(): void {
             <article class="install-path-card">
               <div class="install-path-meta"><span>No Brew</span><strong>Verified download</strong></div>
               <h3>Use the standalone installer.</h3>
-              <button class="method-command" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy the shell.online curl installer command">
-                <code>curl -fsSL https://shell.online/install | sh</code>
+              <button class="method-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online installer command">
+                <code>${installCommand}</code>
                 <span data-copy-label aria-live="polite">Copy</span>
               </button>
               <ul>
-                <li>Detects macOS or Linux and arm64 or amd64.</li>
+                <li>Detects Windows, macOS, Linux, BSD, Solaris, and 15 architectures.</li>
                 <li>Verifies SHA-256 before installing.</li>
                 <li>Never invokes sudo or edits your shell files.</li>
               </ul>
@@ -667,12 +675,12 @@ function renderLanding(): void {
         <section class="final-cta">
           <p>Ready when your terminal isn’t finished.</p>
           <h2>Your next command<br />can be a link.</h2>
-          <button class="install-command final-install" type="button" data-copy-target="install" data-copy-value="curl -fsSL https://shell.online/install | sh" aria-label="Copy install command">
-            <span class="command-prompt" aria-hidden="true">$</span>
-            <code>curl -fsSL https://shell.online/install | sh</code>
+          <button class="install-command final-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
+            <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
+            <code>${installCommand}</code>
             <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
           </button>
-          <span class="platform-note">macOS and Linux · arm64 and amd64 · Homebrew optional · free to use</span>
+          <span class="platform-note">macOS · Windows · Linux · BSD · routers · 36 static binaries · free to use</span>
           <div class="github-star-request">
             <span aria-hidden="true">★</span>
             <p><strong>Like what we’re building?</strong>A GitHub star helps more developers find shell.online.</p>
@@ -692,6 +700,7 @@ function renderLanding(): void {
           <a href="/security/">Security</a>
           <a href="/e2ee/">E2EE</a>
           <a href="/docker/">Docker</a>
+          <a href="/platforms/">Platforms</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
           <a href="/skill">Agent skill</a>
           <a href="/llms.txt">llms.txt</a>

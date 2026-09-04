@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -13,11 +11,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
-type unixLocalSession struct {
+type managedLocalSession struct {
 	record         localSessionRecord
 	listener       net.Listener
 	stop           chan struct{}
@@ -46,37 +43,30 @@ func startLocalSession(record localSessionRecord) (localSessionControl, error) {
 	if err != nil {
 		return nil, err
 	}
-	socketPath := localSessionSocketPath(directory, record.ID)
-	_ = os.Remove(socketPath)
-	listener, err := net.Listen("unix", socketPath)
+	listener, err := listenLocalControl(record.ID)
 	if err != nil {
-		return nil, fmt.Errorf("listen on local control socket: %w", err)
-	}
-	if err := os.Chmod(socketPath, 0o600); err != nil {
-		_ = listener.Close()
-		_ = os.Remove(socketPath)
-		return nil, fmt.Errorf("secure local control socket: %w", err)
+		return nil, fmt.Errorf("listen on local control channel: %w", err)
 	}
 
-	session := &unixLocalSession{
+	session := &managedLocalSession{
 		record:   record,
 		listener: listener,
 		stop:     make(chan struct{}),
 	}
 	if err := writeLocalSessionRecord(directory, record); err != nil {
 		_ = listener.Close()
-		_ = os.Remove(socketPath)
+		cleanupLocalControl(record.ID)
 		return nil, err
 	}
 	go session.serve()
 	return session, nil
 }
 
-func (session *unixLocalSession) StopRequested() <-chan struct{} {
+func (session *managedLocalSession) StopRequested() <-chan struct{} {
 	return session.stop
 }
 
-func (session *unixLocalSession) BindTerminal(
+func (session *managedLocalSession) BindTerminal(
 	input io.Writer,
 	output localTerminalOutput,
 	_ func(cols, rows uint16) error,
@@ -91,7 +81,7 @@ func (session *unixLocalSession) BindTerminal(
 	session.terminalMu.Unlock()
 }
 
-func (session *unixLocalSession) PublishOutput(value []byte) {
+func (session *managedLocalSession) PublishOutput(value []byte) {
 	session.terminalMu.Lock()
 	defer session.terminalMu.Unlock()
 	if session.terminalOutput != nil {
@@ -109,7 +99,7 @@ func (session *unixLocalSession) PublishOutput(value []byte) {
 	_ = session.attached.SetWriteDeadline(time.Time{})
 }
 
-func (session *unixLocalSession) Close() error {
+func (session *managedLocalSession) Close() error {
 	var closeError error
 	session.close.Do(func() {
 		closeError = session.listener.Close()
@@ -121,7 +111,7 @@ func (session *unixLocalSession) Close() error {
 		session.terminalMu.Unlock()
 		directory, err := localSessionDirectory()
 		if err == nil {
-			_ = os.Remove(localSessionSocketPath(directory, session.record.ID))
+			cleanupLocalControl(session.record.ID)
 			_ = os.Remove(localSessionRecordPath(directory, session.record.ID))
 		}
 	})
@@ -131,7 +121,7 @@ func (session *unixLocalSession) Close() error {
 	return closeError
 }
 
-func (session *unixLocalSession) serve() {
+func (session *managedLocalSession) serve() {
 	for {
 		connection, err := session.listener.Accept()
 		if err != nil {
@@ -141,7 +131,7 @@ func (session *unixLocalSession) serve() {
 	}
 }
 
-func (session *unixLocalSession) handleConnection(connection net.Conn) {
+func (session *managedLocalSession) handleConnection(connection net.Conn) {
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(time.Second))
 	request, err := bufio.NewReader(io.LimitReader(connection, 64)).ReadString('\n')
@@ -170,7 +160,7 @@ func (session *unixLocalSession) handleConnection(connection net.Conn) {
 	_ = json.NewEncoder(connection).Encode(response)
 }
 
-func (session *unixLocalSession) handleAttach(connection net.Conn) {
+func (session *managedLocalSession) handleAttach(connection net.Conn) {
 	session.terminalMu.Lock()
 	if session.terminalInput == nil || session.terminalOutput == nil {
 		_ = json.NewEncoder(connection).Encode(localControlResponse{OK: false, Error: "terminal is not ready"})
@@ -270,7 +260,7 @@ func loadActiveLocalSessions() ([]localSessionRecord, error) {
 		response, pingError := sendLocalControl(record.ID, "ping")
 		if pingError != nil || !response.OK || response.ID != record.ID || response.PID != record.PID {
 			_ = os.Remove(path)
-			_ = os.Remove(localSessionSocketPath(directory, record.ID))
+			cleanupLocalControl(record.ID)
 			continue
 		}
 		sessions = append(sessions, record)
@@ -314,11 +304,7 @@ func sendLocalControl(id, command string) (localControlResponse, error) {
 	if !localSessionIDPattern.MatchString(id) {
 		return response, fmt.Errorf("invalid session id")
 	}
-	directory, err := localSessionDirectory()
-	if err != nil {
-		return response, err
-	}
-	connection, err := net.DialTimeout("unix", localSessionSocketPath(directory, id), 300*time.Millisecond)
+	connection, err := dialLocalControl(id, 300*time.Millisecond)
 	if err != nil {
 		return response, err
 	}
@@ -333,40 +319,8 @@ func sendLocalControl(id, command string) (localControlResponse, error) {
 	return response, nil
 }
 
-func ensureLocalSessionDirectory() (string, error) {
-	directory, err := localSessionDirectory()
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return "", err
-	}
-	info, err := os.Stat(directory)
-	if err != nil {
-		return "", err
-	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || int(stat.Uid) != os.Getuid() {
-		return "", fmt.Errorf("local session directory is not owned by the current user")
-	}
-	if info.Mode().Perm() != 0o700 {
-		if err := os.Chmod(directory, 0o700); err != nil {
-			return "", err
-		}
-	}
-	return directory, nil
-}
-
-func localSessionDirectory() (string, error) {
-	return filepath.Join("/tmp", fmt.Sprintf("shell-online-%d", os.Getuid())), nil
-}
-
 func localSessionRecordPath(directory, id string) string {
 	return filepath.Join(directory, id+".json")
-}
-
-func localSessionSocketPath(directory, id string) string {
-	return filepath.Join(directory, id+".sock")
 }
 
 func writeLocalSessionRecord(directory string, record localSessionRecord) error {
@@ -391,5 +345,12 @@ func writeLocalSessionRecord(directory string, record localSessionRecord) error 
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, localSessionRecordPath(directory, record.ID))
+	if err := securePrivateStateFile(temporaryPath); err != nil {
+		return err
+	}
+	path := localSessionRecordPath(directory, record.ID)
+	if err := replaceFileAtomically(temporaryPath, path); err != nil {
+		return err
+	}
+	return securePrivateStateFile(path)
 }

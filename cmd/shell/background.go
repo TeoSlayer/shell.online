@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -10,6 +10,8 @@ import (
 const (
 	backgroundChildEnvironment  = "SHELL_ONLINE_BACKGROUND_CHILD"
 	backgroundReadyEnvironment  = "SHELL_ONLINE_READY_FD"
+	backgroundReadyAddress      = "SHELL_ONLINE_READY_ADDRESS"
+	backgroundReadyToken        = "SHELL_ONLINE_READY_TOKEN"
 	backgroundParentEnvironment = "SHELL_ONLINE_BACKGROUND_PARENT_PID"
 )
 
@@ -36,26 +38,7 @@ func isBackgroundChild() bool {
 	return err == nil && parentPID > 0 && parentPID == os.Getppid()
 }
 
-func openBackgroundReadyFile() (*os.File, error) {
-	if !isBackgroundChild() {
-		return nil, nil
-	}
-	fileDescriptor, err := strconv.Atoi(os.Getenv(backgroundReadyEnvironment))
-	if err != nil || fileDescriptor < 3 {
-		return nil, fmt.Errorf("invalid background readiness channel")
-	}
-	file := os.NewFile(uintptr(fileDescriptor), "shell-online-ready")
-	if file == nil {
-		return nil, fmt.Errorf("open background readiness channel")
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return nil, fmt.Errorf("open background readiness channel: %w", err)
-	}
-	if info.Mode()&os.ModeNamedPipe == 0 {
-		_ = file.Close()
-		return nil, fmt.Errorf("invalid background readiness channel")
-	}
-	return file, nil
+type backgroundReadyWriter interface {
+	io.Writer
+	io.Closer
 }

@@ -6,7 +6,11 @@ shell.online wraps a local terminal process and produces an unguessable browser 
 
 curl -fsSL https://shell.online/install | sh
 
-Supported platforms: macOS and Linux on arm64 or amd64. The installer never prompts, invokes sudo, or silently edits shell configuration. It uses /usr/local/bin when writable, XDG_BIN_HOME when set, and otherwise ~/.local/bin. If the destination is not on PATH or another shell executable shadows it, the installer prints specific repair instructions. Set SHELL_ONLINE_INSTALL_DIR to choose another absolute writable destination.
+Supported platforms: macOS; Windows with native ConPTY; Linux across x86, ARMv5/6/7/64, MIPS/MIPSLE/MIPS64, PPC64, RISC-V 64, s390x, and LoongArch64; FreeBSD; OpenBSD; NetBSD; DragonFly BSD; and Solaris. This includes many OpenWrt and Ubiquiti-style Linux devices. The POSIX and PowerShell installers verify SHA-256, never invoke sudo, and print PATH instructions when needed. Full matrix: https://shell.online/platforms/
+
+Windows PowerShell installation:
+
+irm https://shell.online/install.ps1 | iex
 
 Optional Homebrew installation (the tap lives in this repository):
 
@@ -20,9 +24,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.7.2 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.8.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.7.2" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.8.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.27 or newer. Keep using ./shell or move it to a directory on PATH.
@@ -73,6 +77,10 @@ shell kill --all
 `shell attach` opens the existing PTY locally. Its terminal title keeps a Ctrl-X D to detach reminder visible even when a full-screen TUI redraws the terminal. Press Ctrl-X, release it, then press D to detach without stopping it (Ctrl-] remains a legacy alternative); the wrapper intercepts the sequence before the child process receives it. Input and output remain mirrored to browser viewers. Anonymous presence and a brief per-typist input lease prevent remote keystrokes from interleaving.
 
 Sessions close immediately when their task exits. `--auto-close 5m` or an absolute/local date adds an earlier deadline; supported duration units are ms, s, m, h, d, w, mo, and y.
+
+ROS 1 and ROS 2 processes need no plugin: source the ROS environment, then run `shell roscore`, `shell roslaunch <package> <launch-file>`, `shell ros2 run <package> <executable>`, or `shell ros2 launch <package> <launch-file>`. shell.online platform support does not expand the supported platforms of the installed ROS distribution.
+
+Native shares run in the background by default. Re-run `shell --persistent <state-file> <command>` with the same private state file to recover the same URL and password after a process or machine restart. Docker combines the same identity with `restart: unless-stopped` for automatic recovery.
 
 The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated eight-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
 
