@@ -119,13 +119,14 @@ for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [mobileHtml, "
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guarantee of ["phone-aware", "large-paste chunking", "authenticated ciphertext"]) {
-  check(readme.includes(guarantee), `README reliability guarantee is missing: ${guarantee}`);
+for (const guide of ["mobile", "reliability", "security", "e2ee", "docker"]) {
+  check(readme.includes(`https://shell.online/${guide}/`), `README ${guide} guide link is missing`);
 }
-check(readme.includes("End-to-end encryption by default"), "README default E2EE instructions are missing");
-check(readme.includes("e2ee_password"), "README structured E2EE password output is missing");
+for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d"]) {
+  check(docsSource.includes(guarantee), `Versioned documentation guarantee is missing: ${guarantee}`);
+}
+check(readme.includes("end-to-end encrypted by default"), "README default E2EE summary is missing");
 check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
-check(readme.includes("docker compose up --build -d"), "README Docker instructions are missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
 for (const page of ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"]) {
   check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);

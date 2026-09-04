@@ -4,24 +4,31 @@
 [![CodeQL](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml/badge.svg)](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-53658c.svg)](LICENSE)
 
-shell.online is developed by [Pilot Protocol](https://pilotprotocol.network/), open-source infrastructure for connected software agents. Start with the [knowledge base](https://shell.online/docs/) for the guided product, terminal, reliability, and trust documentation.
+A browser link to any terminal process.
 
-The website documentation is rendered from [`docs/content.json`](docs/content.json), the same versioned source shipped in each Git tag. Starting with v0.6.0, the documentation version selector discovers GitHub releases and loads the selected tag's source through a cached same-origin endpoint. A release therefore preserves its exact documentation without copying prose into a separate CMS.
+Run one command, get a URL and password, and open the same terminal from a phone or desktop. No SSH, VPN, account, or configuration. The process and PTY stay on your machine; terminal traffic is end-to-end encrypted by default.
 
-Turn a terminal command into an interactive or read-only browser link. The command and PTY stay on your machine; every new CLI share encrypts terminal payloads before Cloudflare relays them.
+Features:
+
+- Share a shell, coding agent, build, server, training job, or TUI.
+- View and type from any modern browser, with mobile terminal controls.
+- Collaborate without interleaved input; local attach still works.
+- Create immutable read-only links for monitoring.
+- Reconnect without killing or restarting the local process.
+- Close automatically when the wrapped process exits.
+- Run in the background by default and manage sessions locally.
 
 ## Install
 
-Homebrew is not required. The verified installer supports macOS and Linux on arm64 and amd64:
+macOS and Linux, arm64 and amd64:
 
 ```sh
 curl -fsSL https://shell.online/install | sh
-shell claude
 ```
 
-The installer uses `/usr/local/bin` when writable, `$XDG_BIN_HOME` when set, and otherwise `~/.local/bin`. It detects Rosetta, verifies the binary checksum before writing it, never invokes `sudo`, and never silently edits shell configuration. If the destination is not on `PATH` or another `shell` command shadows it, the installer prints specific repair instructions. Set `SHELL_ONLINE_INSTALL_DIR` to choose an absolute writable destination.
+The installer verifies the release checksum and prints PATH instructions when needed. Published binaries and [`SHA256SUMS`](https://shell.online/downloads/SHA256SUMS) are also attached to every [GitHub release](https://github.com/TeoSlayer/shell.online/releases).
 
-Homebrew users can tap this repository directly once, then use the short formula name:
+With Homebrew:
 
 ```sh
 brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
@@ -29,209 +36,78 @@ brew trust --tap teoslayer/shell-online
 brew install shell-online
 ```
 
-Homebrew 6 requires one-time trust for third-party taps. Tap-level trust persists across formula updates, which keeps the short install and upgrade commands working; review the repository before granting it. Older Homebrew versions that do not provide `brew trust` do not require that line. After setup, `brew install shell-online`, `brew upgrade shell-online`, and `brew uninstall shell-online` work normally. Confirm the command selected by your `PATH` with `command -v shell` and `shell --version`.
+Homebrew versions before 6 do not need the `brew trust` line.
 
-The Homebrew formula does not install a prebuilt shell.online binary. Brew downloads the checksum-pinned tagged source, installs Go as a build-only dependency when needed, runs `go build` locally, and links the resulting `shell` binary into the Homebrew prefix. Application modules are pinned by [`go.sum`](go.sum) and resolved by Go during that build; shell.online has no runtime package dependencies.
-
-The curl installer uses the checksum-pinned release binary instead. To compile the tagged source yourself and run it without installing it globally:
+## Use
 
 ```sh
-git clone --depth 1 --branch v0.7.3 https://github.com/TeoSlayer/shell.online.git
-cd shell.online
-go build -trimpath -ldflags="-X main.version=0.7.3" -o ./shell ./cmd/shell
-./shell --version
-```
-
-This path requires Go 1.27 or newer. Keep using `./shell`, or move that binary to any directory already on your `PATH`.
-
-Every release publishes one canonical [`SHA256SUMS`](https://shell.online/downloads/SHA256SUMS) manifest and machine-readable [`release.json`](https://shell.online/downloads/release.json). The manifest covers every platform binary plus the installer, agent skill, and metadata file. The installer verifies the selected binary before installing it, prints its SHA-256 digest, and the same artifacts and manifest are attached to the corresponding GitHub release.
-
-Agent operators can download the ready-to-install skill from `https://shell.online/skill` as `SKILL.md`.
-
-`shell` prints the link, an eight-character browser password, and detaches by default. Recipients need both. Links are interactive unless you pass `--read-only`; there are no accounts or login prompts.
-
-When an already-running Claude Code session invokes `shell claude` through its Bash tool, the CLI detects Claude's current session ID and starts a shareable fork of that conversation under shell.online. The fork keeps the conversation history and workspace, while the original Claude process remains open; new messages after the handoff do not synchronize between them. This is a safe handoff to a new process, not a claim that macOS can retroactively move the original PID to another PTY.
-
-## Run and manage sessions
-
-Omit the command to share a fresh instance of your default shell:
-
-```sh
+shell claude
+shell codex
+shell python train.py
+shell npm run dev
 shell
 ```
 
-Create a view-only link when people should be able to monitor output but never type:
+`shell` prints a link and an eight-character browser password, then leaves the process running in the background. Send both to the person opening the terminal.
+
+Useful commands:
 
 ```sh
-shell --read-only python train.py
+shell --read-only python train.py  # viewers cannot type
+shell list                         # show local sessions
+shell attach <session-id>          # take over locally
+shell kill <session-id>            # stop a session and its process
+shell --foreground <command>       # mirror it in this terminal
+shell --auto-close 5m <command>    # add an earlier deadline
+shell --no-e2ee <command>          # transport encryption only
 ```
 
-The access mode is fixed when the session is created. Read-only input is rejected by the Worker, so changing the page or WebSocket frames cannot turn that link into an interactive one. The terminal clearly labels view-only sessions; scrolling, responsive TUI sizing, themes, zoom, and latency measurement still work.
+While attached, press `Ctrl-X`, release it, then press `D` to detach without stopping the process. Run `shell help` for a guided overview or `shell help reference` for the complete reference.
 
-Sessions run in the background. Inspect or stop them locally:
+## How access works
+
+The URL and password together are a bearer credential. Anyone with both can see the terminal and, unless the share is read-only, type with the permissions of the wrapped process. Share them only with intended viewers.
+
+E2EE is automatic: the CLI encrypts terminal frames before Cloudflare relays them, and the browser decrypts them locally. Cloudflare still sees connection and lifecycle metadata, but not terminal input or output. `--no-e2ee` deliberately makes terminal content visible to the relay while retaining HTTPS/WSS transport encryption.
+
+Read the [security model](https://shell.online/security/), [E2EE guide](https://shell.online/e2ee/), or [private vulnerability policy](SECURITY.md) before sharing sensitive work.
+
+## Agents
+
+Agents can create a share without interactive setup and return structured details to their operator:
 
 ```sh
-shell help
-shell help reference
-shell list
-shell list --json
-shell attach <session-id-or-prefix>
-shell kill <session-id-or-prefix>
-shell kill --all
+shell --json -- <command> <args...>
 ```
 
-`shell help` provides a guided start/share/attach/detach/stop flow; `shell help attach` explains local takeover and detaching in detail.
-
-The complete command, option, environment, structured-output, and exit-status reference is available both as `shell help reference` inside the executable and in the versioned [CLI reference](https://shell.online/cli/).
-
-`shell list` checks both sides of every share and shows the URL plus browser password retained in its owner-only local record. Its `RELAY` column reports `online`, `reconnecting`, `expired`, or `unknown`; `shell list --json` exposes the corresponding raw `relay_status` and `e2ee_password`. An `expired` relay means the local process is still running but its public link no longer exists. `unknown` means the status check itself could not complete and is not treated as proof that the link died.
-
-`attach` takes the existing process over in the local terminal and replays its current screen. While attached, the terminal title keeps the `Ctrl-X D to detach` reminder visible. Press `Ctrl-X`, release it, then press `D` to detach without stopping the process (`Ctrl-]` remains a legacy alternative). Local input and resulting terminal output remain visible to connected browsers.
-
-In an interactive browser, the first `Ctrl-D` shows a warning instead of immediately sending EOF. Press `Ctrl-D` again within three seconds to deliberately send EOF. This protects shared shells from an accidental one-keystroke exit while preserving EOF for programs that require it. Read-only links reject both ordinary input and confirmed EOF.
-
-The session closes and disappears automatically when its task exits. Use `--foreground` when you also want the process mirrored in the local terminal:
-
-```sh
-shell --foreground your-long-running-command
-```
-
-An optional deadline can close it earlier. Durations support `ms`, `s`, `m`, `h`, `d`, `w`, `mo`, and `y`; local or ISO dates are also accepted:
-
-```sh
-shell --auto-close 5m your-command
-shell --auto-close tomorrow 09:00 your-command
-```
-
-The task exiting is always the final upper bound, including when no deadline is supplied.
-
-## End-to-end encryption by default
-
-By default, every new share encrypts terminal frames on the CLI before they enter Cloudflare. The browser decrypts them locally. No flag or extra setup is required:
-
-```sh
-shell your-command
-```
-
-Unless configured otherwise, the CLI generates a cryptographically random eight-character base64url password and prints it with the share URL. The URL carries a fresh `#salt=...` fragment, not the password. URL fragments are used by the browser but are not included in HTTP or WebSocket requests. The CLI and browser derive an AES-256-GCM key locally with PBKDF2-HMAC-SHA256 using 600,000 iterations, so Cloudflare receives neither the password nor plaintext terminal contents.
-
-Eight random base64url characters provide 48 bits of generated entropy. This is convenient for ordinary task-bound shares; use a longer unique password for sensitive or long-lived sessions:
-
-```sh
-SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell your-command
-```
-
-Password entry and derivation happen in the browser. Recipients need the complete URL and the password; send them through separate channels when the session is sensitive. shell.online cannot recover a lost password. The old `--e2ee` flag remains accepted for script compatibility but is redundant.
-
-For deliberate compatibility or debugging, `--no-e2ee` disables terminal-payload encryption:
-
-```sh
-shell --no-e2ee your-command
-```
-
-This mode still uses HTTPS/WSS for each transport hop, but Cloudflare can access terminal input and output while relaying it. The CLI labels that boundary prominently. `--no-e2ee` cannot be combined with `--e2ee`, `SHELL_ONLINE_E2EE_PASSWORD`, or `--persistent`.
-
-E2EE protects terminal input, output, snapshots, legacy resize frames, and latency probes from relay inspection or undetected modification. It does not hide connection IPs, timing, encrypted frame sizes, frame opcodes, the command label, access mode, or lifecycle metadata. It also cannot stop the relay from dropping, delaying, or replaying a previously valid encrypted frame. Read-only remains independently enforced by the Worker because the authenticated frame opcode is intentionally visible for routing and policy.
-
-See the [E2EE guide](https://shell.online/e2ee/) for the full trust boundary and recovery limits.
+An installable agent skill is available at [`https://shell.online/skill`](https://shell.online/skill).
 
 ## Persistent Docker terminal
 
-The published multi-architecture image is `ghcr.io/teoslayer/shell.online:0.7.3` (`linux/amd64` and `linux/arm64`). Each tagged GitHub build includes an SBOM and build provenance. It runs a shell.online client against the hosted service, preserves a stable E2EE link, host credential, browser password, and workspace across container restarts, and is not a self-hosted relay.
+The Docker client preserves the same encrypted link, password, and workspace across container restarts:
 
 ```sh
-docker compose up --build -d
+docker compose up -d
 docker compose logs shell-online
 ```
 
-Compose pins the release image and retains a local `build` definition so a source checkout can be tested with `--build`. To use the published image directly:
+It connects to the hosted shell.online relay; it is not a self-hosted server. See the [Docker guide](https://shell.online/docker/) for volumes, backups, password rotation, and the published GHCR image.
 
-```sh
-docker pull ghcr.io/teoslayer/shell.online:0.7.3
-docker run -d --name shell-online --restart unless-stopped \
-  -v shell-online-state:/var/lib/shell-online \
-  -v shell-online-workspace:/workspace \
-  ghcr.io/teoslayer/shell.online:0.7.3
-docker logs shell-online
-```
+## Documentation
 
-The first launch prints the stable share URL and an automatically generated eight-character password. Enter that password in the browser. To supply a longer one instead, set `SHELL_ONLINE_E2EE_PASSWORD` before the state volume is first created. The password is then bound to that stable URL and retained across restarts; a different configured password is refused instead of silently breaking the link. Create a new state volume to rotate to a new password and URL. Do not place a valuable password directly in a committed Compose file or shell history.
+- [Quick start and guides](https://shell.online/docs/)
+- [CLI reference](https://shell.online/cli/)
+- [Mobile terminals](https://shell.online/mobile/)
+- [Reliability](https://shell.online/reliability/)
+- [Security](https://shell.online/security/)
+- [End-to-end encryption](https://shell.online/e2ee/)
+- [Docker](https://shell.online/docker/)
 
-Two named volumes are created:
-
-- `shell-online-state` contains the stable session ID, host credential, E2EE key material, and generated password. Anyone who can read it can control the host identity and decrypt the session.
-- `shell-online-workspace` contains `/workspace`, the persistent working directory presented by the container shell.
-
-Restarting the container reconnects the same URL. A browser already on that URL reports offline while the container is away, then resumes when it returns. An offline persistent relay identity expires after 30 days; the saved state volume can recreate that identity and URL on the next start. Deleting the state volume creates a new identity and makes the old password/link unrecoverable.
-
-The same mechanism is available outside Docker for deliberate integrations:
-
-```sh
-SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' \
-  shell --foreground --persistent ./shell-online-state.json your-command
-```
-
-The state file is written owner-only and rejected if group or other users can read it. See the [Docker guide](https://shell.online/docker/) for restart and backup behavior.
-
-## Security model
-
-The share URL and browser password together form a bearer credential. Anyone who has both for an interactive share can see terminal output and send input with the same operating-system permissions as the wrapped process. A `--read-only` share can see output but its browser input is rejected server-side. In either mode, avoid displaying secrets and share access only with intended viewers. Run interactive processes with the least privilege they need, and use `shell kill <session-id>` if access reaches the wrong person.
-
-By default, every session created by the current CLI exposes authenticated ciphertext—not plaintext terminal payloads—and the metadata listed above to Cloudflare. The explicit `--no-e2ee` mode instead includes Cloudflare in the content trust boundary while retaining HTTPS/WSS transport encryption. Older clients may also have created transport-only sessions and should be upgraded. shell.online does not persist terminal contents server-side; the CLI keeps a bounded in-memory replay buffer while the process is alive.
-
-The public session ID grants viewer/input access but not host access. A separate 256-bit host token authenticates the local CLI and is never placed in the share URL. Session creation and connection attempts are IP-rate-limited, WebSocket origins are checked for browsers, frames and audiences are bounded, and local control files/sockets are owner-only.
-
-See [SECURITY.md](SECURITY.md) for supported versions and private vulnerability reporting.
-
-## Agents and long-running processes
-
-Installation is noninteractive and does not invoke `sudo`. Agents can request structured session output while preserving the wrapped process's stdout:
-
-```sh
-shell --json -- your-long-running-command --flag value
-```
-
-For monitoring without browser control, add `--read-only` before the command:
-
-```sh
-shell --read-only --json -- your-long-running-command --flag value
-```
-
-The single stderr line normally contains `share_url`, `e2ee_password`, `session_id`, `read_only`, `encrypted: true`, and `background: true`. The agent must pass both `share_url` and `e2ee_password`, plus the access mode, to its operator through its existing communication channel. An explicitly requested `--no-e2ee` event instead has `encrypted: false` and omits `e2ee_password`. The CLI reconnects after transient network failures, and Cloudflare renews the session while the process remains connected.
-
-## Architecture
-
-- Go CLI owns the local PTY and mirrors input/output locally.
-- A Cloudflare Worker handles session creation, rate limiting, and static assets.
-- One hibernatable Durable Object coordinates each terminal's host and viewers and enforces its immutable interactive or read-only access mode.
-- The xterm.js browser renders ANSI attributes, 256-color and 24-bit color, alternate screens, mouse/input sequences, and fits the real PTY—not only a CSS box—to the active browser viewport. Terminal pages follow the system light/dark preference and include a manual switch; the cloudy landing remains light.
-- Anonymous collaborator chips show who has the link open. A short renewable typing lease prevents browser keystrokes from interleaving; local attached input takes priority briefly without disconnecting remote viewers.
-- A 512 KiB local ring buffer restores newly connected viewers. In E2EE mode, snapshots are encrypted before leaving the CLI. Terminal output is not retained by Cloudflare after the task closes.
-- A relay ping/pong measures browser-to-machine round-trip latency; the UI reports `Offline` when the local CLI cannot answer.
-
-An active ordinary process renews its lease indefinitely. If its machine sleeps or loses the network, the same link remains recoverable for 12 hours while the CLI reconnects automatically. Its completed process closes sockets and deletes Durable Object state immediately. Persistent Docker sessions are the explicit exception: the relay keeps their non-content identity for up to 30 offline days so the same state volume can reconnect the same URL. Opening an expired ordinary link shows that the session no longer exists.
-
-## Terminal reliability guarantees
-
-Shared terminals fail in ways that ordinary responsive pages do not. These behaviors are part of the protocol and test surface, not cosmetic promises. The matching website guides are [Mobile terminals](https://shell.online/mobile/), [Reliability](https://shell.online/reliability/), and [Security and trust](https://shell.online/security/).
-
-| Concern | shell.online behavior |
-| --- | --- |
-| Mobile terminals crop, jump, or start at the wrong size | Desktop-only sessions use a spacious 120×36 PTY. When any phone connects, the relay atomically switches the session to the compatible 80×24 grid before accepting input; each browser still fits that shared grid to its own visual viewport. |
-| Several viewers fight over terminal dimensions | Viewers never own sizing. Phone presence—not the latest typist—selects one session-wide canonical grid, and the relay orders a grid transition ahead of viewer input. The last phone leaving restores 120×36 automatically. |
-| Mobile keyboards and browser shortcuts break controls | Input uses xterm’s terminal events plus explicit paths for raw binary replies, selected-text copy, the iOS hardware-keyboard Ctrl-C anomaly, and Ctrl-W when the browser delivers it. The first browser Ctrl-D warns; a repeat within three seconds sends an authenticated confirmed-EOF frame. VisualViewport sampling follows keyboard open and dismiss transitions. Browser-reserved shortcuts that the operating system never delivers cannot be overridden by a web page. |
-| Selection, copy, and large paste are unreliable | Ctrl/Cmd-C copies a terminal selection instead of sending SIGINT. Paste is split into frames no larger than 16 KiB, waits for WebSocket backpressure, and has a 1 MiB pending-input ceiling. |
-| Temporary network loss destroys or strands a session | The CLI-owned process and PTY keep running when the relay disappears. CLI and browser reconnect automatically; the browser requests a bounded local replay snapshot after reconnect. Relay loss never signals or kills the child process. |
-| Large output breaks WebSockets or loses terminal state | PTY reads never wait on the network. Relay and rendering queues are bounded, WebSocket writes time out, and overflow marks the display stale. A fresh snapshot from the CLI’s 512 KiB ring buffer replaces stale queued output once capacity returns. |
-| Permissions and lifecycle are unclear | Links are interactive by default and immutable read-only with `--read-only`. `shell list` reports local process uptime and independently checks whether the relay is online, reconnecting, expired, or temporarily unknown; `shell attach` and `shell kill` expose local control. A short startup handshake suppresses dead links and impossible attach/kill instructions when a task exits immediately. Sessions close automatically when the task exits. |
-| Users distrust relay and bearer links | The URL plus browser password is explicitly a bearer capability. E2EE is automatic, keeping terminal payloads opaque to Cloudflare while still exposing traffic and lifecycle metadata. Terminal contents are not persisted server-side. |
-| Sharing does not yield an immediately usable result | `shell <command>` prints the browser URL after the relay exists and the task survives a short usability handshake, then returns control while the task continues in the background. A fast exit prints its status and no dead URL. |
-
-Automated tests cover viewport calculations, phone-aware canonical-grid transitions, touch-scroll translation, ignored legacy viewer resize frames, confirmed browser EOF, read-only input enforcement, startup liveness, auto-close parsing, frame limits, large-paste chunking, queue saturation, snapshot replacement, relay reconnection primitives, ANSI rendering input, session cleanup, Go/browser cryptographic compatibility, authentication-tag tampering, persistent credential permissions, and stable-session resume. Browser emulation is useful but not treated as a substitute for the iOS Safari and Android Chrome physical-device release checklist.
+The website documentation is generated from [`docs/content.json`](docs/content.json) and versioned with each release.
 
 ## Development
 
-Requirements: Go 1.27+ and Node.js 22+.
+Requires Go 1.27+ and Node.js 22+.
 
 ```sh
 npm install
@@ -240,39 +116,8 @@ npm run build:web
 go test -race ./...
 ```
 
-Edit product documentation in [`docs/content.json`](docs/content.json) and keep its `version` equal to `package.json`. The current bundle renders it directly; after a GitHub release is published, the website can also render that immutable tagged copy at `/docs/v<version>/`.
+The Go CLI owns the local PTY. A Cloudflare Worker creates sessions and serves the site, while one Durable Object coordinates each terminal's host and viewers. The browser uses xterm.js.
 
-## Privacy-limited product analytics
+Bug reports and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and the [changelog](CHANGELOG.md).
 
-The Worker writes a small, privacy-limited product funnel to the `shell_online_events` Cloudflare Analytics Engine dataset:
-
-- landing and shared-terminal page views;
-- installer, release binary, and agent skill downloads;
-- successful copy actions;
-- session creation, first host connection, first share opening, first remote input, and session end;
-- coarse device (`mobile`, `tablet`, `desktop`, `cli`, or `bot`) and referrer buckets such as `hacker_news`, `github`, `direct`, and `other`.
-
-The dataset never stores IP addresses, cookies, persistent visitor IDs, raw user agents or referrers, command labels, session IDs, terminal contents, or clipboard contents.
-
-`installer_download` records a request for the `/install` script, not proof that installation completed. Its device and client dimensions distinguish browser opens from `curl`/`wget`; release-binary downloads and session creation are the stronger activation signals.
-
-The same normalized events are accumulated into hourly aggregates for the private project dashboard, including:
-
-- live connected sessions and viewers from anonymous three-minute presence leases;
-- session creation, startup, sharing, collaboration, and outcome funnels;
-- page views, devices, coarse referrers, and CLI versions;
-- installer, agent skill, binary download, and copy activity;
-- average/maximum session duration and peak audiences;
-- a complete event/target aggregate ledger.
-
-Live presence is tracked separately from historical counters, expires automatically, and uses random internal keys that are never exposed publicly.
-
-The site uses the open-source Uncut Sans typeface by Kasper Nordkvist under the SIL Open Font License 1.1.
-
-## Current platform support
-
-The distributed CLI supports macOS and Linux on arm64 and amd64. Windows ConPTY support is planned but is not distributed yet.
-
-## Contributing and license
-
-Bug reports and focused pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), review the [Code of Conduct](CODE_OF_CONDUCT.md), and see the [changelog](CHANGELOG.md). The source is released under the [MIT License](LICENSE); bundled component licenses are preserved in [third-party notices](THIRD_PARTY_NOTICES.md).
+Developed by [Pilot Protocol](https://pilotprotocol.network/) and released under the [MIT License](LICENSE).
