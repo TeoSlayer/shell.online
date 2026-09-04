@@ -779,6 +779,8 @@ a {
 }
 
 .session-page {
+  --session-header-height: 48px;
+
   display: grid;
   width: 100%;
   height: var(--session-viewport-height, 100svh);
@@ -798,6 +800,8 @@ a {
 }
 
 .session-page.keyboard-open {
+  --session-header-height: 36px;
+
   grid-template-rows: 36px minmax(0, 1fr);
 }
 
@@ -2020,6 +2024,57 @@ a {
 
 }
 
+@media (max-width: 560px) {
+  .session-header {
+    padding: 4px max(10px, env(safe-area-inset-right)) 3px max(10px, env(safe-area-inset-left));
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 30px 26px;
+    grid-template-areas:
+      "brand actions"
+      "identity identity";
+    column-gap: 8px;
+    row-gap: 0;
+  }
+
+  .session-page {
+    --session-header-height: 66px;
+
+    grid-template-rows: 66px minmax(0, 1fr) auto;
+  }
+
+  .session-page.keyboard-open {
+    --session-header-height: 54px;
+
+    grid-template-rows: 54px minmax(0, 1fr) auto;
+  }
+
+  .session-page.keyboard-open .session-header {
+    padding-top: 2px;
+    padding-bottom: 2px;
+    grid-template-rows: 26px 23px;
+  }
+
+  .session-header .wordmark {
+    grid-area: brand;
+  }
+
+  .session-identity {
+    width: 100%;
+    overflow: hidden;
+    justify-self: stretch;
+    grid-area: identity;
+    gap: 7px;
+  }
+
+  .session-actions {
+    grid-area: actions;
+  }
+
+  .session-identity.has-typing .status {
+    display: none;
+  }
+}
+
 @media (max-width: 480px) {
   .story-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2057,10 +2112,6 @@ a {
   .github-stars {
     min-width: 25px;
     padding-left: 5px;
-  }
-
-  .session-header {
-    gap: 7px;
   }
 
   .session-actions {
@@ -2170,16 +2221,8 @@ a {
     display: none;
   }
 
-  .session-header .wordmark {
-    display: none;
-  }
-
-  .session-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .session-identity {
-    justify-self: start;
+  .session-header .wordmark.compact {
+    font-size: 15px;
   }
 }
 
