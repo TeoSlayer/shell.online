@@ -13,7 +13,12 @@ machine_name=$(uname -m 2>/dev/null || true)
 case "$system_name" in
   Darwin) platform=darwin ;;
   Linux) platform=linux ;;
-  *) fail "unsupported operating system: ${system_name:-unknown} (supported: macOS and Linux)" ;;
+  FreeBSD) platform=freebsd ;;
+  OpenBSD) platform=openbsd ;;
+  NetBSD) platform=netbsd ;;
+  DragonFly) platform=dragonfly ;;
+  SunOS) platform=solaris ;;
+  *) fail "unsupported operating system: ${system_name:-unknown} (supported: macOS, Linux, FreeBSD, OpenBSD, NetBSD, DragonFly BSD, and Solaris)" ;;
 esac
 
 case "$machine_name" in
@@ -26,7 +31,20 @@ case "$machine_name" in
       architecture=amd64
     fi
     ;;
-  *) fail "unsupported architecture: ${machine_name:-unknown} (supported: arm64 and amd64)" ;;
+  i386|i486|i586|i686|x86) architecture=386 ;;
+  armv5*|armv5l) architecture=armv5 ;;
+  armv6*|armv6l) architecture=armv6 ;;
+  armv7*|armv7l|armv8l|arm) architecture=armv7 ;;
+  mips) architecture=mips ;;
+  mipsel|mipsle) architecture=mipsle ;;
+  mips64) architecture=mips64 ;;
+  mips64el|mips64le) architecture=mips64le ;;
+  ppc64|powerpc64) architecture=ppc64 ;;
+  ppc64le|powerpc64le) architecture=ppc64le ;;
+  riscv64) architecture=riscv64 ;;
+  s390x) architecture=s390x ;;
+  loongarch64|loong64) architecture=loong64 ;;
+  *) fail "unsupported architecture: ${machine_name:-unknown}; see https://shell.online/docs/platforms/" ;;
 esac
 
 if [ -n "${SHELL_ONLINE_INSTALL_DIR:-}" ]; then

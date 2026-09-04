@@ -20,10 +20,16 @@ Features:
 
 ## Install
 
-macOS and Linux, arm64 and amd64:
+macOS, Linux, and BSD/Solaris:
 
 ```sh
 curl -fsSL https://shell.online/install | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://shell.online/install.ps1 | iex
 ```
 
 The installer verifies the release checksum and prints PATH instructions when needed. Published binaries and [`SHA256SUMS`](https://shell.online/downloads/SHA256SUMS) are also attached to every [GitHub release](https://github.com/TeoSlayer/shell.online/releases).
@@ -38,6 +44,23 @@ brew install shell-online
 
 Homebrew versions before 6 do not need the `brew trust` line.
 
+## Supported platforms
+
+All release binaries are static, checksummed, and built in CI. Windows uses ConPTY and supports background sessions plus `list`, `attach`, and `kill`.
+
+| OS | Architectures |
+|---|---|
+| macOS | x86-64, ARM64 |
+| Windows 10 1809+ / 11 | x86, x86-64, ARM64 |
+| Linux | x86, x86-64, ARMv5, ARMv6, ARMv7, ARM64, MIPS, MIPSLE, MIPS64, MIPS64LE, PPC64, PPC64LE, RISC-V 64, s390x, LoongArch64 |
+| FreeBSD | x86, x86-64, ARMv7, ARM64 |
+| OpenBSD | x86, x86-64, ARMv7, ARM64, PPC64, RISC-V 64 |
+| NetBSD | x86, x86-64, ARMv7, ARM64 |
+| DragonFly BSD | x86-64 |
+| Solaris | x86-64 |
+
+That includes common OpenWrt and Ubiquiti-style Linux devices; choose the artifact matching `uname -m`. ROS 1/ROS 2 commands need no adapter—after sourcing the ROS environment, wrap `roscore`, `roslaunch`, `ros2 run`, or `ros2 launch` normally. See the [platform guide](https://shell.online/platforms/).
+
 ## Use
 
 ```sh
@@ -45,6 +68,7 @@ shell claude
 shell codex
 shell python train.py
 shell npm run dev
+shell ros2 launch <package> <launch-file>
 shell
 ```
 
@@ -60,6 +84,7 @@ shell kill <session-id>            # stop a session and its process
 shell --foreground <command>       # mirror it in this terminal
 shell --auto-close 5m <command>    # add an earlier deadline
 shell --no-e2ee <command>          # transport encryption only
+shell --persistent <state-file> <command> # reuse the same URL and password after restart
 ```
 
 While attached, press `Ctrl-X`, release it, then press `D` to detach without stopping the process. Run `shell help` for a guided overview or `shell help reference` for the complete reference.
@@ -93,6 +118,8 @@ docker compose logs shell-online
 
 It connects to the hosted shell.online relay; it is not a self-hosted server. See the [Docker guide](https://shell.online/docker/) for volumes, backups, password rotation, and the published GHCR image.
 
+Native shares also run in the background. Re-run `shell --persistent <state-file> <command>` with the same owner-only state file to restore the same URL and password after a process or machine restart; `shell kill` still stops the current task. Use Docker's restart policy when automatic restart after boot is required.
+
 ## Documentation
 
 - [Quick start and guides](https://shell.online/docs/)
@@ -102,6 +129,7 @@ It connects to the hosted shell.online relay; it is not a self-hosted server. Se
 - [Security](https://shell.online/security/)
 - [End-to-end encryption](https://shell.online/e2ee/)
 - [Docker](https://shell.online/docker/)
+- [Platforms, routers, Windows, and ROS](https://shell.online/platforms/)
 
 The website documentation is generated from [`docs/content.json`](docs/content.json) and versioned with each release.
 

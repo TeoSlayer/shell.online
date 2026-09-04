@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, docsHtml, cliHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
+const [indexHtml, docsHtml, cliHtml, platformsHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
   readSource("docs/index.html"),
   readSource("cli/index.html"),
+  readSource("platforms/index.html"),
   readSource("mobile/index.html"),
   readSource("reliability/index.html"),
   readSource("security/index.html"),
@@ -86,7 +87,7 @@ check(website?.publisher?.["@id"] === organization?.["@id"], "WebSite publisher 
 check(application?.name === "shell.online", "SoftwareApplication name is invalid");
 check(application?.creator?.["@id"] === organization?.["@id"], "Software creator is not Pilot Protocol");
 check(application?.offers?.price === "0", "Free software offer is missing");
-check(application?.operatingSystem === "macOS, Linux", "Supported operating systems are missing");
+check(application?.operatingSystem.includes("Windows") && application?.operatingSystem.includes("Linux"), "Supported operating systems are missing");
 check(application?.sameAs === "https://github.com/TeoSlayer/shell.online", "Source repository is missing from schema");
 check(application?.image === "https://shell.online/social-card.png", "Application image is missing from schema");
 check(application?.screenshot === "https://shell.online/screenshots/codex-working-mobile.png", "Application screenshot is missing from schema");
@@ -113,13 +114,13 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 8, "Sitemap should list the homepage and knowledge base");
-for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
+check((sitemap.match(/<loc>/gu) ?? []).length === 9, "Sitemap should list the homepage and knowledge base");
+for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [platformsHtml, "platforms"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
   check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
   check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guide of ["mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const guide of ["platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
   check(readme.includes(`https://shell.online/${guide}/`), `README ${guide} guide link is missing`);
 }
 for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d"]) {

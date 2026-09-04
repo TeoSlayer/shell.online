@@ -4,13 +4,15 @@ import { resolve } from "node:path";
 
 const directory = resolve(process.argv[2] ?? "dist/downloads");
 const packageMetadata = JSON.parse(await readFile(resolve("package.json"), "utf8"));
-const binaries = [
-  "shell-darwin-amd64",
-  "shell-darwin-arm64",
-  "shell-linux-amd64",
-  "shell-linux-arm64",
-];
-const signedArtifacts = [...binaries, "install", "SKILL.md", "release.json"];
+const targets = (await readFile(resolve("scripts/release-targets.tsv"), "utf8"))
+  .split("\n")
+  .filter((line) => line && !line.startsWith("#"))
+  .map((line) => line.split("\t"));
+const binaries = targets.map(([artifact]) => artifact);
+if (new Set(binaries).size !== binaries.length || targets.some((row) => row.length !== 4)) {
+  fail("release target manifest is invalid");
+}
+const signedArtifacts = [...binaries, "install", "install.ps1", "SKILL.md", "release.json"];
 const requiredFiles = [
   ...signedArtifacts,
   ...binaries.map((name) => `${name}.sha256`),
@@ -76,7 +78,7 @@ if (release.version !== packageMetadata.version) {
 if (release.algorithm !== "sha256" || typeof release.artifacts !== "object" || release.artifacts === null) {
   fail("release.json has invalid metadata");
 }
-for (const filename of [...binaries, "install", "SKILL.md"]) {
+for (const filename of [...binaries, "install", "install.ps1", "SKILL.md"]) {
   if (release.artifacts[filename] !== manifest.get(filename)) {
     fail(`release.json checksum for ${filename} does not match SHA256SUMS`);
   }

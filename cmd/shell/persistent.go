@@ -140,8 +140,8 @@ func readPersistentState(path string) (persistentSessionState, error) {
 	if err != nil {
 		return state, err
 	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return state, fmt.Errorf("persistent state must not be accessible by group or other users")
+	if err := validatePrivateStateFile(path, info); err != nil {
+		return state, err
 	}
 	if err := json.NewDecoder(io.LimitReader(file, 16*1024)).Decode(&state); err != nil {
 		return state, fmt.Errorf("decode persistent state: %w", err)
@@ -181,10 +181,13 @@ func writePersistentState(path string, state persistentSessionState) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
+	if err := securePrivateStateFile(temporaryPath); err != nil {
 		return err
 	}
-	return nil
+	if err := replaceFileAtomically(temporaryPath, path); err != nil {
+		return err
+	}
+	return securePrivateStateFile(path)
 }
 
 func randomPersistentToken(length int) (string, error) {

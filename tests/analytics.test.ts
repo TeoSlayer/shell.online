@@ -87,6 +87,9 @@ describe("analytics", () => {
     }))).toBe(true);
     expect(isDocumentNavigation(new Request("https://shell.online/assets/app.js"))).toBe(false);
     expect(binaryDownloadTarget("/downloads/shell-darwin-arm64")).toBe("darwin-arm64");
+    expect(binaryDownloadTarget("/downloads/shell-windows-amd64.exe")).toBe("windows-amd64");
+    expect(binaryDownloadTarget("/downloads/shell-linux-armv7")).toBe("linux-armv7");
+    expect(binaryDownloadTarget("/downloads/shell-linux-mips64le")).toBe("linux-mips64le");
     expect(binaryDownloadTarget("/downloads/shell-linux-amd64.sha256")).toBeNull();
   });
 });

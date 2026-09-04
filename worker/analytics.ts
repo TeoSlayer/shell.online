@@ -114,7 +114,7 @@ export function isDocumentNavigation(request: Request): boolean {
 }
 
 export function binaryDownloadTarget(pathname: string): string | null {
-  const match = pathname.match(/^\/downloads\/shell-(darwin|linux)-(arm64|amd64)$/);
+  const match = pathname.match(/^\/downloads\/shell-(darwin|windows|linux|freebsd|openbsd|netbsd|dragonfly|solaris)-([a-z0-9]+)(?:\.exe)?$/);
   return match ? `${match[1]}-${match[2]}` : null;
 }
 

@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -14,10 +12,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
-	"github.com/creack/pty"
 	"golang.org/x/term"
 
 	"shell.online/internal/api"
@@ -37,6 +33,14 @@ const (
 	mobileTerminalRows     = 24
 	backgroundStartupGrace = 250 * time.Millisecond
 )
+
+type sharedTerminalProcess interface {
+	io.ReadWriteCloser
+	Resize(cols, rows int) error
+	Wait() error
+	Process() *os.Process
+	Finish() error
+}
 
 func runSharedProcess(
 	ctx context.Context,
@@ -72,9 +76,7 @@ func runSharedProcess(
 		defer func() { _ = term.Restore(int(terminal.Fd()), previousState) }()
 	}
 
-	command := exec.Command(commandArguments[0], commandArguments[1:]...)
-	command.Env = terminalEnvironment(commandEnvironment)
-	ptmx, err := pty.StartWithSize(command, sharedTerminalSize())
+	ptmx, err := startTerminalProcess(commandArguments, terminalEnvironment(commandEnvironment))
 	if err != nil {
 		sendFinalState(connection, outputRing, session.Cipher, 1, nil)
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
@@ -164,7 +166,7 @@ func runSharedProcess(
 		}
 	}()
 	processResult := make(chan error, 1)
-	go func() { processResult <- command.Wait() }()
+	go func() { processResult <- ptmx.Wait() }()
 
 	var waitError error
 	if onStarted != nil {
@@ -172,11 +174,12 @@ func runSharedProcess(
 		waitError, exited = waitForBackgroundStartup(processResult, backgroundStartupGrace)
 		if !exited {
 			onStarted()
-			waitError = waitForProcess(ctx, command, processResult)
+			waitError = waitForProcess(ctx, ptmx, processResult)
 		}
 	} else {
-		waitError = waitForProcess(ctx, command, processResult)
+		waitError = waitForProcess(ctx, ptmx, processResult)
 	}
+	_ = ptmx.Finish()
 	<-readDone
 	close(outputChunks)
 	<-batchDone
@@ -205,31 +208,22 @@ func waitForBackgroundStartup(result <-chan error, grace time.Duration) (error, 
 	}
 }
 
-func waitForProcess(ctx context.Context, command *exec.Cmd, result <-chan error) error {
+func waitForProcess(ctx context.Context, command sharedTerminalProcess, result <-chan error) error {
 	select {
 	case err := <-result:
 		return err
 	case <-ctx.Done():
 	}
 
-	signalProcessGroup(command, syscall.SIGTERM)
+	terminateProcess(command.Process(), false)
 	timer := time.NewTimer(2 * time.Second)
 	defer timer.Stop()
 	select {
 	case err := <-result:
 		return err
 	case <-timer.C:
-		signalProcessGroup(command, syscall.SIGKILL)
+		terminateProcess(command.Process(), true)
 		return <-result
-	}
-}
-
-func signalProcessGroup(command *exec.Cmd, signal syscall.Signal) {
-	if command.Process == nil {
-		return
-	}
-	if err := syscall.Kill(-command.Process.Pid, signal); err != nil {
-		_ = command.Process.Signal(signal)
 	}
 }
 
@@ -352,7 +346,7 @@ func batchOutput(
 
 func readRelay(
 	connection *relay.Connection,
-	ptmx *os.File,
+	ptmx sharedTerminalProcess,
 	output *ringbuffer.Buffer,
 	frameCipher *e2ee.Cipher,
 	exitAcknowledged chan<- struct{},
@@ -393,7 +387,7 @@ func readRelay(
 			}
 			if event.Type == "terminal_size" {
 				if isCanonicalTerminalSize(event.Cols, event.Rows) {
-					_ = pty.Setsize(ptmx, &pty.Winsize{Cols: event.Cols, Rows: event.Rows})
+					_ = ptmx.Resize(int(event.Cols), int(event.Rows))
 				}
 				continue
 			}
@@ -451,8 +445,13 @@ func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
 	return frameCipher.SealFrame(frame)
 }
 
-func sharedTerminalSize() *pty.Winsize {
-	return &pty.Winsize{Cols: desktopTerminalCols, Rows: desktopTerminalRows}
+type terminalGrid struct {
+	Cols uint16
+	Rows uint16
+}
+
+func sharedTerminalSize() terminalGrid {
+	return terminalGrid{Cols: desktopTerminalCols, Rows: desktopTerminalRows}
 }
 
 func isCanonicalTerminalSize(cols, rows uint16) bool {
@@ -465,6 +464,8 @@ func terminalEnvironment(environment []string) []string {
 		environment,
 		backgroundChildEnvironment,
 		backgroundReadyEnvironment,
+		backgroundReadyAddress,
+		backgroundReadyToken,
 		backgroundParentEnvironment,
 	)
 	environment = setEnvironmentValue(environment, "TERM", "xterm-256color")
@@ -490,13 +491,7 @@ func processExitCode(err error) int {
 	}
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
-		if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-			if status.Signaled() {
-				return 128 + int(status.Signal())
-			}
-			return status.ExitStatus()
-		}
-		return exitError.ExitCode()
+		return platformExitCode(exitError)
 	}
 	return 1
 }

@@ -475,8 +475,9 @@ function recordAssetAnalytics(
   if (request.method !== "GET" || !response.ok) return;
 
   const context = requestAnalyticsContext(request);
-  if (url.pathname === "/install") {
-    recordAnalytics(env, executionContext, "installer_download", "script", context);
+  if (url.pathname === "/install" || url.pathname === "/install.ps1") {
+    const target = url.pathname === "/install.ps1" ? "powershell" : "posix";
+    recordAnalytics(env, executionContext, "installer_download", target, context);
     return;
   }
   if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -498,6 +499,7 @@ function recordAssetAnalytics(
   const documentTarget = new Map([
     ["/", "landing"],
     ["/docs/", "docs"],
+    ["/platforms/", "docs_platforms"],
     ["/mobile/", "docs_mobile"],
     ["/reliability/", "docs_reliability"],
     ["/security/", "docs_security"],

@@ -5,6 +5,7 @@ version="${npm_package_version:-$(node -p 'require("./package.json").version')}"
 go_version=$(go env GOVERSION)
 output_dir="dist/downloads"
 mkdir -p "$output_dir"
+find "$output_dir" -type f -delete
 checksum_manifest="$output_dir/SHA256SUMS"
 checksum_manifest_tmp="$output_dir/.SHA256SUMS.tmp"
 : > "$checksum_manifest_tmp"
@@ -17,22 +18,42 @@ sha256_file() {
   fi
 }
 
-for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do
-  target_os=${target%/*}
-  target_arch=${target#*/}
-  output="$output_dir/shell-$target_os-$target_arch"
-  printf 'Building %s/%s\n' "$target_os" "$target_arch"
-  CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
-    go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" -o "$output" ./cmd/shell
+while IFS="	" read -r artifact target_os target_arch variant; do
+  case "$artifact" in ''|'#'*) continue ;; esac
+  output="$output_dir/$artifact"
+  printf 'Building %-30s %s/%s %s\n' "$artifact" "$target_os" "$target_arch" "$variant"
+  case "$variant" in
+    GOARM=*)
+      GOARM=${variant#GOARM=} CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+        go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" -o "$output" ./cmd/shell
+      ;;
+    GOMIPS=*)
+      GOMIPS=${variant#GOMIPS=} CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+        go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" -o "$output" ./cmd/shell
+      ;;
+    GOMIPS64=*)
+      GOMIPS64=${variant#GOMIPS64=} CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+        go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" -o "$output" ./cmd/shell
+      ;;
+    -)
+      CGO_ENABLED=0 GOOS="$target_os" GOARCH="$target_arch" \
+        go build -buildvcs=false -trimpath -ldflags="-s -w -X main.version=$version" -o "$output" ./cmd/shell
+      ;;
+    *)
+      printf 'Unknown target variant: %s\n' "$variant" >&2
+      exit 1
+      ;;
+  esac
 
   checksum=$(sha256_file "$output")
-  printf '%s  %s\n' "$checksum" "$(basename "$output")" > "$output.sha256"
-  printf '%s  %s\n' "$checksum" "$(basename "$output")" >> "$checksum_manifest_tmp"
-done
+  printf '%s  %s\n' "$checksum" "$artifact" > "$output.sha256"
+  printf '%s  %s\n' "$checksum" "$artifact" >> "$checksum_manifest_tmp"
+done < scripts/release-targets.tsv
 
 cp public/install "$output_dir/install"
+cp public/install.ps1 "$output_dir/install.ps1"
 cp public/skill/shell-online/SKILL.md "$output_dir/SKILL.md"
-for filename in install SKILL.md; do
+for filename in install install.ps1 SKILL.md; do
   checksum=$(sha256_file "$output_dir/$filename")
   printf '%s  %s\n' "$checksum" "$filename" >> "$checksum_manifest_tmp"
 done

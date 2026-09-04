@@ -46,6 +46,32 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test native ConPTY and local session control
+        run: go test ./...
+      - name: Build and run the Windows CLI
+        run: |
+          go build -buildvcs=false -trimpath -o shell.exe ./cmd/shell
+          if ((./shell.exe --version) -ne "shell dev") { exit 1 }
+      - name: Parse the PowerShell installer
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/public/install.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+      - name: Test the PowerShell installer and checksum verification
+        run: ./scripts/test-install-windows.ps1
+
   vulnerabilities:
     runs-on: ubuntu-latest
     timeout-minutes: 10

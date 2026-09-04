@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,9 @@ func TestPersistentStateIsOwnerOnlyAndRoundTrips(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows protects this file with an owner-only ACL; Unix permission bits
+	// are not an authoritative representation of that ACL.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("state permissions = %#o", info.Mode().Perm())
 	}
 	loaded, err := readPersistentState(path)
@@ -73,6 +76,9 @@ func TestPersistentSessionIDIsBoundToHostToken(t *testing.T) {
 }
 
 func TestPersistentStateRejectsLoosePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows uses ACLs rather than Unix permission bits")
+	}
 	path := filepath.Join(t.TempDir(), "session.json")
 	if err := os.WriteFile(path, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)

@@ -57,6 +57,7 @@ More guidance
   shell help kill
   shell help e2ee
   shell help docker
+  shell help platforms
   shell help reference             Print the complete CLI reference
 `)
 }
@@ -67,7 +68,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|e2ee|docker|reference]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|e2ee|docker|platforms|reference]")
 		return 2
 	}
 
@@ -171,11 +172,40 @@ and encryption key are already bound to the original password. Create a new stat
 volume to rotate the password and receive a new link. The image is a hosted-service
 client, not a self-hosted relay.
 `)
+	case "platforms", "platform", "ros", "windows":
+		fmt.Fprint(stdout, `Platforms
+
+  macOS:       amd64, arm64
+  Windows:     386, amd64, arm64 (Windows 10 1809+; native ConPTY)
+  Linux:       386, amd64, armv5, armv6, armv7, arm64, loong64,
+               mips, mipsle, mips64, mips64le, ppc64, ppc64le,
+               riscv64, s390x
+  FreeBSD:     386, amd64, armv7, arm64
+  OpenBSD:     386, amd64, armv7, arm64, ppc64, riscv64
+  NetBSD:      386, amd64, armv7, arm64
+  DragonFly:   amd64
+  Solaris:     amd64
+
+The POSIX installer detects uname -s and uname -m, verifies SHA-256, and selects
+the matching static binary. Windows has a PowerShell installer and supports the
+same background, list, attach, kill, E2EE, and persistent-state workflow.
+
+ROS 1 and ROS 2 need no bridge. Source the ROS environment, then wrap the normal
+process, for example:
+
+  shell roscore
+  shell roslaunch <package> <launch-file>
+  shell ros2 run <package> <executable>
+  shell ros2 launch <package> <launch-file>
+
+Use --persistent <state-file> to restore one URL and password when rerunning a
+process. The Docker image combines it with a restart policy for automatic recovery.
+`)
 	case "reference", "cli", "commands":
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, kill, e2ee, docker, reference")
+		fmt.Fprintln(stderr, "Available topics: start, attach, list, kill, e2ee, docker, platforms, reference")
 		return 2
 	}
 	return 0
@@ -190,13 +220,13 @@ SYNOPSIS
   shell attach <session-id-or-prefix>
   shell kill <session-id-or-prefix>
   shell kill --all
-  shell help [start|attach|list|kill|e2ee|docker|reference]
+  shell help [start|attach|list|kill|e2ee|docker|platforms|reference]
 
 START AND SHARE
   shell [command] [arguments...]
       Wrap a command in a PTY, print its browser URL, and leave it running in
-      the background. With no command, start the program named by $SHELL or
-      /bin/sh. Use -- before a command when argument boundaries are ambiguous.
+      the background. With no command, start the platform's default shell.
+      Use -- before a command when argument boundaries are ambiguous.
 
 START OPTIONS
   --read-only
@@ -210,6 +240,7 @@ START OPTIONS
   --persistent <state-file>
       Reuse a stable session identity, password, and URL. The owner-only state
       file contains host credentials, the browser password, and decryption material.
+      Re-run with the same file after a process or machine restart to restore the link.
   --foreground
       Mirror and control the process in the launching terminal instead of
       returning immediately.
@@ -252,7 +283,8 @@ SESSION COMMANDS
 
 ENVIRONMENT
   SHELL
-      Program used when no command is supplied.
+      Program used when no command is supplied on Unix. Windows prefers PowerShell,
+      then COMSPEC.
   SHELL_ONLINE_SERVER
       Default relay URL; overridden by --server.
   SHELL_ONLINE_E2EE_PASSWORD
