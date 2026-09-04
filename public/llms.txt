@@ -6,7 +6,7 @@ shell.online wraps a local terminal process and produces an unguessable browser 
 
 curl -fsSL https://shell.online/install | sh
 
-Supported platforms: macOS; Windows with native ConPTY; Linux across x86, ARMv5/6/7/64, MIPS/MIPSLE/MIPS64, PPC64, RISC-V 64, s390x, and LoongArch64; FreeBSD; OpenBSD; NetBSD; DragonFly BSD; and Solaris. This includes many OpenWrt and Ubiquiti-style Linux devices. The POSIX and PowerShell installers verify SHA-256, never invoke sudo, and print PATH instructions when needed. Full matrix: https://shell.online/platforms/
+Supported platforms: macOS; Windows with native ConPTY; Linux across x86, ARMv5/6/7/64, MIPS/MIPSLE/MIPS64, PPC64, RISC-V 64, s390x, and LoongArch64; FreeBSD; OpenBSD; NetBSD; DragonFly BSD; and Solaris. Every Linux release artifact executes the full Go and PTY integration suite under QEMU; Windows amd64 runs a native ConPTY suite; other artifacts are build-verified. QEMU does not reproduce vendor firmware or kernel restrictions. This includes many OpenWrt and Ubiquiti-style Linux devices. The POSIX and PowerShell installers verify SHA-256, never invoke sudo, and print PATH instructions when needed. Full matrix: https://shell.online/platforms/
 
 Windows PowerShell installation:
 

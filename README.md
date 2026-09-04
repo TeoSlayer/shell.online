@@ -46,18 +46,20 @@ Homebrew versions before 6 do not need the `brew trust` line.
 
 ## Supported platforms
 
-All release binaries are static, checksummed, and built in CI. Windows uses ConPTY and supports background sessions plus `list`, `attach`, and `kill`.
+All release binaries are static, checksummed, and built in CI. Every Linux artifact also executes the full Go and PTY integration suite under QEMU. Windows uses ConPTY and supports background sessions plus `list`, `attach`, and `kill`.
 
-| OS | Architectures |
-|---|---|
-| macOS | x86-64, ARM64 |
-| Windows 10 1809+ / 11 | x86, x86-64, ARM64 |
-| Linux | x86, x86-64, ARMv5, ARMv6, ARMv7, ARM64, MIPS, MIPSLE, MIPS64, MIPS64LE, PPC64, PPC64LE, RISC-V 64, s390x, LoongArch64 |
-| FreeBSD | x86, x86-64, ARMv7, ARM64 |
-| OpenBSD | x86, x86-64, ARMv7, ARM64, PPC64, RISC-V 64 |
-| NetBSD | x86, x86-64, ARMv7, ARM64 |
-| DragonFly BSD | x86-64 |
-| Solaris | x86-64 |
+| OS | Architectures | Continuous validation |
+|---|---|---|
+| macOS | x86-64, ARM64 | Build-verified; ARM64 manually exercised |
+| Windows 10 1809+ / 11 | x86, x86-64, ARM64 | Native Windows x86-64 ConPTY and installer suite; other artifacts build-verified |
+| Linux | x86, x86-64, ARMv5, ARMv6, ARMv7, ARM64, MIPS, MIPSLE, MIPS64, MIPS64LE, PPC64, PPC64LE, RISC-V 64, s390x, LoongArch64 | Full suite executed under QEMU for every artifact; x86-64 also runs natively |
+| FreeBSD | x86, x86-64, ARMv7, ARM64 | Build-verified |
+| OpenBSD | x86, x86-64, ARMv7, ARM64, PPC64, RISC-V 64 | Build-verified |
+| NetBSD | x86, x86-64, ARMv7, ARM64 | Build-verified |
+| DragonFly BSD | x86-64 | Build-verified |
+| Solaris | x86-64 | Build-verified |
+
+QEMU proves that each Linux executable starts on its target ISA and exercises networking, cryptography, persistence, local session control, PTY input/output, and resize behavior. It does not reproduce a particular router kernel, vendor firmware, or physical CPU erratum; hardware-specific reports remain valuable.
 
 That includes common OpenWrt and Ubiquiti-style Linux devices; choose the artifact matching `uname -m`. ROS 1/ROS 2 commands need no adapter—after sourcing the ROS environment, wrap `roscore`, `roslaunch`, `ros2 run`, or `ros2 launch` normally. See the [platform guide](https://shell.online/platforms/).
 

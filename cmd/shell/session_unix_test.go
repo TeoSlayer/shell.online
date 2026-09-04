@@ -57,6 +57,71 @@ func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 	}
 }
 
+func TestTerminalProcessRoundTripsInputAndResize(t *testing.T) {
+	process, err := startTerminalProcess(
+		[]string{"/bin/sh", "-c", `stty -echo; printf 'ready\n'; IFS= read -r line; stty size; printf 'reply:%s\n' "$line"`},
+		terminalEnvironment([]string{"PATH=/usr/bin:/bin"}),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		terminateProcess(process.Process(), true)
+		_ = process.Close()
+	}()
+
+	lines := make(chan string, 4)
+	readErrors := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(process)
+		for {
+			line, readError := reader.ReadString('\n')
+			if line != "" {
+				lines <- strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+			}
+			if readError != nil {
+				readErrors <- readError
+				return
+			}
+		}
+	}()
+
+	nextLine := func() string {
+		t.Helper()
+		select {
+		case line := <-lines:
+			return line
+		case readError := <-readErrors:
+			t.Fatalf("read terminal output: %v", readError)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out reading terminal output")
+		}
+		return ""
+	}
+
+	if line := nextLine(); line != "ready" {
+		t.Fatalf("first terminal line = %q", line)
+	}
+	if err := process.Resize(91, 37); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := process.Write([]byte("hello from qemu\n")); err != nil {
+		t.Fatal(err)
+	}
+	if line := nextLine(); line != "37 91" {
+		t.Fatalf("resized terminal reported %q", line)
+	}
+	if line := nextLine(); line != "reply:hello from qemu" {
+		t.Fatalf("terminal reply = %q", line)
+	}
+	if err := process.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Finish(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type capturedInput struct {
 	values chan []byte
 }
