@@ -66,7 +66,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "shell: --e2ee and --no-e2ee cannot be used together")
 		return 2
 	}
-	closeDeadline, err := parseCloseDeadline(autoClose.value, now)
+	parsedCloseDeadline, err := parseCloseDeadline(autoClose.value, now)
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 2
@@ -124,20 +124,11 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stopSignals()
 
-	var processContext context.Context
-	var cancelProcess context.CancelFunc
-	if closeDeadline.IsZero() {
-		processContext, cancelProcess = context.WithCancel(signalContext)
-	} else {
-		processContext, cancelProcess = context.WithDeadline(signalContext, closeDeadline)
-	}
-	defer cancelProcess()
-
 	client := api.NewClient(strings.TrimRight(*server, "/"), "shell/"+version)
 	var session api.Session
 	if *persistentState != "" {
 		session, password, err = preparePersistentSession(
-			processContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true, password,
+			signalContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true, password,
 		)
 	} else {
 		if encrypted && password == "" {
@@ -150,7 +141,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				frameCipher, encryptionFragment, err = e2ee.Generate(password)
 			}
 			if err == nil {
-				session, err = client.CreateSession(processContext, filepath.Base(command[0]), *readOnly, encrypted, false)
+				session, err = client.CreateSession(signalContext, filepath.Base(command[0]), *readOnly, encrypted, false)
 			}
 			session.Cipher = frameCipher
 			session.ShareURL += encryptionFragment
@@ -161,6 +152,25 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 1
 	}
+
+	processStartedAt := time.Now()
+	closeDeadline := processCloseDeadline(autoClose.value, parsedCloseDeadline, processStartedAt)
+	closeDeadline = boundedCloseDeadline(closeDeadline, session.ExpiresAt)
+	if !closeDeadline.IsZero() && !closeDeadline.After(processStartedAt) {
+		err = fmt.Errorf("auto-close deadline elapsed before the process could start")
+		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
+	}
+
+	var processContext context.Context
+	var cancelProcess context.CancelFunc
+	if closeDeadline.IsZero() {
+		processContext, cancelProcess = context.WithCancel(signalContext)
+	} else {
+		processContext, cancelProcess = context.WithDeadline(signalContext, closeDeadline)
+	}
+	defer cancelProcess()
 
 	var closesAt *time.Time
 	if !closeDeadline.IsZero() {
@@ -176,7 +186,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		Persistent: session.Persistent,
 		Command:    displayCommand(launch.DisplayArguments),
 		PID:        os.Getpid(),
-		StartedAt:  now,
+		StartedAt:  processStartedAt,
 		ClosesAt:   closesAt,
 	})
 	if controlError != nil {
