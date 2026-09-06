@@ -10,6 +10,7 @@ import {
 } from "./lib/tokens";
 import { isValidRedirectUri } from "./lib/redirect";
 import { closeSession, listSessions, registerSession } from "./lib/sessions";
+import { mintSecret } from "./lib/tokens";
 
 export interface AppOptions {
   store: Store;
@@ -233,6 +234,83 @@ export function createApp(options: AppOptions) {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
         return send(response, 200, { sessions: listSessions(store, identity.uid) });
+      }
+
+      /* ---- Driving a machine from the browser ---- */
+
+      /*
+       * Queues work for a machine. The machine only ever sees it while its
+       * owner is running `shell agent` there, which is the opt-in.
+       */
+      if (route === "POST /api/commands") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const deviceId = String(body.device_id ?? "");
+        const kind = String(body.kind ?? "");
+
+        const device = store.listDevices(identity.uid).find((entry) => entry.id === deviceId);
+        if (!device) return send(response, 404, { error: "no such machine" });
+
+        if (kind === "start") {
+          const command = String(body.command ?? "").trim();
+          if (!command) return send(response, 400, { error: "give a command to run" });
+          if (command.length > 500) return send(response, 400, { error: "that command is too long" });
+          const queued = {
+            id: mintSecret("cmd"),
+            uid: identity.uid,
+            deviceId,
+            kind: "start" as const,
+            command,
+            createdAt: Date.now(),
+          };
+          store.putCommand(queued);
+          return send(response, 202, { command: queued });
+        }
+
+        if (kind === "kill") {
+          const sessionId = String(body.session_id ?? "");
+          /* Scoped by uid, so one account cannot stop another's session. */
+          const owned = listSessions(store, identity.uid).some((s) => s.id === sessionId);
+          if (!owned) return send(response, 404, { error: "no such session" });
+          const queued = {
+            id: mintSecret("cmd"),
+            uid: identity.uid,
+            deviceId,
+            kind: "kill" as const,
+            sessionId,
+            createdAt: Date.now(),
+          };
+          store.putCommand(queued);
+          return send(response, 202, { command: queued });
+        }
+
+        return send(response, 400, { error: "unknown command kind" });
+      }
+
+      /* ---- The agent side, authenticated as the machine ---- */
+      if (route === "GET /api/agent/commands") {
+        const token = requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        return send(response, 200, { commands: store.claimCommands(token.id) });
+      }
+
+      const doneMatch = url.pathname.match(/^\/api\/agent\/commands\/(cmd_[A-Za-z0-9_-]{1,128})$/);
+      if (request.method === "POST" && doneMatch) {
+        const token = requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const error = typeof body.error === "string" && body.error ? body.error : undefined;
+        const finished = store.finishCommand(token.id, doneMatch[1], error);
+        if (!finished) return send(response, 404, { error: "no such command" });
+        return send(response, 200, { ok: true });
+      }
+
+      if (route === "GET /api/commands") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        return send(response, 200, { commands: store.listCommands(identity.uid) });
       }
 
       if (route === "GET /api/health") {

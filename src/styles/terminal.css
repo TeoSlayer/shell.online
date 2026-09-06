@@ -296,3 +296,146 @@ button.tab {
     max-width: 190px;
   }
 }
+
+/* ---------------------------------------------------------------
+   Launcher: start a session on a linked machine from this page
+   --------------------------------------------------------------- */
+
+.launcher {
+  display: flex;
+  padding: 6px 6px 6px 16px;
+  border: 1px solid #2a2e25;
+  border-radius: var(--radius-control);
+  margin: 20px 0 8px;
+  background: var(--terminal);
+  align-items: center;
+  gap: 10px;
+}
+
+.launcher-prompt {
+  color: var(--acid);
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+.launcher-input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--terminal-ink);
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 14px;
+  height: 40px;
+}
+
+.launcher-input::placeholder {
+  color: #6f7566;
+}
+
+.launcher-input:disabled {
+  cursor: not-allowed;
+}
+
+.launcher-machine {
+  border: 1px solid var(--terminal-line);
+  border-radius: var(--radius-chip);
+  outline: 0;
+  background: rgb(255 255 255 / 5%);
+  color: var(--terminal-muted);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  height: 34px;
+  padding: 0 8px;
+}
+
+.launcher-go {
+  display: inline-flex;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--acid);
+  color: #1b2109;
+  cursor: pointer;
+  flex: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 620;
+  height: 40px;
+  align-items: center;
+  gap: 7px;
+  transition: filter 160ms var(--ease);
+}
+
+.launcher-go:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.launcher-go:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.launcher-hint {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ---------------------------------------------------------------
+   Row actions
+   --------------------------------------------------------------- */
+
+.session-action {
+  display: inline-flex;
+  height: 38px;
+  padding: 0 15px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 520;
+  align-items: center;
+  gap: 7px;
+  transition: border-color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.session-action:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.session-action.is-primary {
+  border-color: var(--cta-border);
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+}
+
+.session-action.is-primary:hover {
+  border-color: var(--cta-border-hover);
+}
+
+.session-action:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.session-ended {
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+@media (max-width: 560px) {
+  .launcher {
+    flex-wrap: wrap;
+  }
+
+  .launcher-input {
+    flex-basis: 100%;
+  }
+}

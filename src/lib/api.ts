@@ -83,6 +83,20 @@ export function revokeDevice(id: string) {
   });
 }
 
+export function startSession(deviceId: string, command: string) {
+  return request<{ command: { id: string } }>("/api/commands", {
+    method: "POST",
+    body: JSON.stringify({ device_id: deviceId, kind: "start", command }),
+  });
+}
+
+export function stopSession(deviceId: string, sessionId: string) {
+  return request<{ command: { id: string } }>("/api/commands", {
+    method: "POST",
+    body: JSON.stringify({ device_id: deviceId, kind: "kill", session_id: sessionId }),
+  });
+}
+
 export function fetchSessions() {
   return request<{ sessions: SessionRecord[] }>("/api/sessions");
 }

@@ -1,13 +1,29 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { ArrowSquareOut, Copy, Check, X, Terminal as TerminalIcon, List } from "@phosphor-icons/react";
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { EMPTY, reduce } from "../terminal/tabs";
-import { fetchSessions, type SessionRecord } from "../lib/api";
+import {
+  fetchDevices,
+  fetchSessions,
+  startSession,
+  stopSession,
+  type Device,
+  type SessionRecord,
+} from "../lib/api";
 import { elapsed } from "../lib/time";
 
 const POLL_MS = 4000;
+/* Long enough for the agent to poll, launch, and for the session to publish. */
+const AFTER_COMMAND_MS = 1500;
 
 function CopyLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -15,8 +31,7 @@ function CopyLink({ url }: { url: string }) {
     <button
       type="button"
       className="session-copy"
-      onClick={async (event) => {
-        event.stopPropagation();
+      onClick={async () => {
         try {
           await navigator.clipboard.writeText(url);
           setCopied(true);
@@ -25,7 +40,8 @@ function CopyLink({ url }: { url: string }) {
           /* clipboard is unavailable outside a secure context */
         }
       }}
-      aria-label={copied ? "Link copied" : "Copy link"}
+      aria-label={copied ? "Link copied" : "Copy share link"}
+      title="Copy the share link"
     >
       {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
     </button>
@@ -35,8 +51,14 @@ function CopyLink({ url }: { url: string }) {
 export function Workspace() {
   const [state, dispatch] = useReducer(reduce, EMPTY);
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => Date.now());
+  const [draft, setDraft] = useState("");
+  const [machine, setMachine] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [killing, setKilling] = useState("");
   const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
@@ -61,6 +83,55 @@ export function Workspace() {
       window.clearInterval(tick);
     };
   }, [load]);
+
+  useEffect(() => {
+    void fetchDevices()
+      .then((result) => {
+        setDevices(result.devices);
+        setMachine((current) => current || result.devices[0]?.id || "");
+      })
+      .catch(() => setDevices([]));
+  }, []);
+
+  async function handleStart(event: FormEvent) {
+    event.preventDefault();
+    const command = draft.trim();
+    if (!command || !machine) return;
+    setStarting(true);
+    setError("");
+    setNotice("");
+    try {
+      await startSession(machine, command);
+      setDraft("");
+      /*
+       * The machine has to poll, launch, and publish, so the row shows up a
+       * moment later rather than on this response.
+       */
+      setNotice(`Starting ${command}. It appears here once the machine picks it up.`);
+      window.setTimeout(() => void load(), AFTER_COMMAND_MS);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not start that session.");
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  async function handleKill(session: SessionRecord) {
+    const target = machine || devices[0]?.id;
+    if (!target) return;
+    setKilling(session.id);
+    setError("");
+    setNotice("");
+    try {
+      await stopSession(target, session.id);
+      setNotice(`Stopping ${session.command}.`);
+      window.setTimeout(() => void load(), AFTER_COMMAND_MS);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not stop that session.");
+    } finally {
+      setKilling("");
+    }
+  }
 
   const live = sessions?.filter((session) => !session.closedAt) ?? [];
   const finished = sessions?.filter((session) => session.closedAt) ?? [];
@@ -92,10 +163,7 @@ export function Workspace() {
           </button>
 
           {state.tabs.map((tab) => (
-            <span
-              key={tab.id}
-              className={state.activeId === tab.id ? "tab is-active" : "tab"}
-            >
+            <span key={tab.id} className={state.activeId === tab.id ? "tab is-active" : "tab"}>
               <button
                 type="button"
                 role="tab"
@@ -126,20 +194,71 @@ export function Workspace() {
         alive while another tab is in front.
       */}
       {state.tabs.map((tab) => (
-        <TerminalPane
-          key={tab.id}
-          shareUrl={tab.shareUrl}
-          active={state.activeId === tab.id}
-        />
+        <TerminalPane key={tab.id} shareUrl={tab.shareUrl} active={state.activeId === tab.id} />
       ))}
 
       <div className="workspace-list" hidden={!showingList}>
         <p className="page-dek">
-          Every terminal shared from a linked machine appears here. Click one to
-          open it as a tab.
+          Start a terminal on a linked machine, or open one that is already
+          running. It all happens on this page.
         </p>
 
-        {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
+        <form className="launcher" onSubmit={handleStart}>
+          <span className="launcher-prompt" aria-hidden="true">
+            $
+          </span>
+          <input
+            className="launcher-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="top"
+            aria-label="Command to run"
+            spellCheck={false}
+            autoCapitalize="off"
+            autoComplete="off"
+            disabled={devices.length === 0 || starting}
+          />
+          {devices.length > 1 && (
+            <select
+              className="launcher-machine"
+              value={machine}
+              onChange={(event) => setMachine(event.target.value)}
+              aria-label="Machine to run it on"
+            >
+              {devices.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.label}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="submit"
+            className="launcher-go"
+            disabled={devices.length === 0 || starting || !draft.trim()}
+          >
+            <Plus size={15} weight="bold" />
+            {starting ? "Starting" : "Start"}
+          </button>
+        </form>
+
+        {devices.length === 0 && (
+          <p className="launcher-hint">
+            No linked machine yet. Run <code>shell login</code>, then{" "}
+            <code>shell agent</code> on the machine you want to drive from here.
+          </p>
+        )}
+
+        {notice && (
+          <div className="sessions-alert">
+            <Alert tone="success">{notice}</Alert>
+          </div>
+        )}
+        {error && (
+          <div className="sessions-alert">
+            <Alert tone="error">{error}</Alert>
+          </div>
+        )}
 
         {sessions === null ? (
           <div className="sessions-skeleton" aria-hidden="true">
@@ -152,12 +271,10 @@ export function Workspace() {
             <p>No sessions yet.</p>
             <ol>
               <li>
-                Run <code>shell login</code> and approve this browser.
+                Run <code>shell agent</code> on a linked machine.
               </li>
-              <li>
-                Run <code>shell claude</code>, or any command you want to share.
-              </li>
-              <li>It appears here within a few seconds.</li>
+              <li>Type a command above and press Start.</li>
+              <li>It opens here as a tab you can type into.</li>
             </ol>
           </div>
         ) : (
@@ -168,7 +285,9 @@ export function Workspace() {
                 sessions={live}
                 now={now}
                 live
+                killing={killing}
                 onOpen={(session) => dispatch({ type: "open", session })}
+                onKill={handleKill}
               />
             )}
             {finished.length > 0 && (
@@ -177,7 +296,9 @@ export function Workspace() {
                 sessions={finished}
                 now={now}
                 live={false}
+                killing={killing}
                 onOpen={(session) => dispatch({ type: "open", session })}
+                onKill={handleKill}
               />
             )}
           </>
@@ -192,13 +313,17 @@ function SessionGroup({
   sessions,
   now,
   live,
+  killing,
   onOpen,
+  onKill,
 }: {
   heading: string;
   sessions: SessionRecord[];
   now: number;
   live: boolean;
+  killing: string;
   onOpen: (session: SessionRecord) => void;
+  onKill: (session: SessionRecord) => void;
 }) {
   return (
     <section className="sessions-group">
@@ -210,10 +335,7 @@ function SessionGroup({
             className={live ? "session is-openable" : "session"}
             data-live={live}
           >
-            {/*
-              The row is the button. A finished session has nothing to attach
-              to, so only a running one opens.
-            */}
+            {/* The whole row opens the session; the buttons are the same act. */}
             <button
               type="button"
               className="session-main session-open-row"
@@ -233,18 +355,31 @@ function SessionGroup({
                 {!live && session.exitCode !== undefined ? ` · exit ${session.exitCode}` : ""}
               </span>
             </button>
+
             <div className="session-actions">
-              <CopyLink url={session.shareUrl} />
-              <a
-                className="session-open"
-                href={session.shareUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                onClick={(event) => event.stopPropagation()}
-                title="Open in a new tab, outside the app"
-              >
-                <ArrowSquareOut size={15} weight="bold" />
-              </a>
+              {live ? (
+                <>
+                  <button
+                    type="button"
+                    className="session-action is-primary"
+                    onClick={() => onOpen(session)}
+                  >
+                    <TerminalIcon size={15} weight="bold" />
+                    Open
+                  </button>
+                  <CopyLink url={session.shareUrl} />
+                  <button
+                    type="button"
+                    className="session-action"
+                    onClick={() => void onKill(session)}
+                    disabled={killing === session.id}
+                  >
+                    {killing === session.id ? "Stopping" : "Stop"}
+                  </button>
+                </>
+              ) : (
+                <CopyLink url={session.shareUrl} />
+              )}
             </div>
           </li>
         ))}

@@ -395,3 +395,118 @@ describe("linked machines", () => {
     expect(result.status).toBe(404);
   });
 });
+
+describe("driving a machine from the browser", () => {
+  async function withDevice() {
+    const tokens = await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    return { tokens, deviceId: listed.body.devices[0].id as string };
+  }
+
+  it("queues a start for a machine and hands it to that machine's agent", async () => {
+    const { tokens, deviceId } = await withDevice();
+
+    const queued = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+    expect(queued.status).toBe(202);
+
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    expect(claimed.body.commands).toHaveLength(1);
+    expect(claimed.body.commands[0]).toMatchObject({ kind: "start", command: "top" });
+  });
+
+  it("hands a command out only once, so two agents cannot both run it", async () => {
+    const { tokens, deviceId } = await withDevice();
+    await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+
+    const first = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const second = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    expect(first.body.commands).toHaveLength(1);
+    expect(second.body.commands).toEqual([]);
+  });
+
+  it("refuses a machine that is not yours", async () => {
+    const { deviceId } = await withDevice();
+    const result = await call("POST", "/api/commands", {
+      auth: await idToken({ sub: "uid-2" }),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+    expect(result.status).toBe(404);
+  });
+
+  it("refuses an empty or oversized command", async () => {
+    const { deviceId } = await withDevice();
+    for (const command of ["", "   ", "x".repeat(501)]) {
+      const result = await call("POST", "/api/commands", {
+        auth: await idToken(),
+        body: { device_id: deviceId, kind: "start", command },
+      });
+      expect(result.status).toBe(400);
+    }
+  });
+
+  it("will not queue a kill for another account's session", async () => {
+    const { tokens, deviceId } = await withDevice();
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        command: "top",
+      },
+    });
+
+    const result = await call("POST", "/api/commands", {
+      auth: await idToken({ sub: "uid-2" }),
+      body: {
+        device_id: deviceId,
+        kind: "kill",
+        session_id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+      },
+    });
+    expect(result.status).toBe(404);
+  });
+
+  it("rejects an unknown command kind", async () => {
+    const { deviceId } = await withDevice();
+    const result = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "rm -rf" },
+    });
+    expect(result.status).toBe(400);
+  });
+
+  it("accepts a completion report from the machine that claimed it", async () => {
+    const { tokens, deviceId } = await withDevice();
+    await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const id = claimed.body.commands[0].id;
+
+    const done = await call("POST", `/api/agent/commands/${id}`, {
+      auth: tokens.access_token,
+      body: {},
+    });
+    expect(done.status).toBe(200);
+
+    /* Reporting twice is not an error the agent should have to reason about. */
+    const again = await call("POST", `/api/agent/commands/${id}`, {
+      auth: tokens.access_token,
+      body: {},
+    });
+    expect(again.status).toBe(404);
+  });
+
+  it("refuses agent routes without a machine token", async () => {
+    await withDevice();
+    expect((await call("GET", "/api/agent/commands")).status).toBe(401);
+    expect((await call("POST", "/api/agent/commands/cmd_x", { body: {} })).status).toBe(401);
+  });
+});

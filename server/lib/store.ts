@@ -52,13 +52,34 @@ export interface SessionRecord {
   exitCode?: number;
 }
 
+/**
+ * Work the web app asks a machine to do. A machine only sees these while it is
+ * running `shell agent`, which is how a person opts a machine in to being
+ * driven from the browser.
+ */
+export interface AgentCommand {
+  id: string;
+  uid: string;
+  deviceId: string;
+  kind: "start" | "kill";
+  /** For "start": the command line to wrap. */
+  command?: string;
+  /** For "kill": the session to stop. */
+  sessionId?: string;
+  createdAt: number;
+  claimedAt?: number;
+  doneAt?: number;
+  error?: string;
+}
+
 interface Shape {
   codes: AuthorizationCode[];
   tokens: CliToken[];
   sessions: SessionRecord[];
+  commands: AgentCommand[];
 }
 
-const EMPTY: Shape = { codes: [], tokens: [], sessions: [] };
+const EMPTY: Shape = { codes: [], tokens: [], sessions: [], commands: [] };
 
 /**
  * File-backed store for local development. Every read and write goes through
@@ -105,6 +126,7 @@ export class Store {
         codes: parsed.codes ?? [],
         tokens: parsed.tokens ?? [],
         sessions: parsed.sessions ?? [],
+        commands: parsed.commands ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -229,9 +251,53 @@ export class Store {
       .sort((a, b) => b.startedAt - a.startedAt);
   }
 
+  putCommand(command: AgentCommand): void {
+    this.data.commands.push(command);
+    this.flush();
+  }
+
+  /*
+   * Hands a machine everything queued for it and marks it claimed in the same
+   * step, so two agents on one device cannot both run the same command.
+   */
+  claimCommands(deviceId: string, now = Date.now()): AgentCommand[] {
+    const claimed = this.data.commands.filter(
+      (entry) => entry.deviceId === deviceId && !entry.claimedAt,
+    );
+    if (claimed.length === 0) return [];
+    for (const entry of claimed) entry.claimedAt = now;
+    this.flush();
+    return claimed;
+  }
+
+  finishCommand(deviceId: string, id: string, error: string | undefined, now = Date.now()): boolean {
+    const entry = this.data.commands.find(
+      (candidate) => candidate.id === id && candidate.deviceId === deviceId,
+    );
+    if (!entry || entry.doneAt) return false;
+    entry.doneAt = now;
+    if (error) entry.error = error;
+    this.flush();
+    return true;
+  }
+
+  listCommands(uid: string, limit = 20): AgentCommand[] {
+    return this.data.commands
+      .filter((entry) => entry.uid === uid)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  }
+
   purgeExpired(now = Date.now()): void {
     const before = this.data.codes.length;
     this.data.codes = this.data.codes.filter((entry) => entry.expiresAt > now);
-    if (this.data.codes.length !== before) this.flush();
+    /* Finished commands are only kept long enough to be reported back. */
+    const commandsBefore = this.data.commands.length;
+    this.data.commands = this.data.commands.filter(
+      (entry) => !entry.doneAt || now - entry.doneAt < 10 * 60_000,
+    );
+    if (this.data.codes.length !== before || this.data.commands.length !== commandsBefore) {
+      this.flush();
+    }
   }
 }
