@@ -498,16 +498,16 @@
 
 .account-row {
   display: grid;
-  padding: 15px 0;
+  padding: 18px 0;
   border-bottom: 1px solid var(--line);
-  gap: 4px 24px;
-  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 5px 28px;
+  grid-template-columns: 160px minmax(0, 1fr);
   align-items: baseline;
 }
 
 .account-row dt {
   color: var(--faint);
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 520;
 }
 
@@ -516,7 +516,7 @@
   margin: 0;
   color: var(--ink-soft);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 14.5px;
 }
 
 .account-actions {
@@ -851,15 +851,15 @@
 }
 
 .sessions-group {
-  margin-top: 34px;
+  margin-top: 38px;
 }
 
 .sessions-group h2 {
   margin: 0 0 2px;
   color: var(--faint);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 560;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
@@ -872,7 +872,7 @@
 
 .session {
   display: flex;
-  padding: 16px 0;
+  padding: 19px 0;
   border-bottom: 1px solid var(--line);
   align-items: center;
   justify-content: space-between;
@@ -888,7 +888,7 @@
   overflow: hidden;
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 14px;
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -908,9 +908,9 @@
 
 .session-meta {
   display: block;
-  margin-top: 5px;
+  margin-top: 6px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 .session-actions {
@@ -922,8 +922,8 @@
 
 .session-copy {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
   background: var(--white);
@@ -940,16 +940,16 @@
 
 .session-open {
   display: inline-flex;
-  height: 32px;
-  padding: 0 13px;
+  height: 38px;
+  padding: 0 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
   background: var(--white);
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 520;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   transition: border-color 160ms var(--ease), transform 160ms var(--ease);
 }
 
@@ -960,7 +960,7 @@
 }
 
 .sessions-empty {
-  padding: 30px 32px;
+  padding: 34px 36px;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   margin-top: 30px;
@@ -970,16 +970,16 @@
 .sessions-empty p {
   margin: 0;
   color: var(--ink);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 500;
 }
 
 .sessions-empty ol {
-  padding-left: 18px;
-  margin: 14px 0 0;
+  padding-left: 20px;
+  margin: 16px 0 0;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.9;
+  font-size: 15.5px;
+  line-height: 1.95;
 }
 
 .sessions-skeleton {
@@ -989,7 +989,7 @@
 }
 
 .sessions-skeleton span {
-  height: 66px;
+  height: 76px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(90deg, transparent, rgb(0 0 0 / 3%), transparent);
   background-size: 300% 100%;
@@ -1005,15 +1005,15 @@
 }
 
 .sessions-note {
-  max-width: 62ch;
-  padding: 14px 16px;
+  max-width: 66ch;
+  padding: 16px 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   margin-top: 28px;
   background: var(--white);
   color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.65;
 }
 
 .sessions-foot {

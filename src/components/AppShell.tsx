@@ -35,7 +35,7 @@ function LinkHint() {
         <code>
           <span aria-hidden="true">$</span> {LINK_COMMAND}
         </code>
-        {copied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
+        {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
       </button>
     </div>
   );
@@ -64,7 +64,9 @@ function AccountMenu() {
   }, [open]);
 
   const email = user?.email ?? "";
-  const initial = (user?.displayName || email || "?").trim().charAt(0).toUpperCase();
+  /* The rail is narrow, so the chip leads with whichever label is shorter. */
+  const label = user?.displayName || email;
+  const initial = (label || "?").trim().charAt(0).toUpperCase();
 
   return (
     <div className="account-menu" ref={wrapper}>
@@ -78,7 +80,7 @@ function AccountMenu() {
         <span className="account-avatar" aria-hidden="true">
           {initial}
         </span>
-        <span className="account-email">{email}</span>
+        <span className="account-email">{label}</span>
       </button>
 
       {open && (
@@ -86,7 +88,7 @@ function AccountMenu() {
           <p className="account-pop-name">{user?.displayName || "Signed in"}</p>
           <p className="account-pop-email">{email}</p>
           <Link to="/account" role="menuitem" onClick={() => setOpen(false)}>
-            <User size={15} />
+            <User size={16} />
             Account
           </Link>
           <button
@@ -98,7 +100,7 @@ function AccountMenu() {
               navigate("/login", { replace: true });
             }}
           >
-            <SignOut size={15} />
+            <SignOut size={16} />
             Sign out
           </button>
         </div>
@@ -129,21 +131,24 @@ export function AppShell({ title, aside, children }: AppShellProps) {
               to={to}
               className={({ isActive }) => (isActive ? "rail-link is-active" : "rail-link")}
             >
-              <Icon size={17} />
+              <Icon size={19} />
               {label}
             </NavLink>
           ))}
         </nav>
 
         <LinkHint />
+
+        <div className="rail-foot">
+          <AccountMenu />
+        </div>
       </aside>
 
       <div className="shell-main">
         <header className="topbar">
-          <h1 className="topbar-title">{title}</h1>
-          <div className="topbar-right">
-            {aside}
-            <AccountMenu />
+          <div className="topbar-inner">
+            <h1 className="topbar-title">{title}</h1>
+            <div className="topbar-right">{aside}</div>
           </div>
         </header>
 

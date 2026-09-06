@@ -60,11 +60,14 @@ reproduced in that commit message.
 Signing in lands on `/sessions`, the page with something on it. `/` and any
 unknown path redirect to `/login`.
 
-The three signed-in pages share `AppShell`: a fixed rail on the left carrying
-the nav and the one command a new machine needs, and a topbar carrying the page
-title, a live count, and the account menu. Only the content column scrolls.
-Below 900px the rail becomes a horizontal strip, which three items fit without
-needing a drawer.
+The three signed-in pages share `AppShell`: a rail on the left carrying the
+nav, the one command a new machine needs, and the account block at its foot
+behind a separator; and a topbar carrying the page title and a live count. Only
+the content column scrolls, and the topbar's inner measure matches the content
+column so their right edges line up.
+
+Below 900px the rail becomes a horizontal strip with the account moved beside
+it. Three items fit without a drawer, so there is no menu state to manage.
 
 `/cli/authorize` carries its own guard rather than `RequireAuth`, because it
 has to send a signed-out user back to that exact URL with its query string

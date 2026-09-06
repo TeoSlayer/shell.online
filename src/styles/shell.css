@@ -6,7 +6,7 @@
 .shell {
   display: grid;
   min-height: 100dvh;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 264px minmax(0, 1fr);
 }
 
 .rail {
@@ -14,14 +14,13 @@
   top: 0;
   display: flex;
   height: 100dvh;
-  padding: 22px 16px 20px;
-  border-right: 1px solid var(--line);
+  padding: 24px 14px 14px;
   background: var(--paper);
   flex-direction: column;
 }
 
 .rail-head {
-  padding: 0 8px 24px;
+  padding: 0 10px 26px;
 }
 
 .rail-nav {
@@ -33,14 +32,14 @@
 
 .rail-link {
   display: flex;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 480;
-  height: 38px;
+  height: 44px;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   transition: background 160ms var(--ease), color 160ms var(--ease);
 }
 
@@ -63,13 +62,13 @@
 /* ---- Sidebar footer: the one command a new machine needs ---- */
 
 .rail-hint {
-  padding: 0 6px;
+  padding: 0 8px 16px;
 }
 
 .rail-hint p {
-  margin: 0 0 8px;
+  margin: 0 0 9px;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 560;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -78,7 +77,7 @@
 .rail-command {
   display: flex;
   width: 100%;
-  padding: 10px 11px;
+  padding: 12px 12px;
   border: 1px solid #2a2e25;
   border-radius: var(--radius-control);
   background: var(--terminal);
@@ -99,7 +98,7 @@
   overflow: hidden;
   color: var(--terminal-ink);
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -115,6 +114,7 @@
 .shell-main {
   display: flex;
   min-width: 0;
+  border-left: 1px solid var(--line);
   flex-direction: column;
 }
 
@@ -123,23 +123,29 @@
   top: 0;
   z-index: 20;
   display: flex;
-  height: 64px;
-  padding: 0 clamp(20px, 3vw, 36px);
+  height: 74px;
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   backdrop-filter: blur(8px);
+  flex: none;
+}
+
+/* Same measure and padding as .shell-content, so the two edges line up. */
+.topbar-inner {
+  display: flex;
+  width: min(960px, 100%);
+  padding: 0 clamp(22px, 3vw, 40px);
   align-items: center;
   justify-content: space-between;
-  flex: none;
   gap: 18px;
 }
 
 .topbar-title {
   margin: 0;
   color: var(--ink);
-  font-size: 17px;
-  font-weight: 540;
-  letter-spacing: -0.03em;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
 }
 
 .topbar-right {
@@ -150,20 +156,20 @@
 
 .topbar-count {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13.5px;
   white-space: nowrap;
 }
 
 .topbar-count.is-live {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 /* The single status dot in the app. It reports real running state. */
 .topbar-count.is-live i {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #4f9d43;
   box-shadow: 0 0 0 4px rgb(110 208 97 / 16%);
@@ -173,22 +179,29 @@
    Account menu
    --------------------------------------------------------------- */
 
+.rail-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 .account-menu {
   position: relative;
 }
 
+/* Full width of the rail, so it reads as a row rather than a floating pill. */
 .account-chip {
   display: flex;
-  max-width: 300px;
-  padding: 5px 10px 5px 5px;
+  width: 100%;
+  padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-control);
   background: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 13.5px;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  text-align: left;
   transition: border-color 160ms var(--ease), background 160ms var(--ease);
 }
 
@@ -201,29 +214,32 @@
 
 .account-avatar {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--terminal);
   color: var(--acid);
   flex: none;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   place-items: center;
 }
 
 .account-email {
   overflow: hidden;
+  color: var(--ink-soft);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .account-pop {
   position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
   z-index: 40;
-  width: 232px;
+  width: 100%;
+  min-width: 216px;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
@@ -234,7 +250,7 @@
 .account-pop-name {
   margin: 6px 10px 0;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 540;
 }
 
@@ -242,7 +258,7 @@
   overflow: hidden;
   margin: 2px 10px 8px;
   color: var(--faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
   text-overflow: ellipsis;
   border-bottom: 1px solid var(--line);
   padding-bottom: 9px;
@@ -259,8 +275,8 @@
   color: var(--ink-soft);
   cursor: pointer;
   font-family: inherit;
-  font-size: 13.5px;
-  height: 36px;
+  font-size: 14.5px;
+  height: 40px;
   align-items: center;
   gap: 9px;
   text-align: left;
@@ -278,41 +294,42 @@
    --------------------------------------------------------------- */
 
 .shell-content {
-  width: min(880px, 100%);
-  padding: 30px clamp(20px, 3vw, 36px) 72px;
+  width: min(960px, 100%);
+  min-width: 0;
+  padding: 34px clamp(22px, 3vw, 40px) 80px;
   flex: 1;
 }
 
 .page-dek {
-  max-width: 60ch;
+  max-width: 62ch;
   margin: 0 0 4px;
   color: var(--muted);
-  font-size: 14.5px;
+  font-size: 16px;
   line-height: 1.6;
 }
 
 .device-label {
   display: flex;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 500;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
 
 .device-unlink {
   width: auto;
-  height: 32px;
-  padding: 0 14px;
-  font-size: 12.5px;
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13.5px;
 }
 
 .account-verified,
 .account-unverified {
   display: inline-flex;
-  margin-left: 9px;
+  margin-left: 10px;
   font-family: var(--sans);
-  font-size: 11.5px;
+  font-size: 12.5px;
   align-items: center;
   gap: 4px;
 }
@@ -332,7 +349,7 @@
 
 @media (max-width: 900px) {
   .shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rail {
@@ -367,9 +384,43 @@
     display: none;
   }
 
-  .topbar {
-    height: 58px;
+  /* The account moves back beside the nav, since the rail has no foot here. */
+  .rail-foot {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: auto;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .rail {
+    position: relative;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .shell-main {
+    border-left: 0;
+  }
+
+  .topbar-inner {
+    width: 100%;
     padding: 0 18px;
+  }
+
+  .account-chip {
+    width: auto;
+    padding: 4px;
+  }
+
+  .account-pop {
+    right: 0;
+    left: auto;
+    width: 232px;
+  }
+
+  .topbar {
+    height: 64px;
   }
 
   .account-email {
