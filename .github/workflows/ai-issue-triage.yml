@@ -1,0 +1,115 @@
+name: AI issue triage
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  models: read
+
+concurrency:
+  group: ai-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  assess:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted moderation policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Capture untrusted issue data
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const fs = require("node:fs");
+            const issue = context.payload.issue;
+            fs.writeFileSync("issue-context.json", JSON.stringify({
+              number: issue.number,
+              title: issue.title,
+              body: issue.body || "",
+              author_association: issue.author_association,
+              labels: issue.labels.map(label => typeof label === "string" ? label : label.name),
+            }, null, 2));
+
+      - name: Assess project relevance
+        id: assessment
+        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        with:
+          prompt-file: .github/prompts/issue-assessment.prompt.yml
+          file_input: |
+            issue: ./issue-context.json
+
+      - name: Independently verify deletion
+        id: verifier
+        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        with:
+          prompt-file: .github/prompts/issue-removal-verifier.prompt.yml
+          file_input: |
+            issue: ./issue-context.json
+            assessment: ${{ steps.assessment.outputs.response-file }}
+
+      - name: Apply triage decision
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          ASSESSMENT_FILE: ${{ steps.assessment.outputs.response-file }}
+          VERIFIER_FILE: ${{ steps.verifier.outputs.response-file }}
+        with:
+          script: |
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const {pathToFileURL} = require("node:url");
+            const policy = await import(pathToFileURL(path.join(process.env.GITHUB_WORKSPACE, ".github/scripts/moderation.mjs")));
+            const primary = policy.parseModelJson(fs.readFileSync(process.env.ASSESSMENT_FILE, "utf8"));
+            const verifier = policy.parseModelJson(fs.readFileSync(process.env.VERIFIER_FILE, "utf8"));
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            if (policy.shouldDeleteIssue(primary, verifier, issue.author_association)) {
+              core.notice(`Deleting issue #${issue.number}: ${primary.classification} (${primary.confidence}/${verifier.confidence})`);
+              try {
+                await github.graphql(`mutation($issueId: ID!) {
+                  deleteIssue(input: {issueId: $issueId}) { clientMutationId }
+                }`, {issueId: issue.node_id});
+              } catch (error) {
+                core.warning(`GitHub denied permanent deletion; closing and locking instead: ${error.message}`);
+                await github.rest.issues.update({owner, repo, issue_number: issue.number, state: "closed", state_reason: "not_planned"});
+                await github.rest.issues.lock({owner, repo, issue_number: issue.number, lock_reason: primary.classification === "spam" ? "spam" : "off-topic"});
+              }
+              return;
+            }
+
+            const label = policy.issueLabel(primary);
+            const colors = {
+              "ai: actionable": "1f883d",
+              "needs-info": "d4c5f9",
+              "moderation: unrelated": "6e7781",
+              "moderation: spam": "b60205",
+              "ai: review-needed": "fbca04",
+            };
+            try {
+              await github.rest.issues.createLabel({owner, repo, name: label, color: colors[label]});
+            } catch (error) {
+              if (error.status !== 422) throw error;
+            }
+            await github.rest.issues.addLabels({owner, repo, issue_number: issue.number, labels: [label]});
+
+            const missing = primary.missing_information?.length
+              ? `\n\nMissing information:\n${primary.missing_information.map(item => `- ${item}`).join("\n")}`
+              : "";
+            const marker = "<!-- shell-online-ai-triage -->";
+            const body = `${marker}\n**AI intake:** ${primary.summary}\n\n${primary.reason}${missing}\n\n<sub>This is an automated intake assessment. A maintainer can override it.</sub>`;
+            const comments = await github.paginate(github.rest.issues.listComments, {owner, repo, issue_number: issue.number, per_page: 100});
+            const previous = comments.find(comment => comment.user?.type === "Bot" && comment.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: previous.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number: issue.number, body});
+            }

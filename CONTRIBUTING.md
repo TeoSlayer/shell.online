@@ -27,6 +27,10 @@ go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 Keep changes focused, add regression tests for fixes, and describe the user-visible behavior and security implications. By contributing, you agree that your contribution is licensed under the repository's MIT License.
 
+New issues and pull requests receive an automated, LLM-assisted intake review. Two conservative reviews must independently agree with at least 98% confidence before an external issue is deleted or an unrelated pull request is closed. Product criticism and imperfect but relevant changes remain in scope; advertising, scams, unrelated content, and content-free generated noise do not. Maintainer submissions are never removed automatically. The model cannot execute submitted code, merge changes, or approve a pull request, and maintainers can override every non-deletion decision.
+
+The pull-request review also checks the submitted diff for concrete problems and proposes a changelog entry. User-visible changes should update [`CHANGELOG.md`](CHANGELOG.md); published GitHub releases receive a generated summary that preserves any human-written release notes.
+
 Documentation copy lives in [`docs/content.json`](docs/content.json) and renders both the current site and tagged, release-selectable docs. Keep its version equal to `package.json`, preserve the schema, and run the SEO test through `npm run check` after editing it.
 
 E2EE is the default product invariant for new CLI sessions; only an explicit `--no-e2ee` may opt out. Changes to session startup, structured output, persistent state, or Docker entrypoints must preserve the browser-password flow, prevent accidental downgrade, and include regression tests. Update the built-in CLI help, README, security policy, agent skill, `public/llms.txt`, and versioned documentation together when that flow changes.
