@@ -13,7 +13,7 @@ messages:
       <untrusted_pull_request>
       {{pull_request}}
       </untrusted_pull_request>
-model: gpt-4.1
+model: ""
 modelParameters:
   maxCompletionTokens: 1600
   temperature: 0

@@ -9,7 +9,7 @@ messages:
       <untrusted_release_context>
       {{release}}
       </untrusted_release_context>
-model: gpt-4.1
+model: ""
 modelParameters:
   maxCompletionTokens: 1200
   temperature: 0
