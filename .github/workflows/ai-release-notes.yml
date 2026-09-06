@@ -102,8 +102,8 @@ jobs:
             const fs = require("node:fs");
             const path = require("node:path");
             const {pathToFileURL} = require("node:url");
-            const {parseModelJson} = await import(pathToFileURL(path.join(process.env.GITHUB_WORKSPACE, ".github/scripts/moderation.mjs")));
-            const notes = parseModelJson(fs.readFileSync(process.env.NOTES_FILE, "utf8"));
+            const policy = await import(pathToFileURL(path.join(process.env.GITHUB_WORKSPACE, ".github/scripts/moderation.mjs")));
+            const notes = policy.validateReleaseNotes(policy.parseModelJson(fs.readFileSync(process.env.NOTES_FILE, "utf8")));
             const release = await github.rest.repos.getRelease({...context.repo, release_id: Number(process.env.RELEASE_ID)});
             const section = (title, items) => items?.length ? `\n### ${title}\n\n${items.map(item => `- ${item}`).join("\n")}\n` : "";
             const generated = [

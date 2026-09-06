@@ -8,7 +8,7 @@ messages:
       "unrelated" means the issue has no meaningful connection to this project or its operation. "spam" means advertising, bulk noise, scams, harassment without a project problem, or machine-generated filler. "needs_information" means it could be relevant but lacks enough detail. "actionable" means it states a bug, scoped improvement, documentation problem, or useful project question.
   - role: user
     content: |-
-      Assess this issue. Return only JSON matching the schema.
+      Assess this issue. Return only a JSON object with exactly these keys: classification (actionable, needs_information, unrelated, or spam), confidence (number 0 through 1), technical_substance (boolean), summary (string), reason (string), and missing_information (array of strings). Do not wrap it in Markdown.
 
       <untrusted_issue>
       {{issue}}

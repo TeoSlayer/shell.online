@@ -106,8 +106,8 @@ jobs:
             const path = require("node:path");
             const {pathToFileURL} = require("node:url");
             const policy = await import(pathToFileURL(path.join(process.env.GITHUB_WORKSPACE, ".github/scripts/moderation.mjs")));
-            const primary = policy.parseModelJson(fs.readFileSync(process.env.ASSESSMENT_FILE, "utf8"));
-            const verifier = policy.parseModelJson(fs.readFileSync(process.env.VERIFIER_FILE, "utf8"));
+            const primary = policy.validatePullRequestAssessment(policy.parseModelJson(fs.readFileSync(process.env.ASSESSMENT_FILE, "utf8")));
+            const verifier = policy.validatePullRequestVerifier(policy.parseModelJson(fs.readFileSync(process.env.VERIFIER_FILE, "utf8")));
             const pr = context.payload.pull_request;
             const owner = context.repo.owner;
             const repo = context.repo.repo;

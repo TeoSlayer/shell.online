@@ -4,6 +4,8 @@ import {
   parseModelJson,
   shouldClosePullRequest,
   shouldDeleteIssue,
+  validateIssueAssessment,
+  validateReleaseNotes,
 } from "./moderation.mjs";
 
 const issue = (overrides = {}) => ({
@@ -24,6 +26,19 @@ const prVerifier = (overrides = {}) => ({decision: "close", confidence: 0.99, ..
 test("parses plain and fenced JSON model responses", () => {
   assert.deepEqual(parseModelJson('{"ok":true}'), {ok: true});
   assert.deepEqual(parseModelJson('```json\n{"ok":true}\n```'), {ok: true});
+});
+
+test("rejects incomplete model output before it can mutate GitHub", () => {
+  assert.throws(() => validateIssueAssessment({}), /classification/);
+  assert.throws(() => validateReleaseNotes({headline: "undefined"}), /summary/);
+  assert.deepEqual(validateReleaseNotes({
+    headline: "Portable PTY checks",
+    summary: "The release expands runtime validation.",
+    highlights: [],
+    fixes: [],
+    compatibility: ["Linux ARM"],
+    verification: ["QEMU"],
+  }).verification, ["QEMU"]);
 });
 
 test("deletion requires two high-confidence votes and no technical substance", () => {

@@ -8,7 +8,7 @@ messages:
       Produce specific findings with file paths when possible. A user-visible behavior change normally needs a CHANGELOG.md entry; tests/docs/build-only changes may not. Supply a concise changelog entry even when one already exists so maintainers can compare it.
   - role: user
     content: |-
-      Review this pull request. Return only JSON matching the schema.
+      Review this pull request. Return only a JSON object with exactly these keys: classification (relevant, needs_changes, unrelated, or spam), confidence (number 0 through 1), technical_substance (boolean), summary (string), reason (string), findings (array of objects containing severity, path, and message), changelog_required (boolean), changelog_present (boolean), and changelog_entry (string, empty only when genuinely inapplicable). Finding severity must be blocking, important, or suggestion. Do not wrap it in Markdown.
 
       <untrusted_pull_request>
       {{pull_request}}
