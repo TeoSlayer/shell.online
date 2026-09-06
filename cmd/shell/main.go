@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"shell.online/internal/account"
 	"shell.online/internal/api"
 	"shell.online/internal/e2ee"
 )
@@ -202,6 +203,19 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		}()
 	}
 
+	// Publish to the linked account, if this machine has one. Nothing below is
+	// fatal: sharing a terminal must not depend on the accounts service.
+	link := openSessionLink(signalContext, stderr)
+	link.Register(signalContext, account.SessionInput{
+		ID:         session.ID,
+		ShareURL:   session.ShareURL,
+		Command:    displayCommand(launch.DisplayArguments),
+		ReadOnly:   session.ReadOnly,
+		Encrypted:  session.Encrypted,
+		Persistent: session.Persistent,
+		StartedAt:  processStartedAt.UnixMilli(),
+	})
+
 	if !isBackgroundChild() && *jsonOutput {
 		event := map[string]any{
 			"type":       "session",
@@ -258,6 +272,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		onStarted,
 		control,
 	)
+	// The share is over once the process is; mark it closed in the account.
+	link.Close(&exitCode)
+
 	if readyFile != nil {
 		startupError := fmt.Sprintf("task exited before its share became usable (exit code %d); no link was printed", exitCode)
 		var reportedExitCode *int

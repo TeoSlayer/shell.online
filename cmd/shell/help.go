@@ -32,6 +32,12 @@ The guided flow
   6. Use shell kill <ID> to stop the process and close its link.
      A share also closes automatically when its task exits.
 
+Your account (optional)
+  shell login                      Link this machine so your shares appear in your account
+  shell login --no-browser         Print the sign-in URL instead of opening a browser
+  shell whoami                     Show which account this machine is linked to
+  shell logout                     Unlink this machine and revoke its token
+
 Manage sessions
   shell list                       Show uptime, relay status, URL, and browser password
   shell list --json                Emit sessions and relay status as JSON
@@ -55,6 +61,7 @@ More guidance
   shell help attach
   shell help list
   shell help kill
+  shell help login
   shell help e2ee
   shell help docker
   shell help platforms
@@ -68,7 +75,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|e2ee|docker|platforms|reference]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|login|e2ee|docker|platforms|reference]")
 		return 2
 	}
 
@@ -120,6 +127,33 @@ Detaching does not stop the process or disable the browser link. While attached,
 the terminal title keeps the Ctrl-X D reminder visible. Ctrl-] is also supported as
 a legacy alternative. Ctrl-Z only suspends the local shell client; it does not detach.
 `)
+	case "login", "logout", "whoami", "account":
+		fmt.Fprint(stdout, `shell login
+
+Linking a machine to an account is optional. The CLI works exactly the same
+without it; linking only adds a list of your shares at shell.online.
+
+  1. Run shell login. A browser opens on the approval screen.
+     On a headless box use shell login --no-browser and open the printed URL
+     yourself, on any machine.
+  2. Approve the request. The browser hands a one-time code back to a listener
+     bound to 127.0.0.1, so the code never leaves this computer.
+  3. Run shell as usual. Each share is published to your account as it starts,
+     and marked closed when the process exits.
+
+What is published
+  The share URL, the command name, the host name, and the timing. Never the
+  terminal contents, and never the E2EE key: it lives in the URL fragment,
+  which is stripped before the URL is sent.
+
+  shell whoami                     Show the linked account
+  shell logout                     Unlink this machine and revoke its token
+
+Credentials live in your user config directory, readable only by you. Set
+SHELL_ONLINE_CONFIG to keep them somewhere else.
+`)
+		return 0
+
 	case "list", "ps":
 		fmt.Fprint(stdout, `List active sessions
 

@@ -134,3 +134,54 @@ func TestE2EEFlagsRejectAmbiguousOrUnsafeCombinations(t *testing.T) {
 		t.Fatalf("password conflict error = %q", stderr.String())
 	}
 }
+
+func TestHelpMentionsTheAccountCommands(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if exitCode := run([]string{"help"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run(help) = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, expected := range []string{
+		"shell login",
+		"shell whoami",
+		"shell logout",
+		"--no-browser",
+	} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Errorf("help output does not mention %q", expected)
+		}
+	}
+	// Linking is optional; the overview must not imply an account is required.
+	if !strings.Contains(stdout.String(), "Your account (optional)") {
+		t.Error("help should mark the account section optional")
+	}
+}
+
+func TestHelpLoginTopicExplainsWhatIsPublished(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if exitCode := run([]string{"help", "login"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run(help login) = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, expected := range []string{
+		"--no-browser",
+		"127.0.0.1",
+		"What is published",
+		"never the E2EE key",
+		"SHELL_ONLINE_CONFIG",
+	} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Errorf("help login does not contain %q", expected)
+		}
+	}
+}
+
+func TestHelpLoginTopicIsReachableFromEveryAccountVerb(t *testing.T) {
+	for _, verb := range []string{"login", "logout", "whoami", "account"} {
+		var stdout, stderr bytes.Buffer
+		if exitCode := run([]string{"help", verb}, &stdout, &stderr); exitCode != 0 {
+			t.Fatalf("run(help %s) = %d", verb, exitCode)
+		}
+		if !strings.Contains(stdout.String(), "shell login") {
+			t.Errorf("help %s did not reach the login topic", verb)
+		}
+	}
+}

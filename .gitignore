@@ -20,3 +20,7 @@ bin/
 .idea/
 .vscode/
 coverage/
+
+wrangler.local.jsonc
+.wrangler
+.gstack/

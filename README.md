@@ -99,6 +99,33 @@ E2EE is automatic: the CLI encrypts terminal frames before Cloudflare relays the
 
 Read the [security model](https://shell.online/security/), [E2EE guide](https://shell.online/e2ee/), or [private vulnerability policy](SECURITY.md) before sharing sensitive work.
 
+## Your account
+
+Linking a machine to an account is optional. The CLI works exactly the same
+without it; linking adds a list of your shares on the web.
+
+```sh
+shell login                 # opens a browser to approve this machine
+shell login --no-browser    # prints the URL instead, for headless boxes and CI
+shell whoami                # show the linked account
+shell logout                # unlink and revoke this machine's token
+```
+
+Login uses the OAuth 2.0 authorization code flow with PKCE and a loopback
+redirect (RFC 8252). The browser hands a one-time code back to a listener bound
+to `127.0.0.1`, so the code never leaves the machine, and it is useless without
+a verifier that is never transmitted. The CLI receives a scoped token that can
+only publish sessions, and that you can revoke per machine.
+
+After linking, each share is published as it starts and marked closed when the
+process exits. What is published: the share URL, the command name, the host
+name, and the timing. Never the terminal contents, and never the E2EE key,
+which lives in the URL fragment and is stripped before the URL is sent.
+
+Credentials are stored in your user config directory, readable only by you.
+Set `SHELL_ONLINE_CONFIG` to move them, `SHELL_ONLINE_ACCOUNTS` to point at
+another accounts service, and `SHELL_ONLINE_WEB` at another approval site.
+
 ## Agents
 
 Agents can create a share without interactive setup and return structured details to their operator:
