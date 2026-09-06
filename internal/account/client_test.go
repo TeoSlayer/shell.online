@@ -184,33 +184,6 @@ func TestRegisterSessionSendsTheMetadata(t *testing.T) {
 	}
 }
 
-func TestRegisterSessionStripsTheEncryptionFragment(t *testing.T) {
-	// The fragment carries the E2EE key. The accounts service must never see it.
-	var body map[string]any
-	service := httptest.NewServer(http.HandlerFunc(
-		func(writer http.ResponseWriter, request *http.Request) {
-			decodeJSON(t, request, &body)
-			writeJSON(writer, http.StatusCreated, map[string]any{})
-		}))
-	defer service.Close()
-
-	err := NewClient(service.URL, "test").RegisterSession(context.Background(), "sha_token", SessionInput{
-		ID:       "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
-		ShareURL: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t#k=SECRETKEYMATERIAL",
-		Command:  "claude",
-	})
-	if err != nil {
-		t.Fatalf("RegisterSession: %v", err)
-	}
-	shareURL, _ := body["share_url"].(string)
-	if strings.Contains(shareURL, "#") || strings.Contains(shareURL, "SECRETKEYMATERIAL") {
-		t.Fatalf("share_url leaked the fragment: %q", shareURL)
-	}
-	if shareURL != "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t" {
-		t.Fatalf("share_url = %q", shareURL)
-	}
-}
-
 func TestCloseSessionPatchesTheSession(t *testing.T) {
 	var method, path string
 	var body map[string]any
@@ -308,5 +281,67 @@ func TestClientSendsTheUserAgent(t *testing.T) {
 	}
 	if agent != "shell/1.2.3" {
 		t.Fatalf("User-Agent = %q", agent)
+	}
+}
+
+func TestSafeShareURLKeepsTheSaltFragment(t *testing.T) {
+	// The salt is not a secret. Without it the browser cannot derive the key
+	// from the password, so the link published to the account would be dead.
+	const withSalt = "https://shell.online/s/abc#salt=i6AaAzfYyklCDqgMRgEIDw"
+	if got := SafeShareURL(withSalt); got != withSalt {
+		t.Fatalf("SafeShareURL dropped the salt: %q", got)
+	}
+}
+
+func TestSafeShareURLStripsARawKeyFragment(t *testing.T) {
+	// "#key=" is the AES key itself. Publishing it would let the service
+	// decrypt the terminal, which is the whole point of E2EE.
+	got := SafeShareURL("https://shell.online/s/abc#key=AAAAAAAAAAAAAAAAAAAAAA")
+	if got != "https://shell.online/s/abc" {
+		t.Fatalf("SafeShareURL = %q, want the key removed", got)
+	}
+}
+
+func TestSafeShareURLStripsAnUnrecognisedFragment(t *testing.T) {
+	// Allowlist, not blocklist: a fragment form added later must be reviewed
+	// before it can be published, rather than leaking by default.
+	for _, shareURL := range []string{
+		"https://shell.online/s/abc#secret=xyz",
+		"https://shell.online/s/abc#saltier=xyz",
+		"https://shell.online/s/abc#",
+	} {
+		if got := SafeShareURL(shareURL); got != "https://shell.online/s/abc" {
+			t.Fatalf("SafeShareURL(%q) = %q, want the fragment removed", shareURL, got)
+		}
+	}
+}
+
+func TestSafeShareURLLeavesAPlainURLAlone(t *testing.T) {
+	const plain = "https://shell.online/s/abc"
+	if got := SafeShareURL(plain); got != plain {
+		t.Fatalf("SafeShareURL = %q, want it unchanged", got)
+	}
+}
+
+func TestRegisterSessionPublishesAWorkingEncryptedLink(t *testing.T) {
+	var body map[string]any
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			decodeJSON(t, request, &body)
+			writeJSON(writer, http.StatusCreated, map[string]any{})
+		}))
+	defer service.Close()
+
+	err := NewClient(service.URL, "test").RegisterSession(context.Background(), "sha_token", SessionInput{
+		ID:       "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+		ShareURL: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t#salt=i6AaAzfYyklCDqgMRgEIDw",
+		Command:  "claude",
+	})
+	if err != nil {
+		t.Fatalf("RegisterSession: %v", err)
+	}
+	shareURL, _ := body["share_url"].(string)
+	if !strings.Contains(shareURL, "#salt=") {
+		t.Fatalf("the published link cannot be opened without the salt: %q", shareURL)
 	}
 }

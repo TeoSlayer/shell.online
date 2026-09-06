@@ -182,13 +182,10 @@ type SessionInput struct {
 }
 
 // RegisterSession publishes a session so it appears in the account.
-//
-// The share URL is deliberately sent without its fragment: the E2EE key lives
-// in the fragment, and the accounts service has no business holding it.
 func (client *Client) RegisterSession(
 	ctx context.Context, accessToken string, input SessionInput,
 ) error {
-	input.ShareURL = stripFragment(input.ShareURL)
+	input.ShareURL = SafeShareURL(input.ShareURL)
 	_, err := client.do(ctx, http.MethodPost, "/api/sessions", accessToken, input)
 	return err
 }
@@ -205,9 +202,27 @@ func (client *Client) CloseSession(
 	return err
 }
 
-func stripFragment(shareURL string) string {
-	if index := strings.IndexByte(shareURL, '#'); index >= 0 {
-		return shareURL[:index]
+// saltFragmentPrefix marks the one fragment form that is safe to publish.
+const saltFragmentPrefix = "#salt="
+
+// SafeShareURL returns the share URL with any fragment the accounts service
+// must not hold removed.
+//
+// E2EE produces two fragment forms. "#salt=" carries a PBKDF2 salt, which is
+// not a secret: the eight-character browser password is, and it is never sent
+// here. "#key=" carries the raw AES key, so publishing it would hand the
+// service everything it needs to decrypt the terminal.
+//
+// The check is an allowlist rather than a blocklist. A fragment form added
+// later must be reviewed before it can be published, instead of leaking by
+// default.
+func SafeShareURL(shareURL string) string {
+	index := strings.IndexByte(shareURL, '#')
+	if index < 0 {
+		return shareURL
 	}
-	return shareURL
+	if strings.HasPrefix(shareURL[index:], saltFragmentPrefix) {
+		return shareURL
+	}
+	return shareURL[:index]
 }

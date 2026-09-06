@@ -259,3 +259,96 @@ func TestRefreshFailureDisablesPublishingWithoutFailingTheLaunch(t *testing.T) {
 		t.Fatalf("warning = %q", warn.String())
 	}
 }
+
+func TestSharingUsesTheServiceRecordedAtLoginNotTheEnvironment(t *testing.T) {
+	// Linking is per machine, not per terminal. A shell started later, in a
+	// window that never exported SHELL_ONLINE_ACCOUNTS, must still publish to
+	// the service the login was approved against.
+	var reached bool
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, _ *http.Request) {
+			reached = true
+			writer.WriteHeader(http.StatusCreated)
+			_, _ = writer.Write([]byte(`{}`))
+		}))
+	defer service.Close()
+
+	linkedAccount(t, service.URL)
+	t.Setenv("SHELL_ONLINE_ACCOUNTS", "http://127.0.0.1:1/never-used")
+
+	var warn bytes.Buffer
+	link := openSessionLink(context.Background(), &warn)
+	if link == nil {
+		t.Fatalf("a linked machine must produce a link; warnings %q", warn.String())
+	}
+	link.Register(context.Background(), sampleSessionInput())
+
+	if !reached {
+		t.Fatal("the share was not published to the service recorded at login")
+	}
+	if warn.Len() != 0 {
+		t.Fatalf("publishing warned unexpectedly: %q", warn.String())
+	}
+}
+
+func TestEveryShellInvocationPublishesOnALinkedMachine(t *testing.T) {
+	// "Running a terminal with shell is intentional." Three separate shares,
+	// as three separate terminals would produce, must all arrive.
+	var published []string
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			var body struct {
+				ID string `json:"id"`
+			}
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			published = append(published, body.ID)
+			writer.WriteHeader(http.StatusCreated)
+			_, _ = writer.Write([]byte(`{}`))
+		}))
+	defer service.Close()
+
+	linkedAccount(t, service.URL)
+
+	for _, id := range []string{
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+		"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+		"CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+	} {
+		var warn bytes.Buffer
+		// A fresh openSessionLink per share is exactly what a new terminal does.
+		link := openSessionLink(context.Background(), &warn)
+		input := sampleSessionInput()
+		input.ID = id
+		link.Register(context.Background(), input)
+	}
+
+	if len(published) != 3 {
+		t.Fatalf("published %d of 3 shares: %v", len(published), published)
+	}
+}
+
+func TestPublishedLinkKeepsTheSaltSoItCanBeOpened(t *testing.T) {
+	var shareURL string
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			var body struct {
+				ShareURL string `json:"share_url"`
+			}
+			_ = json.NewDecoder(request.Body).Decode(&body)
+			shareURL = body.ShareURL
+			writer.WriteHeader(http.StatusCreated)
+			_, _ = writer.Write([]byte(`{}`))
+		}))
+	defer service.Close()
+
+	linkedAccount(t, service.URL)
+	var warn bytes.Buffer
+	link := openSessionLink(context.Background(), &warn)
+	input := sampleSessionInput()
+	input.ShareURL += "#salt=i6AaAzfYyklCDqgMRgEIDw"
+	link.Register(context.Background(), input)
+
+	if !strings.Contains(shareURL, "#salt=") {
+		t.Fatalf("a link without its salt cannot be opened from the web app: %q", shareURL)
+	}
+}

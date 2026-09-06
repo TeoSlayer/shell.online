@@ -117,10 +117,17 @@ to `127.0.0.1`, so the code never leaves the machine, and it is useless without
 a verifier that is never transmitted. The CLI receives a scoped token that can
 only publish sessions, and that you can revoke per machine.
 
-After linking, each share is published as it starts and marked closed when the
-process exits. What is published: the share URL, the command name, the host
-name, and the timing. Never the terminal contents, and never the E2EE key,
-which lives in the URL fragment and is stripped before the URL is sent.
+You link a machine, not a terminal. `shell login` records the account once,
+and every later `shell <command>` in any window publishes without further
+setup. Each share is published as it starts and marked closed when the process
+exits.
+
+What is published: the share URL, the command name, the host name, and the
+timing. Never the terminal contents, and never the browser password. The share
+URL keeps its `#salt=` fragment so the link can be opened from the web, which
+is safe because the salt is not the secret: without the eight-character
+password no key can be derived from it. A `#key=` fragment, which carries a
+raw key, is stripped instead.
 
 Credentials are stored in your user config directory, readable only by you.
 Set `SHELL_ONLINE_CONFIG` to move them, `SHELL_ONLINE_ACCOUNTS` to point at
