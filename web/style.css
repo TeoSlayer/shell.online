@@ -996,6 +996,15 @@ a {
   color: #7e899d;
 }
 
+.status.state-full {
+  color: #d8b879;
+}
+
+.status.state-full i {
+  background: #d7a84d;
+  box-shadow: 0 0 0 3px rgb(215 168 77 / 14%);
+}
+
 .typing-status {
   max-width: min(22vw, 190px);
   overflow: hidden;
@@ -1615,6 +1624,15 @@ a {
 
 .session-page.theme-light .status.offline {
   color: #6d778a;
+}
+
+.session-page.theme-light .status.state-full {
+  color: #8a641b;
+}
+
+.session-page.theme-light .status.state-full i {
+  background: #b9811c;
+  box-shadow: 0 0 0 3px rgb(185 129 28 / 12%);
 }
 
 .session-page.theme-light .status i {

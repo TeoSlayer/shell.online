@@ -4,6 +4,10 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Tell viewers when a session's 16 browser slots are full and keep retrying automatically instead of showing the same `Offline` state as an expired link.
+
 ### Added
 
 - Add LLM-assisted issue intake, pull-request diff review, changelog suggestions, and generated GitHub release notes.
