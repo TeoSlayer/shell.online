@@ -193,6 +193,7 @@ export function createApp(options: AppOptions) {
           encrypted: Boolean(body.encrypted),
           persistent: Boolean(body.persistent),
           host: typeof body.host === "string" ? body.host : "",
+          name: typeof body.name === "string" ? body.name : undefined,
           startedAt: typeof body.started_at === "number" ? body.started_at : undefined,
         });
         if (!result.ok) return send(response, 400, { error: result.reason });
@@ -257,12 +258,14 @@ export function createApp(options: AppOptions) {
           const command = String(body.command ?? "").trim();
           if (!command) return send(response, 400, { error: "give a command to run" });
           if (command.length > 500) return send(response, 400, { error: "that command is too long" });
+          const name = String(body.name ?? "").trim().slice(0, 120);
           const queued = {
             id: mintSecret("cmd"),
             uid: identity.uid,
             deviceId,
             kind: "start" as const,
             command,
+            name: name || undefined,
             createdAt: Date.now(),
           };
           store.putCommand(queued);

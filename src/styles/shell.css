@@ -130,11 +130,11 @@
   flex: none;
 }
 
-/* Same measure and padding as .shell-content, so the two edges line up. */
+/* Same padding as .shell-content, so the two edges line up. */
 .topbar-inner {
   display: flex;
-  width: min(960px, 100%);
-  padding: 0 clamp(22px, 3vw, 40px);
+  width: 100%;
+  padding: 0 clamp(22px, 2.4vw, 34px);
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -154,25 +154,37 @@
   gap: 16px;
 }
 
-.topbar-count {
-  color: var(--muted);
-  font-size: 13.5px;
-  white-space: nowrap;
-}
-
-.topbar-count.is-live {
+.new-session {
   display: inline-flex;
+  height: 40px;
+  padding: 0 17px;
+  border: 1px solid var(--cta-border);
+  border-radius: var(--radius-control);
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 560;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 
-/* The single status dot in the app. It reports real running state. */
-.topbar-count.is-live i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #4f9d43;
-  box-shadow: 0 0 0 4px rgb(110 208 97 / 16%);
+.new-session:hover {
+  box-shadow: 0 10px 24px var(--cta-shadow);
+  transform: translateY(-1px);
+}
+
+.new-session:active {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .new-session:hover {
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -294,10 +306,12 @@
    --------------------------------------------------------------- */
 
 .shell-content {
-  width: min(960px, 100%);
+  display: flex;
+  width: 100%;
   min-width: 0;
-  padding: 34px clamp(22px, 3vw, 40px) 80px;
+  padding: 26px clamp(22px, 2.4vw, 34px) 40px;
   flex: 1;
+  flex-direction: column;
 }
 
 .page-dek {
@@ -404,7 +418,6 @@
   }
 
   .topbar-inner {
-    width: 100%;
     padding: 0 18px;
   }
 

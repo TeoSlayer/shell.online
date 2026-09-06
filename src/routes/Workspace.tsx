@@ -1,12 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
+import { NewSessionModal } from "../components/NewSessionModal";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -55,9 +49,8 @@ export function Workspace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const [draft, setDraft] = useState("");
   const [machine, setMachine] = useState("");
-  const [starting, setStarting] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
   const loadedOnce = useRef(false);
 
@@ -93,27 +86,16 @@ export function Workspace() {
       .catch(() => setDevices([]));
   }, []);
 
-  async function handleStart(event: FormEvent) {
-    event.preventDefault();
-    const command = draft.trim();
-    if (!command || !machine) return;
-    setStarting(true);
+  async function handleStart(input: { deviceId: string; command: string; name: string }) {
     setError("");
     setNotice("");
-    try {
-      await startSession(machine, command);
-      setDraft("");
-      /*
-       * The machine has to poll, launch, and publish, so the row shows up a
-       * moment later rather than on this response.
-       */
-      setNotice(`Starting ${command}. It appears here once the machine picks it up.`);
-      window.setTimeout(() => void load(), AFTER_COMMAND_MS);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not start that session.");
-    } finally {
-      setStarting(false);
-    }
+    await startSession(input.deviceId, input.command, input.name);
+    /*
+     * The machine has to poll, launch, and publish, so the row shows up a
+     * moment later rather than on this response.
+     */
+    setNotice(`Starting ${input.name}. It appears here once the machine picks it up.`);
+    window.setTimeout(() => void load(), AFTER_COMMAND_MS);
   }
 
   async function handleKill(session: SessionRecord) {
@@ -141,12 +123,10 @@ export function Workspace() {
     <AppShell
       title="Sessions"
       aside={
-        live.length > 0 ? (
-          <span className="topbar-count is-live">
-            <i aria-hidden="true" />
-            {live.length} running
-          </span>
-        ) : null
+        <button type="button" className="new-session" onClick={() => setComposing(true)}>
+          <Plus size={16} weight="bold" />
+          Session
+        </button>
       }
     >
       {state.tabs.length > 0 && (
@@ -173,13 +153,13 @@ export function Workspace() {
                 title={tab.command}
               >
                 <TerminalIcon size={15} />
-                {tab.command}
+                {tab.label}
               </button>
               <button
                 type="button"
                 className="tab-close"
                 onClick={() => dispatch({ type: "close", id: tab.id })}
-                aria-label={`Close ${tab.command}`}
+                aria-label={`Close ${tab.label}`}
               >
                 <X size={13} weight="bold" />
               </button>
@@ -198,57 +178,6 @@ export function Workspace() {
       ))}
 
       <div className="workspace-list" hidden={!showingList}>
-        <p className="page-dek">
-          Start a terminal on a linked machine, or open one that is already
-          running. It all happens on this page.
-        </p>
-
-        <form className="launcher" onSubmit={handleStart}>
-          <span className="launcher-prompt" aria-hidden="true">
-            $
-          </span>
-          <input
-            className="launcher-input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="top"
-            aria-label="Command to run"
-            spellCheck={false}
-            autoCapitalize="off"
-            autoComplete="off"
-            disabled={devices.length === 0 || starting}
-          />
-          {devices.length > 1 && (
-            <select
-              className="launcher-machine"
-              value={machine}
-              onChange={(event) => setMachine(event.target.value)}
-              aria-label="Machine to run it on"
-            >
-              {devices.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.label}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            type="submit"
-            className="launcher-go"
-            disabled={devices.length === 0 || starting || !draft.trim()}
-          >
-            <Plus size={15} weight="bold" />
-            {starting ? "Starting" : "Start"}
-          </button>
-        </form>
-
-        {devices.length === 0 && (
-          <p className="launcher-hint">
-            No linked machine yet. Run <code>shell login</code>, then{" "}
-            <code>shell agent</code> on the machine you want to drive from here.
-          </p>
-        )}
-
         {notice && (
           <div className="sessions-alert">
             <Alert tone="success">{notice}</Alert>
@@ -273,7 +202,9 @@ export function Workspace() {
               <li>
                 Run <code>shell agent</code> on a linked machine.
               </li>
-              <li>Type a command above and press Start.</li>
+              <li>
+                Press <b>+ Session</b> and pick what to run.
+              </li>
               <li>It opens here as a tab you can type into.</li>
             </ol>
           </div>
@@ -304,6 +235,14 @@ export function Workspace() {
           </>
         )}
       </div>
+
+      {composing && (
+        <NewSessionModal
+          devices={devices}
+          onClose={() => setComposing(false)}
+          onStart={handleStart}
+        />
+      )}
     </AppShell>
   );
 }
@@ -343,8 +282,14 @@ function SessionGroup({
               disabled={!live}
               aria-label={live ? `Open ${session.command}` : undefined}
             >
-              <span className="session-command">{session.command}</span>
+              <span className="session-command">{session.name || session.command}</span>
               <span className="session-meta">
+                {session.name && session.name !== session.command ? (
+                  <>
+                    {session.command}
+                    {" · "}
+                  </>
+                ) : null}
                 {session.host || "unknown host"}
                 {" · "}
                 {live

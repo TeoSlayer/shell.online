@@ -43,6 +43,8 @@ export interface SessionRecord {
   uid: string;
   shareUrl: string;
   command: string;
+  /** Operator-chosen label. Falls back to the command when absent. */
+  name?: string;
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;
@@ -64,6 +66,8 @@ export interface AgentCommand {
   kind: "start" | "kill";
   /** For "start": the command line to wrap. */
   command?: string;
+  /** For "start": what to call the session in the UI. */
+  name?: string;
   /** For "kill": the session to stop. */
   sessionId?: string;
   createdAt: number;

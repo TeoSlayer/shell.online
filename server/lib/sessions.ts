@@ -4,6 +4,7 @@ export interface SessionInput {
   id: string;
   shareUrl: string;
   command: string;
+  name?: string;
   readOnly?: boolean;
   encrypted?: boolean;
   persistent?: boolean;
@@ -42,6 +43,9 @@ export function registerSession(
     uid,
     shareUrl: input.shareUrl,
     command: input.command.slice(0, 300),
+    name: typeof input.name === "string" && input.name.trim()
+      ? input.name.trim().slice(0, 120)
+      : undefined,
     readOnly: Boolean(input.readOnly),
     encrypted: Boolean(input.encrypted),
     persistent: Boolean(input.persistent),

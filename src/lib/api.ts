@@ -6,6 +6,7 @@ export interface SessionRecord {
   id: string;
   shareUrl: string;
   command: string;
+  name?: string;
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;
@@ -83,10 +84,10 @@ export function revokeDevice(id: string) {
   });
 }
 
-export function startSession(deviceId: string, command: string) {
+export function startSession(deviceId: string, command: string, name: string) {
   return request<{ command: { id: string } }>("/api/commands", {
     method: "POST",
-    body: JSON.stringify({ device_id: deviceId, kind: "start", command }),
+    body: JSON.stringify({ device_id: deviceId, kind: "start", command, name }),
   });
 }
 

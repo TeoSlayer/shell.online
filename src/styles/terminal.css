@@ -100,8 +100,8 @@ button.tab {
 .pane {
   position: relative;
   overflow: hidden;
-  height: min(640px, calc(100dvh - 230px));
   min-height: 320px;
+  flex: 1;
   padding: 14px 6px 14px 16px;
   border: 1px solid #2a2e25;
   border-radius: var(--radius-panel);
@@ -286,7 +286,7 @@ button.tab {
 
 @media (max-width: 900px) {
   .pane {
-    height: min(520px, calc(100dvh - 260px));
+    min-height: 60dvh;
     padding: 12px 4px 12px 12px;
   }
 
@@ -300,6 +300,12 @@ button.tab {
 /* ---------------------------------------------------------------
    Launcher: start a session on a linked machine from this page
    --------------------------------------------------------------- */
+
+.workspace-list {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+}
 
 .launcher {
   display: flex;
@@ -431,11 +437,322 @@ button.tab {
 }
 
 @media (max-width: 560px) {
-  .launcher {
+  .workspace-list {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.launcher {
     flex-wrap: wrap;
   }
 
   .launcher-input {
     flex-basis: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------
+   New session sheet
+   --------------------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  padding: 5vh 20px;
+  background: rgb(16 19 9 / 46%);
+  backdrop-filter: blur(3px);
+  place-items: start center;
+  animation: scrim-in 180ms var(--ease);
+}
+
+.sheet {
+  display: flex;
+  overflow: hidden;
+  width: min(880px, 100%);
+  max-height: 90dvh;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  outline: 0;
+  background: var(--paper);
+  box-shadow: 0 30px 80px rgb(0 0 0 / 32%);
+  flex-direction: column;
+  animation: sheet-in 220ms var(--ease);
+}
+
+.sheet-head {
+  display: flex;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+}
+
+.sheet-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.sheet-close {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  place-items: center;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.sheet-close:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+.sheet-body {
+  overflow-y: auto;
+  padding: 22px;
+}
+
+/* ---- The five choices ---- */
+
+.kind-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.kind {
+  display: flex;
+  padding: 16px 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  cursor: pointer;
+  flex-direction: column;
+  font-family: inherit;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  transition: border-color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.kind:hover {
+  border-color: var(--muted);
+}
+
+.kind.is-active {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+/*
+ * The icons arrive in their own brands' colours. Desaturating them keeps the
+ * row reading as one set rather than five logos competing for attention.
+ */
+.kind-icon {
+  width: 30px;
+  height: 30px;
+  margin-bottom: 10px;
+  filter: grayscale(1) contrast(1.05);
+  opacity: 0.62;
+  object-fit: contain;
+  transition: opacity 160ms var(--ease);
+}
+
+.kind:hover .kind-icon,
+.kind.is-active .kind-icon {
+  opacity: 1;
+}
+
+.kind-title {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 560;
+  line-height: 1.25;
+}
+
+.kind-blurb {
+  color: var(--faint);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* ---- The chosen kind's form ---- */
+
+.sheet-form {
+  padding-top: 22px;
+  margin-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.sheet-field {
+  margin-bottom: 16px;
+}
+
+.sheet-field label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 540;
+}
+
+.sheet-field input[type="text"],
+.sheet-field select {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.sheet-field input[type="text"]:focus,
+.sheet-field select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.sheet-help {
+  margin: 7px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sheet-toggle {
+  display: flex;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  cursor: pointer;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.sheet-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+  flex: none;
+}
+
+.sheet-toggle b {
+  display: block;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.sheet-toggle em {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.sheet-note {
+  display: flex;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 26%, transparent);
+  border-radius: var(--radius-control);
+  margin: 0 0 16px;
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sheet-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.sheet-preview {
+  display: flex;
+  overflow-x: auto;
+  padding: 13px 15px;
+  border: 1px solid #2a2e25;
+  border-radius: var(--radius-control);
+  margin-top: 4px;
+  background: var(--terminal);
+  align-items: center;
+  gap: 9px;
+}
+
+.sheet-preview span {
+  color: var(--acid);
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.sheet-preview code {
+  color: var(--terminal-ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sheet-actions {
+  display: flex;
+  margin-top: 18px;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.sheet-actions .btn {
+  width: auto;
+  min-width: 130px;
+}
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes sheet-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim,
+  .sheet {
+    animation: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .kind-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sheet-actions {
+    flex-direction: column-reverse;
+  }
+
+  .sheet-actions .btn {
+    width: 100%;
   }
 }

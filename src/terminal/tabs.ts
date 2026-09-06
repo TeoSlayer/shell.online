@@ -2,6 +2,8 @@ import type { SessionRecord } from "../lib/api";
 
 export interface Tab {
   id: string;
+  /** What to show on the tab: the operator's name, else the command. */
+  label: string;
   command: string;
   shareUrl: string;
   readOnly: boolean;
@@ -37,6 +39,7 @@ export function reduce(state: TabState, action: TabAction): TabState {
 
       const tab: Tab = {
         id: session.id,
+        label: session.name?.trim() || session.command,
         command: session.command,
         shareUrl: session.shareUrl,
         readOnly: session.readOnly,
