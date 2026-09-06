@@ -4,7 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
-import { encryptionFragment, sessionSocketUrl } from "./socket-url";
+import { encryptionFragment, resolveSessionSocket } from "./socket-url";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 
@@ -47,12 +47,17 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
     const node = mount.current;
     if (!node) return;
 
-    const target = sessionSocketUrl(shareUrl, window.location.origin);
-    if (!target) {
+    const resolved = resolveSessionSocket(
+      shareUrl,
+      window.location.origin,
+      import.meta.env.VITE_RELAY_URL,
+    );
+    if (!resolved.ok) {
       setStatus("error");
-      setDetail("That session link is not one this app can open.");
+      setDetail(resolved.reason);
       return;
     }
+    const target = resolved.target;
 
     const term = new Terminal({
       fontFamily: 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace',

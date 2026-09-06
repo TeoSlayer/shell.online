@@ -21,29 +21,70 @@ export interface SocketTarget {
   proxied: boolean;
 }
 
-export function sessionSocketUrl(
+export type SocketResolution =
+  | { ok: true; target: SocketTarget }
+  | { ok: false; reason: string };
+
+/**
+ * @param proxyRelayOrigin origin the dev proxy forwards to, when there is one.
+ */
+export function resolveSessionSocket(
   shareUrl: string,
   appOrigin: string,
-): SocketTarget | null {
+  proxyRelayOrigin?: string,
+): SocketResolution {
   let share: URL;
   let app: URL;
   try {
     share = new URL(shareUrl);
     app = new URL(appOrigin);
   } catch {
-    return null;
+    return { ok: false, reason: "That session link is not a URL this app understands." };
   }
 
   const id = share.pathname.match(/^\/s\/([A-Za-z0-9_-]{32})$/)?.[1];
-  if (!id) return null;
+  if (!id) {
+    return { ok: false, reason: "That session link does not point at a session." };
+  }
 
   const scheme = app.protocol === "https:" ? "wss:" : "ws:";
   const path = `/api/sessions/${id}/ws`;
 
   if (share.origin === app.origin) {
-    return { url: `${scheme}//${app.host}${path}`, proxied: false };
+    return { ok: true, target: { url: `${scheme}//${app.host}${path}`, proxied: false } };
   }
-  return { url: `${scheme}//${app.host}${RELAY_PROXY_PREFIX}${path}`, proxied: true };
+
+  /*
+   * The proxy forwards to exactly one relay. Sending a session recorded
+   * against a different relay down it would open a socket to the wrong
+   * service and report the session as missing, which is a confusing way to
+   * describe a misconfiguration. Say what is actually wrong instead.
+   */
+  if (!proxyRelayOrigin) {
+    return {
+      ok: false,
+      reason: `This session lives on ${share.origin}, which this app is not configured to reach.`,
+    };
+  }
+  let relay: URL;
+  try {
+    relay = new URL(proxyRelayOrigin);
+  } catch {
+    return { ok: false, reason: "The configured relay URL is not valid." };
+  }
+  if (relay.origin !== share.origin) {
+    return {
+      ok: false,
+      reason:
+        `This session is on ${share.origin}, but this app proxies to ${relay.origin}. ` +
+        `Start it with SHELL_ONLINE_SERVER=${relay.origin} to open it here.`,
+    };
+  }
+
+  return {
+    ok: true,
+    target: { url: `${scheme}//${app.host}${RELAY_PROXY_PREFIX}${path}`, proxied: true },
+  };
 }
 
 /** The 32-character session id inside a share URL, or null. */
