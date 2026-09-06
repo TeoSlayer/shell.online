@@ -1004,6 +1004,18 @@
   to { background-position: -150% 0; }
 }
 
+.sessions-note {
+  max-width: 62ch;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  margin-top: 28px;
+  background: var(--white);
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .sessions-foot {
   margin-top: 34px;
   color: var(--faint);

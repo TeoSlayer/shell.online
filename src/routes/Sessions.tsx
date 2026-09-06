@@ -128,6 +128,14 @@ export function Sessions() {
         </>
       )}
 
+      {(sessions?.some((session) => session.encrypted && !session.closedAt) ?? false) && (
+        <p className="sessions-note">
+          Opening an encrypted session asks for its browser password. This page
+          never sees it, which is what keeps the terminal end-to-end encrypted.
+          Run <code>shell list</code> on the machine to read it.
+        </p>
+      )}
+
       <p className="sessions-foot">Signed in as {user?.email}</p>
     </main>
   );
