@@ -46,7 +46,7 @@ export function SignUp() {
     setPending("email");
     try {
       await signUp(name, email, password);
-      navigate("/account", { replace: true });
+      navigate("/sessions", { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
     } finally {
@@ -60,7 +60,7 @@ export function SignUp() {
     setPending("google");
     try {
       await signInWithGoogle();
-      navigate("/account", { replace: true });
+      navigate("/sessions", { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
     } finally {

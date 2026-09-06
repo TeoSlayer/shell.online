@@ -67,7 +67,7 @@ export function createApp(options: AppOptions) {
       response.setHeader("Access-Control-Allow-Origin", origin);
       response.setHeader("Vary", "Origin");
       response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-      response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
+      response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
     }
   }
 
@@ -207,6 +207,26 @@ export function createApp(options: AppOptions) {
         const session = closeSession(store, token.uid, closeMatch[1], exitCode);
         if (!session) return send(response, 404, { error: "no such session" });
         return send(response, 200, { session });
+      }
+
+      /* ---- Linked machines ---- */
+      if (route === "GET /api/devices") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        return send(response, 200, { devices: store.listDevices(identity.uid) });
+      }
+
+      const deviceMatch = url.pathname.match(/^\/api\/devices\/(dev_[A-Za-z0-9_-]{1,64})$/);
+      if (request.method === "DELETE" && deviceMatch) {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        /*
+         * Scoped by uid inside the store, so a guessed id cannot unlink a
+         * machine belonging to another account.
+         */
+        const revoked = store.revokeDevice(identity.uid, deviceMatch[1]);
+        if (!revoked) return send(response, 404, { error: "no such machine" });
+        return send(response, 200, { revoked: true });
       }
 
       if (route === "GET /api/sessions") {

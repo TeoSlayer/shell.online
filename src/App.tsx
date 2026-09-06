@@ -6,6 +6,7 @@ import { SignUp } from "./routes/SignUp";
 import { ResetPassword } from "./routes/ResetPassword";
 import { Account } from "./routes/Account";
 import { Sessions } from "./routes/Sessions";
+import { Machines } from "./routes/Machines";
 import { CliAuthorize } from "./routes/CliAuthorize";
 
 export default function App() {
@@ -43,6 +44,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Account />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/machines"
+            element={
+              <RequireAuth>
+                <Machines />
               </RequireAuth>
             }
           />

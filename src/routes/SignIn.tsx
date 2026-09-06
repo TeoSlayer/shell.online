@@ -13,7 +13,7 @@ export function SignIn() {
   const navigate = useNavigate();
   const location = useLocation();
   const destination =
-    (location.state as { from?: string } | null)?.from ?? "/account";
+    (location.state as { from?: string } | null)?.from ?? "/sessions";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -52,11 +52,19 @@ reproduced in that commit message.
 | `/login`   | redirects if authed | Email and password, or Continue with Google |
 | `/signup`  | redirects if authed | Creates the account, sets the display name, sends verification |
 | `/reset`   | redirects if authed | Sends a password reset link               |
-| `/account` | requires auth       | Account details, resend verification, sign out |
 | `/sessions` | requires auth      | Live list of shares from every linked machine |
+| `/machines` | requires auth      | Linked machines, with per-machine unlink      |
+| `/account` | requires auth       | Profile and email verification                |
 | `/cli/authorize` | own guard     | Approves a `shell login` request              |
 
-`/` and any unknown path redirect to `/login`.
+Signing in lands on `/sessions`, the page with something on it. `/` and any
+unknown path redirect to `/login`.
+
+The three signed-in pages share `AppShell`: a fixed rail on the left carrying
+the nav and the one command a new machine needs, and a topbar carrying the page
+title, a live count, and the account menu. Only the content column scrolls.
+Below 900px the rail becomes a horizontal strip, which three items fit without
+needing a drawer.
 
 `/cli/authorize` carries its own guard rather than `RequireAuth`, because it
 has to send a signed-out user back to that exact URL with its query string
@@ -157,6 +165,8 @@ CLI login handshake, and the per-user session registry.
 | `POST /api/sessions` | CLI token | Publishes a session |
 | `PATCH /api/sessions/:id` | CLI token | Marks a session closed |
 | `GET /api/sessions` | Firebase ID token | Lists the caller's sessions |
+| `GET /api/devices` | Firebase ID token | Lists linked machines, secrets stripped |
+| `DELETE /api/devices/:id` | Firebase ID token | Unlinks one machine |
 
 Decisions worth knowing:
 
@@ -180,8 +190,9 @@ file, `ACCOUNTS_PORT` to change the port, and `WEB_ORIGIN` for CORS.
 ## Tests
 
 ```sh
-npm test          # 95 tests: PKCE, redirect validation, codes, tokens,
-                  # session scoping, every route, and the web-side parser
+npm test          # 128 tests: PKCE, redirect validation, codes, tokens,
+                  # store migration, device scoping, session scoping,
+                  # every route, and the web-side helpers
 ```
 
 The Go side of this flow lives in the shell.online repository under

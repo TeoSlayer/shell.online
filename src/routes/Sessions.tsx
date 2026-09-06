@@ -1,22 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { ArrowSquareOut, Copy, Check } from "@phosphor-icons/react";
-import { Wordmark } from "../components/Wordmark";
+import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
-import { useAuth } from "../auth/AuthProvider";
 import { fetchSessions, type SessionRecord } from "../lib/api";
+import { elapsed } from "../lib/time";
 
 const POLL_MS = 4000;
-
-function elapsed(from: number, to: number): string {
-  const seconds = Math.max(0, Math.round((to - from) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ${minutes % 60}m`;
-  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
-}
 
 function CopyLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
@@ -41,7 +30,6 @@ function CopyLink({ url }: { url: string }) {
 }
 
 export function Sessions() {
-  const { user, signOutUser } = useAuth();
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(() => Date.now());
@@ -75,21 +63,20 @@ export function Sessions() {
   const finished = sessions?.filter((session) => session.closedAt) ?? [];
 
   return (
-    <main className="account">
-      <header className="account-head">
-        <Wordmark />
-        <nav className="account-nav">
-          <Link to="/account">Account</Link>
-          <button type="button" onClick={() => void signOutUser()}>
-            Sign out
-          </button>
-        </nav>
-      </header>
-
-      <h1 className="sessions-title">Your sessions.</h1>
-      <p className="sessions-dek">
-        Every terminal you share from a linked machine appears here. Run{" "}
-        <code>shell login</code> once per machine, then <code>shell</code> as usual.
+    <AppShell
+      title="Sessions"
+      aside={
+        live.length > 0 ? (
+          <span className="topbar-count is-live">
+            <i aria-hidden="true" />
+            {live.length} running
+          </span>
+        ) : null
+      }
+    >
+      <p className="page-dek">
+        Every terminal shared from a linked machine appears here, and updates
+        every few seconds.
       </p>
 
       {error && (
@@ -136,8 +123,7 @@ export function Sessions() {
         </p>
       )}
 
-      <p className="sessions-foot">Signed in as {user?.email}</p>
-    </main>
+    </AppShell>
   );
 }
 

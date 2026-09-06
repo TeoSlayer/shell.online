@@ -25,6 +25,7 @@ export interface IssuedTokens {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  deviceId: string;
 }
 
 export function issueTokens(
@@ -34,7 +35,9 @@ export function issueTokens(
 ): IssuedTokens {
   const accessToken = mintSecret("sha");
   const refreshToken = mintSecret("shr");
+  const deviceId = mintSecret("dev");
   store.putToken({
+    id: deviceId,
     accessHash: hashSecret(accessToken),
     refreshHash: hashSecret(refreshToken),
     uid: identity.uid,
@@ -43,8 +46,14 @@ export function issueTokens(
     label: identity.label,
     accessExpiresAt: now + ACCESS_TTL_MS,
     createdAt: now,
+    lastSeenAt: now,
   });
-  return { accessToken, refreshToken, expiresIn: Math.floor(ACCESS_TTL_MS / 1000) };
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+    deviceId,
+  };
 }
 
 export type AccessCheck =
@@ -56,6 +65,7 @@ export function checkAccessToken(store: Store, presented: string, now = Date.now
   if (!token) return { ok: false, reason: "unknown" };
   if (token.revokedAt) return { ok: false, reason: "revoked" };
   if (token.accessExpiresAt <= now) return { ok: false, reason: "expired" };
+  store.touchToken(token.id, now);
   return { ok: true, token };
 }
 

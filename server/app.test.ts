@@ -301,3 +301,97 @@ describe("unknown routes", () => {
     expect((await call("GET", "/api/nope")).status).toBe(404);
   });
 });
+
+describe("linked machines", () => {
+  it("lists a machine after login, with no secrets in the payload", async () => {
+    const tokens = await login();
+    const result = await call("GET", "/api/devices", { auth: await idToken() });
+
+    expect(result.status).toBe(200);
+    expect(result.body.devices).toHaveLength(1);
+
+    const serialised = JSON.stringify(result.body);
+    expect(serialised).not.toContain(tokens.access_token);
+    expect(serialised).not.toContain(tokens.refresh_token);
+    /* Hashes are not secrets, but there is no reason to hand them out either. */
+    expect(serialised).not.toContain("accessHash");
+    expect(serialised).not.toContain("refreshHash");
+  });
+
+  it("carries the label the CLI supplied", async () => {
+    const authorize = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: {
+        redirect_uri: REDIRECT,
+        code_challenge: deriveChallenge(verifier),
+        code_challenge_method: "S256",
+      },
+    });
+    await call("POST", "/api/cli/token", {
+      body: {
+        code: authorize.body.code,
+        code_verifier: verifier,
+        redirect_uri: REDIRECT,
+        label: "ana-mbp",
+      },
+    });
+
+    const result = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(result.body.devices[0].label).toBe("ana-mbp");
+  });
+
+  it("never lists another account's machines", async () => {
+    await login();
+    const other = await call("GET", "/api/devices", { auth: await idToken({ sub: "uid-2" }) });
+    expect(other.body.devices).toEqual([]);
+  });
+
+  it("unlinks a machine and kills its token", async () => {
+    const tokens = await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    const deviceId = listed.body.devices[0].id;
+
+    const revoked = await call("DELETE", `/api/devices/${deviceId}`, { auth: await idToken() });
+    expect(revoked.status).toBe(200);
+
+    /* The point of unlinking: that machine can no longer publish. */
+    const publish = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        command: "claude",
+      },
+    });
+    expect(publish.status).toBe(401);
+
+    const after = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(after.body.devices).toEqual([]);
+  });
+
+  it("refuses to unlink a machine belonging to another account", async () => {
+    await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    const deviceId = listed.body.devices[0].id;
+
+    const attempt = await call("DELETE", `/api/devices/${deviceId}`, {
+      auth: await idToken({ sub: "uid-2" }),
+    });
+    expect(attempt.status).toBe(404);
+
+    const still = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(still.body.devices).toHaveLength(1);
+  });
+
+  it("refuses without a signed-in user", async () => {
+    await login();
+    expect((await call("GET", "/api/devices")).status).toBe(401);
+    expect((await call("DELETE", "/api/devices/dev_anything")).status).toBe(401);
+  });
+
+  it("404s an unknown machine rather than reporting success", async () => {
+    await login();
+    const result = await call("DELETE", "/api/devices/dev_nope", { auth: await idToken() });
+    expect(result.status).toBe(404);
+  });
+});

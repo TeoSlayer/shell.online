@@ -66,6 +66,23 @@ export function approveCliLogin(input: AuthorizeInput) {
   });
 }
 
+export interface Device {
+  id: string;
+  label: string;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+export function fetchDevices() {
+  return request<{ devices: Device[] }>("/api/devices");
+}
+
+export function revokeDevice(id: string) {
+  return request<{ revoked: boolean }>(`/api/devices/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
 export function fetchSessions() {
   return request<{ sessions: SessionRecord[] }>("/api/sessions");
 }

@@ -1,0 +1,154 @@
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Terminal, Desktop, User, SignOut, Copy, Check } from "@phosphor-icons/react";
+import { Wordmark } from "./Wordmark";
+import { useAuth } from "../auth/AuthProvider";
+
+const NAV = [
+  { to: "/sessions", label: "Sessions", Icon: Terminal },
+  { to: "/machines", label: "Machines", Icon: Desktop },
+  { to: "/account", label: "Account", Icon: User },
+] as const;
+
+/* The command a new machine needs. Shown once, in the sidebar, not per page. */
+const LINK_COMMAND = "shell login";
+
+function LinkHint() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="rail-hint">
+      <p>Link another machine</p>
+      <button
+        type="button"
+        className="rail-command"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(LINK_COMMAND);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1600);
+          } catch {
+            /* clipboard is unavailable outside a secure context */
+          }
+        }}
+        aria-label={copied ? "Command copied" : `Copy ${LINK_COMMAND}`}
+      >
+        <code>
+          <span aria-hidden="true">$</span> {LINK_COMMAND}
+        </code>
+        {copied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
+      </button>
+    </div>
+  );
+}
+
+function AccountMenu() {
+  const { user, signOutUser } = useAuth();
+  const [open, setOpen] = useState(false);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const email = user?.email ?? "";
+  const initial = (user?.displayName || email || "?").trim().charAt(0).toUpperCase();
+
+  return (
+    <div className="account-menu" ref={wrapper}>
+      <button
+        type="button"
+        className="account-chip"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
+        <span className="account-avatar" aria-hidden="true">
+          {initial}
+        </span>
+        <span className="account-email">{email}</span>
+      </button>
+
+      {open && (
+        <div className="account-pop" role="menu">
+          <p className="account-pop-name">{user?.displayName || "Signed in"}</p>
+          <p className="account-pop-email">{email}</p>
+          <Link to="/account" role="menuitem" onClick={() => setOpen(false)}>
+            <User size={15} />
+            Account
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              setOpen(false);
+              await signOutUser();
+              navigate("/login", { replace: true });
+            }}
+          >
+            <SignOut size={15} />
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AppShellProps {
+  title: string;
+  /* Sits at the right of the page header, for counts or page-level actions. */
+  aside?: ReactNode;
+  children: ReactNode;
+}
+
+export function AppShell({ title, aside, children }: AppShellProps) {
+  return (
+    <div className="shell">
+      <aside className="rail">
+        <div className="rail-head">
+          <Wordmark />
+        </div>
+
+        <nav className="rail-nav">
+          {NAV.map(({ to, label, Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => (isActive ? "rail-link is-active" : "rail-link")}
+            >
+              <Icon size={17} />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+
+        <LinkHint />
+      </aside>
+
+      <div className="shell-main">
+        <header className="topbar">
+          <h1 className="topbar-title">{title}</h1>
+          <div className="topbar-right">
+            {aside}
+            <AccountMenu />
+          </div>
+        </header>
+
+        <div className="shell-content">{children}</div>
+      </div>
+    </div>
+  );
+}

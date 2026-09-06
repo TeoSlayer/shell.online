@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 
 export interface AuthorizationCode {
@@ -13,6 +14,8 @@ export interface AuthorizationCode {
 }
 
 export interface CliToken {
+  /** Stable public id for this device. Safe to show and to address in a URL. */
+  id: string;
   /** SHA-256 of the presented secret. The secret itself is never stored. */
   accessHash: string;
   refreshHash: string;
@@ -22,6 +25,16 @@ export interface CliToken {
   label: string;
   accessExpiresAt: number;
   createdAt: number;
+  lastSeenAt: number;
+  revokedAt?: number;
+}
+
+/** A linked machine, with every secret removed. */
+export interface Device {
+  id: string;
+  label: string;
+  createdAt: number;
+  lastSeenAt: number;
   revokedAt?: number;
 }
 
@@ -57,6 +70,27 @@ export class Store {
 
   constructor(private readonly path: string | null) {
     this.data = this.read();
+    this.migrate();
+  }
+
+  /*
+   * Fills in fields added after a record was first written. Doing it once on
+   * load keeps every reader simple: a token in memory always has an id and a
+   * lastSeenAt, so nothing downstream has to cope with a half-shaped record.
+   */
+  private migrate(): void {
+    let changed = false;
+    for (const token of this.data.tokens) {
+      if (!token.id) {
+        token.id = `dev_${randomBytes(16).toString("hex")}`;
+        changed = true;
+      }
+      if (typeof token.lastSeenAt !== "number") {
+        token.lastSeenAt = token.createdAt;
+        changed = true;
+      }
+    }
+    if (changed) this.flush();
   }
 
   static memory(): Store {
@@ -129,6 +163,43 @@ export class Store {
     if (!token) return;
     Object.assign(token, patch);
     this.flush();
+  }
+
+  /*
+   * Touching lastSeenAt on every authenticated call would mean a write per
+   * request. The resolution only needs to be useful to a person reading a
+   * device list, so it settles for a minute.
+   */
+  touchToken(id: string, now = Date.now(), resolutionMs = 60_000): void {
+    const token = this.data.tokens.find((entry) => entry.id === id);
+    if (!token || now - token.lastSeenAt < resolutionMs) return;
+    token.lastSeenAt = now;
+    this.flush();
+  }
+
+  /** Devices for one account, secrets stripped, newest first. */
+  listDevices(uid: string): Device[] {
+    return this.data.tokens
+      .filter((entry) => entry.uid === uid && !entry.revokedAt)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(({ id, label, createdAt, lastSeenAt, revokedAt }) => ({
+        id,
+        label,
+        createdAt,
+        lastSeenAt,
+        revokedAt,
+      }));
+  }
+
+  /* Scoped by uid so one account cannot revoke another account's machine. */
+  revokeDevice(uid: string, id: string, now = Date.now()): boolean {
+    const token = this.data.tokens.find(
+      (entry) => entry.id === id && entry.uid === uid && !entry.revokedAt,
+    );
+    if (!token) return false;
+    token.revokedAt = now;
+    this.flush();
+    return true;
   }
 
   upsertSession(session: SessionRecord): void {

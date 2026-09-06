@@ -29,7 +29,7 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
     return <Booting label="Checking your session" />;
   }
   if (user) {
-    return <Navigate to="/account" replace />;
+    return <Navigate to="/sessions" replace />;
   }
   return <>{children}</>;
 }
