@@ -4,6 +4,7 @@ import { AppShell } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { fetchDevices, revokeDevice, type Device } from "../lib/api";
+import { agentOnline } from "../lib/agent";
 import { ago } from "../lib/time";
 
 export function Machines() {
@@ -24,6 +25,9 @@ export function Machines() {
 
   useEffect(() => {
     void load();
+    /* Refresh so the listening state reflects the agent starting or stopping. */
+    const poll = window.setInterval(() => void load(), 5000);
+    return () => window.clearInterval(poll);
   }, [load]);
 
   async function handleUnlink(device: Device) {
@@ -39,7 +43,12 @@ export function Machines() {
     }
   }
 
-  const now = Date.now();
+  /* Ticks so "agent listening" goes stale on its own rather than lying. */
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 3000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <AppShell
@@ -87,6 +96,12 @@ export function Machines() {
                   {device.label}
                 </span>
                 <span className="session-meta">
+                  {agentOnline(device, now) ? (
+                    <b className="agent-live">agent listening</b>
+                  ) : (
+                    <span className="agent-idle">no agent</span>
+                  )}
+                  {" · "}
                   linked {ago(device.createdAt, now)} · last used{" "}
                   {ago(device.lastSeenAt, now)}
                 </span>
@@ -111,9 +126,10 @@ export function Machines() {
 
       {devices !== null && devices.length > 0 && (
         <p className="sessions-note">
-          Unlinking cuts the account link only. A terminal already running keeps
-          running, and the machine can be linked again with{" "}
-          <code>shell login</code>.
+          A machine can publish sessions whenever it is linked. It can be driven
+          from this page only while <code>shell agent</code> is running there.
+          Unlinking cuts the account link; a terminal already running keeps
+          running.
         </p>
       )}
     </AppShell>

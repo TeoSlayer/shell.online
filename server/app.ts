@@ -20,6 +20,9 @@ export interface AppOptions {
 
 const MAX_BODY_BYTES = 64 * 1024;
 
+/* An agent polls every 2s, so this is generous enough to survive a hiccup. */
+export const AGENT_ONLINE_MS = 15_000;
+
 function readBody(request: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -254,6 +257,17 @@ export function createApp(options: AppOptions) {
         const device = store.listDevices(identity.uid).find((entry) => entry.id === deviceId);
         if (!device) return send(response, 404, { error: "no such machine" });
 
+        /*
+         * Only a polling agent can carry work out. Queuing for a machine with
+         * none would sit there silently forever, which is a worse answer than
+         * saying so now.
+         */
+        if (!device.agentSeenAt || Date.now() - device.agentSeenAt > AGENT_ONLINE_MS) {
+          return send(response, 409, {
+            error: `No agent is listening on ${device.label}. Run 'shell agent' there and try again.`,
+          });
+        }
+
         if (kind === "start") {
           const command = String(body.command ?? "").trim();
           if (!command) return send(response, 400, { error: "give a command to run" });
@@ -296,6 +310,7 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/agent/commands") {
         const token = requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
+        store.markAgentSeen(token.id);
         return send(response, 200, { commands: store.claimCommands(token.id) });
       }
 

@@ -16,6 +16,8 @@ import {
 import { elapsed } from "../lib/time";
 
 const POLL_MS = 4000;
+/* Well inside the service's 15s agent-online window, so the state stays true. */
+const DEVICE_POLL_MS = 5000;
 /* Long enough for the agent to poll, launch, and for the session to publish. */
 const AFTER_COMMAND_MS = 1500;
 
@@ -77,13 +79,22 @@ export function Workspace() {
     };
   }, [load]);
 
+  /*
+   * Machines are polled, not fetched once: whether an agent is listening is a
+   * live fact, and a stale snapshot silently disables the Start button.
+   */
   useEffect(() => {
-    void fetchDevices()
-      .then((result) => {
-        setDevices(result.devices);
-        setMachine((current) => current || result.devices[0]?.id || "");
-      })
-      .catch(() => setDevices([]));
+    const loadDevices = () =>
+      void fetchDevices()
+        .then((result) => {
+          setDevices(result.devices);
+          setMachine((current) => current || result.devices[0]?.id || "");
+        })
+        .catch(() => setDevices([]));
+
+    loadDevices();
+    const poll = window.setInterval(loadDevices, DEVICE_POLL_MS);
+    return () => window.clearInterval(poll);
   }, []);
 
   async function handleStart(input: { deviceId: string; command: string; name: string }) {

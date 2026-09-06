@@ -10,6 +10,7 @@ import {
   type SessionKind,
 } from "../lib/session-kinds";
 import type { Device } from "../lib/api";
+import { agentOnline } from "../lib/agent";
 
 interface NewSessionModalProps {
   devices: Device[];
@@ -23,22 +24,31 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
   const [machine, setMachine] = useState(devices[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const dialog = useRef<HTMLDivElement>(null);
+  const firstField = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
-  /* Escape closes, and focus starts inside so the dialog is usable by keyboard. */
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
+    /* Restoring the literal earlier value, not "", so a nested open is safe. */
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    dialog.current?.focus();
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
     };
   }, [onClose]);
+
+  /*
+   * Focus the first field rather than the dialog. Focusing the dialog left the
+   * caret on a div, so the first thing typed went nowhere until you clicked a
+   * second time.
+   */
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => firstField.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [kind.id]);
 
   function choose(next: SessionKind) {
     setKind(next);
@@ -48,6 +58,8 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
   }
 
   const command = kind.build(values);
+  const chosenMachine = devices.find((device) => device.id === machine);
+  const machineReady = chosenMachine ? agentOnline(chosenMachine) : false;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -65,14 +77,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
 
   return createPortal(
     <div className="scrim" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label="New session"
-        tabIndex={-1}
-        ref={dialog}
-      >
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="New session">
         <header className="sheet-head">
           <h2>New session</h2>
           <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
@@ -99,21 +104,23 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
           </div>
 
           <form className="sheet-form" onSubmit={handleSubmit}>
-            {kind.fields.map((field) => (
+            {kind.fields.map((field, index) => (
               <div key={field.name} className="sheet-field">
                 {field.kind === "toggle" ? (
                   <label className="sheet-toggle">
+                    <span className="sheet-toggle-text">
+                      <b>{field.label}</b>
+                      {field.help && <em>{field.help}</em>}
+                    </span>
                     <input
                       type="checkbox"
+                      className="switch"
+                      role="switch"
                       checked={values[field.name] === true}
                       onChange={(event) =>
                         setValues((current) => ({ ...current, [field.name]: event.target.checked }))
                       }
                     />
-                    <span>
-                      <b>{field.label}</b>
-                      {field.help && <em>{field.help}</em>}
-                    </span>
                   </label>
                 ) : (
                   <>
@@ -121,6 +128,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                     {field.kind === "select" ? (
                       <select
                         id={`f-${field.name}`}
+                        ref={index === 0 ? (firstField as React.RefObject<HTMLSelectElement>) : undefined}
                         value={String(values[field.name] ?? "")}
                         onChange={(event) =>
                           setValues((current) => ({ ...current, [field.name]: event.target.value }))
@@ -135,6 +143,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                     ) : (
                       <input
                         id={`f-${field.name}`}
+                        ref={index === 0 ? (firstField as React.RefObject<HTMLInputElement>) : undefined}
                         type="text"
                         value={String(values[field.name] ?? "")}
                         placeholder={field.placeholder}
@@ -173,10 +182,21 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                   {devices.map((device) => (
                     <option key={device.id} value={device.id}>
                       {device.label}
+                      {agentOnline(device) ? "" : " (no agent)"}
                     </option>
                   ))}
                 </select>
               </div>
+            )}
+
+            {chosenMachine && !machineReady && (
+              <p className="sheet-note">
+                <Warning size={14} weight="fill" />
+                <span>
+                  No agent is listening on <b>{chosenMachine.label}</b>. Run{" "}
+                  <code>shell agent</code> there, and this will light up.
+                </span>
+              </p>
             )}
 
             {error && <Alert tone="error">{error}</Alert>}
@@ -195,7 +215,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                 type="submit"
                 busy={busy}
                 busyLabel="Starting"
-                disabled={!command || !machine}
+                disabled={!command || !machine || !machineReady}
               >
                 Start session
               </Button>

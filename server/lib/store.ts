@@ -26,6 +26,12 @@ export interface CliToken {
   accessExpiresAt: number;
   createdAt: number;
   lastSeenAt: number;
+  /**
+   * When `shell agent` last asked for work. Distinct from lastSeenAt, which
+   * any authenticated call touches: only a polling agent can accept a command,
+   * so only its polling should count as being online.
+   */
+  agentSeenAt?: number;
   revokedAt?: number;
 }
 
@@ -35,6 +41,7 @@ export interface Device {
   label: string;
   createdAt: number;
   lastSeenAt: number;
+  agentSeenAt?: number;
   revokedAt?: number;
 }
 
@@ -203,16 +210,25 @@ export class Store {
     this.flush();
   }
 
+  /** Records that `shell agent` is polling on this machine right now. */
+  markAgentSeen(id: string, now = Date.now()): void {
+    const token = this.data.tokens.find((entry) => entry.id === id);
+    if (!token) return;
+    token.agentSeenAt = now;
+    this.flush();
+  }
+
   /** Devices for one account, secrets stripped, newest first. */
   listDevices(uid: string): Device[] {
     return this.data.tokens
       .filter((entry) => entry.uid === uid && !entry.revokedAt)
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(({ id, label, createdAt, lastSeenAt, revokedAt }) => ({
+      .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, revokedAt }) => ({
         id,
         label,
         createdAt,
         lastSeenAt,
+        agentSeenAt,
         revokedAt,
       }));
   }

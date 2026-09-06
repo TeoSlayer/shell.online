@@ -400,6 +400,8 @@ describe("driving a machine from the browser", () => {
   async function withDevice() {
     const tokens = await login();
     const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    /* A start is refused unless an agent is listening, so poll once first. */
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
     return { tokens, deviceId: listed.body.devices[0].id as string };
   }
 
@@ -508,5 +510,64 @@ describe("driving a machine from the browser", () => {
     await withDevice();
     expect((await call("GET", "/api/agent/commands")).status).toBe(401);
     expect((await call("POST", "/api/agent/commands/cmd_x", { body: {} })).status).toBe(401);
+  });
+});
+
+describe("starting on a machine with no agent", () => {
+  async function deviceWithoutAgent() {
+    await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    return listed.body.devices[0].id as string;
+  }
+
+  it("refuses, and names the command that fixes it", async () => {
+    /*
+     * Queuing for a machine with nothing listening used to sit there silently
+     * forever, which is a worse answer than saying so at the point of asking.
+     */
+    const deviceId = await deviceWithoutAgent();
+    const result = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+    expect(result.status).toBe(409);
+    expect(result.body.error).toContain("shell agent");
+  });
+
+  it("accepts once the agent has polled", async () => {
+    const tokens = await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    const deviceId = listed.body.devices[0].id;
+
+    /* Polling for work is what marks a machine as listening. */
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+
+    const result = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: deviceId, kind: "start", command: "top" },
+    });
+    expect(result.status).toBe(202);
+  });
+
+  it("reports agent liveness on the machine, distinct from any other use", async () => {
+    const tokens = await login();
+    const before = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(before.body.devices[0].agentSeenAt).toBeUndefined();
+
+    /* Registering a session is use, but it is not an agent listening. */
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        command: "top",
+      },
+    });
+    const afterUse = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(afterUse.body.devices[0].agentSeenAt).toBeUndefined();
+
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const afterPoll = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(afterPoll.body.devices[0].agentSeenAt).toBeTypeOf("number");
   });
 });

@@ -1,5 +1,7 @@
 import { auth } from "./firebase";
 
+export { agentOnline } from "./agent";
+
 const BASE = (import.meta.env.VITE_ACCOUNTS_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
 
 export interface SessionRecord {
@@ -72,7 +74,9 @@ export interface Device {
   label: string;
   createdAt: number;
   lastSeenAt: number;
+  agentSeenAt?: number;
 }
+
 
 export function fetchDevices() {
   return request<{ devices: Device[] }>("/api/devices");

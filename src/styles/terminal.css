@@ -633,24 +633,22 @@ button.tab {
   line-height: 1.5;
 }
 
-.sheet-toggle {
+/* Label on the left, switch on the right, both on one baseline. */
+.sheet-field label.sheet-toggle {
   display: flex;
-  padding: 13px 14px;
+  margin-bottom: 0;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--white);
   cursor: pointer;
-  align-items: flex-start;
-  gap: 11px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
 }
 
-.sheet-toggle input {
-  width: 17px;
-  height: 17px;
-  margin: 1px 0 0;
-  accent-color: var(--ink);
-  cursor: pointer;
-  flex: none;
+.sheet-toggle-text {
+  min-width: 0;
 }
 
 .sheet-toggle b {
@@ -667,6 +665,57 @@ button.tab {
   font-size: 12px;
   font-style: normal;
   line-height: 1.5;
+}
+
+/*
+ * A switch rather than a checkbox: this reads as a mode you leave on, and the
+ * knob makes its state legible from across the sheet.
+ */
+.switch {
+  position: relative;
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  outline-offset: 3px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--line-strong);
+  cursor: pointer;
+  flex: none;
+  margin: 0;
+  transition: background 200ms var(--ease);
+}
+
+.switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 28%);
+  content: "";
+  transition: transform 200ms var(--ease);
+}
+
+.switch:checked {
+  background: var(--ink);
+}
+
+.switch:checked::after {
+  transform: translateX(18px);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--blue);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switch::after {
+    transition: none;
+  }
 }
 
 .sheet-note {
@@ -755,4 +804,13 @@ button.tab {
   .sheet-actions .btn {
     width: 100%;
   }
+}
+
+.agent-live {
+  color: var(--success);
+  font-weight: 540;
+}
+
+.agent-idle {
+  color: var(--faint);
 }
