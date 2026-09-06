@@ -69,7 +69,6 @@ jobs:
                 status: file.status,
                 additions: file.additions,
                 deletions: file.deletions,
-                patch: (file.patch || "").slice(0, 3000),
               }));
             }
             fs.writeFileSync("release-context.json", JSON.stringify({
