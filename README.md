@@ -135,6 +135,23 @@ Native shares also run in the background. Re-run `shell --persistent <state-file
 
 The website documentation is generated from [`docs/content.json`](docs/content.json) and versioned with each release.
 
+## Optional accounts
+
+Accounts are optional everywhere: shares are created, opened, and used without one.
+An account only remembers the links you choose to save.
+
+Relays that want to offer them need three pieces of configuration:
+
+```jsonc
+"durable_objects": { "bindings": [{ "name": "ACCOUNTS", "class_name": "AccountsStore" }] },
+"migrations": [{ "tag": "v2", "new_sqlite_classes": ["AccountsStore"] }],
+"vars": { "ACCOUNT_SECRET": "<a secret of at least 12 characters>" }
+```
+
+`ACCOUNT_SECRET` signs session cookies and should be a real secret, not a literal in
+source control. Without it `/api/account/*` answers `503` and the browser simply shows
+no account controls, which is the intended fallback.
+
 ## Development
 
 Requires the release toolchain Go 1.26.8 and Node.js 22+. Go 1.27.x must not be used for MIPS64 release binaries because of [Go issue 80978](https://go.dev/issue/80978).

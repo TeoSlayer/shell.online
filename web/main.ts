@@ -1,4 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { renderAccountPage } from "./account";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
   CLAUDE_CODE_PATH,
@@ -134,6 +135,7 @@ const terminalThemes: Record<TerminalColorMode, ITheme> = {
   },
 };
 
+const accountRoute = /^\/account\/?$/.test(window.location.pathname);
 const sessionMatch = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]{32})\/?$/);
 const documentationRoute = resolveDocumentationRoute(window.location.pathname);
 const statsDashboard = window.location.hostname === "stats.shell.online" ||
@@ -142,6 +144,8 @@ const statsDashboard = window.location.hostname === "stats.shell.online" ||
 
 if (statsDashboard) {
   renderStatsDashboard(app);
+} else if (accountRoute) {
+  renderAccountPage(app);
 } else if (sessionMatch) {
   renderTerminal(sessionMatch[1]);
 } else if (window.location.pathname === "/" || window.location.pathname === "") {
@@ -930,6 +934,8 @@ function renderTerminal(sessionId: string): void {
         </div>
         <div class="session-actions">
           <div id="presence" class="presence" aria-label="No collaborators connected"></div>
+          <a id="account-link" class="account-chip" href="/account/" title="Optional account">Sign in</a>
+          <button id="account-save" class="account-chip account-save" type="button" hidden title="Save this link to your account">Save link</button>
           <button id="theme-toggle" class="theme-button" type="button">
             <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="3.25"></circle>
@@ -961,6 +967,22 @@ function renderTerminal(sessionId: string): void {
         <button type="button" data-terminal-key="enter" aria-label="Enter">enter</button>
         <button type="button" data-terminal-key="interrupt" aria-label="Control C">ctrl-c</button>
       </nav>
+      <div id="slash-gate" class="encryption-gate" hidden>
+        <form id="slash-form" class="encryption-panel">
+          <h2 id="slash-title">Sign in to shell.online</h2>
+          <p id="slash-note">Optional. An account only keeps a list of the links you save.</p>
+          <label for="slash-email">Email</label>
+          <input id="slash-email" type="email" autocomplete="username" required />
+          <label for="slash-password">Password</label>
+          <input id="slash-password" type="password" autocomplete="current-password" required />
+          <div class="slash-actions">
+            <button type="submit">Sign in</button>
+            <button id="slash-create" type="button">Create account</button>
+            <button id="slash-cancel" type="button">Cancel</button>
+          </div>
+          <p id="slash-error" class="slash-error" hidden></p>
+        </form>
+      </div>
       <div id="encryption-gate" class="encryption-gate" hidden>
         <form id="encryption-form" class="encryption-panel">
           <span class="settings-kicker">Private terminal</span>
@@ -981,6 +1003,16 @@ function renderTerminal(sessionId: string): void {
             <button id="settings-close" class="settings-close" type="button" aria-label="Close terminal controls">×</button>
           </header>
           <div class="settings-content">
+            <section id="account-card" class="settings-card account-card">
+              <div class="settings-card-heading">
+                <span>Account</span>
+                <span id="account-card-state" class="account-card-state">Optional</span>
+              </div>
+              <div class="account-card-actions">
+                <a id="account-card-link" class="btn btn-small" href="/account/">Sign in</a>
+                <button id="account-card-save" class="btn btn-small" type="button" hidden>Save this link</button>
+              </div>
+            </section>
             <div class="settings-control-grid">
               <section class="settings-card zoom-card" aria-labelledby="zoom-label">
                 <div class="settings-card-heading">
@@ -1058,6 +1090,194 @@ function renderTerminal(sessionId: string): void {
   const accessDescription = requiredElement("session-access-description");
   const typingElement = requiredElement("typing-status");
   const presenceElement = requiredElement("presence");
+  const accountLink = requiredElement<HTMLAnchorElement>("account-link");
+  const accountSave = requiredElement<HTMLButtonElement>("account-save");
+  const cardState = requiredElement("account-card-state");
+  const cardLink = requiredElement<HTMLAnchorElement>("account-card-link");
+  const cardSave = requiredElement<HTMLButtonElement>("account-card-save");
+
+  // Optional accounts. Everything below is additive: if the relay has no
+  // account support, or nobody is signed in, the share behaves exactly as it
+  // always has and the chip simply reads "Sign in".
+  const refreshAccountChip = async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/account/me", { credentials: "same-origin" });
+      if (!response.ok) return;
+      const me = await response.json() as { signedIn?: boolean; email?: string };
+      if (!me.signedIn || !me.email) {
+        accountLink.textContent = "Sign in";
+        accountSave.hidden = true;
+        cardState.textContent = "Optional";
+        cardLink.textContent = "Sign in";
+        cardSave.hidden = true;
+        return;
+      }
+      accountLink.textContent = me.email.split("@")[0].slice(0, 18);
+      accountLink.title = `Signed in as ${me.email}`;
+      accountSave.hidden = false;
+      cardState.textContent = me.email;
+      cardLink.textContent = "My links";
+      cardSave.hidden = false;
+      const links = await fetch("/api/account/links", { credentials: "same-origin" });
+      if (links.ok) {
+        const body = await links.json() as { links?: Array<{ session_id: string }> };
+        if (body.links?.some((link) => link.session_id === sessionId)) {
+          accountSave.textContent = "Saved";
+          accountSave.classList.add("is-saved");
+          accountSave.disabled = true;
+          cardSave.textContent = "Saved";
+          cardSave.disabled = true;
+        }
+      }
+    } catch {
+      // Accounts are optional; a relay without them changes nothing here.
+    }
+  };
+
+  cardSave.addEventListener("click", () => { accountSave.click(); cardSave.textContent = "Saved"; cardSave.disabled = true; });
+
+  accountSave.addEventListener("click", () => {
+    accountSave.disabled = true;
+    void (async () => {
+      try {
+        const response = await fetch("/api/account/links", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, label: document.title.replace(" — shell.online", "") }),
+        });
+        if (response.ok) {
+          accountSave.textContent = "Saved";
+          accountSave.classList.add("is-saved");
+        } else {
+          accountSave.textContent = "Save failed";
+          accountSave.disabled = false;
+        }
+      } catch {
+        accountSave.textContent = "Save failed";
+        accountSave.disabled = false;
+      }
+    })();
+  });
+
+  // Remember this share so the account page can return you here instead of
+  // dumping you on the marketing site.
+  try {
+    localStorage.setItem("shell-online:last-terminal", window.location.href);
+  } catch {
+    // Storage may be unavailable; the account page then falls back to "/".
+  }
+
+  void refreshAccountChip();
+
+  const slashGate = requiredElement("slash-gate");
+  const slashForm = requiredElement<HTMLFormElement>("slash-form");
+  const slashEmail = requiredElement<HTMLInputElement>("slash-email");
+  const slashPassword = requiredElement<HTMLInputElement>("slash-password");
+  const slashError = requiredElement("slash-error");
+
+  // The shell redraws its prompt after the Ctrl-U that clears the typed
+  // command, so let that land before printing, or the redraw overwrites it.
+  const note = (text: string, extra: string[] = []): void => {
+    window.setTimeout(() => {
+      terminal.writeln("");
+      terminal.writeln(`\u001b[38;5;114m${text}\u001b[0m`);
+      for (const line of extra) terminal.writeln(line);
+    }, 90);
+  };
+
+  const closeSlashGate = (): void => {
+    slashGate.hidden = true;
+    slashError.hidden = true;
+    slashForm.reset();
+    terminal.focus();
+  };
+
+  const submitSlashAuth = async (path: string): Promise<void> => {
+    slashError.hidden = true;
+    try {
+      const response = await fetch(path, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: slashEmail.value, password: slashPassword.value }),
+      });
+      if (response.ok) {
+        const me = await response.json() as { email?: string };
+        closeSlashGate();
+        note(`Signed in as ${me.email ?? "your account"}. Type /save to keep this link.`);
+        void refreshAccountChip();
+        return;
+      }
+      slashError.textContent = ((await response.json()) as { error?: string }).error ?? "Could not sign in.";
+      slashError.hidden = false;
+    } catch {
+      slashError.textContent = "Could not reach the relay.";
+      slashError.hidden = false;
+    }
+  };
+
+  slashForm.addEventListener("submit", (event) => { event.preventDefault(); void submitSlashAuth("/api/account/login"); });
+  requiredElement<HTMLButtonElement>("slash-create")
+    .addEventListener("click", () => { void submitSlashAuth("/api/account/register"); });
+  requiredElement<HTMLButtonElement>("slash-cancel")
+    .addEventListener("click", () => { closeSlashGate(); });
+
+  /** Returns true when the input was a slash command and must not reach the shell. */
+  function runSlashCommand(command: string): boolean {
+    switch (command) {
+      case "/login":
+        slashGate.hidden = false;
+        slashEmail.focus();
+        return true;
+      case "/logout":
+        void fetch("/api/account/logout", { method: "POST", credentials: "same-origin" })
+          .then(() => { note("Signed out."); void refreshAccountChip(); });
+        return true;
+      case "/save":
+        void (async () => {
+          const me = await fetch("/api/account/me", { credentials: "same-origin" }).then((r) => r.json())
+            .catch(() => ({})) as { signedIn?: boolean };
+          if (!me.signedIn) { note("Not signed in. Type /login first."); return; }
+          const response = await fetch("/api/account/links", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId, label: document.title.replace(" — shell.online", "") }),
+          });
+          note(response.ok ? "Saved this link to your account." : "Could not save this link.");
+          void refreshAccountChip();
+        })();
+        return true;
+      case "/links":
+        void (async () => {
+          const response = await fetch("/api/account/links", { credentials: "same-origin" });
+          if (!response.ok) { note("Not signed in. Type /login first."); return; }
+          const links = ((await response.json()) as { links?: Array<{ label: string; status: string }> }).links ?? [];
+          if (links.length === 0) { note("No saved links yet."); return; }
+          note(
+            `${links.length} saved link${links.length === 1 ? "" : "s"}:`,
+            links.slice(0, 20).map((link) => `  \u001b[38;5;245m${link.status.padEnd(13)}\u001b[0m${link.label}`),
+          );
+        })();
+        return true;
+      case "/account":
+        window.open("/account/", "_blank", "noreferrer");
+        note("Opened your account page in a new tab.");
+        return true;
+      case "/help":
+        note("Browser commands (never sent to the shell):", [
+          "  \u001b[38;5;245m/login   \u001b[0msign in to an optional account",
+          "  \u001b[38;5;245m/logout  \u001b[0msign out",
+          "  \u001b[38;5;245m/save    \u001b[0msave this link to your account",
+          "  \u001b[38;5;245m/links   \u001b[0mlist your saved links",
+          "  \u001b[38;5;245m/account \u001b[0mopen the account page",
+        ]);
+        return true;
+      default:
+        return false;
+    }
+  }
   const copyButton = requiredElement<HTMLButtonElement>("settings-copy-link");
   const settingsButton = requiredElement<HTMLButtonElement>("settings-open");
   const settingsDialog = requiredElement<HTMLDialogElement>("terminal-settings");

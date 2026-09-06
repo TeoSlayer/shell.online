@@ -2394,3 +2394,215 @@ a {
     height: 38px;
   }
 }
+/* Optional account controls in the session header. Small, unobtrusive, and
+   never in the way of a share: signing in is not required for anything. */
+.account-chip {
+  display: inline-flex;
+  min-height: 20px;
+  padding: 0 9px;
+  border: 1px solid #315d50;
+  border-radius: 999px;
+  background: #14251f;
+  color: #83d2b5;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  align-items: center;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.account-chip:hover {
+  border-color: #4a8371;
+  background: #18302a;
+}
+.account-chip.account-save {
+  border-color: #3a4559;
+  background: #1a202b;
+  color: #aebbd1;
+  font-family: inherit;
+}
+.account-chip.account-save:hover { border-color: #55637d; }
+.account-chip.is-saved { color: #83d2b5; border-color: #315d50; }
+
+
+.theme-light .account-chip {
+  border-color: #bcd8cd;
+  background: #eaf5f0;
+  color: #2f6f5c;
+}
+.theme-light .account-chip:hover { border-color: #93c4b3; background: #e0f0e9; }
+.theme-light .account-chip.account-save {
+  border-color: #ccd3e2;
+  background: #f4f6fa;
+  color: #46536e;
+}
+.theme-light .account-chip.account-save:hover { border-color: #a9b6cd; }
+.theme-light .account-chip.is-saved { border-color: #bcd8cd; color: #2f6f5c; }
+
+/* ---- Optional account page ------------------------------------------- */
+.account-shell {
+  min-height: 100%;
+  background: #f3f1e9;
+  color: #1f2b45;
+  font-family: "Uncut Sans", system-ui, sans-serif;
+}
+.account-topbar {
+  display: flex;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 26px 24px 0;
+  align-items: center;
+  justify-content: space-between;
+}
+.account-exit {
+  padding: 6px 13px;
+  border: 1px solid #d5d8cd;
+  border-radius: 999px;
+  background: #fbfaf6;
+  color: #5b6478;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.account-exit:hover { border-color: #b3b8a9; color: #2c3450; }
+.account-main { max-width: 780px; margin: 0 auto; padding: 26px 24px 72px; display: grid; gap: 28px; }
+.account-hero h1 { margin: 0 0 8px; font-size: 30px; font-weight: 560; letter-spacing: -0.03em; }
+.account-hero p { margin: 0; max-width: 56ch; color: #5b6478; font-size: 15px; line-height: 1.6; }
+.account-muted { margin: 0; color: #6a7488; font-size: 14px; line-height: 1.6; }
+.account-eyebrow {
+  display: block; color: #8a92a4; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.account-card {
+  padding: 18px; border: 1px solid #e2e1d6; border-radius: 14px;
+  background: #fbfaf6; box-shadow: 0 1px 2px rgb(31 43 69 / 4%);
+}
+.account-idbar {
+  display: flex; padding: 16px 18px; border: 1px solid #e2e1d6; border-radius: 14px;
+  background: #fbfaf6; align-items: center; justify-content: space-between; gap: 16px;
+}
+.account-idbar strong { font-size: 15px; }
+.account-section { display: grid; gap: 12px; }
+.account-section h2 { margin: 0; font-size: 15px; font-weight: 620; letter-spacing: -0.01em; }
+.account-section-head { display: flex; align-items: center; justify-content: space-between; }
+.account-form { display: grid; gap: 12px; }
+.account-field { display: grid; gap: 5px; }
+.account-field label { color: #5b6478; font-size: 12px; font-weight: 600; }
+.account-field input {
+  padding: 9px 11px; border: 1px solid #d8dae0; border-radius: 9px;
+  background: #fff; color: #1f2b45; font: inherit; font-size: 14px;
+}
+.account-field input:focus { border-color: #6f9e8c; outline: 2px solid #dcefe7; }
+.account-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn {
+  padding: 8px 14px; border: 1px solid #d2d5dd; border-radius: 9px; background: #fff;
+  color: #33415e; font: inherit; font-size: 13px; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.btn:hover { border-color: #a8aebd; }
+.btn-small { padding: 5px 10px; font-size: 12px; }
+.btn-primary { border-color: #2f6f5c; background: #2f6f5c; color: #f2fbf7; }
+.btn-primary:hover { background: #27604f; border-color: #27604f; }
+.btn-danger { border-color: #c9a49c; background: #fff; color: #9c3f2e; }
+.btn-danger:hover { border-color: #a2402f; background: #fdf4f2; }
+.account-error, .account-inline-msg.is-bad { color: #9c3f2e; font-size: 13px; }
+.account-inline-msg { color: #2f6f5c; font-size: 13px; font-weight: 600; }
+.account-danger-head { color: #9c3f2e; }
+.account-danger { border-color: #ecd9d3; background: #fdf8f6; display: grid; gap: 12px; }
+.account-links { display: grid; gap: 10px; }
+.account-link {
+  display: grid; gap: 9px; padding: 14px;
+  border: 1px solid #e2e1d6; border-radius: 14px; background: #fbfaf6;
+}
+.account-link-top { display: flex; gap: 10px; align-items: center; }
+.account-pill {
+  padding: 2px 9px; border-radius: 999px; font-size: 10px;
+  font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.account-link.is-live .account-pill { background: #dff1e9; color: #2f6f5c; }
+.account-link.is-dead .account-pill { background: #ecedef; color: #78849c; }
+.account-link-label { font-size: 14px; font-weight: 620; }
+.account-link-age { margin-left: auto; color: #8a92a4; font-size: 12px; }
+.account-link-url {
+  overflow-x: auto; padding: 7px 9px; border-radius: 8px;
+  background: #f1f0ea; color: #46536e; font-size: 12px; white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .account-hero h1 { font-size: 24px; }
+  .account-idbar { flex-direction: column; align-items: flex-start; }
+}
+
+/* Slash-command sign-in overlay inside the terminal. */
+.slash-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.slash-error { margin-top: 6px; color: #d08b7d; font-size: 13px; }
+.theme-light .slash-error { color: #9c3f2e; }
+
+.account-topbar-right { display: flex; gap: 10px; align-items: center; }
+.account-whoami { color: #6a7488; font-size: 13px; }
+.account-whoami strong { color: #1f2b45; font-weight: 620; }
+.account-h1 { margin: 0; font-size: 22px; font-weight: 560; letter-spacing: -0.02em; }
+@media (max-width: 560px) { .account-whoami { display: none; } }
+
+/* Settings overlay on the account page. */
+.account-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  padding: 24px;
+  background: rgb(31 43 69 / 28%);
+  backdrop-filter: blur(3px);
+  place-items: start center;
+  overflow-y: auto;
+}
+.account-sheet[hidden] { display: none; }
+.account-sheet-panel {
+  display: grid;
+  gap: 16px;
+  width: min(440px, 100%);
+  margin-top: 8vh;
+  padding: 20px;
+  border: 1px solid #e2e1d6;
+  border-radius: 16px;
+  background: #fbfaf6;
+  box-shadow: 0 26px 70px rgb(31 43 69 / 22%);
+}
+.account-sheet-head { display: flex; align-items: center; justify-content: space-between; }
+.account-sheet-head h2 { margin: 0; font-size: 17px; font-weight: 620; }
+.account-sheet-divider { height: 1px; background: #e6e5da; }
+.account-sheet-panel .account-danger {
+  display: grid; gap: 12px; padding: 14px;
+  border: 1px solid #ecd9d3; border-radius: 12px; background: #fdf8f6;
+}
+
+/* The hidden attribute must win over the chip's own display value. */
+.account-chip[hidden] { display: none !important; }
+
+/* The session header is tight on phones: keep a compact way in to the account
+   and drop the save chip, which is reachable from the account page and /save. */
+@media (max-width: 760px) {
+  .account-chip { padding: 0 7px; font-size: 9px; }
+  .account-chip.account-save { display: none; }
+}
+@media (max-width: 460px) {
+  .account-chip { display: none; }
+}
+
+/* Account row at the top of the Controls panel. On wide screens the header
+   chips already cover this, so it only appears once the chips drop away. */
+.settings-card.account-card { display: none; margin-bottom: 12px; }
+.account-card-state {
+  overflow: hidden;
+  max-width: 55%;
+  color: #8a92a4;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-card-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.account-card-actions .btn { text-decoration: none; }
+@media (max-width: 760px) {
+  .settings-card.account-card { display: block; }
+}

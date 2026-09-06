@@ -16,6 +16,7 @@ export default defineConfig({
         security: resolve(import.meta.dirname, "security/index.html"),
         e2ee: resolve(import.meta.dirname, "e2ee/index.html"),
         docker: resolve(import.meta.dirname, "docker/index.html"),
+        account: resolve(import.meta.dirname, "account/index.html"),
       },
     },
   },

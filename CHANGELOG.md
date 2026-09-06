@@ -5,6 +5,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 ## Unreleased
 
 ### Added
+- Add an optional account: sign in from the session header, from the Controls panel on
+  phones, or by typing `/login` in the terminal, then keep a list of the shares you save.
+  Accounts never gate a share — creating, opening, and using links is unchanged without one.
+- Add browser-side terminal commands that never reach the shell: `/login`, `/logout`,
+  `/save`, `/links`, `/account`, and `/help`.
 
 - Add LLM-assisted issue intake, pull-request diff review, changelog suggestions, and generated GitHub release notes.
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.

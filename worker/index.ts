@@ -1,4 +1,15 @@
 import { DurableObject } from "cloudflare:workers";
+import type { AccountsStore } from "./accounts-store";
+import {
+  accountCookie,
+  ACCOUNT_COOKIE_NAME,
+  clearedAccountCookie,
+  createAccountSession,
+  normalizeEmail,
+  readAccountSession,
+  readCookie,
+  validatePassword,
+} from "./account-auth";
 import { decodeResize, Opcode } from "../shared/protocol";
 import {
   binaryDownloadTarget,
@@ -43,6 +54,7 @@ import {
 } from "./stats-auth";
 
 export { StatsStore };
+export { AccountsStore } from "./accounts-store";
 
 const MAX_VIEWERS = 16;
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
@@ -77,6 +89,8 @@ interface Env {
   EVENT_LIMITER: RateLimitBinding;
   STATS_AUTH_LIMITER: RateLimitBinding;
   STATS_PASSWORD: string;
+  ACCOUNTS: DurableObjectNamespace<AccountsStore>;
+  ACCOUNT_SECRET: string;
   ANALYTICS: AnalyticsEngineDataset;
   ASSETS: Fetcher;
 }
@@ -190,6 +204,10 @@ export default {
       return env.SESSIONS.getByName(sessionStatusRoute[1]).fetch(
         "https://session.internal/internal/status",
       );
+    }
+
+    if (url.pathname.startsWith("/api/account/")) {
+      return handleAccountRequest(request, env, url);
     }
 
     if (url.pathname === "/api/events" && request.method === "POST") {
@@ -1578,6 +1596,7 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
   headers.set("X-Frame-Options", "DENY");
   if (
     pathname.startsWith("/s/") ||
+    pathname.startsWith("/account") ||
     pathname.startsWith("/downloads/") ||
     pathname === "/install" ||
     pathname === "/skill" ||
@@ -1595,10 +1614,149 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
     headers.set("Content-Disposition", "attachment; filename=\"SKILL.md\"");
     headers.set("Cache-Control", "public, max-age=300");
   }
-  if (isPublicDocumentPath(pathname) || pathname.startsWith("/s/") || isStatsHostname(hostname)) {
+  if (isPublicDocumentPath(pathname) || pathname.startsWith("/s/") || pathname.startsWith("/account") || isStatsHostname(hostname)) {
     headers.set("Cache-Control", "no-store");
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+/** Optional accounts. Never required to create, open, or use a share. */
+async function handleAccountRequest(request: Request, env: Env, url: URL): Promise<Response> {
+  const secure = url.protocol === "https:";
+  const secret = env.ACCOUNT_SECRET ?? "";
+  if (secret.length < 12) {
+    return json({ error: "accounts are not configured on this relay" }, 503);
+  }
+  const store = env.ACCOUNTS.getByName("accounts");
+  const currentAccountId = async (): Promise<string | null> =>
+    readAccountSession(readCookie(request, ACCOUNT_COOKIE_NAME), secret);
+
+  if (url.pathname === "/api/account/register" && request.method === "POST") {
+    const ip = request.headers.get("CF-Connecting-IP") ?? "local";
+    if (!(await env.STATS_AUTH_LIMITER.limit({ key: `account-register:${ip}` })).success) {
+      return json({ error: "too many attempts" }, 429);
+    }
+    let body: { email?: unknown; password?: unknown };
+    try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+    const email = normalizeEmail(body.email);
+    const password = validatePassword(body.password);
+    if (!email) return json({ error: "enter a valid email address" }, 400);
+    if (!password) return json({ error: "password must be at least 8 characters" }, 400);
+    const result = await store.register(email, password);
+    if (!result.ok) return json({ error: result.error }, 409);
+    const token = await createAccountSession(result.account.id, secret);
+    return json({ email: result.account.email }, 200, { "Set-Cookie": accountCookie(token, secure) });
+  }
+
+  if (url.pathname === "/api/account/login" && request.method === "POST") {
+    const ip = request.headers.get("CF-Connecting-IP") ?? "local";
+    if (!(await env.STATS_AUTH_LIMITER.limit({ key: `account-login:${ip}` })).success) {
+      return json({ error: "too many attempts" }, 429);
+    }
+    let body: { email?: unknown; password?: unknown };
+    try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+    const email = normalizeEmail(body.email);
+    const password = validatePassword(body.password);
+    if (!email || !password) return json({ error: "incorrect email or password" }, 401);
+    const account = await store.login(email, password);
+    if (!account) return json({ error: "incorrect email or password" }, 401);
+    const token = await createAccountSession(account.id, secret);
+    return json({ email: account.email }, 200, { "Set-Cookie": accountCookie(token, secure) });
+  }
+
+  if (url.pathname === "/api/account/logout" && request.method === "POST") {
+    return json({ ok: true }, 200, { "Set-Cookie": clearedAccountCookie(secure) });
+  }
+
+  if (url.pathname === "/api/account/me" && request.method === "GET") {
+    const id = await currentAccountId();
+    if (!id) return json({ signedIn: false }, 200);
+    const account = await store.accountById(id);
+    if (!account) return json({ signedIn: false }, 200, { "Set-Cookie": clearedAccountCookie(secure) });
+    return json({ signedIn: true, email: account.email });
+  }
+
+  if (url.pathname === "/api/account/email" && request.method === "POST") {
+    const id = await currentAccountId();
+    if (!id) return json({ error: "sign in first" }, 401);
+    let body: { email?: unknown };
+    try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+    const email = normalizeEmail(body.email);
+    if (!email) return json({ error: "enter a valid email address" }, 400);
+    const result = await store.updateEmail(id, email);
+    if (!result.ok) return json({ error: result.error ?? "could not update email" }, 409);
+    return json({ email });
+  }
+
+  if (url.pathname === "/api/account/password" && request.method === "POST") {
+    const id = await currentAccountId();
+    if (!id) return json({ error: "sign in first" }, 401);
+    let body: { current?: unknown; next?: unknown };
+    try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+    const current = validatePassword(body.current);
+    const next = validatePassword(body.next);
+    if (!current || !next) return json({ error: "passwords must be at least 8 characters" }, 400);
+    const result = await store.updatePassword(id, current, next);
+    if (!result.ok) return json({ error: result.error ?? "could not update password" }, 400);
+    return json({ ok: true });
+  }
+
+  if (url.pathname === "/api/account/delete" && request.method === "POST") {
+    const id = await currentAccountId();
+    if (!id) return json({ error: "sign in first" }, 401);
+    let body: { password?: unknown };
+    try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+    const password = validatePassword(body.password);
+    if (!password) return json({ error: "password is required" }, 400);
+    const result = await store.deleteAccount(id, password);
+    if (!result.ok) return json({ error: result.error ?? "could not delete account" }, 400);
+    return json({ ok: true }, 200, { "Set-Cookie": clearedAccountCookie(secure) });
+  }
+
+  if (url.pathname === "/api/account/links") {
+    const id = await currentAccountId();
+    if (!id) return json({ error: "sign in first" }, 401);
+
+    if (request.method === "GET") {
+      const saved = await store.listLinks(id);
+      const links = await Promise.all(saved.map(async (link) => {
+        let status = "unknown";
+        try {
+          const response = await env.SESSIONS.getByName(link.session_id).fetch(
+            "https://session.internal/internal/status",
+          );
+          if (response.status === 404) status = "ended";
+          else if (response.ok) {
+            const meta = await response.json() as { exists?: boolean; status?: string };
+            status = meta.exists ? (meta.status ?? "unknown") : "ended";
+          }
+        } catch { status = "unknown"; }
+        return { ...link, status, share_url: `${url.origin}/s/${link.session_id}` };
+      }));
+      return json({ links });
+    }
+
+    if (request.method === "POST") {
+      let body: { session_id?: unknown; label?: unknown };
+      try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+      const sessionId = typeof body.session_id === "string" ? body.session_id : "";
+      if (!/^[A-Za-z0-9_-]{32}$/.test(sessionId)) return json({ error: "invalid session id" }, 400);
+      const label = typeof body.label === "string" ? body.label : "";
+      await store.saveLink(id, sessionId, label);
+      return json({ ok: true });
+    }
+
+    if (request.method === "DELETE") {
+      let body: { session_id?: unknown };
+      try { body = await request.json(); } catch { return json({ error: "invalid body" }, 400); }
+      const sessionId = typeof body.session_id === "string" ? body.session_id : "";
+      if (!sessionId) return json({ error: "invalid session id" }, 400);
+      await store.removeLink(id, sessionId);
+      return json({ ok: true });
+    }
+  }
+
+  return json({ error: "not found" }, 404);
 }
 
 function isPublicDocumentPath(pathname: string): boolean {
