@@ -171,10 +171,13 @@ func (client *Client) Revoke(ctx context.Context, credentials Credentials) error
 
 // SessionInput is the metadata the CLI publishes when a session starts.
 type SessionInput struct {
-	ID         string `json:"id"`
-	ShareURL   string `json:"share_url"`
-	Command    string `json:"command"`
-	Name       string `json:"name,omitempty"`
+	ID       string `json:"id"`
+	ShareURL string `json:"share_url"`
+	Command  string `json:"command"`
+	Name     string `json:"name,omitempty"`
+	// Origin ties a session back to the request that started it, so the
+	// browser that chose the password can recognise its own session.
+	Origin     string `json:"origin,omitempty"`
 	ReadOnly   bool   `json:"read_only"`
 	Encrypted  bool   `json:"encrypted"`
 	Persistent bool   `json:"persistent"`
@@ -235,14 +238,26 @@ type AgentCommand struct {
 	Command   string `json:"command,omitempty"`
 	Name      string `json:"name,omitempty"`
 	SessionID string `json:"sessionId,omitempty"`
+	// SenderPublicKey and SealedPassword carry a browser password sealed to
+	// this agent's key. The accounts service relays them without being able
+	// to read the password inside.
+	SenderPublicKey string `json:"senderPublicKey,omitempty"`
+	SealedPassword  string `json:"sealedPassword,omitempty"`
 }
 
-// PollCommands claims everything queued for this machine.
+// PollCommands claims everything queued for this machine, publishing the key
+// a browser should seal a password to.
 //
 // Claiming happens server-side in the same step as the read, so two agents on
 // one machine cannot both run the same command.
-func (client *Client) PollCommands(ctx context.Context, accessToken string) ([]AgentCommand, error) {
-	contents, err := client.do(ctx, http.MethodGet, "/api/agent/commands", accessToken, nil)
+func (client *Client) PollCommands(
+	ctx context.Context, accessToken, agentPublicKey string,
+) ([]AgentCommand, error) {
+	path := "/api/agent/commands"
+	if agentPublicKey != "" {
+		path += "?key=" + url.QueryEscape(agentPublicKey)
+	}
+	contents, err := client.do(ctx, http.MethodGet, path, accessToken, nil)
 	if err != nil {
 		return nil, err
 	}

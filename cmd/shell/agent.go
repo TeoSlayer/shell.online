@@ -70,6 +70,14 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// One key per agent run. Stopping the agent ends the ability to open
+	// anything a browser sealed to it.
+	agentKey, err := account.NewAgentKey()
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
+	}
+
 	client := account.NewClient(credentials.Server, "shell/"+version)
 	printAgentCard(stdout, credentials)
 
@@ -92,7 +100,7 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 			}
 		}
 
-		commands, pollErr := client.PollCommands(ctx, credentials.AccessToken)
+		commands, pollErr := client.PollCommands(ctx, credentials.AccessToken, agentKey.PublicKey())
 		if pollErr != nil {
 			if ctx.Err() != nil {
 				break
@@ -100,7 +108,7 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "shell: %v\n", pollErr)
 		}
 		for _, command := range commands {
-			runErr := performAgentCommand(ctx, self, command, stdout, stderr)
+			runErr := performAgentCommand(ctx, self, agentKey, command, stdout, stderr)
 			if finishErr := client.FinishCommand(ctx, credentials.AccessToken, command.ID, runErr); finishErr != nil {
 				fmt.Fprintf(stderr, "shell: could not report a command as done: %v\n", finishErr)
 			}
@@ -117,7 +125,11 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 
 // performAgentCommand carries out one queued instruction.
 func performAgentCommand(
-	ctx context.Context, self string, command account.AgentCommand, stdout, stderr io.Writer,
+	ctx context.Context,
+	self string,
+	agentKey *account.AgentKey,
+	command account.AgentCommand,
+	stdout, stderr io.Writer,
 ) error {
 	switch command.Kind {
 	case "start":
@@ -135,6 +147,16 @@ func performAgentCommand(
 			// the name chosen in the browser survives to the session list.
 			launch.Env = append(launch.Env, sessionNameEnvironment+"="+command.Name)
 		}
+		// The browser that asked for this session chose its password and kept
+		// a copy, so it can open the terminal without prompting anyone.
+		if command.SealedPassword != "" {
+			password, openErr := agentKey.Open(command.SenderPublicKey, command.SealedPassword)
+			if openErr != nil {
+				return fmt.Errorf("read the sealed password: %w", openErr)
+			}
+			launch.Env = append(launch.Env, "SHELL_ONLINE_E2EE_PASSWORD="+password)
+		}
+		launch.Env = append(launch.Env, sessionOriginEnvironment+"="+command.ID)
 		launch.Stdout = io.Discard
 		launch.Stderr = io.Discard
 		if err := launch.Run(); err != nil {

@@ -140,6 +140,12 @@ machine. It is opt-in for a reason: the browser can launch processes here. It
 runs in the foreground, prints exactly what it permits, and stops with Ctrl-C.
 Sessions it started keep running after it exits.
 
+The agent generates an ephemeral key pair each run and publishes the public
+half. A browser starting a session picks the browser password itself and seals
+it to that key, so the accounts service relays an envelope it cannot open, and
+the browser can open the terminal without asking for a password nobody was
+shown. Stopping the agent ends the ability to open anything sealed to it.
+
 ### Running against a local stack
 
 Every address defaults to production, so setting only some of them leaves the

@@ -20,6 +20,10 @@ const linkTimeout = 10 * time.Second
 // app, through to the published session.
 const sessionNameEnvironment = "SHELL_ONLINE_SESSION_NAME"
 
+// sessionOriginEnvironment carries the request that started this session, so
+// the browser that made it can recognise its own session when it appears.
+const sessionOriginEnvironment = "SHELL_ONLINE_SESSION_ORIGIN"
+
 // sessionNameFromEnvironment returns the label for this session, if any.
 func sessionNameFromEnvironment() string {
 	return strings.TrimSpace(os.Getenv(sessionNameEnvironment))
@@ -88,6 +92,9 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 	}
 	if input.Name == "" {
 		input.Name = sessionNameFromEnvironment()
+	}
+	if input.Origin == "" {
+		input.Origin = strings.TrimSpace(os.Getenv(sessionOriginEnvironment))
 	}
 
 	registerContext, cancel := context.WithTimeout(ctx, linkTimeout)
