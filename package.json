@@ -10,9 +10,10 @@
     "preview": "vite preview",
     "dev:accounts": "tsx watch server/index.ts",
     "dev:all": "npm-run-all --parallel dev dev:accounts",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/check-protocol.mjs",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --force"
+    "typecheck": "tsc -b --force",
+    "check:protocol": "node scripts/check-protocol.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

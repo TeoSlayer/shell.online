@@ -1,0 +1,298 @@
+/* ---------------------------------------------------------------
+   Tab strip
+   --------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+  gap: 2px;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  max-width: 240px;
+  border: 0;
+  border-radius: var(--radius-chip) var(--radius-chip) 0 0;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  flex: none;
+  font-family: inherit;
+  font-size: 13.5px;
+  align-items: center;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.tab:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+}
+
+/* The active tab joins the pane below it by covering the shared border. */
+.tab.is-active {
+  border-bottom: 1px solid var(--paper);
+  background: var(--paper);
+  box-shadow: inset 0 1px 0 var(--line), inset 1px 0 0 var(--line), inset -1px 0 0 var(--line);
+  color: var(--ink);
+  font-weight: 520;
+}
+
+.tab > svg,
+.tab-label {
+  display: inline-flex;
+  overflow: hidden;
+  padding: 0 6px 0 13px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  height: 40px;
+  align-items: center;
+  gap: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The "All sessions" tab is a single button, so it owns its own padding. */
+button.tab {
+  padding: 0 15px;
+  height: 40px;
+  gap: 8px;
+}
+
+.tab-close {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  margin-right: 8px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  flex: none;
+  place-items: center;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.tab-close:hover {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------
+   Terminal pane
+   --------------------------------------------------------------- */
+
+.pane {
+  position: relative;
+  overflow: hidden;
+  height: min(640px, calc(100dvh - 230px));
+  min-height: 320px;
+  padding: 14px 6px 14px 16px;
+  border: 1px solid #2a2e25;
+  border-radius: var(--radius-panel);
+  background: var(--terminal);
+  box-shadow: 0 20px 50px rgb(26 31 22 / 16%);
+}
+
+/*
+ * Hidden rather than unmounted: the socket, the scrollback and the PTY size
+ * all survive a tab switch this way. display:none would measure as zero and
+ * make xterm resize the shared PTY to nothing, so it moves out of view instead.
+ */
+.pane[data-active="false"] {
+  position: absolute;
+  top: -100000px;
+  left: -100000px;
+  width: 1px;
+  visibility: hidden;
+}
+
+.pane-screen {
+  width: 100%;
+  height: 100%;
+}
+
+.pane-screen .xterm .xterm-viewport {
+  background: transparent !important;
+}
+
+.pane-banner {
+  position: absolute;
+  top: 14px;
+  right: 20px;
+  display: inline-flex;
+  padding: 6px 11px;
+  border: 1px solid var(--terminal-line);
+  border-radius: 999px;
+  background: rgb(16 19 9 / 90%);
+  color: var(--terminal-muted);
+  font-size: 12px;
+  align-items: center;
+  gap: 7px;
+}
+
+.pane-banner svg {
+  animation: spin 1.4s linear infinite;
+}
+
+/* ---- Gate shown over the screen for a password, or a dead session ---- */
+
+.pane-gate {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  background: rgb(16 19 9 / 82%);
+  backdrop-filter: blur(3px);
+  place-items: center;
+  padding: 20px;
+}
+
+.pane-gate-card {
+  width: min(380px, 100%);
+  padding: 26px 28px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--white);
+  box-shadow: 0 22px 60px rgb(0 0 0 / 30%);
+}
+
+.pane-gate-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-control);
+  margin-bottom: 16px;
+  background: var(--terminal);
+  color: var(--acid);
+  place-items: center;
+}
+
+.pane-gate-card h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 21px;
+  font-weight: 450;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.pane-gate-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.pane-gate-card label {
+  display: block;
+  margin: 20px 0 7px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 540;
+}
+
+.pane-gate-card input {
+  width: 100%;
+  height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.pane-gate-card input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.pane-gate-card .btn {
+  margin-top: 14px;
+}
+
+.pane-gate-card .alert {
+  margin-top: 18px;
+  margin-bottom: 0;
+}
+
+/* ---------------------------------------------------------------
+   Session rows become buttons that open a tab
+   --------------------------------------------------------------- */
+
+.session-open-row {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.session-open-row:disabled {
+  cursor: default;
+}
+
+.session.is-openable {
+  border-radius: var(--radius-control);
+  padding-inline: 10px;
+  margin-inline: -10px;
+  transition: background 140ms var(--ease);
+}
+
+.session.is-openable:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.session-open-row:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+}
+
+/* The external-link action shrinks to an icon now the row itself opens. */
+.session-actions .session-open {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-banner svg {
+    animation-duration: 3s;
+  }
+}
+
+@media (max-width: 900px) {
+  .pane {
+    height: min(520px, calc(100dvh - 260px));
+    padding: 12px 4px 12px 12px;
+  }
+
+  .tab,
+  .tab-label,
+  button.tab {
+    max-width: 190px;
+  }
+}

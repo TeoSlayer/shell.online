@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+/*
+ * Fails when a vendored protocol module has drifted from its upstream copy in
+ * the shell.online checkout. Skips silently when that checkout is absent, so
+ * the app still builds on a machine that only has this repository.
+ */
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const upstream = process.env.SHELL_ONLINE_REPO ?? join(here, "..", "..", "shell.online");
+
+const FILES = [
+  { vendored: "src/terminal/protocol.ts", source: "shared/protocol.ts" },
+  { vendored: "src/terminal/e2ee.ts", source: "web/e2ee.ts" },
+];
+
+if (!existsSync(upstream)) {
+  console.log(`check:protocol: no shell.online checkout at ${upstream}, skipping`);
+  process.exit(0);
+}
+
+let drifted = false;
+for (const { vendored, source } of FILES) {
+  const sourcePath = join(upstream, source);
+  if (!existsSync(sourcePath)) {
+    console.error(`check:protocol: upstream ${source} is missing`);
+    drifted = true;
+    continue;
+  }
+  /* The vendored copy carries a provenance header; compare the body only. */
+  const body = readFileSync(join(here, "..", vendored), "utf8").replace(/^\/\*[\s\S]*?\*\/\n/, "");
+  if (body !== readFileSync(sourcePath, "utf8")) {
+    console.error(`check:protocol: ${vendored} has drifted from ${source}`);
+    drifted = true;
+  }
+}
+
+if (drifted) {
+  console.error("Re-sync with: npm run sync:protocol");
+  process.exit(1);
+}
+console.log("check:protocol: vendored modules match upstream");

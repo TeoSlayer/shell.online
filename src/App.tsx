@@ -5,7 +5,7 @@ import { SignIn } from "./routes/SignIn";
 import { SignUp } from "./routes/SignUp";
 import { ResetPassword } from "./routes/ResetPassword";
 import { Account } from "./routes/Account";
-import { Sessions } from "./routes/Sessions";
+import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
 import { CliAuthorize } from "./routes/CliAuthorize";
 
@@ -59,7 +59,7 @@ export default function App() {
             path="/sessions"
             element={
               <RequireAuth>
-                <Sessions />
+                <Workspace />
               </RequireAuth>
             }
           />

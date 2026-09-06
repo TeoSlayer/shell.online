@@ -200,3 +200,51 @@ npm test          # 128 tests: PKCE, redirect validation, codes, tokens,
 
 The Go side of this flow lives in the shell.online repository under
 `internal/account` and `cmd/shell`.
+
+## The embedded terminal
+
+Clicking a running session opens it as a tab inside the app, with a real
+terminal you can type into. It is not a link out to the standalone viewer.
+
+`src/terminal/` holds the pieces:
+
+- `protocol.ts` and `e2ee.ts` are **copied verbatim** from shell.online
+  (`shared/protocol.ts`, `web/e2ee.ts`). The wire format and the browser half
+  of the encryption are reused rather than reimplemented, so the two cannot
+  drift apart in meaning. `npm run check:protocol` fails if they diverge from
+  the sibling checkout, and runs as part of `npm test`.
+- `connection.ts` owns one viewer connection: the socket, the retry policy and
+  the cipher. It has no React and no xterm in it, so the parts worth testing
+  are testable without a DOM.
+- `TerminalPane.tsx` renders xterm and the password gate.
+- `tabs.ts` is the tab reducer, also plain.
+
+### Same-origin is a hard requirement
+
+The relay refuses a websocket whose `Origin` is not its own
+(`worker/index.ts`: `origin not allowed`). Verified: a socket from
+`http://localhost:5173` to the relay gets **403**, one from the relay's own
+origin connects.
+
+So the app has to be served from the relay's origin in production. In
+development they are separate ports, so `vite.config.ts` proxies `/relay` and
+rewrites the `Origin` to the relay's own, which is what a same-origin browser
+would have sent. `sessionSocketUrl()` picks the direct or proxied path by
+comparing the share URL's origin with the app's.
+
+If the app is ever deployed to a different origin than the relay, that check
+has to grow an allowlist. It is not something this repository can decide.
+
+### Passwords stay on the device
+
+An encrypted session prompts inside the pane. The password derives the key
+locally and is never sent anywhere, which is why the accounts service can hold
+the `#salt=` fragment but the session still cannot be opened without it.
+
+### Tabs
+
+Open panes stay mounted while another tab is in front. Hiding rather than
+unmounting keeps each socket and its scrollback alive, and a hidden pane is
+moved off-screen rather than `display: none` because a zero-sized xterm would
+resize the shared PTY to nothing. Opening a session that is already open
+selects that tab instead of opening a second pane onto the same PTY.

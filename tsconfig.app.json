@@ -19,7 +19,10 @@
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "erasableSyntaxOnly": true,
+    /* The vendored protocol modules are copied verbatim from shell.online
+       and use `const enum` and constructor parameter properties. Keeping them
+       byte-identical to upstream is worth more than this lint. */
+    "erasableSyntaxOnly": false,
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"]
