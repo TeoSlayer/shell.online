@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Wordmark } from "../components/Wordmark";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
@@ -52,16 +52,17 @@ export function Account() {
     <main className="account">
       <header className="account-head">
         <Wordmark />
-        <span style={{ color: "var(--muted)", fontSize: 13 }}>
-          {user.email}
-        </span>
+        <nav className="account-nav">
+          <Link to="/sessions">Sessions</Link>
+          <span>{user.email}</span>
+        </nav>
       </header>
 
       <section className="account-card">
         <h1>You are signed in.</h1>
         <p>
-          Account plumbing is live. Session management, shared links, and team
-          access build on top of this.
+          Link a machine with <code>shell login</code>, then every terminal you
+          share from it shows up under <Link to="/sessions">Sessions</Link>.
         </p>
 
         {notice && <div style={{ marginTop: 22 }}><Alert tone="success">{notice}</Alert></div>}

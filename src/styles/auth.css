@@ -663,3 +663,379 @@
     width: 100%;
   }
 }
+
+/* ---------------------------------------------------------------
+   CLI consent screen
+   --------------------------------------------------------------- */
+
+.consent {
+  display: flex;
+  width: min(560px, calc(100% - 40px));
+  min-height: 100dvh;
+  margin: 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  padding: 32px 0 56px;
+}
+
+.consent-head {
+  display: flex;
+  padding-bottom: 26px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.consent-account {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.consent-card {
+  padding: 32px 34px 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--white);
+  box-shadow: 0 18px 44px rgb(26 31 22 / 7%);
+}
+
+.consent-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-control);
+  margin-bottom: 22px;
+  background: var(--terminal);
+  color: var(--acid);
+  place-items: center;
+}
+
+.consent-card h1 {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 36px);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1.04;
+}
+
+.consent-card > p {
+  max-width: 48ch;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.consent-card b {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.consent-card code,
+.sessions-dek code,
+.sessions-empty code {
+  padding: 2px 6px 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.86em;
+  white-space: nowrap;
+}
+
+.consent-hint {
+  margin-top: 18px;
+}
+
+.consent-alert {
+  margin-top: 20px;
+}
+
+.consent-rows {
+  margin: 26px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.consent-row {
+  display: grid;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 4px 22px;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: baseline;
+}
+
+.consent-row dt {
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 520;
+}
+
+.consent-row dd {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.consent-actions {
+  display: flex;
+  margin-top: 26px;
+  gap: 12px;
+}
+
+.consent-actions .btn {
+  flex: 1;
+}
+
+.consent-note {
+  display: flex;
+  margin: 22px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.55;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.consent-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------
+   Sessions
+   --------------------------------------------------------------- */
+
+.account-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.account-nav a,
+.account-nav button {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  transition: color 160ms var(--ease);
+}
+
+.account-nav a:hover,
+.account-nav button:hover {
+  color: var(--ink);
+}
+
+.sessions-title {
+  margin: 8px 0 0;
+  font-size: clamp(34px, 4vw, 46px);
+  font-weight: 400;
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.sessions-dek {
+  max-width: 56ch;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.sessions-alert {
+  margin-top: 22px;
+}
+
+.sessions-group {
+  margin-top: 34px;
+}
+
+.sessions-group h2 {
+  margin: 0 0 2px;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sessions-list {
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.session {
+  display: flex;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.session-main {
+  min-width: 0;
+}
+
+.session-command {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A running session is the one thing on this page with live state. */
+.session[data-live="true"] .session-command::before {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 9px;
+  background: #4f9d43;
+  box-shadow: 0 0 0 4px rgb(110 208 97 / 16%);
+  content: "";
+  vertical-align: middle;
+}
+
+.session-meta {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.session-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-copy {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--white);
+  color: var(--muted);
+  cursor: pointer;
+  place-items: center;
+  transition: border-color 160ms var(--ease), color 160ms var(--ease);
+}
+
+.session-copy:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+.session-open {
+  display: inline-flex;
+  height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--white);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 520;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 160ms var(--ease), transform 160ms var(--ease);
+}
+
+.session-open:hover {
+  border-color: var(--muted);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.sessions-empty {
+  padding: 30px 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  margin-top: 30px;
+  background: var(--white);
+}
+
+.sessions-empty p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.sessions-empty ol {
+  padding-left: 18px;
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.sessions-skeleton {
+  display: grid;
+  margin-top: 34px;
+  gap: 1px;
+}
+
+.sessions-skeleton span {
+  height: 66px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, transparent, rgb(0 0 0 / 3%), transparent);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.sessions-skeleton span:nth-child(2) { animation-delay: 0.12s; }
+.sessions-skeleton span:nth-child(3) { animation-delay: 0.24s; }
+
+@keyframes shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -150% 0; }
+}
+
+.sessions-foot {
+  margin-top: 34px;
+  color: var(--faint);
+  font-size: 12.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sessions-skeleton span {
+    animation: none;
+  }
+
+  .session-open:hover {
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .consent-card {
+    padding: 24px 20px;
+  }
+
+  .consent-row {
+    grid-template-columns: 1fr;
+  }
+
+  .consent-actions {
+    flex-direction: column-reverse;
+  }
+
+  .session {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+}

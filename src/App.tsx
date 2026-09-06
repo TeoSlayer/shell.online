@@ -5,6 +5,8 @@ import { SignIn } from "./routes/SignIn";
 import { SignUp } from "./routes/SignUp";
 import { ResetPassword } from "./routes/ResetPassword";
 import { Account } from "./routes/Account";
+import { Sessions } from "./routes/Sessions";
+import { CliAuthorize } from "./routes/CliAuthorize";
 
 export default function App() {
   return (
@@ -44,6 +46,19 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/sessions"
+            element={
+              <RequireAuth>
+                <Sessions />
+              </RequireAuth>
+            }
+          />
+          {/*
+            No guard here. CliAuthorize handles the signed-out case itself so
+            it can send the user back to this exact URL, query string included.
+          */}
+          <Route path="/cli/authorize" element={<CliAuthorize />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>

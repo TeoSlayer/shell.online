@@ -12,11 +12,38 @@ The CLI is unchanged. Accounts sit alongside it, they do not gate it.
 ```sh
 cp .env.example .env.local   # fill in the Firebase web app config
 npm install
-npm run dev                  # http://localhost:5173
+npm run dev:all              # web on :5173, accounts service on :8787
 ```
 
-`npm run build` typechecks and bundles. `npm run preview` serves the build with
-the same headers as dev.
+`npm run dev` runs the web app alone, `npm run dev:accounts` the service alone.
+`npm run build` typechecks and bundles, `npm test` runs the suite, and
+`npm run preview` serves the build with the same headers as dev.
+
+### Running the whole loop locally
+
+Three processes, all on loopback:
+
+```sh
+# 1. web app and accounts service
+npm run dev:all
+
+# 2. the relay, from a shell.online checkout
+npm run build:web
+npx wrangler dev --config wrangler.local.jsonc     # :8788
+
+# 3. the CLI, pointed at all three
+export SHELL_ONLINE_ACCOUNTS=http://127.0.0.1:8787
+export SHELL_ONLINE_WEB=http://localhost:5173
+export SHELL_ONLINE_SERVER=http://127.0.0.1:8788
+go build -o /tmp/shell ./cmd/shell
+
+/tmp/shell login            # approve in the browser
+/tmp/shell sleep 120        # appears at localhost:5173/sessions
+```
+
+`wrangler.local.jsonc` is not in the shell.online repository; the production
+Wrangler config is private. The file the CLI work added is untracked and
+reproduced in that commit message.
 
 ## Routes
 
@@ -26,8 +53,14 @@ the same headers as dev.
 | `/signup`  | redirects if authed | Creates the account, sets the display name, sends verification |
 | `/reset`   | redirects if authed | Sends a password reset link               |
 | `/account` | requires auth       | Account details, resend verification, sign out |
+| `/sessions` | requires auth      | Live list of shares from every linked machine |
+| `/cli/authorize` | own guard     | Approves a `shell login` request              |
 
 `/` and any unknown path redirect to `/login`.
+
+`/cli/authorize` carries its own guard rather than `RequireAuth`, because it
+has to send a signed-out user back to that exact URL with its query string
+intact. Losing the query would lose the request the CLI made.
 
 ## Auth
 
@@ -108,3 +141,48 @@ It is lazy-loaded because it is a third of the bundle and is hidden below 940px.
 
 Asymmetric split: form hard-left on paper, terminal right on dark. Below 940px the
 terminal drops and the form becomes a single scrolling column.
+
+## Accounts service
+
+`server/` backs `shell login`. It runs on loopback and holds two things: the
+CLI login handshake, and the per-user session registry.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/cli/authorize` | Firebase ID token | Mints a one-time code for an approved login |
+| `POST /api/cli/token` | none | Exchanges code plus verifier for CLI tokens |
+| `POST /api/cli/refresh` | none | Renews the access token |
+| `POST /api/cli/revoke` | none | Revokes a refresh token and everything from it |
+| `GET /api/cli/me` | CLI token | The account a machine is linked to |
+| `POST /api/sessions` | CLI token | Publishes a session |
+| `PATCH /api/sessions/:id` | CLI token | Marks a session closed |
+| `GET /api/sessions` | Firebase ID token | Lists the caller's sessions |
+
+Decisions worth knowing:
+
+- **The CLI gets opaque scoped tokens, never the Firebase refresh token.** A
+  Firebase refresh token is a full account credential. A scoped token can be
+  revoked per device and only grants session registration.
+- **Only hashes are stored.** A leaked store file yields nothing live.
+- **`redirect_uri` is allowlisted to loopback callbacks** on unprivileged
+  ports. Without that check a crafted authorize link could forward a live code
+  to a remote host. The approve screen repeats the check so a bad link fails
+  with an explanation rather than a generic error after the click.
+- **Codes are single-use and burn even on a failed verifier**, so a stolen code
+  cannot be retried.
+- **Every query is scoped by uid at the store boundary**, so a route cannot
+  leak another account's sessions.
+
+`Store` is a JSON file for local development, behind an interface so Firestore
+or D1 can drop in without touching route code. Set `ACCOUNTS_DATA` to move the
+file, `ACCOUNTS_PORT` to change the port, and `WEB_ORIGIN` for CORS.
+
+## Tests
+
+```sh
+npm test          # 95 tests: PKCE, redirect validation, codes, tokens,
+                  # session scoping, every route, and the web-side parser
+```
+
+The Go side of this flow lives in the shell.online repository under
+`internal/account` and `cmd/shell`.
