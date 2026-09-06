@@ -13,7 +13,7 @@ messages:
       <untrusted_issue>
       {{issue}}
       </untrusted_issue>
-model: openai/gpt-4o
+model: gpt-4.1
 modelParameters:
   maxCompletionTokens: 700
   temperature: 0

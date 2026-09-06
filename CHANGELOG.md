@@ -8,6 +8,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 - Add LLM-assisted issue intake, pull-request diff review, changelog suggestions, and generated GitHub release notes.
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.
+- Use GitHub's current Copilot inference path rather than the retired GitHub Models endpoint.
 
 ## [0.8.1] — 2026-09-04
 

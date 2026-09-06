@@ -23,7 +23,8 @@ jobs:
       - name: Test automated moderation decisions
         run: node --test .github/scripts/moderation.node.mjs
       - name: Lint all GitHub Actions workflows
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+        # copilot-requests is documented by GitHub but not yet known to actionlint 1.7.12.
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -ignore 'unknown permission scope "copilot-requests"' .github/workflows/*.yml
 
   web:
     runs-on: ubuntu-latest

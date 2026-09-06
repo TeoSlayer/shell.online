@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: write
-  models: read
+  copilot-requests: write
 
 concurrency:
   group: ai-release-${{ github.event.release.tag_name || inputs.tag }}
@@ -28,6 +28,13 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Install the pinned GitHub Copilot CLI
+        run: npm install --global @github/copilot@1.0.83
 
       - name: Build bounded release context
         id: context
@@ -77,7 +84,9 @@ jobs:
 
       - name: Generate release notes
         id: notes
-        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
+        uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3.0.0
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
           prompt-file: .github/prompts/release-notes.prompt.yml
           file_input: |
