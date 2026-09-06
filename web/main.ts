@@ -1,4 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { rememberLinkFragment } from "./link-fragments";
 import { renderAccountPage } from "./account";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
@@ -1147,6 +1148,9 @@ function renderTerminal(sessionId: string): void {
           body: JSON.stringify({ session_id: sessionId, label: document.title.replace(" — shell.online", "") }),
         });
         if (response.ok) {
+          // The key lives in the fragment and never reaches the relay, so keep
+          // it here; the account page stitches it back onto the saved link.
+          rememberLinkFragment(sessionId, window.location.hash);
           accountSave.textContent = "Saved";
           accountSave.classList.add("is-saved");
         } else {
@@ -1245,6 +1249,7 @@ function renderTerminal(sessionId: string): void {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: sessionId, label: document.title.replace(" — shell.online", "") }),
           });
+          if (response.ok) rememberLinkFragment(sessionId, window.location.hash);
           note(response.ok ? "Saved this link to your account." : "Could not save this link.");
           void refreshAccountChip();
         })();

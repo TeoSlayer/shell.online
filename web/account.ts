@@ -5,12 +5,15 @@
  * settings for the account itself. Creating one is never required: every link
  * works exactly the same whether or not anyone signs in.
  */
+import { completeShareUrl, forgetLinkFragment, linkFragmentFor } from "./link-fragments";
+
 interface SavedLink {
   session_id: string;
   label: string;
   saved_at: number;
   status: string;
   share_url: string;
+  encrypted?: boolean;
 }
 
 const api = (path: string, init?: RequestInit): Promise<Response> =>
@@ -268,20 +271,29 @@ async function loadLinks(body: HTMLElement): Promise<void> {
       list.innerHTML = `<div class="account-card"><p class="account-muted">No links saved yet. Open any share and use <em>Save link</em> in its header, or type <code>/login</code> then <code>/save</code> in the terminal.</p></div>`;
       return;
     }
-    list.innerHTML = links.map((link) => `
+    list.innerHTML = links.map((link) => {
+      const full = completeShareUrl(link.share_url, link.session_id);
+      // An encrypted share keeps its key in the fragment, which never reaches
+      // the relay. If this browser did not save the link, it cannot rebuild it.
+      const keyMissing = link.encrypted === true && !linkFragmentFor(link.session_id);
+      return `
       <article class="account-link ${link.status === "connected" ? "is-live" : "is-dead"}">
         <div class="account-link-top">
           <span class="account-pill">${statusLabel(link.status)}</span>
           <span class="account-link-label">${esc(link.label || link.session_id.slice(0, 10))}</span>
           <span class="account-link-age">${age(link.saved_at)}</span>
         </div>
-        <code class="account-link-url">${esc(link.share_url)}</code>
+        <code class="account-link-url">${esc(keyMissing ? link.share_url : full)}</code>
+        ${keyMissing ? `<p class="account-key-note">Saved on another device. The decryption key stays in
+           the browser that saved it and never reaches the relay, so open this share from that device
+           or paste the full link, password included.</p>` : ""}
         <div class="account-row">
-          <button class="btn btn-small" data-copy="${esc(link.share_url)}">Copy</button>
-          <a class="btn btn-small" href="${esc(link.share_url)}" target="_blank" rel="noreferrer">Open</a>
+          ${keyMissing ? "" : `<button class="btn btn-small" data-copy="${esc(full)}">Copy</button>
+          <a class="btn btn-small" href="${esc(full)}" target="_blank" rel="noreferrer">Open</a>`}
           <button class="btn btn-small" data-remove="${esc(link.session_id)}">Remove</button>
         </div>
-      </article>`).join("");
+      </article>`;
+    }).join("");
     list.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
       button.addEventListener("click", () => {
         void navigator.clipboard?.writeText(button.dataset.copy ?? "");
@@ -295,7 +307,7 @@ async function loadLinks(body: HTMLElement): Promise<void> {
         void api("/api/account/links", {
           method: "DELETE", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ session_id: button.dataset.remove }),
-        }).then(() => loadLinks(body));
+        }).then(() => { forgetLinkFragment(button.dataset.remove ?? ""); void loadLinks(body); });
       });
     });
   } catch {

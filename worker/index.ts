@@ -1721,17 +1721,21 @@ async function handleAccountRequest(request: Request, env: Env, url: URL): Promi
       const saved = await store.listLinks(id);
       const links = await Promise.all(saved.map(async (link) => {
         let status = "unknown";
+        let encrypted = false;
         try {
           const response = await env.SESSIONS.getByName(link.session_id).fetch(
             "https://session.internal/internal/status",
           );
           if (response.status === 404) status = "ended";
           else if (response.ok) {
-            const meta = await response.json() as { exists?: boolean; status?: string };
+            const meta = await response.json() as { exists?: boolean; status?: string; encrypted?: boolean };
             status = meta.exists ? (meta.status ?? "unknown") : "ended";
+            encrypted = meta.encrypted === true;
           }
         } catch { status = "unknown"; }
-        return { ...link, status, share_url: `${url.origin}/s/${link.session_id}` };
+        // The share URL is returned without a fragment on purpose: the relay
+        // never holds the decryption key. The browser adds it back if it has it.
+        return { ...link, status, encrypted, share_url: `${url.origin}/s/${link.session_id}` };
       }));
       return json({ links });
     }

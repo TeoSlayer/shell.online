@@ -148,6 +148,12 @@ Relays that want to offer them need three pieces of configuration:
 "vars": { "ACCOUNT_SECRET": "<a secret of at least 12 characters>" }
 ```
 
+Saved links are stored as session ids only. An encrypted share keeps its key in the URL
+fragment, which never reaches the relay, so the browser that saved a link keeps that
+fragment locally and stitches it back on when the account page renders the link. A link
+saved on one device therefore opens in full only on that device; elsewhere the account
+page says so rather than handing back an undecryptable URL.
+
 `ACCOUNT_SECRET` signs session cookies and should be a real secret, not a literal in
 source control. Without it `/api/account/*` answers `503` and the browser simply shows
 no account controls, which is the intended fallback.

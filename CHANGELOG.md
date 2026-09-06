@@ -10,6 +10,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   Accounts never gate a share — creating, opening, and using links is unchanged without one.
 - Add browser-side terminal commands that never reach the shell: `/login`, `/logout`,
   `/save`, `/links`, `/account`, and `/help`.
+- Keep a saved encrypted share openable by remembering its URL fragment in the browser
+  that saved it; the relay still never receives the key, and the account page says when a
+  link was saved on another device instead of returning an undecryptable URL.
 
 - Add LLM-assisted issue intake, pull-request diff review, changelog suggestions, and generated GitHub release notes.
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.

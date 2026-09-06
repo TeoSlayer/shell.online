@@ -2606,3 +2606,9 @@ a {
 @media (max-width: 760px) {
   .settings-card.account-card { display: block; }
 }
+.account-key-note {
+  margin: 0;
+  color: #8a6d3b;
+  font-size: 12px;
+  line-height: 1.5;
+}
