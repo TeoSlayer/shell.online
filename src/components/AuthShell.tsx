@@ -50,10 +50,6 @@ export function AuthShell({
         <Suspense fallback={<div className="stage-panel" aria-hidden="true" />}>
           <SessionPreview />
         </Suspense>
-        <p className="stage-caption">
-          <b>One command, one link.</b> Your process and PTY never leave your
-          machine, and terminal frames are encrypted before the relay sees them.
-        </p>
       </aside>
     </div>
   );

@@ -41,27 +41,28 @@
 .auth-body {
   display: flex;
   width: 100%;
-  max-width: 396px;
+  max-width: 440px;
   flex: 1;
   flex-direction: column;
   justify-content: center;
+  margin-inline: auto;
 }
 
 .auth-title {
   max-width: 8ch;
   margin: 0;
   color: var(--ink);
-  font-size: clamp(38px, 4vw, 52px);
+  font-size: clamp(38px, 3.8vw, 48px);
   font-weight: 400;
   letter-spacing: -0.062em;
   line-height: 0.94;
 }
 
 .auth-dek {
-  max-width: 42ch;
-  margin: 18px 0 0;
+  max-width: 44ch;
+  margin: 15px 0 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 400;
   letter-spacing: -0.012em;
   line-height: 1.6;
@@ -79,19 +80,19 @@
 }
 
 .auth-form {
-  margin-top: 30px;
+  margin-top: 24px;
 }
 
 .auth-foot {
-  margin-top: 30px;
+  margin-top: 22px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .auth-legal {
-  max-width: 44ch;
-  margin: 18px 0 0;
+  max-width: 46ch;
+  margin: 14px 0 0;
   color: var(--faint);
   font-size: 11.5px;
   line-height: 1.65;
@@ -103,14 +104,14 @@
 
 .field {
   display: grid;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   gap: 7px;
 }
 
 .field-label {
   display: flex;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 540;
   letter-spacing: -0.005em;
   align-items: baseline;
@@ -131,20 +132,20 @@
 
 .field input {
   width: 100%;
-  height: 46px;
-  padding: 0 14px;
+  height: 52px;
+  padding: 0 15px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   outline: 0;
   background: var(--white);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: 15.5px;
   transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 
 .field-input-wrap:has(.field-reveal) input {
-  padding-right: 46px;
+  padding-right: 52px;
 }
 
 .field input::placeholder {
@@ -176,10 +177,10 @@
 
 .field-reveal {
   position: absolute;
-  right: 6px;
+  right: 7px;
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   border: 0;
   border-radius: var(--radius-chip);
   background: transparent;
@@ -259,11 +260,11 @@
   position: relative;
   display: inline-flex;
   width: 100%;
-  height: 48px;
+  height: 54px;
   padding: 0 18px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
-  font-size: 14.5px;
+  font-size: 15px;
   font-weight: 540;
   letter-spacing: -0.008em;
   cursor: pointer;
@@ -320,7 +321,7 @@
 
 .divider {
   display: grid;
-  margin: 18px 0;
+  margin: 14px 0;
   color: var(--faint);
   font-size: 11.5px;
   gap: 12px;
@@ -447,19 +448,6 @@
 .stage-term .xterm .xterm-viewport {
   overflow: hidden !important;
   background: transparent !important;
-}
-
-.stage-caption {
-  padding: 16px clamp(4px, 1vw, 12px) 0;
-  color: var(--muted);
-  flex: none;
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-.stage-caption b {
-  color: var(--ink-soft);
-  font-weight: 540;
 }
 
 /* ---------------------------------------------------------------

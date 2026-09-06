@@ -1,0 +1,303 @@
+import { beforeEach, describe, expect, it, beforeAll } from "vitest";
+import { randomBytes } from "node:crypto";
+import { exportJWK, generateKeyPair, SignJWT, type KeyObject } from "jose";
+import { createApp } from "./app";
+import { Store } from "./lib/store";
+import { createVerifier, localKeySet } from "./lib/firebase-token";
+import { base64url, deriveChallenge } from "./lib/pkce";
+
+const PROJECT = "vv-cloud-firebase";
+const REDIRECT = "http://127.0.0.1:51234/callback";
+const ORIGIN = "http://localhost:5173";
+
+let privateKey: KeyObject;
+let verifyIdToken: (token: string) => Promise<{ ok: boolean }>;
+let store: Store;
+let handle: ReturnType<typeof createApp>;
+let verifier: string;
+
+/* Signs a token that looks exactly like a Firebase ID token, minus Google. */
+async function idToken(overrides: Record<string, unknown> = {}) {
+  return new SignJWT({ email: "ana@example.com", name: "Ana Ferreira", ...overrides })
+    .setProtectedHeader({ alg: "RS256", kid: "test-key" })
+    .setIssuer(String(overrides.iss ?? `https://securetoken.google.com/${PROJECT}`))
+    .setAudience(String(overrides.aud ?? PROJECT))
+    .setSubject(String(overrides.sub ?? "uid-1"))
+    .setIssuedAt()
+    .setExpirationTime((overrides.exp as number | string) ?? "1h")
+    .sign(privateKey);
+}
+
+/* Minimal node-style request/response doubles so routes are tested directly. */
+async function call(
+  method: string,
+  path: string,
+  options: { body?: unknown; auth?: string; origin?: string } = {},
+) {
+  const chunks: Buffer[] = [];
+  if (options.body !== undefined) chunks.push(Buffer.from(JSON.stringify(options.body)));
+
+  const request = {
+    method,
+    url: path,
+    headers: {
+      ...(options.auth ? { authorization: `Bearer ${options.auth}` } : {}),
+      ...(options.origin ? { origin: options.origin } : {}),
+    },
+    on(event: string, handler: (arg?: unknown) => void) {
+      if (event === "data") chunks.forEach((chunk) => handler(chunk));
+      if (event === "end") handler();
+      return request;
+    },
+    destroy() {},
+  };
+
+  let status = 0;
+  let payload = "";
+  const headers: Record<string, string> = {};
+  const response = {
+    writeHead(code: number, given?: Record<string, string>) {
+      status = code;
+      Object.assign(headers, given ?? {});
+      return response;
+    },
+    setHeader(name: string, value: string) {
+      headers[name] = value;
+    },
+    end(body?: string) {
+      payload = body ?? "";
+    },
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await handle(request as any, response as any);
+  return { status, headers, body: payload ? JSON.parse(payload) : null };
+}
+
+beforeAll(async () => {
+  const pair = await generateKeyPair("RS256", { extractable: true });
+  privateKey = pair.privateKey as KeyObject;
+  const jwk = await exportJWK(pair.publicKey);
+  verifyIdToken = createVerifier(PROJECT, localKeySet({ keys: [{ ...jwk, kid: "test-key", alg: "RS256" }] })) as never;
+});
+
+beforeEach(() => {
+  store = Store.memory();
+  verifier = base64url(randomBytes(48));
+  handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
+});
+
+/* Walks the whole login handshake and returns the CLI's tokens. */
+async function login() {
+  const authorize = await call("POST", "/api/cli/authorize", {
+    auth: await idToken(),
+    body: {
+      redirect_uri: REDIRECT,
+      code_challenge: deriveChallenge(verifier),
+      code_challenge_method: "S256",
+    },
+  });
+  const token = await call("POST", "/api/cli/token", {
+    body: { code: authorize.body.code, code_verifier: verifier, redirect_uri: REDIRECT },
+  });
+  return token.body as { access_token: string; refresh_token: string };
+}
+
+describe("POST /api/cli/authorize", () => {
+  it("mints a code for a signed-in user", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: {
+        redirect_uri: REDIRECT,
+        code_challenge: deriveChallenge(verifier),
+        code_challenge_method: "S256",
+      },
+    });
+    expect(result.status).toBe(200);
+    expect(result.body.code).toMatch(/^shc_/);
+  });
+
+  it("refuses without a valid ID token", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "S256" },
+    });
+    expect(result.status).toBe(401);
+  });
+
+  it("refuses a token minted for another Firebase project", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken({ aud: "someone-elses-project", iss: "https://securetoken.google.com/someone-elses-project" }),
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "S256" },
+    });
+    expect(result.status).toBe(401);
+  });
+
+  it("refuses an expired ID token", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken({ exp: Math.floor(Date.now() / 1000) - 60 }),
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "S256" },
+    });
+    expect(result.status).toBe(401);
+  });
+
+  it("refuses a non-loopback redirect_uri", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: {
+        redirect_uri: "http://evil.example.com:8080/callback",
+        code_challenge: deriveChallenge(verifier),
+        code_challenge_method: "S256",
+      },
+    });
+    expect(result.status).toBe(400);
+  });
+
+  it("refuses a plain code_challenge_method", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "plain" },
+    });
+    expect(result.status).toBe(400);
+  });
+});
+
+describe("POST /api/cli/token", () => {
+  it("exchanges the code for scoped tokens and the account", async () => {
+    const tokens = await login();
+    expect(tokens.access_token).toMatch(/^sha_/);
+    expect(tokens.refresh_token).toMatch(/^shr_/);
+  });
+
+  it("never returns the Firebase ID token to the CLI", async () => {
+    const firebaseToken = await idToken();
+    const authorize = await call("POST", "/api/cli/authorize", {
+      auth: firebaseToken,
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "S256" },
+    });
+    const result = await call("POST", "/api/cli/token", {
+      body: { code: authorize.body.code, code_verifier: verifier, redirect_uri: REDIRECT },
+    });
+    expect(JSON.stringify(result.body)).not.toContain(firebaseToken);
+  });
+
+  it("rejects a stolen code presented without the verifier", async () => {
+    const authorize = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: { redirect_uri: REDIRECT, code_challenge: deriveChallenge(verifier), code_challenge_method: "S256" },
+    });
+    const result = await call("POST", "/api/cli/token", {
+      body: { code: authorize.body.code, code_verifier: base64url(randomBytes(48)), redirect_uri: REDIRECT },
+    });
+    expect(result.status).toBe(400);
+  });
+});
+
+describe("GET /api/cli/me", () => {
+  it("returns the bound account for a valid access token", async () => {
+    const tokens = await login();
+    const result = await call("GET", "/api/cli/me", { auth: tokens.access_token });
+    expect(result.status).toBe(200);
+    expect(result.body.account.uid).toBe("uid-1");
+  });
+
+  it("refuses a Firebase ID token in place of a CLI token", async () => {
+    const result = await call("GET", "/api/cli/me", { auth: await idToken() });
+    expect(result.status).toBe(401);
+  });
+});
+
+describe("session registry", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "claude",
+    encrypted: true,
+  };
+
+  it("registers from the CLI and lists in the web app", async () => {
+    const tokens = await login();
+    const created = await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    expect(created.status).toBe(201);
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.status).toBe(200);
+    expect(listed.body.sessions).toHaveLength(1);
+    expect(listed.body.sessions[0].command).toBe("claude");
+  });
+
+  it("refuses registration without a CLI token", async () => {
+    const result = await call("POST", "/api/sessions", { body: session });
+    expect(result.status).toBe(401);
+  });
+
+  it("refuses a revoked CLI token", async () => {
+    const tokens = await login();
+    await call("POST", "/api/cli/revoke", { body: { refresh_token: tokens.refresh_token } });
+    const result = await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    expect(result.status).toBe(401);
+  });
+
+  it("does not leak another account's sessions", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+
+    const other = await call("GET", "/api/sessions", { auth: await idToken({ sub: "uid-2" }) });
+    expect(other.body.sessions).toEqual([]);
+  });
+
+  it("closes a session and records the exit code", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const closed = await call("PATCH", `/api/sessions/${session.id}`, {
+      auth: tokens.access_token,
+      body: { exit_code: 0 },
+    });
+    expect(closed.status).toBe(200);
+    expect(closed.body.session.exitCode).toBe(0);
+    expect(closed.body.session.closedAt).toBeTypeOf("number");
+  });
+
+  it("rejects a malformed session id", async () => {
+    const tokens = await login();
+    const result = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...session, id: "bad id" },
+    });
+    expect(result.status).toBe(400);
+  });
+});
+
+describe("refresh", () => {
+  it("issues a working access token from the refresh token", async () => {
+    const tokens = await login();
+    const refreshed = await call("POST", "/api/cli/refresh", {
+      body: { refresh_token: tokens.refresh_token },
+    });
+    expect(refreshed.status).toBe(200);
+    const me = await call("GET", "/api/cli/me", { auth: refreshed.body.access_token });
+    expect(me.status).toBe(200);
+  });
+
+  it("refuses an unknown refresh token", async () => {
+    const result = await call("POST", "/api/cli/refresh", { body: { refresh_token: "shr_nope" } });
+    expect(result.status).toBe(401);
+  });
+});
+
+describe("cors", () => {
+  it("allows the configured web origin", async () => {
+    const result = await call("GET", "/api/health", { origin: ORIGIN });
+    expect(result.headers["Access-Control-Allow-Origin"]).toBe(ORIGIN);
+  });
+
+  it("does not echo an unlisted origin", async () => {
+    const result = await call("GET", "/api/health", { origin: "http://evil.example.com" });
+    expect(result.headers["Access-Control-Allow-Origin"]).toBeUndefined();
+  });
+});
+
+describe("unknown routes", () => {
+  it("404s", async () => {
+    expect((await call("GET", "/api/nope")).status).toBe(404);
+  });
+});
