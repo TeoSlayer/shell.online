@@ -129,6 +129,17 @@ is safe because the salt is not the secret: without the eight-character
 password no key can be derived from it. A `#key=` fragment, which carries a
 raw key, is stripped instead.
 
+### Driving a machine from the browser
+
+```sh
+shell agent
+```
+
+While this runs, your signed-in browser can start and stop sessions on this
+machine. It is opt-in for a reason: the browser can launch processes here. It
+runs in the foreground, prints exactly what it permits, and stops with Ctrl-C.
+Sessions it started keep running after it exits.
+
 Credentials are stored in your user config directory, readable only by you.
 Set `SHELL_ONLINE_CONFIG` to move them, `SHELL_ONLINE_ACCOUNTS` to point at
 another accounts service, and `SHELL_ONLINE_WEB` at another approval site.

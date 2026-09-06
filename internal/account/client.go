@@ -226,3 +226,41 @@ func SafeShareURL(shareURL string) string {
 	}
 	return shareURL[:index]
 }
+
+// AgentCommand is work the web app has queued for this machine.
+type AgentCommand struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Command   string `json:"command,omitempty"`
+	SessionID string `json:"sessionId,omitempty"`
+}
+
+// PollCommands claims everything queued for this machine.
+//
+// Claiming happens server-side in the same step as the read, so two agents on
+// one machine cannot both run the same command.
+func (client *Client) PollCommands(ctx context.Context, accessToken string) ([]AgentCommand, error) {
+	contents, err := client.do(ctx, http.MethodGet, "/api/agent/commands", accessToken, nil)
+	if err != nil {
+		return nil, err
+	}
+	var decoded struct {
+		Commands []AgentCommand `json:"commands"`
+	}
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return nil, fmt.Errorf("decode commands: %w", err)
+	}
+	return decoded.Commands, nil
+}
+
+// FinishCommand reports a command as done, with an error when it failed.
+func (client *Client) FinishCommand(
+	ctx context.Context, accessToken, id string, failure error,
+) error {
+	body := map[string]string{}
+	if failure != nil {
+		body["error"] = failure.Error()
+	}
+	_, err := client.do(ctx, http.MethodPost, "/api/agent/commands/"+url.PathEscape(id), accessToken, body)
+	return err
+}

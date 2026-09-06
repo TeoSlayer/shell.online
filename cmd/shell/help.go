@@ -37,6 +37,7 @@ Your account (optional)
   shell login --no-browser         Print the sign-in URL instead of opening a browser
   shell whoami                     Show which account this machine is linked to
   shell logout                     Unlink this machine and revoke its token
+  shell agent                      Let your browser start and stop sessions here
 
 Manage sessions
   shell list                       Show uptime, relay status, URL, and browser password
@@ -148,6 +149,13 @@ What is published
 
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine and revoke its token
+  shell agent                      Let your browser start and stop sessions here
+
+Driving this machine from the browser
+  shell agent runs in the foreground and lets your signed-in browser start and
+  stop sessions on this machine. It is opt-in for a reason: while it runs, the
+  browser can launch processes here. It stops with Ctrl-C, and sessions it
+  started keep running.
 
 Credentials live in your user config directory, readable only by you. Set
 SHELL_ONLINE_CONFIG to keep them somewhere else.

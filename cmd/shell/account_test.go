@@ -251,3 +251,43 @@ func TestResolvedLabelPrefersTheFlag(t *testing.T) {
 		t.Fatal("resolvedLabel should fall back to a hostname")
 	}
 }
+
+func TestAgentRequiresALinkedAccount(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_CONFIG", filepath.Join(t.TempDir(), "absent.json"))
+	var stdout, stderr bytes.Buffer
+
+	if code := runAgent(nil, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "shell login") {
+		t.Fatalf("stderr should point at the fix, got %q", stderr.String())
+	}
+}
+
+func TestAgentRejectsPositionalArguments(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_CONFIG", filepath.Join(t.TempDir(), "credentials.json"))
+	var stdout, stderr bytes.Buffer
+	if code := runAgent([]string{"extra"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("exit code = %d, want 2", code)
+	}
+}
+
+func TestRunSessionCommandRoutesAgent(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_CONFIG", filepath.Join(t.TempDir(), "credentials.json"))
+	var stdout, stderr bytes.Buffer
+	if _, handled := runSessionCommand([]string{"agent", "--help"}, &stdout, &stderr); !handled {
+		t.Fatal("agent was not routed")
+	}
+}
+
+func TestAgentCardSaysWhatItAllows(t *testing.T) {
+	// Running this lets a browser start processes here, so the card has to be
+	// explicit rather than merely reassuring.
+	var output bytes.Buffer
+	printAgentCard(&output, account.Credentials{Email: "ana@example.com"})
+	for _, want := range []string{"start and stop sessions here", "ana@example.com", "Ctrl-C"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("agent card is missing %q:\n%s", want, output.String())
+		}
+	}
+}
