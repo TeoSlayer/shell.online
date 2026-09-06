@@ -9,6 +9,7 @@ export interface SessionRecord {
   shareUrl: string;
   command: string;
   name?: string;
+  origin?: string;
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;
@@ -75,6 +76,8 @@ export interface Device {
   createdAt: number;
   lastSeenAt: number;
   agentSeenAt?: number;
+  /** Published by a running agent so a password can be sealed to it. */
+  agentPublicKey?: string;
 }
 
 
@@ -88,10 +91,26 @@ export function revokeDevice(id: string) {
   });
 }
 
-export function startSession(deviceId: string, command: string, name: string) {
+export interface StartInput {
+  deviceId: string;
+  command: string;
+  name: string;
+  /** A password sealed to the agent; this service cannot read it. */
+  senderPublicKey?: string;
+  sealedPassword?: string;
+}
+
+export function startSession(input: StartInput) {
   return request<{ command: { id: string } }>("/api/commands", {
     method: "POST",
-    body: JSON.stringify({ device_id: deviceId, kind: "start", command, name }),
+    body: JSON.stringify({
+      device_id: input.deviceId,
+      kind: "start",
+      command: input.command,
+      name: input.name,
+      sender_public_key: input.senderPublicKey,
+      sealed_password: input.sealedPassword,
+    }),
   });
 }
 

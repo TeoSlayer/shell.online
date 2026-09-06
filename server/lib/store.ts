@@ -32,6 +32,8 @@ export interface CliToken {
    * so only its polling should count as being online.
    */
   agentSeenAt?: number;
+  /** Published by a running agent so a browser can seal a password to it. */
+  agentPublicKey?: string;
   revokedAt?: number;
 }
 
@@ -42,6 +44,7 @@ export interface Device {
   createdAt: number;
   lastSeenAt: number;
   agentSeenAt?: number;
+  agentPublicKey?: string;
   revokedAt?: number;
 }
 
@@ -50,6 +53,8 @@ export interface SessionRecord {
   uid: string;
   shareUrl: string;
   command: string;
+  /** The queued request this session came from, when it came from one. */
+  origin?: string;
   /** Operator-chosen label. Falls back to the command when absent. */
   name?: string;
   readOnly: boolean;
@@ -75,6 +80,12 @@ export interface AgentCommand {
   command?: string;
   /** For "start": what to call the session in the UI. */
   name?: string;
+  /**
+   * For "start": a browser password sealed to the agent's key. Relayed as
+   * opaque bytes; this service cannot open it, which is the point.
+   */
+  senderPublicKey?: string;
+  sealedPassword?: string;
   /** For "kill": the session to stop. */
   sessionId?: string;
   createdAt: number;
@@ -210,11 +221,12 @@ export class Store {
     this.flush();
   }
 
-  /** Records that `shell agent` is polling on this machine right now. */
-  markAgentSeen(id: string, now = Date.now()): void {
+  /** Records that `shell agent` is polling, and the key it publishes. */
+  markAgentSeen(id: string, publicKey?: string, now = Date.now()): void {
     const token = this.data.tokens.find((entry) => entry.id === id);
     if (!token) return;
     token.agentSeenAt = now;
+    if (publicKey) token.agentPublicKey = publicKey;
     this.flush();
   }
 
@@ -223,12 +235,13 @@ export class Store {
     return this.data.tokens
       .filter((entry) => entry.uid === uid && !entry.revokedAt)
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, revokedAt }) => ({
+      .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, agentPublicKey, revokedAt }) => ({
         id,
         label,
         createdAt,
         lastSeenAt,
         agentSeenAt,
+        agentPublicKey,
         revokedAt,
       }));
   }

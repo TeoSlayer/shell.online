@@ -197,6 +197,7 @@ export function createApp(options: AppOptions) {
           persistent: Boolean(body.persistent),
           host: typeof body.host === "string" ? body.host : "",
           name: typeof body.name === "string" ? body.name : undefined,
+          origin: typeof body.origin === "string" ? body.origin : undefined,
           startedAt: typeof body.started_at === "number" ? body.started_at : undefined,
         });
         if (!result.ok) return send(response, 400, { error: result.reason });
@@ -273,6 +274,12 @@ export function createApp(options: AppOptions) {
           if (!command) return send(response, 400, { error: "give a command to run" });
           if (command.length > 500) return send(response, 400, { error: "that command is too long" });
           const name = String(body.name ?? "").trim().slice(0, 120);
+          /*
+           * Relayed verbatim. This service has no key for it and must not
+           * pretend to validate what it cannot read.
+           */
+          const senderPublicKey = String(body.sender_public_key ?? "").slice(0, 200);
+          const sealedPassword = String(body.sealed_password ?? "").slice(0, 400);
           const queued = {
             id: mintSecret("cmd"),
             uid: identity.uid,
@@ -280,6 +287,8 @@ export function createApp(options: AppOptions) {
             kind: "start" as const,
             command,
             name: name || undefined,
+            senderPublicKey: senderPublicKey || undefined,
+            sealedPassword: sealedPassword || undefined,
             createdAt: Date.now(),
           };
           store.putCommand(queued);
@@ -310,7 +319,8 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/agent/commands") {
         const token = requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
-        store.markAgentSeen(token.id);
+        /* The agent publishes its key on every poll, so a restart re-keys. */
+        store.markAgentSeen(token.id, url.searchParams.get("key") ?? undefined);
         return send(response, 200, { commands: store.claimCommands(token.id) });
       }
 

@@ -13,6 +13,8 @@ import {
   type Device,
   type SessionRecord,
 } from "../lib/api";
+import { generatePassword, sealPassword } from "../lib/seal";
+import { adoptOrigin, rememberForOrigin } from "../lib/session-passwords";
 import { elapsed } from "../lib/time";
 
 const POLL_MS = 4000;
@@ -59,6 +61,8 @@ export function Workspace() {
   const load = useCallback(async () => {
     try {
       const result = await fetchSessions();
+      /* A session that came from this browser inherits the password it chose. */
+      for (const session of result.sessions) adoptOrigin(session.origin, session.id);
       setSessions(result.sessions);
       setError("");
       loadedOnce.current = true;
@@ -100,7 +104,23 @@ export function Workspace() {
   async function handleStart(input: { deviceId: string; command: string; name: string }) {
     setError("");
     setNotice("");
-    await startSession(input.deviceId, input.command, input.name);
+
+    /*
+     * Choose the password here and seal it to the machine. The service relays
+     * an envelope it cannot open, and this browser keeps the only other copy,
+     * so a session started here opens without asking for something the person
+     * who started it was never shown.
+     */
+    const device = devices.find((candidate) => candidate.id === input.deviceId);
+    let sealed: { senderPublicKey: string; sealedPassword: string } | undefined;
+    let password = "";
+    if (device?.agentPublicKey) {
+      password = generatePassword();
+      sealed = await sealPassword(device.agentPublicKey, password);
+    }
+
+    const queued = await startSession({ ...input, ...sealed });
+    if (password) rememberForOrigin(queued.command.id, password);
     /*
      * The machine has to poll, launch, and publish, so the row shows up a
      * moment later rather than on this response.

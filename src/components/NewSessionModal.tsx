@@ -189,6 +189,17 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
               </div>
             )}
 
+            {chosenMachine && machineReady && !chosenMachine.agentPublicKey && (
+              <p className="sheet-note">
+                <Warning size={14} weight="fill" />
+                <span>
+                  The agent on <b>{chosenMachine.label}</b> is an older build
+                  that cannot receive a password. Restart <code>shell agent</code>{" "}
+                  there, or the session will ask for one you cannot see.
+                </span>
+              </p>
+            )}
+
             {chosenMachine && !machineReady && (
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />

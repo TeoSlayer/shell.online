@@ -571,3 +571,62 @@ describe("starting on a machine with no agent", () => {
     expect(afterPoll.body.devices[0].agentSeenAt).toBeTypeOf("number");
   });
 });
+
+describe("relaying a sealed password", () => {
+  it("passes the envelope to the agent without being able to read it", async () => {
+    const tokens = await login();
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    const deviceId = listed.body.devices[0].id;
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+
+    await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: {
+        device_id: deviceId,
+        kind: "start",
+        command: "cat",
+        sender_public_key: "BASE64_SENDER_KEY",
+        sealed_password: "BASE64_SEALED_ENVELOPE",
+      },
+    });
+
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    expect(claimed.body.commands[0]).toMatchObject({
+      senderPublicKey: "BASE64_SENDER_KEY",
+      sealedPassword: "BASE64_SEALED_ENVELOPE",
+    });
+  });
+
+  it("records the agent's published key so a browser can seal to it", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?key=AGENT_PUBLIC_KEY", {
+      auth: tokens.access_token,
+    });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(listed.body.devices[0].agentPublicKey).toBe("AGENT_PUBLIC_KEY");
+  });
+
+  it("takes a new key when the agent restarts", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?key=FIRST", { auth: tokens.access_token });
+    await call("GET", "/api/agent/commands?key=SECOND", { auth: tokens.access_token });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(listed.body.devices[0].agentPublicKey).toBe("SECOND");
+  });
+
+  it("ties a session back to the request that started it", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        command: "cat",
+        origin: "cmd_abc",
+      },
+    });
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    /* This is how the browser recognises the session it started. */
+    expect(listed.body.sessions[0].origin).toBe("cmd_abc");
+  });
+});

@@ -4,7 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
-import { encryptionFragment, resolveSessionSocket } from "./socket-url";
+import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
+import { forget, passwordFor } from "../lib/session-passwords";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 
@@ -82,7 +83,17 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
         onStatus: (next, message) => {
           setStatus(next);
           setDetail(message ?? "");
-          if (next === "needs-password") setUnlocking(false);
+          if (next === "needs-password") {
+            setUnlocking(false);
+            /*
+             * A remembered password that no longer works is worse than none:
+             * it would retry forever. Drop it and let the person type one.
+             */
+            if (message) {
+              const id = sessionIdFromShareUrl(shareUrl);
+              if (id) forget(id);
+            }
+          }
         },
         onData: (bytes, reset) => {
           if (reset) term.reset();
@@ -97,7 +108,16 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
     connection.current = connected;
 
     const typed = term.onData((data) => connected.send(data));
-    void connected.start();
+
+    /*
+     * A session this browser started already has its password here, so unlock
+     * without a prompt. Everything else still asks.
+     */
+    const sessionId = sessionIdFromShareUrl(shareUrl);
+    const known = sessionId ? passwordFor(sessionId) : null;
+    void connected.start().then(() => {
+      if (known && connected.needsPassword) return connected.submitPassword(known);
+    });
 
     const observer = new ResizeObserver(() => refit());
     observer.observe(node);
