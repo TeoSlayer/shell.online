@@ -174,6 +174,7 @@ type SessionInput struct {
 	ID         string `json:"id"`
 	ShareURL   string `json:"share_url"`
 	Command    string `json:"command"`
+	Name       string `json:"name,omitempty"`
 	ReadOnly   bool   `json:"read_only"`
 	Encrypted  bool   `json:"encrypted"`
 	Persistent bool   `json:"persistent"`
@@ -232,6 +233,7 @@ type AgentCommand struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
 	Command   string `json:"command,omitempty"`
+	Name      string `json:"name,omitempty"`
 	SessionID string `json:"sessionId,omitempty"`
 }
 

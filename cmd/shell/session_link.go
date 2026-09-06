@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"shell.online/internal/account"
@@ -14,6 +15,15 @@ import (
 // linkTimeout bounds every accounts call made around a session launch. Sharing
 // a terminal must never block on the accounts service.
 const linkTimeout = 10 * time.Second
+
+// sessionNameEnvironment carries a label chosen elsewhere, such as in the web
+// app, through to the published session.
+const sessionNameEnvironment = "SHELL_ONLINE_SESSION_NAME"
+
+// sessionNameFromEnvironment returns the label for this session, if any.
+func sessionNameFromEnvironment() string {
+	return strings.TrimSpace(os.Getenv(sessionNameEnvironment))
+}
 
 // sessionLink publishes a running session to the linked account.
 //
@@ -75,6 +85,9 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 	}
 	if input.StartedAt == 0 {
 		input.StartedAt = time.Now().UnixMilli()
+	}
+	if input.Name == "" {
+		input.Name = sessionNameFromEnvironment()
 	}
 
 	registerContext, cancel := context.WithTimeout(ctx, linkTimeout)

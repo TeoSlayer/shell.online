@@ -130,6 +130,11 @@ func performAgentCommand(
 		// itself and publishes through the usual path.
 		launch := exec.CommandContext(ctx, self, fields...)
 		launch.Env = os.Environ()
+		if command.Name != "" {
+			// The launched shell reads this when it publishes the session, so
+			// the name chosen in the browser survives to the session list.
+			launch.Env = append(launch.Env, sessionNameEnvironment+"="+command.Name)
+		}
 		launch.Stdout = io.Discard
 		launch.Stderr = io.Discard
 		if err := launch.Run(); err != nil {
