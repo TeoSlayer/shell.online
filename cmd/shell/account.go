@@ -14,10 +14,30 @@ import (
 	"shell.online/internal/account"
 )
 
+// Local development addresses, used when SHELL_ONLINE_LOCAL is set.
+const (
+	localAccountsURL = "http://127.0.0.1:8787"
+	localWebURL      = "http://localhost:5173"
+	localServerURL   = "http://127.0.0.1:8788"
+)
+
+// developingLocally reports whether to talk to a local stack.
+//
+// Every service defaults to production, so forgetting one variable silently
+// aims a command at the real thing. One switch sets the whole set, and each
+// address can still be overridden on its own.
+func developingLocally() bool {
+	value := os.Getenv("SHELL_ONLINE_LOCAL")
+	return value == "1" || value == "true"
+}
+
 // defaultAccountsURL is the accounts service that issues CLI tokens.
 func defaultAccountsURL() string {
 	if configured := os.Getenv("SHELL_ONLINE_ACCOUNTS"); configured != "" {
 		return configured
+	}
+	if developingLocally() {
+		return localAccountsURL
 	}
 	return "https://accounts.shell.online"
 }
@@ -26,6 +46,9 @@ func defaultAccountsURL() string {
 func defaultWebURL() string {
 	if configured := os.Getenv("SHELL_ONLINE_WEB"); configured != "" {
 		return configured
+	}
+	if developingLocally() {
+		return localWebURL
 	}
 	return "https://shell.online"
 }
@@ -79,6 +102,12 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	// Ctrl-C during the browser wait should stop cleanly, not leave a listener.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if *accountsURL != "https://accounts.shell.online" || *webURL != "https://shell.online" {
+		// Anything other than production is worth stating plainly, so a stray
+		// environment variable is caught before a browser opens.
+		fmt.Fprintf(stderr, "\n  Approving at %s\n  Tokens from  %s\n", *webURL, *accountsURL)
+	}
 
 	client := account.NewClient(*accountsURL, "shell/"+version)
 	credentials, err := account.Login(ctx, client, account.Options{

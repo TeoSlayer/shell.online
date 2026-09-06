@@ -298,5 +298,8 @@ func defaultServer() string {
 	if configured := os.Getenv("SHELL_ONLINE_SERVER"); configured != "" {
 		return configured
 	}
+	if developingLocally() {
+		return localServerURL
+	}
 	return "https://shell.online"
 }

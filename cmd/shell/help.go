@@ -157,6 +157,19 @@ Driving this machine from the browser
   browser can launch processes here. It stops with Ctrl-C, and sessions it
   started keep running.
 
+Running against a local stack
+  Every address defaults to production, so setting only some of them aims the
+  rest at the real service. SHELL_ONLINE_LOCAL=1 points the whole set at a
+  local stack at once:
+
+    accounts  http://127.0.0.1:8787
+    web       http://localhost:5173
+    relay     http://127.0.0.1:8788
+
+  SHELL_ONLINE_ACCOUNTS, SHELL_ONLINE_WEB and SHELL_ONLINE_SERVER still
+  override individually. shell login prints which services it is using
+  whenever they are not the production ones.
+
 Credentials live in your user config directory, readable only by you. Set
 SHELL_ONLINE_CONFIG to keep them somewhere else.
 `)

@@ -291,3 +291,63 @@ func TestAgentCardSaysWhatItAllows(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultsAimAtProductionUnlessToldOtherwise(t *testing.T) {
+	for _, name := range []string{"SHELL_ONLINE_LOCAL", "SHELL_ONLINE_ACCOUNTS", "SHELL_ONLINE_WEB", "SHELL_ONLINE_SERVER"} {
+		t.Setenv(name, "")
+	}
+	if got := defaultAccountsURL(); got != "https://accounts.shell.online" {
+		t.Fatalf("defaultAccountsURL = %q", got)
+	}
+	if got := defaultWebURL(); got != "https://shell.online" {
+		t.Fatalf("defaultWebURL = %q", got)
+	}
+	if got := defaultServer(); got != "https://shell.online" {
+		t.Fatalf("defaultServer = %q", got)
+	}
+}
+
+func TestLocalSwitchMovesEveryServiceAtOnce(t *testing.T) {
+	// Forgetting one variable used to aim that one command at production while
+	// the rest stayed local, which is how a test session reached the real relay.
+	for _, name := range []string{"SHELL_ONLINE_ACCOUNTS", "SHELL_ONLINE_WEB", "SHELL_ONLINE_SERVER"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("SHELL_ONLINE_LOCAL", "1")
+
+	if got := defaultAccountsURL(); got != localAccountsURL {
+		t.Fatalf("defaultAccountsURL = %q, want %q", got, localAccountsURL)
+	}
+	if got := defaultWebURL(); got != localWebURL {
+		t.Fatalf("defaultWebURL = %q, want %q", got, localWebURL)
+	}
+	if got := defaultServer(); got != localServerURL {
+		t.Fatalf("defaultServer = %q, want %q", got, localServerURL)
+	}
+}
+
+func TestLocalSwitchAcceptsTrue(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_WEB", "")
+	t.Setenv("SHELL_ONLINE_LOCAL", "true")
+	if got := defaultWebURL(); got != localWebURL {
+		t.Fatalf("defaultWebURL = %q, want the local address", got)
+	}
+}
+
+func TestAnIndividualOverrideStillWinsOverTheLocalSwitch(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_LOCAL", "1")
+	t.Setenv("SHELL_ONLINE_WEB", "http://localhost:4000")
+	if got := defaultWebURL(); got != "http://localhost:4000" {
+		t.Fatalf("defaultWebURL = %q, want the explicit override", got)
+	}
+}
+
+func TestLocalSwitchIgnoresOtherValues(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_WEB", "")
+	for _, value := range []string{"", "0", "no", "yes"} {
+		t.Setenv("SHELL_ONLINE_LOCAL", value)
+		if got := defaultWebURL(); got != "https://shell.online" {
+			t.Fatalf("SHELL_ONLINE_LOCAL=%q gave %q, want production", value, got)
+		}
+	}
+}

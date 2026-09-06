@@ -140,9 +140,21 @@ machine. It is opt-in for a reason: the browser can launch processes here. It
 runs in the foreground, prints exactly what it permits, and stops with Ctrl-C.
 Sessions it started keep running after it exits.
 
+### Running against a local stack
+
+Every address defaults to production, so setting only some of them leaves the
+rest pointed at the real service. One switch moves the whole set:
+
+```sh
+export SHELL_ONLINE_LOCAL=1     # accounts :8787, web :5173, relay :8788
+```
+
+`SHELL_ONLINE_ACCOUNTS`, `SHELL_ONLINE_WEB` and `SHELL_ONLINE_SERVER` still
+override individually, and `shell login` prints which services it is using
+whenever they are not the production ones.
+
 Credentials are stored in your user config directory, readable only by you.
-Set `SHELL_ONLINE_CONFIG` to move them, `SHELL_ONLINE_ACCOUNTS` to point at
-another accounts service, and `SHELL_ONLINE_WEB` at another approval site.
+Set `SHELL_ONLINE_CONFIG` to move them.
 
 ## Agents
 
