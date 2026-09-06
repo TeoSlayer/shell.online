@@ -51,6 +51,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
+          model: ''
           prompt-file: .github/prompts/issue-assessment.prompt.yml
           file_input: |
             issue: ./issue-context.json
@@ -61,6 +62,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
+          model: ''
           prompt-file: .github/prompts/issue-removal-verifier.prompt.yml
           file_input: |
             issue: ./issue-context.json

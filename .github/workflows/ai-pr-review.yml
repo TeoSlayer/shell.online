@@ -78,6 +78,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
+          model: ''
           prompt-file: .github/prompts/pr-assessment.prompt.yml
           file_input: |
             pull_request: ./pr-context.json
@@ -88,6 +89,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
+          model: ''
           prompt-file: .github/prompts/pr-closure-verifier.prompt.yml
           file_input: |
             pull_request: ./pr-context.json

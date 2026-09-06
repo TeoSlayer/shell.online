@@ -87,6 +87,7 @@ jobs:
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
         with:
+          model: ''
           prompt-file: .github/prompts/release-notes.prompt.yml
           file_input: |
             release: ./release-context.json
