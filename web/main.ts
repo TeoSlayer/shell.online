@@ -56,6 +56,8 @@ if (!app) throw new Error("Missing app root");
 type TerminalColorMode = "dark" | "light";
 const TYPING_LEASE_MS = 1_800;
 const PILOT_PROTOCOL_URL = "https://pilotprotocol.network/";
+const CONTACT_EMAIL = "founders@pilotprotocol.network";
+const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("shell.online")}`;
 const GITHUB_MARK_PATH = "M8 0C3.58 0 0 3.64 0 8.13c0 3.59 2.29 6.64 5.47 7.71.4.08.55-.18.55-.39 0-.19-.01-.82-.01-1.49-2.01.44-2.53-.5-2.69-.96-.09-.23-.48-.96-.82-1.16-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.83.72 1.23 1.87.88 2.33.67.07-.53.28-.88.51-1.08-1.78-.21-3.65-.91-3.65-4.02 0-.89.31-1.62.82-2.19-.08-.2-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.52 7.52 0 018 3.84a7.5 7.5 0 012 .28c1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.96.08 2.16.51.57.82 1.3.82 2.19 0 3.12-1.88 3.81-3.66 4.01.29.25.54.74.54 1.5 0 1.08-.01 1.95-.01 2.22 0 .22.15.47.55.39A8.16 8.16 0 0016 8.13C16 3.64 12.42 0 8 0z";
 const OPENAI_MARK_PATH = "M196.4 185.8l0-48.6c0-4.1 1.5-7.2 5.1-9.2l97.8-56.3c13.3-7.7 29.2-11.3 45.6-11.3 61.4 0 100.4 47.6 100.4 98.3 0 3.6 0 7.7-.5 11.8L343.3 111.1c-6.1-3.6-12.3-3.6-18.4 0L196.4 185.8zM424.7 375.2l0-116.2c0-7.2-3.1-12.3-9.2-15.9L287 168.4 329 144.3c3.6-2 6.7-2 10.2 0L437 200.7c28.2 16.4 47.1 51.2 47.1 85 0 38.9-23 74.8-59.4 89.6l0 0zM166.2 272.8l-42-24.6c-3.6-2-5.1-5.1-5.1-9.2l0-112.6c0-54.8 42-96.3 98.8-96.3 21.5 0 41.5 7.2 58.4 20L175.4 108.5c-6.1 3.6-9.2 8.7-9.2 15.9l0 148.5 0 0zm90.4 52.2l-60.2-33.8 0-71.7 60.2-33.8 60.2 33.8 0 71.7-60.2 33.8zm38.7 155.7c-21.5 0-41.5-7.2-58.4-20l100.9-58.4c6.1-3.6 9.2-8.7 9.2-15.9l0-148.5 42.5 24.6c3.6 2 5.1 5.1 5.1 9.2l0 112.6c0 54.8-42.5 96.3-99.3 96.3l0 0zM173.8 366.5L76.1 310.2c-28.2-16.4-47.1-51.2-47.1-85 0-39.4 23.6-74.8 59.9-89.6l0 116.7c0 7.2 3.1 12.3 9.2 15.9l128 74.2-42 24.1c-3.6 2-6.7 2-10.2 0zm-5.6 84c-57.9 0-100.4-43.5-100.4-97.3 0-4.1 .5-8.2 1-12.3l100.9 58.4c6.1 3.6 12.3 3.6 18.4 0l128.5-74.2 0 48.6c0 4.1-1.5 7.2-5.1 9.2l-97.8 56.3c-13.3 7.7-29.2 11.3-45.6 11.3l0 0zm127 60.9c62 0 113.7-44 125.4-102.4 57.3-14.9 94.2-68.6 94.2-123.4 0-35.8-15.4-70.7-43-95.7 2.6-10.8 4.1-21.5 4.1-32.3 0-73.2-59.4-128-128-128-13.8 0-27.1 2-40.4 6.7-23-22.5-54.8-36.9-89.6-36.9-62 0-113.7 44-125.4 102.4-57.3 14.8-94.2 68.6-94.2 123.4 0 35.8 15.4 70.7 43 95.7-2.6 10.8-4.1 21.5-4.1 32.3 0 73.2 59.4 128 128 128 13.8 0 27.1-2 40.4-6.7 23 22.5 54.8 36.9 89.6 36.9z";
 
@@ -394,6 +396,37 @@ function wireDocumentationControls(kind: DocumentationKind, version: string, con
   });
 }
 
+type PhoneFrameOptions = {
+  src: string;
+  alt: string;
+  proof?: boolean;
+  loading?: "lazy";
+  fetchPriority?: "high";
+};
+
+function renderPhoneFrame({ src, alt, proof = false, loading, fetchPriority }: PhoneFrameOptions): string {
+  const attributes = [
+    loading ? `loading="${loading}"` : "",
+    fetchPriority ? `fetchpriority="${fetchPriority}"` : "",
+  ].filter(Boolean).join(" ");
+  return `
+    <div class="phone-device${proof ? " phone-device-proof" : ""}">
+      <i class="phone-volume" aria-hidden="true"></i>
+      <div class="phone-screen">
+        <div class="phone-statusbar" aria-hidden="true">
+          <span class="phone-time">9:41</span>
+          <span class="phone-island"></span>
+          <span class="phone-status-icons">
+            <svg class="phone-signal" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="0.8"/><rect x="5" y="5.5" width="3" height="6.5" rx="0.8"/><rect x="10" y="3" width="3" height="9" rx="0.8"/><rect x="15" y="0" width="3" height="12" rx="0.8"/></svg>
+            <svg class="phone-wifi" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2 5.9 8.9a3 3 0 0 1 4.2 0Zm3.6-3.9a5.3 5.3 0 0 0-7.2 0L3 5.8a7.4 7.4 0 0 1 10 0Zm2.6-2.7A9.2 9.2 0 0 0 1.8 4.6L.4 3.1a11.3 11.3 0 0 1 15.2 0Z"/></svg>
+            <svg class="phone-battery" viewBox="0 0 27 12" aria-hidden="true"><rect x="0.5" y="0.5" width="22" height="11" rx="3" fill="none" stroke="currentColor" stroke-opacity="0.45"/><rect x="2" y="2" width="19" height="8" rx="1.8"/><path d="M24.2 4v4a2 2 0 0 0 0-4Z" fill-opacity="0.45"/></svg>
+          </span>
+        </div>
+        <img src="${src}" width="780" height="1688" alt="${alt}" ${attributes} />
+      </div>
+    </div>`;
+}
+
 function renderLanding(): void {
   const windowsVisitor = /Windows/i.test(navigator.userAgent);
   const installCommand = windowsVisitor
@@ -406,12 +439,16 @@ function renderLanding(): void {
   app!.innerHTML = `
     <section class="marketing">
       <header class="marketing-nav">
-        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
+        <a class="wordmark" href="/" aria-label="shell.online home"><img class="wordmark-mark" src="/favicon.svg" alt="" width="28" height="28" decoding="async" /><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Main navigation">
           <a href="/docs/">Docs</a>
           <a href="#use-cases">Use cases</a>
           <a href="#how">How it works</a>
-          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
+          <a class="nav-github" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
+          <a class="nav-contact" href="${CONTACT_MAILTO}" aria-label="Contact" title="Email ${CONTACT_EMAIL}">
+            <svg viewBox="0 0 20 16" aria-hidden="true"><rect x="1" y="1" width="18" height="14" rx="3"/><path d="m2 3 8 6 8-6"/></svg>
+            <span>Contact</span>
+          </a>
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
           </button>
@@ -442,9 +479,11 @@ function renderLanding(): void {
           <div class="product-demo phone-product-demo" aria-label="A live shell.online Codex session viewed on a phone">
             <div class="demo-aura" aria-hidden="true"></div>
             <figure class="real-phone-demo">
-              <div class="phone-device">
-                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing Go heartbeat test in a live shell.online session on a phone" fetchpriority="high" />
-              </div>
+              ${renderPhoneFrame({
+                src: "/screenshots/codex-working-mobile.png",
+                alt: "Codex diagnosing a failing Go heartbeat test in a live shell.online session on a phone",
+                fetchPriority: "high",
+              })}
               <figcaption><span><i></i> Actual phone capture</span><strong>Codex · live via shell.online</strong></figcaption>
             </figure>
           </div>
@@ -522,15 +561,21 @@ function renderLanding(): void {
           </div>
           <div class="demo-proof-grid">
             <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing heartbeat test through shell.online on a phone" loading="lazy" />
-              </div>
+              ${renderPhoneFrame({
+                src: "/screenshots/codex-working-mobile.png",
+                alt: "Codex diagnosing a failing heartbeat test through shell.online on a phone",
+                proof: true,
+                loading: "lazy",
+              })}
               <figcaption><b>Working</b><span>Follow the diagnosis and live test output.</span></figcaption>
             </figure>
             <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-complete-mobile.png" width="780" height="1688" alt="The completed Codex fix with passing tests viewed through shell.online on a phone" loading="lazy" />
-              </div>
+              ${renderPhoneFrame({
+                src: "/screenshots/codex-complete-mobile.png",
+                alt: "The completed Codex fix with passing tests viewed through shell.online on a phone",
+                proof: true,
+                loading: "lazy",
+              })}
               <figcaption><b>Complete</b><span>Review the fix and the passing test suite.</span></figcaption>
             </figure>
           </div>

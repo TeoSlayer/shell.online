@@ -10,6 +10,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.
 - Use GitHub's current Copilot inference path rather than the retired GitHub Models endpoint.
 
+### Changed
+
+- Frame the landing page's three phone captures as a realistic device: metal rim, bezel, status bar, Dynamic Island, and side buttons, sharing one status-bar template and scaling with the phone's width.
+- Add a Contact button beside Copy install in the landing page header that opens a prefilled email to the team, and show the cloud terminal mark beside the wordmark.
+
 ## [0.8.1] — 2026-09-04
 
 ### Fixed

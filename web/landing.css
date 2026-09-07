@@ -318,9 +318,20 @@
 }
 
 .marketing .wordmark {
+  display: inline-flex;
   color: #191b18;
   font-size: 23px;
   font-weight: 590;
+  align-items: center;
+}
+
+.marketing-nav .wordmark-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin-right: 9px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgb(25 27 24 / 12%);
 }
 
 .marketing .wordmark span {
@@ -349,23 +360,51 @@
   color: #11130f;
 }
 
-.nav-install {
-  min-width: 108px;
+.nav-install,
+.marketing-nav .marketing-links > a.nav-contact {
   height: 38px;
-  padding: 0 15px;
   border: 1px solid #1d1f1b;
   border-radius: 999px;
+  font-size: 12px;
+  font-weight: 590;
+  transition: transform 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.nav-install {
+  min-width: 108px;
+  padding: 0 15px;
   background: #1d1f1b;
   color: #f8f7f1 !important;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 590;
-  transition: transform 150ms ease, background 150ms ease;
 }
 
 .nav-install:hover {
   background: #353831;
   transform: translateY(-1px);
+}
+
+.marketing-nav .marketing-links > a.nav-contact {
+  display: inline-flex;
+  margin-right: -18px;
+  padding: 0 14px 0 12px;
+  color: #1d1f1b;
+  align-items: center;
+  gap: 8px;
+}
+
+.marketing-nav .marketing-links > a.nav-contact:hover {
+  background: #1d1f1b;
+  color: #f8f7f1;
+  transform: translateY(-1px);
+}
+
+.marketing-links > a.nav-contact svg {
+  width: 16px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
 }
 
 .marketing-hero {
@@ -598,45 +637,142 @@
 }
 
 .phone-device {
+  --phone-scale: 1;
+  --phone-shadow-far: 0 56px 110px rgb(30 39 24 / 26%);
+  --phone-shadow-near: 0 14px 30px rgb(30 39 24 / 18%);
   position: relative;
-  padding: 9px;
-  border: 1px solid #30343d;
-  border-radius: 46px;
-  background: #111319;
+  padding: calc(11px * var(--phone-scale));
+  border-radius: calc(58px * var(--phone-scale));
+  background:
+    linear-gradient(160deg, #3d414b 0%, #1c1f26 28%, #15171d 60%, #2a2e37 100%);
   box-shadow:
-    0 48px 100px rgb(30 39 24 / 24%),
-    0 10px 26px rgb(30 39 24 / 17%),
-    inset 0 0 0 1px rgb(255 255 255 / 7%);
+    var(--phone-shadow-far),
+    var(--phone-shadow-near),
+    0 0 0 1px #0a0b0e,
+    inset 0 0 0 1.5px rgb(255 255 255 / 16%),
+    inset 0 0 0 4px #0c0d11,
+    inset 0 0 0 5px rgb(255 255 255 / 4%);
+}
+
+/* Physical buttons: action + volume on the left, power on the right. */
+.phone-device::before,
+.phone-device::after,
+.phone-volume,
+.phone-volume::after {
+  position: absolute;
+  width: 4px;
+  background: linear-gradient(90deg, #2c3038, #464b55 45%, #23262d);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 45%);
 }
 
 .phone-device::before,
-.phone-device::after {
-  position: absolute;
-  width: 3px;
-  border-radius: 3px 0 0 3px;
-  background: #292d35;
+.phone-device::after,
+.phone-volume::after {
   content: "";
 }
 
 .phone-device::before {
-  height: 70px;
-  top: 118px;
+  height: calc(30px * var(--phone-scale));
+  top: calc(118px * var(--phone-scale));
   left: -4px;
+  border-radius: 3px 0 0 3px;
+}
+
+.phone-volume {
+  height: calc(56px * var(--phone-scale));
+  top: calc(168px * var(--phone-scale));
+  left: -4px;
+  border-radius: 3px 0 0 3px;
+}
+
+.phone-volume::after {
+  top: calc(68px * var(--phone-scale));
+  left: 0;
+  height: 100%;
+  border-radius: inherit;
 }
 
 .phone-device::after {
-  height: 92px;
-  top: 145px;
+  height: calc(92px * var(--phone-scale));
+  top: calc(200px * var(--phone-scale));
   right: -4px;
   border-radius: 0 3px 3px 0;
+  background: linear-gradient(270deg, #2c3038, #464b55 45%, #23262d);
 }
+
+.phone-screen {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(47px * var(--phone-scale));
+  background: #11141b;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 5%);
+}
+
+.phone-statusbar {
+  display: flex;
+  position: relative;
+  height: calc(50px * var(--phone-scale));
+  padding: calc(12px * var(--phone-scale)) calc(30px * var(--phone-scale)) 0;
+  color: #f2f4f7;
+  font: 600 calc(15px * var(--phone-scale))/1 -apple-system, "SF Pro Text", "Uncut Sans", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phone-time {
+  min-width: calc(44px * var(--phone-scale));
+  font-variant-numeric: tabular-nums;
+}
+
+.phone-island {
+  position: absolute;
+  top: calc(16px * var(--phone-scale));
+  left: 50%;
+  width: calc(92px * var(--phone-scale));
+  height: calc(30px * var(--phone-scale));
+  border-radius: 18px;
+  background: #000;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 7%),
+    0 0 0 1px rgb(0 0 0 / 60%);
+  transform: translateX(-50%);
+}
+
+.phone-island::after {
+  position: absolute;
+  top: calc(9px * var(--phone-scale));
+  right: calc(12px * var(--phone-scale));
+  width: calc(12px * var(--phone-scale));
+  height: calc(12px * var(--phone-scale));
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 40%, #1d2433 0 30%, #05070b 70%);
+  content: "";
+}
+
+.phone-status-icons {
+  display: flex;
+  align-items: center;
+  gap: calc(6px * var(--phone-scale));
+  color: #f2f4f7;
+}
+
+.phone-status-icons svg { display: block; fill: currentColor; }
+.phone-signal { width: calc(18px * var(--phone-scale)); height: calc(12px * var(--phone-scale)); }
+.phone-wifi { width: calc(16px * var(--phone-scale)); height: calc(12px * var(--phone-scale)); }
+.phone-battery { width: calc(27px * var(--phone-scale)); height: calc(12px * var(--phone-scale)); }
 
 .phone-device img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 37px;
-  background: #0c0f14;
+  background: #0b0d12;
+}
+
+.phone-device-proof {
+  --phone-scale: 0.82;
+  --phone-shadow-far: 0 30px 70px rgb(30 39 24 / 20%);
+  --phone-shadow-near: 0 10px 22px rgb(30 39 24 / 14%);
 }
 
 .real-phone-demo figcaption {
@@ -2058,50 +2194,31 @@
 }
 
 .demo-proof figure {
+  display: flex;
   min-width: 0;
   margin: 0;
-  overflow: hidden;
-  border: 1px solid #30343d;
-  border-radius: 34px;
-  background: #111319;
-  box-shadow:
-    0 24px 65px rgb(43 49 37 / 13%),
-    inset 0 0 0 1px rgb(255 255 255 / 6%);
-}
-
-.phone-proof-screen {
-  padding: 7px 7px 0;
-}
-
-.demo-proof figure img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border-radius: 27px 27px 0 0;
-  background: #0c0f14;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .demo-proof figcaption {
   display: flex;
-  min-height: 64px;
-  padding: 12px 15px;
-  border-top: 1px solid #30343d;
-  background: #171a20;
+  padding: 0 6px;
   flex-direction: column;
-  justify-content: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .demo-proof figcaption b {
-  color: #e2e5eb;
-  font-size: 10px;
-  font-weight: 580;
+  color: #20231e;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .demo-proof figcaption span {
-  color: #959ca8;
-  font-size: 8px;
-  line-height: 1.4;
+  color: #6b7066;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 @media (max-width: 1040px) {
@@ -2201,8 +2318,22 @@
     display: none;
   }
 
-  .marketing-links > a:last-of-type {
+  .marketing-links > a.nav-github {
     display: block;
+    font-size: 11px;
+  }
+
+  .marketing-nav .wordmark-mark {
+    width: 24px;
+    height: 24px;
+    margin-right: 7px;
+    border-radius: 7px;
+  }
+
+  .marketing-nav .marketing-links > a.nav-contact {
+    height: 35px;
+    margin-right: -4px;
+    padding: 0 12px 0 10px;
     font-size: 11px;
   }
 
@@ -2227,7 +2358,7 @@
     font-size: clamp(50px, 15.2vw, 78px);
   }
 
-  .hero-dek {
+  .marketing .hero-dek {
     margin-top: 25px;
     font-size: 16px;
   }
@@ -2259,6 +2390,10 @@
 
   .real-phone-demo {
     width: min(310px, 88%);
+  }
+
+  .real-phone-demo .phone-device {
+    --phone-scale: 0.92;
   }
 
   .browser-window {
@@ -2346,9 +2481,8 @@
     gap: 12px;
   }
 
-  .demo-proof figcaption {
-    min-height: 54px;
-    padding: 10px;
+  .phone-device-proof {
+    --phone-scale: 0.55;
   }
 
   .numbers {
@@ -2525,13 +2659,34 @@
   }
 }
 
+@media (max-width: 560px) {
+  .marketing-nav .wordmark-mark {
+    display: none;
+  }
+
+  .marketing-nav .marketing-links > a.nav-contact {
+    width: 35px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .marketing-nav .marketing-links > a.nav-contact span {
+    display: none;
+  }
+}
+
 @media (max-width: 420px) {
   .marketing .wordmark {
     font-size: 20px;
   }
 
-  .marketing-links > a:last-of-type {
+  .marketing-links > a.nav-github {
     display: none;
+  }
+
+  .real-phone-demo .phone-device {
+    --phone-scale: 0.75;
   }
 
   .hero-copy h1 {
@@ -2584,6 +2739,10 @@
   .phone-proof {
     width: min(255px, 78%);
     justify-self: center;
+  }
+
+  .phone-device-proof {
+    --phone-scale: 0.66;
   }
 }
 
