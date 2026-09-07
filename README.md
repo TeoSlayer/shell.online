@@ -211,6 +211,16 @@ go test -race ./...
 
 The Go CLI owns the local PTY. A Cloudflare Worker creates sessions and serves the site, while one Durable Object coordinates each terminal's host and viewers. The browser uses xterm.js.
 
+### The platform app
+
+[`app/`](app/) is the accounts and collaboration platform: `shell login`, organizations, an in-app session manager, and a per-session audit log. It is a separate package with its own dependencies, so it is installed and tested on its own:
+
+```sh
+npm run test:app
+```
+
+It ships as one container serving the client, its API, and a proxy to the relay — they have to share an origin, because the relay refuses a websocket whose `Origin` is not its own. See [app/DEPLOYMENT.md](app/DEPLOYMENT.md).
+
 Bug reports and focused pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md), the [Code of Conduct](CODE_OF_CONDUCT.md), and the [changelog](CHANGELOG.md).
 
 Developed by [Pilot Protocol](https://pilotprotocol.network/) and released under the [MIT License](LICENSE).

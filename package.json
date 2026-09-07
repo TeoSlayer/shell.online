@@ -25,7 +25,8 @@
     "check": "npm run typecheck && npm test",
     "test": "vitest run && node --test .github/scripts/moderation.node.mjs && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs",
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
-    "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit"
+    "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test:app": "npm --prefix app ci && npm --prefix app test"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
