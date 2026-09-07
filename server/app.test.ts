@@ -1007,3 +1007,14 @@ describe("accepting an invite when you already have an organization", () => {
     expect(attempt.body.inviteError).toBeTruthy();
   });
 });
+
+describe("cross-origin preflight", () => {
+  it("allows every method the app actually uses", async () => {
+    /* PUT was missing, so assigning a session failed in the browser only. */
+    const result = await call("GET", "/api/health", { origin: ORIGIN });
+    const allowed = result.headers["Access-Control-Allow-Methods"] ?? "";
+    for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      expect(allowed).toContain(method);
+    }
+  });
+});

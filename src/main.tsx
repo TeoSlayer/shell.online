@@ -6,6 +6,9 @@ import "./styles/base.css";
 import "./styles/auth.css";
 import "./styles/shell.css";
 import "./styles/terminal.css";
+import "./styles/people.css";
+import "./styles/collab.css";
+import "./styles/audit.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

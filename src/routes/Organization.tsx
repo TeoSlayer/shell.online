@@ -15,6 +15,7 @@ import {
   type OrgView,
 } from "../lib/api";
 import { ago } from "../lib/time";
+import { publicKey } from "../lib/keypair";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
@@ -97,7 +98,7 @@ export function Organization() {
 
   const load = useCallback(async () => {
     try {
-      const result = await fetchOrg();
+      const result = await fetchOrg(undefined, await publicKey());
       setView(result);
       setDraftName(result.organization.name);
       setError("");

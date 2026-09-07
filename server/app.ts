@@ -22,6 +22,7 @@ import {
   revokeInvite,
 } from "./routes/organizations";
 import { assignSession, auditCsv, recordAudit } from "./routes/audit";
+import { addComment, inbox, notifyAssigned } from "./routes/social";
 
 export interface AppOptions {
   store: Store;
@@ -82,7 +83,7 @@ export function createApp(options: AppOptions) {
       response.setHeader("Access-Control-Allow-Origin", origin);
       response.setHeader("Vary", "Origin");
       response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-      response.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+      response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     }
   }
 
@@ -217,6 +218,10 @@ export function createApp(options: AppOptions) {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
         const resolved = ensureMembership(store, identity, invite);
+        /* Publishing the browser key here keeps it current without a
+           separate call on every sign-in. */
+        const publicKey = url.searchParams.get("key");
+        if (publicKey) store.setMemberKey(identity.uid, publicKey);
         const described = describeOrganization(store, resolved.membership);
         return send(response, described.status, {
           ...(described.body as Record<string, unknown>),
@@ -382,11 +387,41 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         /* Everyone in the organization sees everyone's sessions. */
+        /*
+         * Each caller receives only the copy sealed to them. Handing out
+         * everyone's would be pointless, since they cannot open them, and
+         * would put more sealed material on the wire than anyone needs.
+         */
+        const sessions = store.listOrgSessions(membership.orgId).map((session) => {
+          const mine = session.keyShares?.find((share) => share.uid === membership.uid);
+          return { ...session, keyShares: undefined, keyShare: mine };
+        });
         return send(response, 200, {
-          sessions: store.listOrgSessions(membership.orgId),
+          sessions,
           members: store.members(membership.orgId),
           you: membership,
         });
+      }
+
+      const shareRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/keys$/);
+      if (request.method === "PUT" && shareRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const incoming = Array.isArray(body.shares) ? body.shares : [];
+        const shares = incoming
+          .map((entry) => entry as Record<string, unknown>)
+          .filter((entry) => typeof entry.uid === "string" && typeof entry.sealed === "string")
+          .slice(0, 100)
+          .map((entry) => ({
+            uid: String(entry.uid),
+            senderPublicKey: String(entry.sender_public_key ?? ""),
+            sealed: String(entry.sealed),
+          }));
+        if (!store.putKeyShares(membership.orgId, shareRoute[1], shares)) {
+          return send(response, 404, { error: "no such session" });
+        }
+        return send(response, 200, { shared: shares.length });
       }
 
       const assignRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/assignee$/);
@@ -396,6 +431,13 @@ export function createApp(options: AppOptions) {
         const body = (await readBody(request)) as Record<string, unknown>;
         const result = assignSession(store, membership, assignRoute[1], String(body.uid ?? ""));
         if (!result.ok) return send(response, result.status, { error: result.error });
+        notifyAssigned(
+          store,
+          membership,
+          assignRoute[1],
+          String(body.uid ?? ""),
+          result.session.name || result.session.command,
+        );
         return send(response, 200, { session: result.session });
       }
 
@@ -500,6 +542,57 @@ export function createApp(options: AppOptions) {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
         return send(response, 200, { commands: store.listCommands(identity.uid) });
+      }
+
+      /* ---- One session, in detail ---- */
+
+      const oneSession = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})$/);
+      if (request.method === "GET" && oneSession) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const session = store.sessionInOrg(membership.orgId, oneSession[1]);
+        if (!session) return send(response, 404, { error: "no such session" });
+        const mine = session.keyShares?.find((share) => share.uid === membership.uid);
+        return send(response, 200, {
+          session: { ...session, keyShares: undefined, keyShare: mine },
+          members: store.members(membership.orgId),
+          you: membership,
+          comments: store.comments(membership.orgId, oneSession[1]),
+          audit: store.auditFor(membership.orgId, oneSession[1]),
+        });
+      }
+
+      /* ---- Comments ---- */
+
+      const commentRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/comments$/);
+      if (request.method === "POST" && commentRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const result = addComment(store, membership, commentRoute[1], String(body.body ?? ""));
+        if (!result.ok) return send(response, result.status, { error: result.error });
+        return send(response, 201, { comment: result.value });
+      }
+
+      /* ---- Inbox ---- */
+
+      if (route === "GET /api/notifications") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const view = inbox(store, membership);
+        return send(response, 200, { ...view, members: store.members(membership.orgId) });
+      }
+
+      if (route === "POST /api/notifications/read") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        if (typeof body.id === "string") {
+          store.markNotificationRead(membership.uid, body.id);
+        } else {
+          store.markAllNotificationsRead(membership.uid);
+        }
+        return send(response, 200, inbox(store, membership));
       }
 
       if (route === "GET /api/health") {

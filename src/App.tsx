@@ -9,6 +9,8 @@ import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
 import { Organization } from "./routes/Organization";
 import { Join } from "./routes/Join";
+import { Session } from "./routes/Session";
+import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
 
 export default function App() {
@@ -46,6 +48,22 @@ export default function App() {
             element={
               <RequireAuth>
                 <Account />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/sessions/:sessionId"
+            element={
+              <RequireAuth>
+                <Session />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/audit"
+            element={
+              <RequireAuth>
+                <Audit />
               </RequireAuth>
             }
           />

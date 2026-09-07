@@ -60,6 +60,42 @@ export interface AuditEvent {
   text: string;
 }
 
+/** A session password sealed to one member's browser key. */
+export interface SessionKeyShare {
+  uid: string;
+  senderPublicKey: string;
+  sealed: string;
+}
+
+export interface Comment {
+  id: string;
+  orgId: string;
+  sessionId: string;
+  authorUid: string;
+  body: string;
+  at: number;
+  mentions: string[];
+}
+
+/**
+ * Something that happened which a person should know about.
+ *
+ * "mention" is frequent and low-stakes. "assigned" is rare and means work has
+ * moved onto someone's plate, so the two are distinguished here rather than
+ * left for the UI to guess at.
+ */
+export interface Notification {
+  id: string;
+  orgId: string;
+  uid: string;
+  kind: "mention" | "assigned";
+  sessionId: string;
+  actorUid: string;
+  body: string;
+  at: number;
+  readAt?: number;
+}
+
 export interface SessionRecord {
   id: string;
   uid: string;
@@ -69,6 +105,11 @@ export interface SessionRecord {
   ownerUid?: string;
   /** Who is responsible for it now; the owner until handed off. */
   assigneeUid?: string;
+  /**
+   * The session password, sealed once per member. The service relays these
+   * and can open none of them.
+   */
+  keyShares?: SessionKeyShare[];
   shareUrl: string;
   command: string;
   /** The queued request this session came from, when it came from one. */
@@ -121,11 +162,14 @@ interface Shape {
   memberships: Membership[];
   invites: Invite[];
   audit: AuditEvent[];
+  comments: Comment[];
+  notifications: Notification[];
 }
 
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
+  comments: [], notifications: [],
 };
 
 /**
@@ -178,6 +222,8 @@ export class Store {
         memberships: parsed.memberships ?? [],
         invites: parsed.invites ?? [],
         audit: parsed.audit ?? [],
+        comments: parsed.comments ?? [],
+        notifications: parsed.notifications ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -248,6 +294,25 @@ export class Store {
     if (!token || now - token.lastSeenAt < resolutionMs) return;
     token.lastSeenAt = now;
     this.flush();
+  }
+
+  setMemberKey(uid: string, publicKey: string): void {
+    const membership = this.data.memberships.find((entry) => entry.uid === uid);
+    if (!membership || membership.publicKey === publicKey) return;
+    membership.publicKey = publicKey;
+    this.flush();
+  }
+
+  /** Stores sealed copies of a session password, replacing any for the same uid. */
+  putKeyShares(orgId: string, sessionId: string, shares: SessionKeyShare[]): boolean {
+    const session = this.sessionInOrg(orgId, sessionId);
+    if (!session) return false;
+    const kept = (session.keyShares ?? []).filter(
+      (share) => !shares.some((incoming) => incoming.uid === share.uid),
+    );
+    session.keyShares = [...kept, ...shares];
+    this.flush();
+    return true;
   }
 
   /** Records that `shell agent` is polling, and the key it publishes. */
@@ -487,6 +552,55 @@ export class Store {
       .filter((entry) => entry.orgId === orgId)
       .sort((a, b) => a.at - b.at)
       .slice(-limit);
+  }
+
+  /* ---------------------------------------------------------------
+     Comments and notifications
+     --------------------------------------------------------------- */
+
+  putComment(comment: Comment): void {
+    this.data.comments.push(comment);
+    this.flush();
+  }
+
+  comments(orgId: string, sessionId: string): Comment[] {
+    return this.data.comments
+      .filter((entry) => entry.orgId === orgId && entry.sessionId === sessionId)
+      .sort((a, b) => a.at - b.at);
+  }
+
+  putNotification(notification: Notification): void {
+    this.data.notifications.push(notification);
+    this.flush();
+  }
+
+  notificationsFor(uid: string, limit = 100): Notification[] {
+    return this.data.notifications
+      .filter((entry) => entry.uid === uid)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, limit);
+  }
+
+  markNotificationRead(uid: string, id: string, now = Date.now()): boolean {
+    const notification = this.data.notifications.find(
+      (entry) => entry.id === id && entry.uid === uid,
+    );
+    if (!notification || notification.readAt) return false;
+    notification.readAt = now;
+    this.flush();
+    return true;
+  }
+
+  markAllNotificationsRead(uid: string, now = Date.now()): number {
+    let count = 0;
+    for (const notification of this.data.notifications) {
+      if (notification.uid === uid && !notification.readAt) {
+        notification.readAt = now;
+        count += 1;
+      }
+    }
+    if (count > 0) this.flush();
+    return count;
   }
 
   purgeExpired(now = Date.now()): void {

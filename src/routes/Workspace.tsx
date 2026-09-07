@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Copy, Check, X, Terminal as TerminalIcon, List, Plus, ClockCounterClockwise } from "@phosphor-icons/react";
+import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { PersonChip } from "../components/Avatar";
+import { PersonPicker } from "../components/PersonPicker";
+import { findPerson } from "../lib/people";
 import { NewSessionModal } from "../components/NewSessionModal";
-import { AuditDrawer } from "../components/AuditDrawer";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -17,7 +20,9 @@ import {
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { adoptOrigin, rememberForOrigin } from "../lib/session-passwords";
+import { publicKey, sealForMembers } from "../lib/keypair";
+import { fetchOrg, shareSessionKeys } from "../lib/api";
+import { adoptOrigin, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
 import { elapsed } from "../lib/time";
 
 const POLL_MS = 4000;
@@ -61,8 +66,11 @@ export function Workspace() {
   const [killing, setKilling] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
-  const [auditing, setAuditing] = useState<SessionRecord | null>(null);
   const loadedOnce = useRef(false);
+  /* Passwords waiting for their session to appear so they can be shared. */
+  const pendingShares = useRef(new Map<string, string>());
+  /* Who each session has already been shared with, so polling is not chatty. */
+  const sharedWith = useRef(new Map<string, Set<string>>());
 
   const load = useCallback(async () => {
     try {
@@ -72,6 +80,7 @@ export function Workspace() {
       setSessions(result.sessions);
       setMembers(result.members ?? []);
       setYou(result.you ?? null);
+      await shareAnyPending(result.sessions, result.members ?? [], result.you ?? null);
       setError("");
       loadedOnce.current = true;
     } catch (caught) {
@@ -90,6 +99,16 @@ export function Workspace() {
       window.clearInterval(tick);
     };
   }, [load]);
+
+  /*
+   * Publishing this browser's key makes it a possible recipient of a session
+   * password sealed by a colleague.
+   */
+  useEffect(() => {
+    void publicKey()
+      .then((key) => fetchOrg(undefined, key))
+      .catch(() => undefined);
+  }, []);
 
   /*
    * Machines are polled, not fetched once: whether an agent is listening is a
@@ -128,7 +147,14 @@ export function Workspace() {
     }
 
     const queued = await startSession({ ...input, ...sealed });
-    if (password) rememberForOrigin(queued.command.id, password);
+    if (password) {
+      rememberForOrigin(queued.command.id, password);
+      /*
+       * Colleagues can read this session, so the password is sealed to each of
+       * them too. Held here until the session exists to attach it to.
+       */
+      pendingShares.current.set(queued.command.id, password);
+    }
     /*
      * The machine has to poll, launch, and publish, so the row shows up a
      * moment later rather than on this response.
@@ -151,6 +177,56 @@ export function Workspace() {
       setError(caught instanceof Error ? caught.message : "Could not stop that session.");
     } finally {
       setKilling("");
+    }
+  }
+
+  /*
+   * Sessions started here have a password only this browser knows. Seal it to
+   * every colleague so they can read the session too.
+   *
+   * Runs on each poll rather than once, because someone can join the
+   * organization after a session started, and should still be able to open it.
+   */
+  async function shareAnyPending(all: SessionRecord[], roster: Member[], me: Member | null) {
+    const targets = roster.filter((member) => member.publicKey);
+    if (targets.length === 0) return;
+
+    for (const session of all) {
+      if (session.closedAt) continue;
+
+      /* Newly started here, still waiting for its session to appear. */
+      const pending = session.origin ? pendingShares.current.get(session.origin) : undefined;
+      if (pending) {
+        pendingShares.current.delete(session.origin!);
+        rememberFor(session.id, pending);
+      }
+
+      /* Only the owner holds the password, so only they can share it. */
+      if (me && session.ownerUid !== me.uid) continue;
+      const password = passwordFor(session.id);
+      if (!password) continue;
+
+      const missing = targets.filter(
+        (member) => member.uid !== me?.uid && !sharedWith.current.get(session.id)?.has(member.uid),
+      );
+      if (missing.length === 0) continue;
+
+      try {
+        const shares = await sealForMembers(missing, password);
+        await shareSessionKeys(
+          session.id,
+          shares.map((share) => ({
+            uid: share.uid,
+            sender_public_key: share.senderPublicKey,
+            sealed: share.sealed,
+          })),
+        );
+        const done = sharedWith.current.get(session.id) ?? new Set<string>();
+        for (const share of shares) done.add(share.uid);
+        sharedWith.current.set(session.id, done);
+      } catch {
+        /* Sharing is a convenience; the session still works for its owner. */
+      }
     }
   }
 
@@ -232,6 +308,8 @@ export function Workspace() {
               key={tab.id}
               shareUrl={tab.shareUrl}
               active={state.activeId === tab.id}
+              keyShare={tab.keyShare}
+              canType={tab.canType}
             />
           ))}
         </div>
@@ -279,10 +357,11 @@ export function Workspace() {
                 killing={killing}
                 members={members}
                 you={you}
-                onOpen={(session) => dispatch({ type: "open", session })}
+                onOpen={(session) =>
+                  dispatch({ type: "open", session, canType: canEdit(session, you) })
+                }
                 onKill={handleKill}
                 onAssign={handleAssign}
-                onAudit={setAuditing}
               />
             )}
             {finished.length > 0 && (
@@ -294,19 +373,16 @@ export function Workspace() {
                 killing={killing}
                 members={members}
                 you={you}
-                onOpen={(session) => dispatch({ type: "open", session })}
+                onOpen={(session) =>
+                  dispatch({ type: "open", session, canType: canEdit(session, you) })
+                }
                 onKill={handleKill}
                 onAssign={handleAssign}
-                onAudit={setAuditing}
               />
             )}
           </>
         )}
       </div>
-
-      {auditing && (
-        <AuditDrawer session={auditing} onClose={() => setAuditing(null)} />
-      )}
 
       {composing && (
         <NewSessionModal
@@ -319,24 +395,14 @@ export function Workspace() {
   );
 }
 
-/** Who owns a session and who it is assigned to, when that is worth saying. */
-function describePeople(
-  session: SessionRecord,
-  members: Member[],
-  you: Member | null,
-): string {
-  const nameOf = (uid?: string) => {
-    if (!uid) return "";
-    if (uid === you?.uid) return "you";
-    const member = members.find((entry) => entry.uid === uid);
-    return member?.name?.split(/\s+/)[0] || member?.email || "someone";
-  };
-
-  const owner = nameOf(session.ownerUid);
-  const assignee = nameOf(session.assigneeUid);
-  if (!owner) return "";
-  if (assignee && assignee !== owner) return `${owner} → ${assignee} · `;
-  return `${owner} · `;
+/**
+ * Everyone in the organization can watch a session. Typing into it belongs to
+ * the person who started it and the person it is assigned to.
+ */
+export function canEdit(session: SessionRecord, you: Member | null): boolean {
+  if (!you) return false;
+  if (session.readOnly) return false;
+  return session.ownerUid === you.uid || session.assigneeUid === you.uid;
 }
 
 function canHandOff(session: SessionRecord, you: Member | null): boolean {
@@ -355,7 +421,6 @@ function SessionGroup({
   onOpen,
   onKill,
   onAssign,
-  onAudit,
 }: {
   heading: string;
   sessions: SessionRecord[];
@@ -367,98 +432,90 @@ function SessionGroup({
   onOpen: (session: SessionRecord) => void;
   onKill: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uid: string) => void;
-  onAudit: (session: SessionRecord) => void;
 }) {
   return (
     <section className="sessions-group">
       <h2>{heading}</h2>
-      <ul className="sessions-list">
-        {sessions.map((session) => (
-          <li
-            key={session.id}
-            className={live ? "session is-openable" : "session"}
-            data-live={live}
-          >
-            {/* The whole row opens the session; the buttons are the same act. */}
-            <button
-              type="button"
-              className="session-main session-open-row"
-              onClick={() => live && onOpen(session)}
-              disabled={!live}
-              aria-label={live ? `Open ${session.command}` : undefined}
-            >
-              <span className="session-command">{session.name || session.command}</span>
-              <span className="session-meta">
-                {session.name && session.name !== session.command ? (
-                  <>
-                    {session.command}
-                    {" · "}
-                  </>
-                ) : null}
-                {describePeople(session, members, you)}
-                {session.host || "unknown host"}
-                {" · "}
-                {live
-                  ? `up ${elapsed(session.startedAt, now)}`
-                  : `ran ${elapsed(session.startedAt, session.closedAt ?? now)}`}
-                {session.readOnly ? " · view only" : ""}
-                {session.encrypted ? " · encrypted" : ""}
-                {!live && session.exitCode !== undefined ? ` · exit ${session.exitCode}` : ""}
-              </span>
-            </button>
-
-            <div className="session-actions">
-              <button
-                type="button"
-                className="session-copy"
-                title="Audit log"
-                aria-label={`Audit log for ${session.name || session.command}`}
-                onClick={() => onAudit(session)}
-              >
-                <ClockCounterClockwise size={15} />
-              </button>
-              {live && members.length > 1 && canHandOff(session, you) && (
-                <select
-                  className="launcher-machine"
-                  value={session.assigneeUid ?? ""}
-                  onChange={(event) => onAssign(session, event.target.value)}
-                  aria-label={`Assign ${session.name || session.command}`}
-                  title="Hand this session to someone"
-                >
-                  {members.map((member) => (
-                    <option key={member.uid} value={member.uid}>
-                      {member.uid === you?.uid ? "me" : member.email}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {live ? (
-                <>
-                  <button
-                    type="button"
-                    className="session-action is-primary"
-                    onClick={() => onOpen(session)}
-                  >
-                    <TerminalIcon size={15} weight="bold" />
-                    Open
-                  </button>
-                  <CopyLink url={session.shareUrl} />
-                  <button
-                    type="button"
-                    className="session-action"
-                    onClick={() => void onKill(session)}
-                    disabled={killing === session.id}
-                  >
-                    {killing === session.id ? "Stopping" : "Stop"}
-                  </button>
-                </>
-              ) : (
-                <CopyLink url={session.shareUrl} />
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      <table className="table">
+        <thead>
+          <tr>
+            <th scope="col">Session</th>
+            <th scope="col">Owner</th>
+            <th scope="col">Assignee</th>
+            <th scope="col">Machine</th>
+            <th scope="col">{live ? "Uptime" : "Ran for"}</th>
+            <th scope="col" className="table-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((session) => {
+            const owner = findPerson(members, session.ownerUid);
+            const assignee = findPerson(members, session.assigneeUid);
+            return (
+              <tr key={session.id} data-live={live}>
+                <td>
+                  <Link className="table-subject" to={`/sessions/${session.id}`}>
+                    {live && <span className="table-dot" aria-hidden="true" />}
+                    <span className="table-name">{session.name || session.command}</span>
+                    {session.name && session.name !== session.command && (
+                      <code className="table-command">{session.command}</code>
+                    )}
+                  </Link>
+                </td>
+                <td><PersonChip person={owner} /></td>
+                <td>
+                  {live && canHandOff(session, you) ? (
+                    <PersonPicker
+                      people={members}
+                      value={session.assigneeUid}
+                      label={`Assignee for ${session.name || session.command}`}
+                      onChange={(uid) => onAssign(session, uid)}
+                    />
+                  ) : (
+                    <PersonChip person={assignee} />
+                  )}
+                </td>
+                <td className="table-quiet">{session.host || "unknown"}</td>
+                <td className="table-quiet">
+                  {live
+                    ? elapsed(session.startedAt, now)
+                    : elapsed(session.startedAt, session.closedAt ?? now)}
+                  {!live && session.exitCode !== undefined && (
+                    <span className="table-exit">exit {session.exitCode}</span>
+                  )}
+                </td>
+                <td className="table-end">
+                  <div className="session-actions">
+                    {live ? (
+                      <>
+                        <button
+                          type="button"
+                          className="session-action is-primary"
+                          onClick={() => onOpen(session)}
+                        >
+                          <TerminalIcon size={15} weight="bold" />
+                          {canEdit(session, you) ? "Open" : "Watch"}
+                        </button>
+                        <CopyLink url={session.shareUrl} />
+                        <button
+                          type="button"
+                          className="session-action"
+                          onClick={() => void onKill(session)}
+                          disabled={killing === session.id}
+                        >
+                          {killing === session.id ? "Stopping" : "Stop"}
+                        </button>
+                      </>
+                    ) : (
+                      <CopyLink url={session.shareUrl} />
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }

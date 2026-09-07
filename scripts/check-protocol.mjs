@@ -16,6 +16,11 @@ const FILES = [
   { vendored: "src/terminal/e2ee.ts", source: "web/e2ee.ts" },
 ];
 
+/* Copies kept in step within this repository rather than with shell.online. */
+const LOCAL = [
+  { vendored: "src/lib/mentions.ts", source: "server/lib/mentions.ts" },
+];
+
 if (!existsSync(upstream)) {
   console.log(`check:protocol: no shell.online checkout at ${upstream}, skipping`);
   process.exit(0);
@@ -32,6 +37,14 @@ for (const { vendored, source } of FILES) {
   /* The vendored copy carries a provenance header; compare the body only. */
   const body = readFileSync(join(here, "..", vendored), "utf8").replace(/^\/\*[\s\S]*?\*\/\n/, "");
   if (body !== readFileSync(sourcePath, "utf8")) {
+    console.error(`check:protocol: ${vendored} has drifted from ${source}`);
+    drifted = true;
+  }
+}
+
+for (const { vendored, source } of LOCAL) {
+  const body = readFileSync(join(here, "..", vendored), "utf8").replace(/^\/\*[\s\S]*?\*\/\n\n/, "");
+  if (body !== readFileSync(join(here, "..", source), "utf8")) {
     console.error(`check:protocol: ${vendored} has drifted from ${source}`);
     drifted = true;
   }

@@ -19,6 +19,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase";
+import { setPasswordOwner } from "../lib/session-passwords";
 
 interface AuthValue {
   user: User | null;
@@ -40,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (next) => {
+      /* Scope any stored session password to whoever is signed in now. */
+      setPasswordOwner(next?.uid ?? "");
       setUser(next);
       setInitializing(false);
     });
@@ -90,6 +93,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOutUser = useCallback(async () => {
+    /*
+     * Stored session passwords are keyed by account, so signing out does not
+     * expose them to whoever signs in next. They are deliberately kept: they
+     * are how this person reopens their own sessions, and how they share them
+     * with colleagues who join later.
+     */
     await signOut(auth);
   }, []);
 

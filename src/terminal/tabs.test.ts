@@ -43,6 +43,8 @@ describe("open", () => {
       command: "npm run dev",
       shareUrl: "http://127.0.0.1:8788/s/a",
       readOnly: true,
+      keyShare: undefined,
+      canType: true,
     });
   });
 
@@ -107,6 +109,25 @@ describe("close", () => {
   it("ignores an unknown id", () => {
     const state = open(EMPTY, "a");
     expect(reduce(state, { type: "close", id: "nope" })).toBe(state);
+  });
+});
+
+describe("who may type", () => {
+  it("defaults to editable", () => {
+    expect(open(EMPTY, "a").tabs[0].canType).toBe(true);
+  });
+
+  it("carries a watch-only tab, for a colleague who is neither owner nor assignee", () => {
+    const state = reduce(EMPTY, { type: "open", session: session("a"), canType: false });
+    expect(state.tabs[0].canType).toBe(false);
+  });
+
+  it("carries the key a colleague was given, so they can open it at all", () => {
+    const state = reduce(EMPTY, {
+      type: "open",
+      session: { ...session("a"), keyShare: { senderPublicKey: "pk", sealed: "sealed" } },
+    });
+    expect(state.tabs[0].keyShare).toEqual({ senderPublicKey: "pk", sealed: "sealed" });
   });
 });
 

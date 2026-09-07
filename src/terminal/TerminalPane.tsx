@@ -6,6 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
 import { forget, passwordFor } from "../lib/session-passwords";
+import { openSealed } from "../lib/keypair";
 import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
@@ -15,6 +16,14 @@ export interface TerminalPaneProps {
   shareUrl: string;
   /** Hidden panes stay mounted so switching tabs does not drop the socket. */
   active: boolean;
+  /** The password sealed to this browser by whoever started the session. */
+  keyShare?: { senderPublicKey: string; sealed: string };
+  /**
+   * False for a colleague who is neither owner nor assignee. They can watch
+   * but not type, which is what "readable by the organization, editable by
+   * the people responsible" means in a terminal.
+   */
+  canType?: boolean;
 }
 
 const THEME = {
@@ -24,7 +33,12 @@ const THEME = {
   selectionBackground: "#3a3f33",
 };
 
-export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
+export function TerminalPane({
+  shareUrl,
+  active,
+  keyShare,
+  canType = true,
+}: TerminalPaneProps) {
   const mount = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
@@ -126,18 +140,27 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
     const sink = audit ? new AuditSink(audit, postAudit) : null;
 
     const typed = term.onData((data) => {
+      if (!canType) return;
       connected.send(data);
       sink?.observe(data);
     });
+    term.options.disableStdin = !canType;
 
     /*
      * A session this browser started already has its password here, so unlock
      * without a prompt. Everything else still asks.
      */
     const sessionId = sessionIdFromShareUrl(shareUrl);
-    const known = sessionId ? passwordFor(sessionId) : null;
-    void connected.start().then(() => {
-      if (known && connected.needsPassword) return connected.submitPassword(known);
+    void connected.start().then(async () => {
+      if (!connected.needsPassword) return;
+      /* This browser's own copy, from starting the session here. */
+      const own = sessionId ? passwordFor(sessionId) : null;
+      if (own) return connected.submitPassword(own);
+      /* Otherwise a copy a colleague sealed to this browser. */
+      if (keyShare) {
+        const shared = await openSealed(keyShare.senderPublicKey, keyShare.sealed);
+        if (shared) return connected.submitPassword(shared);
+      }
     });
 
     const observer = new ResizeObserver(() => refit());
@@ -155,7 +178,7 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
       fit.current = null;
       connection.current = null;
     };
-  }, [shareUrl, refit]);
+  }, [shareUrl, refit, canType, keyShare]);
 
   /* A hidden pane measures as zero, so it has to be refitted when it returns. */
   useEffect(() => {
@@ -231,6 +254,10 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
             </p>
           </div>
         </div>
+      )}
+
+      {!canType && status === "connected" && (
+        <div className="pane-banner pane-watching">Watching. Only the owner and assignee can type.</div>
       )}
 
       {status === "disconnected" && (

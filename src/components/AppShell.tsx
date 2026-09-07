@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Terminal, Desktop, User, UsersThree, SignOut, Copy, Check } from "@phosphor-icons/react";
+import {
+  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check,
+} from "@phosphor-icons/react";
+import { Inbox } from "./Inbox";
+import { Avatar } from "./Avatar";
 import { Wordmark } from "./Wordmark";
 import { useAuth } from "../auth/AuthProvider";
 
 const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
   { to: "/machines", label: "Machines", Icon: Desktop },
+  { to: "/audit", label: "Audit log", Icon: ClockCounterClockwise },
   { to: "/organization", label: "Organization", Icon: UsersThree },
   { to: "/account", label: "Account", Icon: User },
 ] as const;
@@ -67,7 +72,8 @@ function AccountMenu() {
   const email = user?.email ?? "";
   /* The rail is narrow, so the chip leads with whichever label is shorter. */
   const label = user?.displayName || email;
-  const initial = (label || "?").trim().charAt(0).toUpperCase();
+  /* The same avatar a colleague sees, so you recognise yourself in a list. */
+  const self = { uid: user?.uid ?? "", name: user?.displayName ?? undefined, email };
 
   return (
     <div className="account-menu" ref={wrapper}>
@@ -78,9 +84,7 @@ function AccountMenu() {
         aria-expanded={open}
         aria-haspopup="menu"
       >
-        <span className="account-avatar" aria-hidden="true">
-          {initial}
-        </span>
+        <Avatar person={self} size="sm" />
         <span className="account-email">{label}</span>
       </button>
 
@@ -149,7 +153,10 @@ export function AppShell({ title, aside, children }: AppShellProps) {
         <header className="topbar">
           <div className="topbar-inner">
             <h1 className="topbar-title">{title}</h1>
-            <div className="topbar-right">{aside}</div>
+            <div className="topbar-right">
+              {aside}
+              <Inbox />
+            </div>
           </div>
         </header>
 

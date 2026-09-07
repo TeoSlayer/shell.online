@@ -7,6 +7,8 @@ export interface Tab {
   command: string;
   shareUrl: string;
   readOnly: boolean;
+  keyShare?: { senderPublicKey: string; sealed: string };
+  canType: boolean;
 }
 
 export interface TabState {
@@ -20,7 +22,7 @@ export const EMPTY: TabState = { tabs: [], activeId: null };
 export const MAX_TABS = 8;
 
 export type TabAction =
-  | { type: "open"; session: SessionRecord }
+  | { type: "open"; session: SessionRecord; canType?: boolean }
   | { type: "close"; id: string }
   | { type: "select"; id: string | null };
 
@@ -43,6 +45,8 @@ export function reduce(state: TabState, action: TabAction): TabState {
         command: session.command,
         shareUrl: session.shareUrl,
         readOnly: session.readOnly,
+        keyShare: session.keyShare,
+        canType: action.canType ?? true,
       };
       /* Oldest goes when the cap is reached, and never the one being opened. */
       const tabs = [...state.tabs, tab].slice(-MAX_TABS);

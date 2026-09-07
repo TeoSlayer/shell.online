@@ -24,6 +24,11 @@ export interface Membership {
   name: string;
   role: Role;
   joinedAt: number;
+  /**
+   * This person's browser key, published so colleagues can seal a session
+   * password to them. Absent until they have signed in somewhere.
+   */
+  publicKey?: string;
 }
 
 export interface Invite {

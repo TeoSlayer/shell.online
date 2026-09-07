@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { adoptOrigin, forget, passwordFor, rememberForOrigin } from "./session-passwords";
+import {
+  adoptOrigin, forget, forgetAll, passwordFor, rememberForOrigin, setPasswordOwner,
+} from "./session-passwords";
 
 function fakeStorage() {
   const map = new Map<string, string>();
@@ -15,6 +17,7 @@ function fakeStorage() {
 
 beforeEach(() => {
   vi.stubGlobal("window", { localStorage: fakeStorage() });
+  setPasswordOwner("uid-1");
 });
 
 describe("remembering a password for a session this browser started", () => {
@@ -75,5 +78,54 @@ describe("remembering a password for a session this browser started", () => {
     /* The oldest are dropped, so a long-lived browser does not grow forever. */
     adoptOrigin("cmd_0", "sess_0");
     expect(passwordFor("sess_0")).toBeNull();
+  });
+});
+
+describe("passwords belong to one account", () => {
+  it("does not hand a password to whoever signs in next on the same computer", () => {
+    /* This is what let a colleague read a session nobody had shared with them. */
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "Kw9eHbru");
+    adoptOrigin("cmd_1", "sess_1");
+    expect(passwordFor("sess_1")).toBe("Kw9eHbru");
+
+    setPasswordOwner("uid-2");
+    expect(passwordFor("sess_1")).toBeNull();
+
+    setPasswordOwner("uid-1");
+    expect(passwordFor("sess_1")).toBe("Kw9eHbru");
+  });
+
+  it("keeps two accounts' passwords for one session apart", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "first");
+    adoptOrigin("cmd_1", "sess_1");
+
+    setPasswordOwner("uid-2");
+    rememberForOrigin("cmd_2", "second");
+    adoptOrigin("cmd_2", "sess_1");
+    expect(passwordFor("sess_1")).toBe("second");
+
+    setPasswordOwner("uid-1");
+    expect(passwordFor("sess_1")).toBe("first");
+  });
+
+  it("forgets everything on sign out", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "Kw9eHbru");
+    adoptOrigin("cmd_1", "sess_1");
+    forgetAll();
+    expect(passwordFor("sess_1")).toBeNull();
+  });
+
+  it("forgets one session without touching the rest", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "a");
+    adoptOrigin("cmd_1", "sess_1");
+    rememberForOrigin("cmd_2", "b");
+    adoptOrigin("cmd_2", "sess_2");
+    forget("sess_1");
+    expect(passwordFor("sess_1")).toBeNull();
+    expect(passwordFor("sess_2")).toBe("b");
   });
 });

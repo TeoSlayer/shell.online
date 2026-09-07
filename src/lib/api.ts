@@ -13,6 +13,8 @@ export interface Member {
   name: string;
   role: Role;
   joinedAt: number;
+  /** Their browser key, so a session password can be sealed to them. */
+  publicKey?: string;
 }
 
 export interface Organization {
@@ -51,9 +53,13 @@ export interface AuditEvent {
   text: string;
 }
 
-export function fetchOrg(inviteId?: string) {
-  const query = inviteId ? `?invite=${encodeURIComponent(inviteId)}` : "";
-  return request<OrgView>(`/api/org${query}`);
+export function fetchOrg(inviteId?: string, publicKey?: string) {
+  const params = new URLSearchParams();
+  if (inviteId) params.set("invite", inviteId);
+  /* Published on every load so a new browser becomes reachable at once. */
+  if (publicKey) params.set("key", publicKey);
+  const query = params.toString();
+  return request<OrgView>(`/api/org${query ? `?${query}` : ""}`);
 }
 
 export function renameOrg(name: string) {
@@ -89,11 +95,78 @@ export function changeMemberRole(uid: string, role: string) {
   });
 }
 
+export function shareSessionKeys(
+  sessionId: string,
+  shares: { uid: string; sender_public_key: string; sealed: string }[],
+) {
+  return request<{ shared: number }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/keys`,
+    { method: "PUT", body: JSON.stringify({ shares }) },
+  );
+}
+
 export function assignSession(sessionId: string, uid: string) {
   return request<{ session: SessionRecord }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/assignee`,
     { method: "PUT", body: JSON.stringify({ uid }) },
   );
+}
+
+export interface Comment {
+  id: string;
+  sessionId: string;
+  authorUid: string;
+  body: string;
+  at: number;
+  mentions: string[];
+}
+
+export interface Notification {
+  id: string;
+  uid: string;
+  kind: "mention" | "assigned";
+  sessionId: string;
+  actorUid: string;
+  body: string;
+  at: number;
+  readAt?: number;
+}
+
+export interface SessionDetail {
+  session: SessionRecord;
+  members: Member[];
+  you: Member;
+  comments: Comment[];
+  audit: AuditEvent[];
+}
+
+export function fetchSession(sessionId: string) {
+  return request<SessionDetail>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function postComment(sessionId: string, body: string) {
+  return request<{ comment: Comment }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/comments`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+export interface Inbox {
+  notifications: Notification[];
+  unread: number;
+  unreadAssignments: number;
+  members: Member[];
+}
+
+export function fetchInbox() {
+  return request<Inbox>("/api/notifications");
+}
+
+export function markNotifications(id?: string) {
+  return request<Inbox>("/api/notifications/read", {
+    method: "POST",
+    body: JSON.stringify(id ? { id } : {}),
+  });
 }
 
 export function fetchAudit(sessionId: string) {
@@ -129,6 +202,8 @@ export interface SessionRecord {
   orgId?: string;
   ownerUid?: string;
   assigneeUid?: string;
+  /** The password sealed to the caller, when one has been shared with them. */
+  keyShare?: { senderPublicKey: string; sealed: string };
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;
