@@ -1,0 +1,446 @@
+/* ---------------------------------------------------------------
+   App shell: fixed rail on the left, topbar above scrolling content.
+   Only the content column scrolls, so the nav and the page title stay put.
+   --------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  min-height: 100dvh;
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.rail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: 100dvh;
+  padding: 24px 14px 14px;
+  background: var(--paper);
+  flex-direction: column;
+}
+
+.rail-head {
+  padding: 0 10px 26px;
+}
+
+.rail-nav {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 2px;
+}
+
+.rail-link {
+  display: flex;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 15.5px;
+  font-weight: 480;
+  height: 44px;
+  align-items: center;
+  gap: 11px;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.rail-link:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+}
+
+.rail-link.is-active {
+  background: var(--white);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-weight: 540;
+}
+
+.rail-link.is-active svg {
+  color: var(--blue);
+}
+
+/* ---- Sidebar footer: the one command a new machine needs ---- */
+
+.rail-hint {
+  padding: 0 8px 16px;
+}
+
+.rail-hint p {
+  margin: 0 0 9px;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.rail-command {
+  display: flex;
+  width: 100%;
+  padding: 12px 12px;
+  border: 1px solid #2a2e25;
+  border-radius: var(--radius-control);
+  background: var(--terminal);
+  color: var(--terminal-muted);
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: border-color 160ms var(--ease), transform 160ms var(--ease);
+}
+
+.rail-command:hover {
+  border-color: #4d5148;
+  transform: translateY(-1px);
+}
+
+.rail-command code {
+  overflow: hidden;
+  color: var(--terminal-ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rail-command code span {
+  color: var(--acid);
+}
+
+/* ---------------------------------------------------------------
+   Topbar
+   --------------------------------------------------------------- */
+
+.shell-main {
+  display: flex;
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  height: 74px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(8px);
+  flex: none;
+}
+
+/* Same padding as .shell-content, so the two edges line up. */
+.topbar-inner {
+  display: flex;
+  width: 100%;
+  padding: 0 clamp(22px, 2.4vw, 34px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.topbar-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.new-session {
+  display: inline-flex;
+  height: 40px;
+  padding: 0 17px;
+  border: 1px solid var(--cta-border);
+  border-radius: var(--radius-control);
+  background: var(--cta-bg);
+  color: var(--cta-fg);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 560;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: transform 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.new-session:hover {
+  box-shadow: 0 10px 24px var(--cta-shadow);
+  transform: translateY(-1px);
+}
+
+.new-session:active {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .new-session:hover {
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Account menu
+   --------------------------------------------------------------- */
+
+.rail-foot {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.account-menu {
+  position: relative;
+}
+
+/* Full width of the rail, so it reads as a row rather than a floating pill. */
+.account-chip {
+  display: flex;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13.5px;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  transition: border-color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.account-chip:hover,
+.account-chip[aria-expanded="true"] {
+  border-color: var(--line);
+  background: var(--white);
+  color: var(--ink);
+}
+
+.account-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--terminal);
+  color: var(--acid);
+  flex: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  place-items: center;
+}
+
+.account-email {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  width: 100%;
+  min-width: 216px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  box-shadow: 0 16px 40px rgb(26 31 22 / 12%);
+}
+
+.account-pop-name {
+  margin: 6px 10px 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 540;
+}
+
+.account-pop-email {
+  overflow: hidden;
+  margin: 2px 10px 8px;
+  color: var(--faint);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 9px;
+}
+
+.account-pop a,
+.account-pop button {
+  display: flex;
+  width: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14.5px;
+  height: 40px;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  transition: background 160ms var(--ease);
+}
+
+.account-pop a:hover,
+.account-pop button:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------
+   Page content
+   --------------------------------------------------------------- */
+
+.shell-content {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  padding: 26px clamp(22px, 2.4vw, 34px) 40px;
+  flex: 1;
+  flex-direction: column;
+}
+
+.page-dek {
+  max-width: 62ch;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.device-label {
+  display: flex;
+  color: var(--ink);
+  font-size: 15.5px;
+  font-weight: 500;
+  align-items: center;
+  gap: 9px;
+}
+
+.device-unlink {
+  width: auto;
+  height: 38px;
+  padding: 0 18px;
+  font-size: 13.5px;
+}
+
+.account-verified,
+.account-unverified {
+  display: inline-flex;
+  margin-left: 10px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  align-items: center;
+  gap: 4px;
+}
+
+.account-verified {
+  color: var(--success);
+}
+
+.account-unverified {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------
+   Responsive: the rail becomes a horizontal strip under the topbar.
+   Three items fit without a drawer, so there is no menu state to manage.
+   --------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail {
+    position: static;
+    height: auto;
+    padding: 16px 18px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .rail-head {
+    padding: 0 0 14px;
+  }
+
+  .rail-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    scrollbar-width: none;
+  }
+
+  .rail-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-link {
+    flex: none;
+    padding: 0 12px;
+  }
+
+  .rail-hint {
+    display: none;
+  }
+
+  /* The account moves back beside the nav, since the rail has no foot here. */
+  .rail-foot {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: auto;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .rail {
+    position: relative;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .shell-main {
+    border-left: 0;
+  }
+
+  .topbar-inner {
+    padding: 0 18px;
+  }
+
+  .account-chip {
+    width: auto;
+    padding: 4px;
+  }
+
+  .account-pop {
+    right: 0;
+    left: auto;
+    width: 232px;
+  }
+
+  .topbar {
+    height: 64px;
+  }
+
+  .account-email {
+    display: none;
+  }
+
+  .shell-content {
+    padding: 24px 18px 64px;
+  }
+}

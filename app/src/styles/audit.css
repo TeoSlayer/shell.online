@@ -1,0 +1,363 @@
+/* ---------------------------------------------------------------
+   Audit: filters, summary, charts, trace
+   --------------------------------------------------------------- */
+
+.filters {
+  display: flex;
+  padding: 14px 0 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 22px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.filter-search {
+  display: flex;
+  min-width: 240px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  color: var(--faint);
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+}
+
+.filter-search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.filter-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.filter-search button {
+  display: grid;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 4px;
+  place-items: center;
+}
+
+.filter-search button:hover {
+  color: var(--ink);
+}
+
+.filters select {
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.filter-clear {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 520;
+}
+
+.filter-clear:hover {
+  color: var(--blue-deep);
+}
+
+/* ---- Summary ---- */
+
+.stat-row {
+  display: grid;
+  margin-bottom: 22px;
+  gap: 1px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.stat {
+  display: grid;
+  padding: 15px 16px;
+  background: var(--white);
+  gap: 3px;
+}
+
+.stat-value {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.stat-label {
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+/* ---- Charts ---- */
+
+.chart-row {
+  display: grid;
+  margin-bottom: 30px;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.chart {
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  margin: 0;
+  background: var(--white);
+}
+
+.chart figcaption {
+  margin-bottom: 14px;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chart-bars {
+  display: flex;
+  height: 92px;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.chart-bar {
+  border-radius: 2px 2px 0 0;
+  background: var(--ink-soft);
+  flex: 1;
+  min-height: 2px;
+  transition: background 140ms var(--ease);
+}
+
+.chart-bar:hover {
+  background: var(--blue);
+}
+
+/* A quiet stretch stays visible as a hairline rather than disappearing. */
+.chart-bar[data-empty="true"] {
+  background: var(--line);
+}
+
+.chart-axis {
+  display: flex;
+  margin-top: 9px;
+  color: var(--faint);
+  font-size: 11px;
+  justify-content: space-between;
+}
+
+.rank {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.rank-row {
+  display: grid;
+  width: 100%;
+  padding: 5px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  gap: 10px;
+  grid-template-columns: minmax(0, 96px) 1fr auto;
+  align-items: center;
+  text-align: left;
+}
+
+.rank-row:disabled {
+  cursor: default;
+}
+
+.rank-row:hover:not(:disabled) .rank-fill {
+  background: var(--blue);
+}
+
+.rank-label {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-label code {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.rank-person {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.rank-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.rank-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ink-soft);
+  transition: background 140ms var(--ease);
+}
+
+.rank-count {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* ---- The trace ---- */
+
+.trace {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.trace-day {
+  margin: 26px 0 12px;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.trace-group + .trace-group {
+  margin-top: 18px;
+}
+
+.trace-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trace-who {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.trace-arrow {
+  color: var(--faint);
+}
+
+.trace-session {
+  display: inline-flex;
+  color: var(--muted);
+  font-size: 13px;
+  align-items: center;
+  gap: 5px;
+}
+
+.trace-session:hover {
+  color: var(--ink);
+}
+
+.trace-time {
+  color: var(--faint);
+  font-size: 11.5px;
+  margin-left: auto;
+}
+
+/*
+ * A rule down the left ties the lines of one run together, so the eye follows
+ * a person's work rather than reading a flat list of timestamps.
+ */
+.trace-lines {
+  padding: 4px 0 0 12px;
+  border-left: 2px solid var(--line);
+  margin: 6px 0 0 12px;
+  list-style: none;
+}
+
+.trace-lines li {
+  display: grid;
+  padding: 3px 0;
+  gap: 12px;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: baseline;
+}
+
+.trace-at {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.trace-lines code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.trace-lines li[data-kind="interrupt"] code {
+  color: var(--danger);
+}
+
+.trace-lines li[data-kind="handoff"] code {
+  color: var(--muted);
+  font-family: var(--sans);
+}
+
+@media (max-width: 1080px) {
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .trace-lines li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .filter-search {
+    min-width: 100%;
+  }
+}

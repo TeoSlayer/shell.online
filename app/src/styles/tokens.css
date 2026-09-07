@@ -1,0 +1,136 @@
+/*
+ * Design tokens lifted from the shell.online marketing site (web/landing.css,
+ * web/style.css) so this app reads as the same product, not a lookalike.
+ *
+ * Radius rule for this app, applied everywhere:
+ *   chips / inline code .... 7px
+ *   inputs / buttons ....... 10px
+ *   panels / cards ......... 18px
+ *
+ * Accent rule: --blue is the only accent on paper surfaces. --acid appears
+ * exclusively inside the dark terminal panel, as the shell prompt color,
+ * which is exactly how shell.online uses it.
+ */
+
+@font-face {
+  font-family: "Uncut Sans";
+  src: url("/fonts/uncut-sans-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+:root {
+  --paper: #f3f1e9;
+  --white: #fcfbf7;
+  --ink: #191b18;
+  --ink-soft: #3a3e37;
+  --muted: #686c63;
+  --faint: #696e62;
+  --line: #d7d5cc;
+  --line-strong: #c5c2b6;
+
+  --blue: #4267f5;
+  --blue-deep: #294ec8;
+  --blue-wash: #edf0fd;
+
+  --acid: #c8ff4d;
+  --terminal: #1d201b;
+  --terminal-line: #33372e;
+  --terminal-ink: #f4f5ed;
+  --terminal-muted: #a3a89a;
+
+  --cta-bg: #1d201b;
+  --cta-fg: #f4f5ed;
+  --cta-border: #22241f;
+  --cta-border-hover: #4d5148;
+  --cta-shadow: rgb(26 31 22 / 14%);
+  --cta-shadow-hover: rgb(26 31 22 / 20%);
+
+  --danger: #a32b1c;
+  --danger-wash: #fbeeeb;
+  --success: #2f6d4f;
+  --success-wash: #edf5f0;
+
+  --radius-chip: 7px;
+  --radius-control: 10px;
+  --radius-panel: 18px;
+
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sans: "Uncut Sans", system-ui, sans-serif;
+  --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  color-scheme: light;
+}
+
+/*
+ * Dark mode reuses shell.online's own dark surface family (#1d201b and up),
+ * the same palette the product's terminal chrome already ships. Same brand,
+ * lights off.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161914;
+    --white: #1d201b;
+    --ink: #f1f2ea;
+    --ink-soft: #d5d8cc;
+    --muted: #9ca194;
+    --faint: #868b7f;
+    --line: #32362d;
+    --line-strong: #454a3f;
+
+    --blue: #8ea3ff;
+    --blue-deep: #adbcff;
+    --blue-wash: #1e2333;
+
+    --terminal: #101309;
+    --terminal-line: #2b2f26;
+
+    --cta-bg: #eceee2;
+    --cta-fg: #14170f;
+    --cta-border: #eceee2;
+    --cta-border-hover: #ffffff;
+    --cta-shadow: rgb(0 0 0 / 34%);
+    --cta-shadow-hover: rgb(0 0 0 / 44%);
+
+    --danger: #f0a495;
+    --danger-wash: #2c1a16;
+    --success: #8fd8bb;
+    --success-wash: #16241d;
+
+    color-scheme: dark;
+  }
+}
+
+/* Explicit override, so the palette can be forced either way. */
+:root[data-theme="dark"] {
+    --paper: #161914;
+    --white: #1d201b;
+    --ink: #f1f2ea;
+    --ink-soft: #d5d8cc;
+    --muted: #9ca194;
+    --faint: #868b7f;
+    --line: #32362d;
+    --line-strong: #454a3f;
+
+    --blue: #8ea3ff;
+    --blue-deep: #adbcff;
+    --blue-wash: #1e2333;
+
+    --terminal: #101309;
+    --terminal-line: #2b2f26;
+
+    --cta-bg: #eceee2;
+    --cta-fg: #14170f;
+    --cta-border: #eceee2;
+    --cta-border-hover: #ffffff;
+    --cta-shadow: rgb(0 0 0 / 34%);
+    --cta-shadow-hover: rgb(0 0 0 / 44%);
+
+    --danger: #f0a495;
+    --danger-wash: #2c1a16;
+    --success: #8fd8bb;
+    --success-wash: #16241d;
+
+    color-scheme: dark;
+}

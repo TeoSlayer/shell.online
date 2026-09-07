@@ -1,0 +1,546 @@
+/* ---------------------------------------------------------------
+   Inbox
+   --------------------------------------------------------------- */
+
+.inbox {
+  position: relative;
+}
+
+.inbox-trigger {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  place-items: center;
+  transition: background 140ms var(--ease), color 140ms var(--ease);
+}
+
+.inbox-trigger:hover,
+.inbox-trigger[aria-expanded="true"] {
+  background: var(--white);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/*
+ * A quiet badge for mentions, which arrive often. An assignment makes it
+ * solid, because a session becoming your responsibility is rare and should
+ * not look like one more mention.
+ */
+.inbox-badge {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  display: grid;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1.5px solid var(--paper);
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--paper);
+  font-size: 9.5px;
+  font-weight: 700;
+  place-items: center;
+}
+
+.inbox-badge.is-loud {
+  background: #c2401f;
+  box-shadow: 0 0 0 3px rgb(194 64 31 / 18%);
+}
+
+.inbox-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 70;
+  overflow: hidden;
+  width: min(400px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  box-shadow: 0 22px 56px rgb(26 31 22 / 18%);
+}
+
+.inbox-head {
+  display: flex;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inbox-head h2 {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 560;
+}
+
+.inbox-head button {
+  display: inline-flex;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  align-items: center;
+  gap: 5px;
+}
+
+.inbox-head button:hover {
+  color: var(--ink);
+}
+
+.inbox-empty {
+  padding: 26px 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.inbox-list {
+  overflow-y: auto;
+  max-height: 60dvh;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.inbox-item {
+  display: flex;
+  width: 100%;
+  padding: 12px 15px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  align-items: flex-start;
+  gap: 11px;
+  text-align: left;
+  transition: background 140ms var(--ease);
+}
+
+.inbox-item:hover {
+  background: var(--paper);
+}
+
+.inbox-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-chip);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--muted);
+  flex: none;
+  place-items: center;
+}
+
+/* An assignment is the loud one, in the list as on the badge. */
+.inbox-item.is-assignment .inbox-icon {
+  background: color-mix(in srgb, #c2401f 14%, transparent);
+  color: #a5361a;
+}
+
+.inbox-item.is-assignment.is-unread {
+  background: color-mix(in srgb, #c2401f 5%, transparent);
+  box-shadow: inset 3px 0 0 #c2401f;
+}
+
+.inbox-item.is-mention.is-unread {
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+
+.inbox-text {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.inbox-title {
+  display: flex;
+  color: var(--ink);
+  font-size: 13px;
+  align-items: center;
+  gap: 7px;
+}
+
+.inbox-item.is-assignment .inbox-title {
+  font-weight: 540;
+}
+
+.inbox-body {
+  overflow: hidden;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.inbox-text time {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------
+   Session detail
+   --------------------------------------------------------------- */
+
+.detail {
+  display: grid;
+  gap: 34px;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+}
+
+.detail-head {
+  display: flex;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-status.is-live {
+  background: color-mix(in srgb, #4f9d43 16%, transparent);
+  color: #2f6d29;
+}
+
+.detail-command {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-actions {
+  display: flex;
+  margin: 18px 0 30px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-heading {
+  margin: 0 0 14px;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.detail-empty {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  margin: 0 0 18px;
+  background: var(--white);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.detail-rows {
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+
+.detail-row {
+  display: grid;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 4px;
+}
+
+.detail-row dt {
+  color: var(--faint);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-row dd {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+}
+
+/* ---- Comments ---- */
+
+.comment-list {
+  padding: 0;
+  margin: 0 0 20px;
+  list-style: none;
+}
+
+.comment {
+  display: flex;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+
+.comment-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.comment-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.comment-head b {
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 560;
+}
+
+.comment-head time {
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+.comment-body {
+  margin: 5px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mention {
+  padding: 1px 5px;
+  border-radius: var(--radius-chip);
+  background: var(--blue-wash);
+  color: var(--blue-deep);
+  font-weight: 540;
+}
+
+.composer {
+  padding: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--white);
+}
+
+.composer:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.composer textarea {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.composer-foot {
+  display: flex;
+  margin-top: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-people {
+  display: flex;
+  gap: 4px;
+}
+
+.composer-mention {
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+  opacity: 0.55;
+  padding: 0;
+  transition: opacity 140ms var(--ease);
+}
+
+.composer-mention:hover {
+  opacity: 1;
+}
+
+.composer .btn {
+  width: auto;
+  height: 40px;
+  min-width: 130px;
+}
+
+@media (max-width: 900px) {
+  .detail {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Organization members
+   --------------------------------------------------------------- */
+
+.member-row {
+  gap: 13px;
+}
+
+.member-row .avatar {
+  align-self: center;
+}
+
+/* A person's name is a name, not a command. */
+.member-name {
+  font-family: var(--sans);
+  font-size: 14.5px;
+  font-weight: 520;
+}
+
+/*
+ * A colleague starting a session is the quietest of the three: everyone gets
+ * one for every session, so it is informational and never tinted.
+ */
+.inbox-item.is-shared .inbox-icon {
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
+}
+
+.inbox-item.is-shared.is-unread {
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+
+/* ---------------------------------------------------------------
+   Organization page
+   --------------------------------------------------------------- */
+
+/*
+ * The name block takes the free space. Without this the flex row distributed
+ * it between name and actions, so each member's name started at a different
+ * place down the column.
+ */
+.session-main {
+  flex: 1;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* The owner is the one role worth picking out of a list. */
+.role-badge[data-role="owner"] {
+  background: color-mix(in srgb, var(--blue) 13%, transparent);
+  color: var(--blue-deep);
+}
+
+.row-select {
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.row-select:hover {
+  border-color: var(--muted);
+}
+
+.invites-heading {
+  margin: 26px 0 0;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+
+
+/* A spent invite is history, so it recedes rather than inviting action. */
+.invites-table tbody tr[data-live="false"] {
+  color: var(--faint);
+}
+
+.invites-table tbody tr[data-live="false"] .invite-target,
+.invites-table tbody tr[data-live="false"] .role-badge {
+  opacity: 0.6;
+}
+
+.invite-target {
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.invite-target[data-open="true"] {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* The invite form: the address takes the room, the rest keeps its size. */
+.org-invite select {
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  flex: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.org-invite input {
+  min-width: 220px;
+}
+
+@media (max-width: 1080px) {
+  .table thead th:nth-child(2),
+  .table tbody td:nth-child(2) {
+    display: table-cell;
+  }
+}
