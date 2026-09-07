@@ -81,6 +81,19 @@ function connect(fragment = "") {
 const SALT = "#salt=" + btoa(String.fromCharCode(...new Uint8Array(16).fill(7)))
   .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
+/*
+ * Decryption is asynchronous and queued, and PBKDF2 competes for the CPU, so a
+ * fixed pause is a coin flip. Wait for the condition instead.
+ */
+async function waitFor(condition: () => boolean, label: string, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 beforeEach(() => {
   FakeSocket.last = null;
   FakeSocket.created = 0;
@@ -93,8 +106,7 @@ describe("plaintext session", () => {
     await connection.start();
     FakeSocket.last!.opened();
     FakeSocket.last!.binary(encodeFrame(Opcode.Output, new TextEncoder().encode("hello")));
-    await Promise.resolve();
-    await Promise.resolve();
+    await waitFor(() => recorded.writes.length > 0, "the output frame");
 
     expect(recorded.statuses.map((s) => s.status)).toEqual(["connecting", "connected"]);
     expect(recorded.writes).toEqual([{ text: "hello", reset: false }]);
@@ -106,7 +118,7 @@ describe("plaintext session", () => {
     FakeSocket.last!.opened();
     FakeSocket.last!.binary(encodeFrame(Opcode.Snapshot, new TextEncoder().encode("restored")));
     FakeSocket.last!.binary(encodeFrame(Opcode.Output, new TextEncoder().encode("live")));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => recorded.writes.length === 2, "both frames");
 
     expect(recorded.writes).toEqual([
       { text: "restored", reset: true },
@@ -119,7 +131,7 @@ describe("plaintext session", () => {
     await connection.start();
     FakeSocket.last!.opened();
     connection.send("ls\r");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => FakeSocket.last!.sent.length > 0, "the input frame");
 
     const sent = new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer);
     expect(sent[0]).toBe(Opcode.Input);
@@ -257,7 +269,7 @@ describe("encrypted session", () => {
     FakeSocket.last!.binary(
       await cipher.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("secret"))),
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => recorded.writes.length > 0, "the decrypted frame");
 
     expect(recorded.writes).toEqual([{ text: "secret", reset: false }]);
   });
@@ -275,7 +287,10 @@ describe("encrypted session", () => {
     FakeSocket.last!.binary(
       await other.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("secret"))),
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(
+      () => recorded.statuses.at(-1)?.status === "needs-password",
+      "the failed decryption to be reported",
+    );
 
     const last = recorded.statuses.at(-1);
     expect(last?.status).toBe("needs-password");
@@ -292,6 +307,7 @@ describe("encrypted session", () => {
     const other = await BrowserFrameCipher.fromPassword("right", new Uint8Array(16).fill(7));
     FakeSocket.last!.opened();
     FakeSocket.last!.binary(await other.seal(encodeFrame(Opcode.Output, new Uint8Array([65]))));
+    /* Long enough that a retry would have fired if one were scheduled. */
     await new Promise((resolve) => setTimeout(resolve, 900));
 
     expect(FakeSocket.created).toBe(1);
@@ -303,11 +319,71 @@ describe("encrypted session", () => {
     await connection.submitPassword("hunter2");
     FakeSocket.last!.opened();
     connection.send("whoami\r");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => FakeSocket.last!.sent.length > 0, "the sealed input frame");
 
     const sent = new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer);
     /* Opcode stays in the clear as AAD; the payload must not be readable. */
     expect(sent[0]).toBe(Opcode.Input);
     expect(new TextDecoder().decode(sent.subarray(1))).not.toContain("whoami");
+  });
+});
+
+describe("resize safety", () => {
+  async function connected() {
+    const { connection, recorded } = connect();
+    await connection.start();
+    FakeSocket.last!.opened();
+    return { connection, recorded, socket: FakeSocket.last! };
+  }
+
+  function resizes(socket: FakeSocket) {
+    return socket.sent
+      .map((payload) => new Uint8Array(payload as ArrayBuffer))
+      .filter((frame) => frame[0] === Opcode.Resize)
+      .map((frame) => {
+        const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+        return { cols: view.getUint16(1), rows: view.getUint16(3) };
+      });
+  }
+
+  it("refuses a size a real terminal would never have", async () => {
+    /*
+     * A hidden pane used to measure about one column wide. Forwarding that
+     * resized the shared PTY to one column and wrecked anything full-screen.
+     */
+    const { connection, socket } = await connected();
+    connection.resize(1, 24);
+    connection.resize(80, 1);
+    connection.resize(2, 2);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(resizes(socket)).toEqual([]);
+  });
+
+  it("keeps the last good size when a degenerate one arrives", async () => {
+    const { connection, socket } = await connected();
+    connection.resize(120, 40);
+    connection.resize(1, 1);
+    connection.resize(120, 40);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    /* The second 120x40 is a duplicate of the size still in force, not a
+       recovery from the sliver, so exactly one resize should have gone out. */
+    expect(resizes(socket)).toEqual([{ cols: 120, rows: 40 }]);
+  });
+
+  it("still accepts a small but plausible terminal", async () => {
+    const { connection, socket } = await connected();
+    connection.resize(20, 4);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resizes(socket)).toEqual([{ cols: 20, rows: 4 }]);
+  });
+
+  it("ignores a non-finite size rather than sending garbage", async () => {
+    const { connection, socket } = await connected();
+    connection.resize(Number.NaN, 24);
+    connection.resize(80, Number.POSITIVE_INFINITY);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resizes(socket)).toEqual([]);
   });
 });

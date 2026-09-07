@@ -29,6 +29,13 @@ export interface ConnectionOptions {
 }
 
 const MAX_BACKOFF_MS = 10_000;
+
+/*
+ * Below this a terminal is not a terminal, it is a measurement artefact from a
+ * pane that is not laid out yet or not on screen.
+ */
+const MIN_COLS = 20;
+const MIN_ROWS = 4;
 const CLOSE_ENDED = 4000;
 const CLOSE_MISSING = 4004;
 const CLOSE_DECRYPT_FAILED = 4003;
@@ -97,8 +104,18 @@ export class TerminalConnection {
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
 
+  /**
+   * Reports this viewer's terminal size to the relay, which resizes the shared
+   * PTY to match.
+   *
+   * A degenerate size is refused rather than sent. A hidden pane can measure
+   * as a sliver, and forwarding that would resize the real PTY to a column or
+   * two, destroying the layout of anything full-screen like htop. No terminal
+   * that small is worth honouring, so the last good size stands.
+   */
   resize(cols: number, rows: number): void {
-    if (cols <= 0 || rows <= 0) return;
+    if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+    if (cols < MIN_COLS || rows < MIN_ROWS) return;
     /* The relay resizes the shared PTY, so only send an actual change. */
     if (this.lastSize?.cols === cols && this.lastSize.rows === rows) return;
     this.lastSize = { cols, rows };

@@ -34,8 +34,16 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
   const [password, setPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
 
+  /*
+   * Only the visible pane measures itself. A hidden one is still laid out, so
+   * it would measure fine here, but refusing to refit it at all means no
+   * future layout change can quietly resize somebody's running terminal.
+   */
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
   const refit = useCallback(() => {
-    if (!fit.current || !terminal.current) return;
+    if (!activeRef.current || !fit.current || !terminal.current) return;
     try {
       fit.current.fit();
       connection.current?.resize(terminal.current.cols, terminal.current.rows);

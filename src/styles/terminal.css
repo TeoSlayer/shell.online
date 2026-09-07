@@ -97,11 +97,21 @@ button.tab {
    Terminal pane
    --------------------------------------------------------------- */
 
-.pane {
+/*
+ * Every open pane occupies the same box, stacked. They therefore all measure
+ * the same size whether shown or not, so switching tabs cannot change any
+ * terminal's dimensions.
+ */
+.panes {
   position: relative;
-  overflow: hidden;
   min-height: 320px;
   flex: 1;
+}
+
+.pane {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
   padding: 14px 6px 14px 16px;
   border: 1px solid #2a2e25;
   border-radius: var(--radius-panel);
@@ -110,16 +120,14 @@ button.tab {
 }
 
 /*
- * Hidden rather than unmounted: the socket, the scrollback and the PTY size
- * all survive a tab switch this way. display:none would measure as zero and
- * make xterm resize the shared PTY to nothing, so it moves out of view instead.
+ * Hidden rather than unmounted, so the socket and the scrollback survive a tab
+ * switch. visibility keeps the box measurable: display:none, or moving it to a
+ * one-pixel corner, would have xterm refit to nothing and resize the shared
+ * PTY with it, which wrecks anything drawing a full-screen layout.
  */
 .pane[data-active="false"] {
-  position: absolute;
-  top: -100000px;
-  left: -100000px;
-  width: 1px;
   visibility: hidden;
+  pointer-events: none;
 }
 
 .pane-screen {
@@ -285,8 +293,11 @@ button.tab {
 }
 
 @media (max-width: 900px) {
-  .pane {
+  .panes {
     min-height: 60dvh;
+  }
+
+  .pane {
     padding: 12px 4px 12px 12px;
   }
 

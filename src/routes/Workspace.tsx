@@ -204,9 +204,17 @@ export function Workspace() {
         makes switching tabs instant, and keeps each socket and its scrollback
         alive while another tab is in front.
       */}
-      {state.tabs.map((tab) => (
-        <TerminalPane key={tab.id} shareUrl={tab.shareUrl} active={state.activeId === tab.id} />
-      ))}
+      {state.tabs.length > 0 && (
+        <div className="panes" hidden={showingList}>
+          {state.tabs.map((tab) => (
+            <TerminalPane
+              key={tab.id}
+              shareUrl={tab.shareUrl}
+              active={state.activeId === tab.id}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="workspace-list" hidden={!showingList}>
         {notice && (
