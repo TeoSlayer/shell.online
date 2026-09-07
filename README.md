@@ -159,6 +159,14 @@ shell login --no-remote-start    # withdraw it on this machine
 shell logout                     # stop it and unlink the machine
 ```
 
+That covers a reboot the moment you next use the tool. A machine that sits
+idle and still has to be reachable can install the daemon as a user service —
+a LaunchAgent on macOS, a systemd user unit on Linux:
+
+```sh
+shell service install
+```
+
 `shell agent` does the same work in the foreground, printing each session as
 it starts, for anyone who would rather watch it than have it run unattended.
 

@@ -30,7 +30,7 @@ func wantsDaemonRunning(arguments []string) bool {
 		return false
 	}
 	switch arguments[0] {
-	case "daemon", "login", "logout", "agent", "help", "--help", "-h", "--version":
+	case "daemon", "service", "login", "logout", "agent", "help", "--help", "-h", "--version":
 		return false
 	default:
 		return true
