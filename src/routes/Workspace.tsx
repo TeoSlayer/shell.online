@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { PersonChip } from "../components/Avatar";
 import { PersonPicker } from "../components/PersonPicker";
 import { findPerson } from "../lib/people";
+import { kindForCommand } from "../lib/session-kinds";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
@@ -455,7 +456,14 @@ function SessionGroup({
               <tr key={session.id} data-live={live}>
                 <td>
                   <Link className="table-subject" to={`/sessions/${session.id}`}>
-                    {live && <span className="table-dot" aria-hidden="true" />}
+                    {/* The kind of thing running, in colour while it runs. */}
+                    <img
+                      className="table-icon"
+                      src={kindForCommand(session.command).icon}
+                      alt={kindForCommand(session.command).title}
+                      title={kindForCommand(session.command).title}
+                      data-live={live}
+                    />
                     <span className="table-name">{session.name || session.command}</span>
                     {session.name && session.name !== session.command && (
                       <code className="table-command">{session.command}</code>

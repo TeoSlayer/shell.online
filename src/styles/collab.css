@@ -407,3 +407,140 @@
     gap: 26px;
   }
 }
+
+/* ---------------------------------------------------------------
+   Organization members
+   --------------------------------------------------------------- */
+
+.member-row {
+  gap: 13px;
+}
+
+.member-row .avatar {
+  align-self: center;
+}
+
+/* A person's name is a name, not a command. */
+.member-name {
+  font-family: var(--sans);
+  font-size: 14.5px;
+  font-weight: 520;
+}
+
+/*
+ * A colleague starting a session is the quietest of the three: everyone gets
+ * one for every session, so it is informational and never tinted.
+ */
+.inbox-item.is-shared .inbox-icon {
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue-deep);
+}
+
+.inbox-item.is-shared.is-unread {
+  box-shadow: inset 3px 0 0 var(--line-strong);
+}
+
+/* ---------------------------------------------------------------
+   Organization page
+   --------------------------------------------------------------- */
+
+/*
+ * The name block takes the free space. Without this the flex row distributed
+ * it between name and actions, so each member's name started at a different
+ * place down the column.
+ */
+.session-main {
+  flex: 1;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* The owner is the one role worth picking out of a list. */
+.role-badge[data-role="owner"] {
+  background: color-mix(in srgb, var(--blue) 13%, transparent);
+  color: var(--blue-deep);
+}
+
+.row-select {
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.row-select:hover {
+  border-color: var(--muted);
+}
+
+.invites-heading {
+  margin: 26px 0 0;
+  color: var(--faint);
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+
+
+/* A spent invite is history, so it recedes rather than inviting action. */
+.invites-table tbody tr[data-live="false"] {
+  color: var(--faint);
+}
+
+.invites-table tbody tr[data-live="false"] .invite-target,
+.invites-table tbody tr[data-live="false"] .role-badge {
+  opacity: 0.6;
+}
+
+.invite-target {
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.invite-target[data-open="true"] {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* The invite form: the address takes the room, the rest keeps its size. */
+.org-invite select {
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  flex: none;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.org-invite input {
+  min-width: 220px;
+}
+
+@media (max-width: 1080px) {
+  .table thead th:nth-child(2),
+  .table tbody td:nth-child(2) {
+    display: table-cell;
+  }
+}

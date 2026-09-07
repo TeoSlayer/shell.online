@@ -124,7 +124,7 @@ export interface Comment {
 export interface Notification {
   id: string;
   uid: string;
-  kind: "mention" | "assigned";
+  kind: "mention" | "assigned" | "shared";
   sessionId: string;
   actorUid: string;
   body: string;

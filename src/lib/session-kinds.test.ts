@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SESSION_KINDS, kindById, quote, sessionName } from "./session-kinds";
+import { SESSION_KINDS, kindById, kindForCommand, quote, sessionName } from "./session-kinds";
 
 const claude = kindById("claude-code")!;
 const codex = kindById("codex")!;
@@ -142,5 +142,41 @@ describe("sessionName", () => {
   it("falls back to the command", () => {
     expect(sessionName({}, "npm run build")).toBe("npm run build");
     expect(sessionName({ name: "   " }, "npm run build")).toBe("npm run build");
+  });
+});
+
+describe("kindForCommand", () => {
+  it("recognises each agent by the program being run", () => {
+    expect(kindForCommand("claude").id).toBe("claude-code");
+    expect(kindForCommand("codex resume abc").id).toBe("codex");
+    expect(kindForCommand("hermes run --task build").id).toBe("hermes");
+    expect(kindForCommand("openclaw --profile work agent").id).toBe("openclaw");
+  });
+
+  it("keeps recognising one with flags after it", () => {
+    expect(kindForCommand("claude --resume abc --dangerously-skip-permissions").id)
+      .toBe("claude-code");
+  });
+
+  it("looks past a path", () => {
+    expect(kindForCommand("/usr/local/bin/claude").id).toBe("claude-code");
+    expect(kindForCommand("./bin/codex").id).toBe("codex");
+  });
+
+  it("is not fooled by the name appearing later in the line", () => {
+    /* This runs npm, not the agent. */
+    expect(kindForCommand("npm run claude-thing").id).toBe("terminal");
+    expect(kindForCommand("echo claude").id).toBe("terminal");
+  });
+
+  it("falls back to a terminal process for anything else", () => {
+    expect(kindForCommand("htop").id).toBe("terminal");
+    expect(kindForCommand("npm run dev").id).toBe("terminal");
+    expect(kindForCommand("").id).toBe("terminal");
+    expect(kindForCommand("   ").id).toBe("terminal");
+  });
+
+  it("ignores case in the program name", () => {
+    expect(kindForCommand("CLAUDE --resume x").id).toBe("claude-code");
   });
 });

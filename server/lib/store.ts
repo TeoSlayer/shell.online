@@ -88,7 +88,7 @@ export interface Notification {
   id: string;
   orgId: string;
   uid: string;
-  kind: "mention" | "assigned";
+  kind: "mention" | "assigned" | "shared";
   sessionId: string;
   actorUid: string;
   body: string;
@@ -351,7 +351,8 @@ export class Store {
     return true;
   }
 
-  upsertSession(session: SessionRecord): void {
+  /** Returns true when this session had not been seen before. */
+  upsertSession(session: SessionRecord): boolean {
     const index = this.data.sessions.findIndex(
       (entry) => entry.id === session.id && entry.uid === session.uid,
     );
@@ -371,6 +372,7 @@ export class Store {
       this.data.sessions.push(session);
     }
     this.flush();
+    return index < 0;
   }
 
   patchSession(uid: string, id: string, patch: Partial<SessionRecord>): SessionRecord | null {

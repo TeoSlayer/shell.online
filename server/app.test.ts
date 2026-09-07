@@ -1018,3 +1018,59 @@ describe("cross-origin preflight", () => {
     }
   });
 });
+
+describe("being told a colleague started a session", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "htop",
+  };
+
+  async function orgWithColleague() {
+    const tokens = await login();
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: {} });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    return { tokens, colleague };
+  }
+
+  it("notifies the rest of the organization, but not the person who started it", async () => {
+    const { tokens, colleague } = await orgWithColleague();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+
+    const theirs = await call("GET", "/api/notifications", { auth: colleague });
+    expect(theirs.body.notifications).toHaveLength(1);
+    expect(theirs.body.notifications[0]).toMatchObject({ kind: "shared", body: "htop" });
+
+    const mine = await call("GET", "/api/notifications", { auth: await idToken() });
+    expect(mine.body.notifications).toEqual([]);
+  });
+
+  it("counts as quiet, so the badge does not shout for it", async () => {
+    /* Only an assignment makes the badge solid. */
+    const { tokens, colleague } = await orgWithColleague();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const theirs = await call("GET", "/api/notifications", { auth: colleague });
+    expect(theirs.body.unread).toBe(1);
+    expect(theirs.body.unreadAssignments).toBe(0);
+  });
+
+  it("does not notify again when a persistent session re-registers", async () => {
+    const { tokens, colleague } = await orgWithColleague();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+
+    const theirs = await call("GET", "/api/notifications", { auth: colleague });
+    expect(theirs.body.notifications).toHaveLength(1);
+  });
+
+  it("does not reach another organization", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const stranger = await call("GET", "/api/notifications", {
+      auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
+    });
+    expect(stranger.body.notifications).toEqual([]);
+  });
+});

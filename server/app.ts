@@ -22,7 +22,7 @@ import {
   revokeInvite,
 } from "./routes/organizations";
 import { assignSession, auditCsv, recordAudit } from "./routes/audit";
-import { addComment, inbox, notifyAssigned } from "./routes/social";
+import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 
 export interface AppOptions {
   store: Store;
@@ -349,6 +349,16 @@ export function createApp(options: AppOptions) {
           ownerUid: token.uid,
         });
         if (!result.ok) return send(response, 400, { error: result.reason });
+        /* Only on first sight, so a persistent session restarting is silent. */
+        if (result.isNew && membership) {
+          notifySessionStarted(
+            store,
+            membership.orgId,
+            token.uid,
+            result.session.id,
+            result.session.name || result.session.command,
+          );
+        }
         return send(response, 201, { session: result.session });
       }
 

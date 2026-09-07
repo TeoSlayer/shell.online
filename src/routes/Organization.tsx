@@ -11,10 +11,11 @@ import {
   renameOrg,
   revokeInvite,
   type Invite,
-  type Member,
   type OrgView,
 } from "../lib/api";
 import { ago } from "../lib/time";
+import { Avatar } from "../components/Avatar";
+import { displayName } from "../lib/people";
 import { publicKey } from "../lib/keypair";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -27,62 +28,32 @@ function inviteLink(invite: Invite): string {
   return `${window.location.origin}/join/${invite.id}`;
 }
 
-function InviteRow({
-  invite,
-  canManage,
-  onRevoke,
-}: {
-  invite: Invite;
-  canManage: boolean;
-  onRevoke: (invite: Invite) => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const spent = Boolean(invite.acceptedAt || invite.revokedAt) || invite.expiresAt < Date.now();
+function inviteState(invite: Invite): { label: string; live: boolean } {
+  if (invite.acceptedAt) return { label: `Accepted ${ago(invite.acceptedAt, Date.now())}`, live: false };
+  if (invite.revokedAt) return { label: "Revoked", live: false };
+  if (invite.expiresAt < Date.now()) return { label: "Expired", live: false };
+  return { label: "Waiting to be used", live: true };
+}
 
+function CopyInvite({ invite }: { invite: Invite }) {
+  const [copied, setCopied] = useState(false);
   return (
-    <li className="session" data-live={!spent}>
-      <div className="session-main">
-        <span className="session-command">{invite.email || "anyone with the link"}</span>
-        <span className="session-meta">
-          {ROLE_LABEL[invite.role]}
-          {" · "}
-          {invite.acceptedAt
-            ? `accepted ${ago(invite.acceptedAt, Date.now())}`
-            : invite.revokedAt
-              ? "revoked"
-              : invite.expiresAt < Date.now()
-                ? "expired"
-                : `expires ${ago(invite.expiresAt, Date.now()).replace(" ago", "")} from now`}
-        </span>
-      </div>
-      <div className="session-actions">
-        {!spent && (
-          <button
-            type="button"
-            className="session-copy"
-            title="Copy the invite link"
-            aria-label={copied ? "Link copied" : "Copy invite link"}
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(inviteLink(invite));
-                setCopied(true);
-                window.setTimeout(() => setCopied(false), 1600);
-              } catch {
-                /* clipboard is unavailable outside a secure context */
-              }
-            }}
-          >
-            {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
-          </button>
-        )}
-        {!spent && canManage && (
-          <button type="button" className="session-action" onClick={() => onRevoke(invite)}>
-            <Trash size={14} />
-            Revoke
-          </button>
-        )}
-      </div>
-    </li>
+    <button
+      type="button"
+      className="session-action"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(inviteLink(invite));
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1600);
+        } catch {
+          /* clipboard is unavailable outside a secure context */
+        }
+      }}
+    >
+      {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
+      {copied ? "Copied" : "Copy link"}
+    </button>
   );
 }
 
@@ -199,22 +170,82 @@ export function Organization() {
 
           <section className="sessions-group">
             <h2>Members</h2>
-            <ul className="sessions-list">
-              {view.members.map((member) => (
-                <MemberRow
-                  key={member.uid}
-                  member={member}
-                  you={you!}
-                  busy={busy}
-                  onRemove={() =>
-                    act(() => removeMember(member.uid), `Removed ${member.email}.`)
-                  }
-                  onRole={(role) =>
-                    act(() => changeMemberRole(member.uid, role), `${member.email} is now ${role}.`)
-                  }
-                />
-              ))}
-            </ul>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Person</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Joined</th>
+                  <th scope="col" className="table-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {view.members.map((member) => {
+                  const isYou = member.uid === you!.uid;
+                  const rank = { owner: 3, admin: 2, member: 1 } as const;
+                  const canAct = !isYou && rank[you!.role] > rank[member.role];
+                  return (
+                    <tr key={member.uid}>
+                      <td>
+                        <span className="person">
+                          <Avatar person={member} size="md" />
+                          <span className="person-text">
+                            <span className="member-name">
+                              {displayName(member)}
+                              {isYou && <span className="member-you">you</span>}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="table-quiet">{member.email}</td>
+                      <td>
+                        {you!.role === "owner" && !isYou && member.role !== "owner" ? (
+                          <select
+                            className="row-select"
+                            value={member.role}
+                            onChange={(event) =>
+                              act(
+                                () => changeMemberRole(member.uid, event.target.value),
+                                `${displayName(member)} is now ${event.target.value}.`,
+                              )
+                            }
+                            disabled={busy}
+                            aria-label={`Role for ${displayName(member)}`}
+                          >
+                            <option value="member">Member</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        ) : (
+                          <span className="role-badge" data-role={member.role}>
+                            {ROLE_LABEL[member.role]}
+                          </span>
+                        )}
+                      </td>
+                      <td className="table-quiet">{ago(member.joinedAt, Date.now())}</td>
+                      <td className="table-end">
+                        {canAct && (
+                          <button
+                            type="button"
+                            className="session-action"
+                            onClick={() =>
+                              act(
+                                () => removeMember(member.uid),
+                                `Removed ${displayName(member)}.`,
+                              )
+                            }
+                            disabled={busy}
+                          >
+                            <Trash size={14} />
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </section>
 
           {canInvite && (
@@ -247,77 +278,64 @@ export function Organization() {
                 email blank lets anyone with the link join, so send it carefully.
               </p>
 
+              <h2 className="invites-heading">Invites</h2>
+
               {view.invites.length > 0 && (
-                <ul className="sessions-list">
-                  {view.invites.map((invite) => (
-                    <InviteRow
-                      key={invite.id}
-                      invite={invite}
-                      canManage={canInvite}
-                      onRevoke={(target) =>
-                        act(() => revokeInvite(target.id), "Invite revoked.")
-                      }
-                    />
-                  ))}
-                </ul>
+                <table className="table invites-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invited</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Status</th>
+                      <th scope="col" className="table-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.invites.map((invite) => {
+                      const state = inviteState(invite);
+                      return (
+                        <tr key={invite.id} data-live={state.live}>
+                          <td>
+                            <span className="invite-target" data-open={!invite.email}>
+                              {invite.email || "Anyone with the link"}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="role-badge" data-role={invite.role}>
+                              {ROLE_LABEL[invite.role]}
+                            </span>
+                          </td>
+                          <td className="table-quiet">{state.label}</td>
+                          <td className="table-end">
+                            {state.live && (
+                              <div className="session-actions">
+                                <CopyInvite invite={invite} />
+                                {canInvite && (
+                                  <button
+                                    type="button"
+                                    className="session-action"
+                                    onClick={() =>
+                                      act(() => revokeInvite(invite.id), "Invite revoked.")
+                                    }
+                                    disabled={busy}
+                                  >
+                                    <Trash size={14} />
+                                    Revoke
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </section>
           )}
         </>
       )}
     </AppShell>
-  );
-}
-
-function MemberRow({
-  member,
-  you,
-  busy,
-  onRemove,
-  onRole,
-}: {
-  member: Member;
-  you: Member;
-  busy: boolean;
-  onRemove: () => void;
-  onRole: (role: string) => void;
-}) {
-  const isYou = member.uid === you.uid;
-  const rank = { owner: 3, admin: 2, member: 1 };
-  const canAct = !isYou && rank[you.role] > rank[member.role];
-
-  return (
-    <li className="session">
-      <div className="session-main">
-        <span className="session-command">
-          {member.name || member.email}
-          {isYou && <span className="member-you">you</span>}
-        </span>
-        <span className="session-meta">
-          {member.email} · {ROLE_LABEL[member.role]} · joined{" "}
-          {ago(member.joinedAt, Date.now())}
-        </span>
-      </div>
-      <div className="session-actions">
-        {you.role === "owner" && !isYou && member.role !== "owner" && (
-          <select
-            className="launcher-machine"
-            value={member.role}
-            onChange={(event) => onRole(event.target.value)}
-            disabled={busy}
-            aria-label={`Role for ${member.email}`}
-          >
-            <option value="member">Member</option>
-            <option value="admin">Admin</option>
-          </select>
-        )}
-        {canAct && (
-          <button type="button" className="session-action" onClick={onRemove} disabled={busy}>
-            <Trash size={14} />
-            Remove
-          </button>
-        )}
-      </div>
-    </li>
   );
 }

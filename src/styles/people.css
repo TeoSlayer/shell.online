@@ -207,8 +207,10 @@
    Session table
    --------------------------------------------------------------- */
 
-.sessions-group > h2 + .table {
-  margin-top: 6px;
+/* A group heading and a column heading are different things; keep them apart. */
+.sessions-group > h2 + .table,
+.invites-heading + .table {
+  margin-top: 14px;
 }
 
 .table {
@@ -268,14 +270,22 @@
   text-decoration: underline;
 }
 
-.table-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #4f9d43;
-  box-shadow: 0 0 0 4px rgb(110 208 97 / 16%);
+/*
+ * The icon says what is running at a glance. A finished session keeps the same
+ * icon, desaturated, so the row still reads as the same kind of thing without
+ * competing with what is live.
+ */
+.table-icon {
+  width: 18px;
+  height: 18px;
   flex: none;
+  object-fit: contain;
   align-self: center;
+}
+
+.table-icon[data-live="false"] {
+  filter: grayscale(1);
+  opacity: 0.45;
 }
 
 .table-name {

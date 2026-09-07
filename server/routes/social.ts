@@ -82,6 +82,35 @@ export function notifyAssigned(
   });
 }
 
+/**
+ * Tells the rest of the organization that a session has started.
+ *
+ * The quietest of the three: it is informational, and everyone gets one for
+ * every session a colleague starts, so it must not shout the way an
+ * assignment does.
+ */
+export function notifySessionStarted(
+  store: Store,
+  orgId: string,
+  ownerUid: string,
+  sessionId: string,
+  label: string,
+): void {
+  for (const member of store.members(orgId)) {
+    if (member.uid === ownerUid) continue;
+    store.putNotification({
+      id: newId("ntf"),
+      orgId,
+      uid: member.uid,
+      kind: "shared",
+      sessionId,
+      actorUid: ownerUid,
+      body: label,
+      at: Date.now(),
+    });
+  }
+}
+
 export function inbox(store: Store, membership: Membership): {
   notifications: Notification[];
   unread: number;

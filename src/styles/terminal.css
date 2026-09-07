@@ -564,17 +564,13 @@ button.tab {
   box-shadow: inset 0 0 0 1px var(--ink);
 }
 
-/*
- * The icons arrive in their own brands' colours. Desaturating them keeps the
- * row reading as one set rather than five logos competing for attention.
- */
 .kind-icon {
   width: 30px;
   height: 30px;
   margin-bottom: 10px;
-  filter: grayscale(1) contrast(1.05);
-  opacity: 0.62;
   object-fit: contain;
+  /* Slightly held back until hovered or chosen, but never desaturated. */
+  opacity: 0.85;
   transition: opacity 160ms var(--ease);
 }
 

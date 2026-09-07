@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Envelope, At, UserSwitch, Check } from "@phosphor-icons/react";
+import { Envelope, At, UserSwitch, Terminal, Check } from "@phosphor-icons/react";
 import { Avatar } from "../components/Avatar";
 import { fetchInbox, markNotifications, type Inbox as InboxView } from "../lib/api";
 import { displayName, findPerson } from "../lib/people";
@@ -95,27 +95,34 @@ export function Inbox() {
 
           {!view || view.notifications.length === 0 ? (
             <p className="inbox-empty">
-              Nothing yet. Mentions in a comment and sessions assigned to you
-              turn up here.
+              Nothing yet. Sessions your colleagues start, mentions in a
+              comment, and anything assigned to you turn up here.
             </p>
           ) : (
             <ul className="inbox-list">
               {view.notifications.map((notification) => {
                 const actor = findPerson(view.members, notification.actorUid);
                 const assigned = notification.kind === "assigned";
+                const shared = notification.kind === "shared";
                 return (
                   <li key={notification.id}>
                     <button
                       type="button"
                       className={[
                         "inbox-item",
-                        assigned ? "is-assignment" : "is-mention",
+                        assigned ? "is-assignment" : shared ? "is-shared" : "is-mention",
                         notification.readAt ? "" : "is-unread",
                       ].filter(Boolean).join(" ")}
                       onClick={() => follow(notification.id, notification.sessionId)}
                     >
                       <span className="inbox-icon">
-                        {assigned ? <UserSwitch size={15} weight="bold" /> : <At size={15} />}
+                        {assigned ? (
+                          <UserSwitch size={15} weight="bold" />
+                        ) : shared ? (
+                          <Terminal size={15} />
+                        ) : (
+                          <At size={15} />
+                        )}
                       </span>
                       <span className="inbox-text">
                         <span className="inbox-title">
@@ -123,6 +130,10 @@ export function Inbox() {
                           {assigned ? (
                             <>
                               <b>{displayName(actor)}</b> assigned you a session
+                            </>
+                          ) : shared ? (
+                            <>
+                              <b>{displayName(actor)}</b> started a session
                             </>
                           ) : (
                             <>

@@ -18,7 +18,7 @@ export interface SessionInput {
 const ID_PATTERN = /^[A-Za-z0-9_-]{6,64}$/;
 
 export type RegisterResult =
-  | { ok: true; session: SessionRecord }
+  | { ok: true; session: SessionRecord; isNew: boolean }
   | { ok: false; reason: string };
 
 /**
@@ -62,8 +62,8 @@ export function registerSession(
     host: (input.host ?? "").slice(0, 120),
     startedAt: typeof input.startedAt === "number" ? input.startedAt : now,
   };
-  store.upsertSession(session);
-  return { ok: true, session };
+  const isNew = store.upsertSession(session);
+  return { ok: true, session, isNew };
 }
 
 export function closeSession(

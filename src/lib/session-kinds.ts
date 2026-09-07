@@ -202,6 +202,27 @@ export function kindById(id: string): SessionKind | undefined {
   return SESSION_KINDS.find((kind) => kind.id === id);
 }
 
+/**
+ * Which kind a running session is, from the command it wraps.
+ *
+ * Matched on the program being run, so `claude --resume abc` is Claude Code
+ * and `npm run claude-thing` is not. Anything unrecognised is a terminal
+ * process, which is what it is.
+ */
+export function kindForCommand(command: string): SessionKind {
+  const program = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  /* Strip any path, so /usr/local/bin/claude still reads as Claude Code. */
+  const leaf = program.split(/[\\/]/).pop() ?? "";
+  const byProgram: Record<string, string> = {
+    claude: "claude-code",
+    codex: "codex",
+    hermes: "hermes",
+    openclaw: "openclaw",
+  };
+  const id = byProgram[leaf];
+  return (id ? kindById(id) : undefined) ?? SESSION_KINDS[SESSION_KINDS.length - 1];
+}
+
 /** The label a session should carry, falling back to the command itself. */
 export function sessionName(values: FieldValues, command: string): string {
   return text(values, "name") || command;
