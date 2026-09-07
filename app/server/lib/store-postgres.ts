@@ -296,12 +296,22 @@ export class PostgresStore implements Store {
       await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK]);
       await client.query(
         `CREATE TABLE IF NOT EXISTS schema_migrations (
-           name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL
+           name TEXT PRIMARY KEY, applied_at BIGINT NOT NULL
          )`,
       );
+      /*
+       * This one table cannot be brought up to shape by a migration, since it
+       * is what records them. So it is repaired in place: a database written
+       * by a build from before checksums existed has no such column, and
+       * CREATE TABLE IF NOT EXISTS would not add one. Nullable, because a row
+       * written back then recorded no checksum and inventing one would be a
+       * claim about a file nobody hashed.
+       */
+      await client.query("ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT");
+
       const applied = new Map(
         (
-          await client.query<{ name: string; checksum: string }>(
+          await client.query<{ name: string; checksum: string | null }>(
             "SELECT name, checksum FROM schema_migrations",
           )
         ).rows.map((row) => [row.name, row.checksum]),
@@ -313,8 +323,16 @@ export class PostgresStore implements Store {
       for (const name of files) {
         const sql = readFileSync(join(MIGRATIONS, name), "utf8");
         const checksum = createHash("sha256").update(sql).digest("hex");
-        const previous = applied.get(name);
-        if (previous) {
+        if (applied.has(name)) {
+          const previous = applied.get(name);
+          /* Recorded before checksums; take the file on trust, once. */
+          if (previous === null) {
+            await client.query("UPDATE schema_migrations SET checksum = $2 WHERE name = $1", [
+              name,
+              checksum,
+            ]);
+            continue;
+          }
           if (previous !== checksum) {
             throw new Error(
               `migration ${name} changed after it was applied. Add a new migration ` +

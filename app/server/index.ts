@@ -2,6 +2,8 @@ import { resolve } from "node:path";
 import { createAccountsServer } from "./app";
 import { ConfigError, readConfig, type Config } from "./lib/config";
 import { createVerifier } from "./lib/firebase-token";
+import { relayProxy } from "./lib/relay-proxy";
+import { staticFiles } from "./lib/static-files";
 import { MemoryStore } from "./lib/store-memory";
 import { PostgresStore } from "./lib/store-postgres";
 import type { Store } from "./lib/store";
@@ -24,12 +26,30 @@ const store: Store = config.databaseUrl
   ? await PostgresStore.connect(config.databaseUrl)
   : new MemoryStore(resolve(config.dataFile));
 
+/*
+ * When this process serves the client too, the app and its API share an
+ * origin, which is what lets a terminal websocket exist at all: the relay
+ * refuses one whose Origin is not its own, and the browser sets that from
+ * wherever the page came. /relay/* is forwarded with the Origin rewritten.
+ */
+const forward = config.relayUrl ? relayProxy(config.relayUrl) : null;
+
 const server = createAccountsServer({
   store,
   verifyIdToken: createVerifier(config.projectId),
   allowedOrigins: [config.webOrigin, "http://127.0.0.1:5173"],
   trustProxy: config.trustProxy,
+  serveClient: config.clientDir ? staticFiles(config.clientDir) : undefined,
+  relay: forward ?? undefined,
 });
+
+if (forward) {
+  server.on("upgrade", (request, socket, head) => {
+    if (forward.handles(request.url)) return forward.upgrade(request, socket, head);
+    /* Nothing else here speaks a protocol worth upgrading to. */
+    socket.destroy();
+  });
+}
 
 /*
  * A request that stalls holds a connection and, with Postgres, a pooled one
@@ -65,9 +85,10 @@ process.on("uncaughtException", (error) => {
 
 server.listen(config.port, config.host, () => {
   const backing = config.databaseUrl ? "postgres" : config.dataFile;
+  const serving = config.clientDir ? `client ${config.clientDir}, relay ${config.relayUrl}` : "api only";
   console.log(
     `accounts: http://${config.host}:${config.port} ` +
-      `(project ${config.projectId}, web ${config.webOrigin}, store ${backing})`,
+      `(project ${config.projectId}, web ${config.webOrigin}, store ${backing}, ${serving})`,
   );
 });
 

@@ -27,3 +27,4 @@ dist-ssr
 .env*.local
 .gstack/
 .data
+dist-server

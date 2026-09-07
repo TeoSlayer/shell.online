@@ -1,0 +1,53 @@
+# A production-shaped stack on one machine: the app, and the database it needs.
+#
+#   cp .env.example .env && $EDITOR .env
+#   docker compose up --build
+#
+# The client is compiled with the Firebase values baked in, so a change to any
+# VITE_ variable needs --build rather than a restart.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev}
+      POSTGRES_DB: shell_online
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    # The app waits for this rather than crash-looping on a database that is
+    # still initialising.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d shell_online"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      args:
+        VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY}
+        VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN}
+        VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
+        VITE_FIREBASE_APP_ID: ${VITE_FIREBASE_APP_ID}
+        VITE_FIREBASE_MESSAGING_SENDER_ID: ${VITE_FIREBASE_MESSAGING_SENDER_ID}
+        VITE_RELAY_URL: ${RELAY_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-dev}@postgres:5432/shell_online
+      FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
+      # Where browsers reach this deployment. Used for CORS and for the links
+      # the CLI is sent to, so it has to be the public URL, not the container's.
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      RELAY_URL: ${RELAY_URL}
+      # Only true behind a proxy that rewrites X-Forwarded-For; believing it
+      # otherwise lets any caller pick a new address per request.
+      TRUST_PROXY: ${TRUST_PROXY:-0}
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
+
+volumes:
+  postgres:

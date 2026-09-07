@@ -21,6 +21,11 @@ export interface Config {
   /** Serve the built client from this directory, making the app single-origin. */
   clientDir?: string;
   /**
+   * The relay to forward /relay/* to. Required whenever the client is served
+   * from here, because a browser on this origin cannot reach the relay itself.
+   */
+  relayUrl?: string;
+  /**
    * Whether a proxy in front rewrites X-Forwarded-For. Off by default: an
    * unproxied deployment that believed the header would let any caller pick a
    * new address per request and walk past the rate limiter.
@@ -68,6 +73,24 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new ConfigError("set DATABASE_URL: the file store cannot back a deployment");
   }
 
+  const clientDir = env.CLIENT_DIR?.trim() || undefined;
+  const relayUrl = env.RELAY_URL?.trim() || undefined;
+  if (relayUrl) {
+    try {
+      new URL(relayUrl);
+    } catch {
+      throw new ConfigError(`RELAY_URL must be a URL, got ${relayUrl}`);
+    }
+  }
+  /*
+   * Serving the app without somewhere to forward /relay/* would leave every
+   * terminal unable to connect, and it would look like a relay outage rather
+   * than a missing variable.
+   */
+  if (clientDir && !relayUrl) {
+    throw new ConfigError("set RELAY_URL: a client served from here needs the relay proxied");
+  }
+
   return {
     port,
     host: env.HOST?.trim() ?? (production ? "0.0.0.0" : "127.0.0.1"),
@@ -75,7 +98,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webOrigin,
     databaseUrl,
     dataFile: env.ACCOUNTS_DATA?.trim() ?? ".data/accounts.json",
-    clientDir: env.CLIENT_DIR?.trim() || undefined,
+    clientDir,
+    relayUrl,
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
     purgeIntervalMs: 5 * 60_000,
   };

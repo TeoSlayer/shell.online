@@ -36,6 +36,20 @@ export interface AppOptions {
   trustProxy?: boolean;
   /** Where server-side faults go. Overridden in tests to keep them quiet. */
   log?: (message: string, error?: unknown) => void;
+  /**
+   * Serves the built client for anything that is not an API route. Present
+   * only in a deployment that serves the app and the API together; in
+   * development Vite serves the client on its own port.
+   */
+  serveClient?: (request: IncomingMessage, response: ServerResponse) => Promise<void>;
+  /**
+   * Forwards /relay/* to the relay. The websocket half is wired to the
+   * server's upgrade event; this is the ordinary-request half.
+   */
+  relay?: {
+    handles(url: string | undefined): boolean;
+    request(request: IncomingMessage, response: ServerResponse): void;
+  };
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -184,6 +198,15 @@ export function createApp(options: AppOptions) {
      * a healthy container because the database it depends on is busy.
      */
     if (route === "GET /api/health") return send(response, 200, { ok: true });
+
+    /*
+     * Forwarded before the limiter: this is the terminal's own traffic, and
+     * counting a busy session against a budget meant for credential guessing
+     * would cut off the thing the app exists to do.
+     */
+    if (options.relay?.handles(request.url)) {
+      return options.relay.request(request, response);
+    }
 
     const caller = callerAddress(request.headers, request.socket?.remoteAddress, trustProxy);
     const limiter = CREDENTIAL_ROUTES.has(route) ? credentialLimit : generalLimit;
@@ -691,6 +714,13 @@ export function createApp(options: AppOptions) {
         }
       }
 
+      /*
+       * Not an API route. When this process also serves the app, the path
+       * belongs to the client router; otherwise there is nothing here.
+       */
+      if (options.serveClient && !url.pathname.startsWith("/api/")) {
+        return options.serveClient(request, response);
+      }
       return send(response, 404, { error: "no such route" });
     } catch (error) {
       if (error instanceof RequestError) {
