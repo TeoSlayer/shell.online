@@ -18,15 +18,15 @@ export interface RecordInput {
  * checked to belong to it, so an event cannot be written into somebody else's
  * organization by asking nicely.
  */
-export function recordAudit(
+export async function recordAudit(
   store: Store,
   membership: Membership,
   input: RecordInput,
-): { ok: true; event: AuditEvent } | { ok: false; status: number; error: string } {
+): Promise<{ ok: true; event: AuditEvent } | { ok: false; status: number; error: string }> {
   if (!KINDS.has(input.kind)) {
     return { ok: false, status: 400, error: "unknown audit kind" };
   }
-  const session = store.sessionInOrg(membership.orgId, input.sessionId);
+  const session = await store.sessionInOrg(membership.orgId, input.sessionId);
   if (!session) {
     return { ok: false, status: 404, error: "no such session in this organization" };
   }
@@ -41,7 +41,7 @@ export function recordAudit(
     kind: input.kind as AuditEvent["kind"],
     text: String(input.text ?? "").slice(0, MAX_TEXT),
   };
-  store.putAudit(event);
+  await store.putAudit(event);
   return { ok: true, event };
 }
 
@@ -51,13 +51,13 @@ export function recordAudit(
  * Only the owner of the session, or an admin, may reassign it: the point is a
  * deliberate handover, not anyone quietly taking work off someone's desk.
  */
-export function assignSession(
+export async function assignSession(
   store: Store,
   membership: Membership,
   sessionId: string,
   assigneeUid: string,
-): { ok: true; session: SessionRecord } | { ok: false; status: number; error: string } {
-  const session = store.sessionInOrg(membership.orgId, sessionId);
+): Promise<{ ok: true; session: SessionRecord } | { ok: false; status: number; error: string }> {
+  const session = await store.sessionInOrg(membership.orgId, sessionId);
   if (!session) return { ok: false, status: 404, error: "no such session" };
 
   const isOwner = session.ownerUid === membership.uid;
@@ -66,15 +66,15 @@ export function assignSession(
     return { ok: false, status: 403, error: "only the session's owner can hand it off" };
   }
 
-  const assignee = store.members(membership.orgId).find((entry) => entry.uid === assigneeUid);
+  const assignee = (await store.members(membership.orgId)).find((entry) => entry.uid === assigneeUid);
   if (!assignee) {
     return { ok: false, status: 404, error: "that person is not in this organization" };
   }
 
-  const updated = store.assignSession(membership.orgId, sessionId, assigneeUid);
+  const updated = await store.assignSession(membership.orgId, sessionId, assigneeUid);
   if (!updated) return { ok: false, status: 404, error: "no such session" };
 
-  recordAudit(store, membership, {
+  await recordAudit(store, membership, {
     sessionId,
     kind: "handoff",
     text: `assigned to ${assignee.email}`,

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { createAccountsServer } from "./app";
-import { Store } from "./lib/store";
+import { MemoryStore } from "./lib/store-memory";
 import { createVerifier } from "./lib/firebase-token";
 
 const port = Number(process.env.ACCOUNTS_PORT ?? 8787);
@@ -14,7 +14,7 @@ if (!projectId) {
   process.exit(1);
 }
 
-const store = new Store(process.env.ACCOUNTS_DATA ?? join(process.cwd(), ".data", "accounts.json"));
+const store = new MemoryStore(process.env.ACCOUNTS_DATA ?? join(process.cwd(), ".data", "accounts.json"));
 
 const server = createAccountsServer({
   store,

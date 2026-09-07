@@ -1,0 +1,158 @@
+export type { Invite, Membership, Organization, Role } from "./orgs";
+
+export interface AuthorizationCode {
+  code: string;
+  uid: string;
+  email: string;
+  name: string;
+  codeChallenge: string;
+  redirectUri: string;
+  expiresAt: number;
+  consumedAt?: number;
+}
+
+export interface CliToken {
+  /** Stable public id for this device. Safe to show and to address in a URL. */
+  id: string;
+  /** SHA-256 of the presented secret. The secret itself is never stored. */
+  accessHash: string;
+  refreshHash: string;
+  uid: string;
+  email: string;
+  name: string;
+  label: string;
+  accessExpiresAt: number;
+  createdAt: number;
+  lastSeenAt: number;
+  /**
+   * When `shell agent` last asked for work. Distinct from lastSeenAt, which
+   * any authenticated call touches: only a polling agent can accept a command,
+   * so only its polling should count as being online.
+   */
+  agentSeenAt?: number;
+  /** Published by a running agent so a browser can seal a password to it. */
+  agentPublicKey?: string;
+  revokedAt?: number;
+}
+
+/** A linked machine, with every secret removed. */
+export interface Device {
+  id: string;
+  label: string;
+  createdAt: number;
+  lastSeenAt: number;
+  agentSeenAt?: number;
+  agentPublicKey?: string;
+  revokedAt?: number;
+}
+
+export interface AuditEvent {
+  id: string;
+  orgId: string;
+  sessionId: string;
+  at: number;
+  actorUid: string;
+  actorEmail: string;
+  kind: "input" | "interrupt" | "opened" | "handoff";
+  text: string;
+}
+
+/** A session password sealed to one member's browser key. */
+export interface SessionKeyShare {
+  uid: string;
+  senderPublicKey: string;
+  sealed: string;
+}
+
+export interface Comment {
+  id: string;
+  orgId: string;
+  sessionId: string;
+  authorUid: string;
+  body: string;
+  at: number;
+  mentions: string[];
+}
+
+/**
+ * Something that happened which a person should know about.
+ *
+ * "mention" is frequent and low-stakes. "assigned" is rare and means work has
+ * moved onto someone's plate, so the two are distinguished here rather than
+ * left for the UI to guess at.
+ */
+export interface Notification {
+  id: string;
+  orgId: string;
+  uid: string;
+  kind: "mention" | "assigned" | "shared";
+  sessionId: string;
+  actorUid: string;
+  body: string;
+  at: number;
+  readAt?: number;
+}
+
+export interface SessionRecord {
+  id: string;
+  uid: string;
+  /** The organization the session belongs to, so colleagues can see it. */
+  orgId?: string;
+  /** Who started it. */
+  ownerUid?: string;
+  /** Who is responsible for it now; the owner until handed off. */
+  assigneeUid?: string;
+  /**
+   * The session password, sealed once per member. The service relays these
+   * and can open none of them.
+   */
+  keyShares?: SessionKeyShare[];
+  shareUrl: string;
+  command: string;
+  /** The queued request this session came from, when it came from one. */
+  origin?: string;
+  /** Operator-chosen label. Falls back to the command when absent. */
+  name?: string;
+  readOnly: boolean;
+  encrypted: boolean;
+  persistent: boolean;
+  host: string;
+  startedAt: number;
+  closedAt?: number;
+  exitCode?: number;
+}
+
+/**
+ * Work the web app asks a machine to do. A machine only sees these while it is
+ * running `shell agent`, which is how a person opts a machine in to being
+ * driven from the browser.
+ */
+export interface AgentCommand {
+  id: string;
+  uid: string;
+  deviceId: string;
+  kind: "start" | "kill";
+  /** For "start": the command line to wrap. */
+  command?: string;
+  /** For "start": what to call the session in the UI. */
+  name?: string;
+  /**
+   * For "start": a browser password sealed to the agent's key. Relayed as
+   * opaque bytes; this service cannot open it, which is the point.
+   */
+  senderPublicKey?: string;
+  sealedPassword?: string;
+  /** For "kill": the session to stop. */
+  sessionId?: string;
+  createdAt: number;
+  claimedAt?: number;
+  doneAt?: number;
+  error?: string;
+}
+
+
+/**
+ * File-backed store for local development. Every read and write goes through
+ * this interface so the production implementation (Firestore, D1) can drop in
+ * without touching route code.
+ */

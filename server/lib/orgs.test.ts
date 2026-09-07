@@ -22,27 +22,27 @@ function invite(overrides: Partial<Invite> = {}): Invite {
 }
 
 describe("suggestOrgName", () => {
-  it("uses the company domain for a work address", () => {
+  it("uses the company domain for a work address", async () => {
     expect(suggestOrgName("alex@vulturelabs.io")).toBe("Vulturelabs");
     expect(suggestOrgName("sam@acme-corp.co.uk")).toBe("Acme-corp");
   });
 
-  it("does not name an organization after an email provider", () => {
+  it("does not name an organization after an email provider", async () => {
     expect(suggestOrgName("ana@gmail.com", "Ana Ferreira")).toBe("Ana's organization");
     expect(suggestOrgName("ana@icloud.com", "Ana Ferreira")).toBe("Ana's organization");
   });
 
-  it("falls back to the local part when there is no display name", () => {
+  it("falls back to the local part when there is no display name", async () => {
     expect(suggestOrgName("ana@gmail.com")).toBe("Ana's organization");
   });
 
-  it("is case-insensitive about the domain", () => {
+  it("is case-insensitive about the domain", async () => {
     expect(suggestOrgName("ALEX@VultureLabs.IO")).toBe("Vulturelabs");
   });
 });
 
 describe("what each role may do", () => {
-  it("lets an owner do everything", () => {
+  it("lets an owner do everything", async () => {
     for (const capability of [
       "invite", "revoke-invite", "remove-member", "change-role", "rename-org", "transfer-ownership",
     ] as const) {
@@ -50,7 +50,7 @@ describe("what each role may do", () => {
     }
   });
 
-  it("lets an admin manage people but not the organization itself", () => {
+  it("lets an admin manage people but not the organization itself", async () => {
     expect(can("admin", "invite")).toBe(true);
     expect(can("admin", "remove-member")).toBe(true);
     expect(can("admin", "rename-org")).toBe(false);
@@ -58,21 +58,21 @@ describe("what each role may do", () => {
     expect(can("admin", "transfer-ownership")).toBe(false);
   });
 
-  it("lets a member do none of it", () => {
+  it("lets a member do none of it", async () => {
     expect(can("member", "invite")).toBe(false);
     expect(can("member", "remove-member")).toBe(false);
   });
 });
 
 describe("rank", () => {
-  it("stops an admin acting on another admin or the owner", () => {
+  it("stops an admin acting on another admin or the owner", async () => {
     /* Otherwise an admin could remove the person who invited them. */
     expect(outranks("admin", "member")).toBe(true);
     expect(outranks("admin", "admin")).toBe(false);
     expect(outranks("admin", "owner")).toBe(false);
   });
 
-  it("lets the owner act on anyone else", () => {
+  it("lets the owner act on anyone else", async () => {
     expect(outranks("owner", "admin")).toBe(true);
     expect(outranks("owner", "member")).toBe(true);
     expect(outranks("owner", "owner")).toBe(false);
@@ -82,16 +82,16 @@ describe("rank", () => {
 describe("checkInvite", () => {
   const now = 2000;
 
-  it("accepts a fresh invite", () => {
+  it("accepts a fresh invite", async () => {
     expect(checkInvite(invite(), "new@example.com", now).ok).toBe(true);
   });
 
-  it("refuses one that does not exist", () => {
+  it("refuses one that does not exist", async () => {
     const result = checkInvite(undefined, "new@example.com", now);
     expect(result).toEqual({ ok: false, reason: "That invite link is not valid." });
   });
 
-  it("refuses a revoked, used or expired invite, each with its own reason", () => {
+  it("refuses a revoked, used or expired invite, each with its own reason", async () => {
     expect(checkInvite(invite({ revokedAt: 1500 }), "a@b.c", now)).toMatchObject({
       reason: "That invite has been revoked.",
     });
@@ -103,7 +103,7 @@ describe("checkInvite", () => {
     });
   });
 
-  it("holds an address-restricted invite to that address", () => {
+  it("holds an address-restricted invite to that address", async () => {
     const restricted = invite({ email: "wanted@example.com" });
     expect(checkInvite(restricted, "someone@else.com", now).ok).toBe(false);
     expect(checkInvite(restricted, "wanted@example.com", now).ok).toBe(true);
@@ -111,14 +111,14 @@ describe("checkInvite", () => {
     expect(checkInvite(restricted, "WANTED@example.com", now).ok).toBe(true);
   });
 
-  it("cannot be used twice", () => {
+  it("cannot be used twice", async () => {
     const used = invite({ acceptedAt: now - 1, acceptedBy: "uid-2" });
     expect(checkInvite(used, "a@b.c", now).ok).toBe(false);
   });
 });
 
 describe("newId", () => {
-  it("prefixes and does not repeat", () => {
+  it("prefixes and does not repeat", async () => {
     const seen = new Set<string>();
     for (let i = 0; i < 300; i += 1) {
       const id = newId("org");

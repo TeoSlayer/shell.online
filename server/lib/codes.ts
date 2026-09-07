@@ -2,7 +2,7 @@ import type { Store } from "./store";
 import { CODE_TTL_MS, mintSecret } from "./tokens";
 import { verifyChallenge } from "./pkce";
 
-export function issueCode(
+export async function issueCode(
   store: Store,
   input: {
     uid: string;
@@ -12,9 +12,9 @@ export function issueCode(
     redirectUri: string;
   },
   now = Date.now(),
-): string {
+): Promise<string> {
   const code = mintSecret("shc");
-  store.putCode({ code, ...input, expiresAt: now + CODE_TTL_MS });
+  await store.putCode({ code, ...input, expiresAt: now + CODE_TTL_MS });
   return code;
 }
 
@@ -22,12 +22,12 @@ export type CodeExchange =
   | { ok: true; uid: string; email: string; name: string }
   | { ok: false; reason: "unknown" | "replayed" | "expired" | "challenge" | "redirect" };
 
-export function exchangeCode(
+export async function exchangeCode(
   store: Store,
   input: { code: string; verifier: string; redirectUri: string },
   now = Date.now(),
-): CodeExchange {
-  const taken = store.takeCode(input.code, now);
+): Promise<CodeExchange> {
+  const taken = await store.takeCode(input.code, now);
   if (!taken) return { ok: false, reason: "unknown" };
   if (taken.alreadyConsumed) return { ok: false, reason: "replayed" };
 

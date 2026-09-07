@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { Store } from "./store";
+import { MemoryStore } from "./store-memory";
+import type { Store } from "./store";
 import {
   ACCESS_TTL_MS,
   checkAccessToken,
@@ -14,12 +15,12 @@ import {
 const identity = { uid: "uid-1", email: "ana@example.com", name: "Ana", label: "laptop" };
 let store: Store;
 
-beforeEach(() => {
-  store = Store.memory();
+beforeEach(async () => {
+  store = MemoryStore.memory();
 });
 
 describe("mintSecret", () => {
-  it("prefixes and never repeats", () => {
+  it("prefixes and never repeats", async () => {
     const seen = new Set<string>();
     for (let i = 0; i < 500; i += 1) {
       const secret = mintSecret("sha");
@@ -31,72 +32,72 @@ describe("mintSecret", () => {
 });
 
 describe("issueTokens", () => {
-  it("stores only hashes, never the secrets", () => {
+  it("stores only hashes, never the secrets", async () => {
     const tokens = issueTokens(store, identity);
     const serialised = JSON.stringify(store);
     expect(serialised).not.toContain(tokens.accessToken);
     expect(serialised).not.toContain(tokens.refreshToken);
-    expect(store.findByAccessHash(hashSecret(tokens.accessToken))).not.toBeNull();
+    expect(await store.findByAccessHash(hashSecret(tokens.accessToken))).not.toBeNull();
   });
 
-  it("issues distinct access and refresh secrets", () => {
+  it("issues distinct access and refresh secrets", async () => {
     const tokens = issueTokens(store, identity);
     expect(tokens.accessToken).not.toBe(tokens.refreshToken);
   });
 });
 
 describe("checkAccessToken", () => {
-  it("accepts a fresh token and returns the bound identity", () => {
+  it("accepts a fresh token and returns the bound identity", async () => {
     const tokens = issueTokens(store, identity);
-    const result = checkAccessToken(store, tokens.accessToken);
+    const result = await checkAccessToken(store, tokens.accessToken);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.token.uid).toBe("uid-1");
   });
 
-  it("rejects an unknown token", () => {
-    expect(checkAccessToken(store, "sha_nope")).toEqual({ ok: false, reason: "unknown" });
+  it("rejects an unknown token", async () => {
+    expect(await checkAccessToken(store, "sha_nope")).toEqual({ ok: false, reason: "unknown" });
   });
 
-  it("rejects a token past its ttl", () => {
+  it("rejects a token past its ttl", async () => {
     const issuedAt = 1_000_000;
     const tokens = issueTokens(store, identity, issuedAt);
-    expect(checkAccessToken(store, tokens.accessToken, issuedAt + ACCESS_TTL_MS)).toEqual({
+    expect(await checkAccessToken(store, tokens.accessToken, issuedAt + ACCESS_TTL_MS)).toEqual({
       ok: false,
       reason: "expired",
     });
   });
 
-  it("rejects a revoked token", () => {
+  it("rejects a revoked token", async () => {
     const tokens = issueTokens(store, identity);
-    revokeByRefreshToken(store, tokens.refreshToken);
-    expect(checkAccessToken(store, tokens.accessToken)).toEqual({ ok: false, reason: "revoked" });
+    await revokeByRefreshToken(store, tokens.refreshToken);
+    expect(await checkAccessToken(store, tokens.accessToken)).toEqual({ ok: false, reason: "revoked" });
   });
 
-  it("does not accept the refresh token as an access token", () => {
+  it("does not accept the refresh token as an access token", async () => {
     const tokens = issueTokens(store, identity);
-    expect(checkAccessToken(store, tokens.refreshToken).ok).toBe(false);
+    expect((await checkAccessToken(store, tokens.refreshToken)).ok).toBe(false);
   });
 });
 
 describe("refreshAccessToken", () => {
-  it("issues a new access token and retires the old one", () => {
+  it("issues a new access token and retires the old one", async () => {
     const tokens = issueTokens(store, identity);
-    const refreshed = refreshAccessToken(store, tokens.refreshToken);
+    const refreshed = await refreshAccessToken(store, tokens.refreshToken);
     expect(refreshed.ok).toBe(true);
     if (!refreshed.ok) return;
     expect(refreshed.accessToken).not.toBe(tokens.accessToken);
-    expect(checkAccessToken(store, refreshed.accessToken).ok).toBe(true);
-    expect(checkAccessToken(store, tokens.accessToken).ok).toBe(false);
+    expect((await checkAccessToken(store, refreshed.accessToken)).ok).toBe(true);
+    expect((await checkAccessToken(store, tokens.accessToken)).ok).toBe(false);
   });
 
-  it("rejects an unknown refresh token", () => {
-    expect(refreshAccessToken(store, "shr_nope")).toEqual({ ok: false, reason: "unknown" });
+  it("rejects an unknown refresh token", async () => {
+    expect(await refreshAccessToken(store, "shr_nope")).toEqual({ ok: false, reason: "unknown" });
   });
 
-  it("rejects a revoked refresh token", () => {
+  it("rejects a revoked refresh token", async () => {
     const tokens = issueTokens(store, identity);
-    revokeByRefreshToken(store, tokens.refreshToken);
-    expect(refreshAccessToken(store, tokens.refreshToken)).toEqual({
+    await revokeByRefreshToken(store, tokens.refreshToken);
+    expect(await refreshAccessToken(store, tokens.refreshToken)).toEqual({
       ok: false,
       reason: "revoked",
     });
@@ -104,15 +105,15 @@ describe("refreshAccessToken", () => {
 });
 
 describe("revokeByRefreshToken", () => {
-  it("reports true once and false thereafter", () => {
+  it("reports true once and false thereafter", async () => {
     const tokens = issueTokens(store, identity);
-    expect(revokeByRefreshToken(store, tokens.refreshToken)).toBe(true);
-    expect(revokeByRefreshToken(store, tokens.refreshToken)).toBe(false);
+    expect(await revokeByRefreshToken(store, tokens.refreshToken)).toBe(true);
+    expect(await revokeByRefreshToken(store, tokens.refreshToken)).toBe(false);
   });
 });
 
 describe("constantTimeEqual", () => {
-  it("compares equal and unequal values without throwing on length mismatch", () => {
+  it("compares equal and unequal values without throwing on length mismatch", async () => {
     expect(constantTimeEqual("abc", "abc")).toBe(true);
     expect(constantTimeEqual("abc", "abd")).toBe(false);
     expect(constantTimeEqual("abc", "abcd")).toBe(false);

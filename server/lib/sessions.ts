@@ -25,12 +25,12 @@ export type RegisterResult =
  * The CLI supplies the session id minted by the relay. It is echoed back into
  * the share URL and the UI, so it is validated here rather than trusted.
  */
-export function registerSession(
+export async function registerSession(
   store: Store,
   uid: string,
   input: SessionInput,
   now = Date.now(),
-): RegisterResult {
+): Promise<RegisterResult> {
   if (!input || typeof input.id !== "string" || !ID_PATTERN.test(input.id)) {
     return { ok: false, reason: "invalid session id" };
   }
@@ -62,20 +62,20 @@ export function registerSession(
     host: (input.host ?? "").slice(0, 120),
     startedAt: typeof input.startedAt === "number" ? input.startedAt : now,
   };
-  const isNew = store.upsertSession(session);
+  const isNew = await store.upsertSession(session);
   return { ok: true, session, isNew };
 }
 
-export function closeSession(
+export async function closeSession(
   store: Store,
   uid: string,
   id: string,
   exitCode: number | undefined,
   now = Date.now(),
-): SessionRecord | null {
-  return store.patchSession(uid, id, { closedAt: now, exitCode });
+): Promise<SessionRecord | null> {
+  return await store.patchSession(uid, id, { closedAt: now, exitCode });
 }
 
-export function listSessions(store: Store, uid: string): SessionRecord[] {
-  return store.listSessions(uid);
+export async function listSessions(store: Store, uid: string): Promise<SessionRecord[]> {
+  return await store.listSessions(uid);
 }

@@ -27,27 +27,27 @@ const missing = (error: string): Result => ({ status: 404, body: { error } });
  * authenticated call. Doing it here rather than on a signup screen means an
  * account is never left without one, whichever way it arrived.
  */
-export function ensureMembership(
+export async function ensureMembership(
   store: Store,
   identity: Identity,
   inviteId?: string,
-): { membership: Membership; joined: boolean; error?: string } {
-  const existing = store.membershipOf(identity.uid);
+): Promise<{ membership: Membership; joined: boolean; error?: string }> {
+  const existing = await store.membershipOf(identity.uid);
 
   if (existing && inviteId) {
-    return acceptAsExistingMember(store, identity, existing, inviteId);
+    return await acceptAsExistingMember(store, identity, existing, inviteId);
   }
   if (existing) return { membership: existing, joined: false };
 
   if (inviteId) {
-    const check = checkInvite(store.invite(inviteId), identity.email);
+    const check = checkInvite(await store.invite(inviteId), identity.email);
     if (!check.ok) {
       /*
        * A bad invite still gets an organization, because the alternative is an
        * account that belongs nowhere. The reason travels back so the person is
        * told they are on their own rather than left to discover it.
        */
-      return { membership: createOwnOrg(store, identity), joined: false, error: check.reason };
+      return { membership: await createOwnOrg(store, identity), joined: false, error: check.reason };
     }
     const membership: Membership = {
       orgId: check.invite.orgId,
@@ -57,12 +57,12 @@ export function ensureMembership(
       role: check.invite.role,
       joinedAt: Date.now(),
     };
-    store.putMembership(membership);
-    store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
+    await store.putMembership(membership);
+    await store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
     return { membership, joined: true };
   }
 
-  return { membership: createOwnOrg(store, identity), joined: false };
+  return { membership: await createOwnOrg(store, identity), joined: false };
 }
 
 /**
@@ -74,22 +74,22 @@ export function ensureMembership(
  * people in it: leaving would strand them with no owner, so that has to be
  * resolved deliberately first.
  */
-function acceptAsExistingMember(
+async function acceptAsExistingMember(
   store: Store,
   identity: Identity,
   existing: Membership,
   inviteId: string,
-): { membership: Membership; joined: boolean; error?: string } {
-  const check = checkInvite(store.invite(inviteId), identity.email);
+): Promise<{ membership: Membership; joined: boolean; error?: string }> {
+  const check = checkInvite(await store.invite(inviteId), identity.email);
   if (!check.ok) return { membership: existing, joined: false, error: check.reason };
 
   if (check.invite.orgId === existing.orgId) {
     return { membership: existing, joined: false, error: "You are already in that organization." };
   }
 
-  const current = store.members(existing.orgId);
+  const current = await store.members(existing.orgId);
   if (existing.role === "owner" && current.length > 1) {
-    const organization = store.organization(existing.orgId);
+    const organization = await store.organization(existing.orgId);
     return {
       membership: existing,
       joined: false,
@@ -99,7 +99,7 @@ function acceptAsExistingMember(
     };
   }
 
-  store.removeMember(existing.orgId, identity.uid);
+  await store.removeMember(existing.orgId, identity.uid);
   const membership: Membership = {
     orgId: check.invite.orgId,
     uid: identity.uid,
@@ -108,19 +108,19 @@ function acceptAsExistingMember(
     role: check.invite.role,
     joinedAt: Date.now(),
   };
-  store.putMembership(membership);
-  store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
+  await store.putMembership(membership);
+  await store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
   return { membership, joined: true };
 }
 
-function createOwnOrg(store: Store, identity: Identity): Membership {
+async function createOwnOrg(store: Store, identity: Identity): Promise<Membership> {
   const organization = {
     id: newId("org"),
     name: suggestOrgName(identity.email, identity.name),
     createdAt: Date.now(),
     createdBy: identity.uid,
   };
-  store.putOrganization(organization);
+  await store.putOrganization(organization);
   const membership: Membership = {
     orgId: organization.id,
     uid: identity.uid,
@@ -129,36 +129,36 @@ function createOwnOrg(store: Store, identity: Identity): Membership {
     role: "owner",
     joinedAt: Date.now(),
   };
-  store.putMembership(membership);
+  await store.putMembership(membership);
   return membership;
 }
 
-export function describeOrganization(store: Store, membership: Membership): Result {
-  const organization = store.organization(membership.orgId);
+export async function describeOrganization(store: Store, membership: Membership): Promise<Result> {
+  const organization = await store.organization(membership.orgId);
   if (!organization) return missing("that organization is gone");
   return ok({
     organization,
     you: membership,
-    members: store.members(membership.orgId),
+    members: await store.members(membership.orgId),
     /* Invites are only anyone's business if they can act on them. */
-    invites: can(membership.role, "invite") ? store.invites(membership.orgId) : [],
+    invites: can(membership.role, "invite") ? await store.invites(membership.orgId) : [],
   });
 }
 
-export function renameOrganization(store: Store, membership: Membership, name: string): Result {
+export async function renameOrganization(store: Store, membership: Membership, name: string): Promise<Result> {
   if (!can(membership.role, "rename-org")) return denied("only the owner can rename it");
   const trimmed = name.trim();
   if (!trimmed) return bad("give the organization a name");
   if (trimmed.length > 80) return bad("that name is too long");
-  store.renameOrganization(membership.orgId, trimmed);
-  return ok({ organization: store.organization(membership.orgId) });
+  await store.renameOrganization(membership.orgId, trimmed);
+  return ok({ organization: await store.organization(membership.orgId) });
 }
 
-export function createInvite(
+export async function createInvite(
   store: Store,
   membership: Membership,
   input: { role?: string; email?: string },
-): Result {
+): Promise<Result> {
   if (!can(membership.role, "invite")) return denied("you cannot invite people");
   const role: Role = input.role === "admin" ? "admin" : "member";
   if (role === "admin" && !can(membership.role, "change-role")) {
@@ -178,24 +178,24 @@ export function createInvite(
     createdAt: Date.now(),
     expiresAt: Date.now() + INVITE_TTL_MS,
   };
-  store.putInvite(invite);
+  await store.putInvite(invite);
   return created({ invite });
 }
 
-export function revokeInvite(store: Store, membership: Membership, id: string): Result {
+export async function revokeInvite(store: Store, membership: Membership, id: string): Promise<Result> {
   if (!can(membership.role, "revoke-invite")) return denied("you cannot manage invites");
-  const invite = store.invite(id);
+  const invite = await store.invite(id);
   if (!invite || invite.orgId !== membership.orgId) return missing("no such invite");
   if (invite.acceptedAt) return bad("that invite has already been used");
-  store.updateInvite(id, { revokedAt: Date.now() });
+  await store.updateInvite(id, { revokedAt: Date.now() });
   return ok({ revoked: true });
 }
 
 /** What an invite link can say before anyone has signed in. */
-export function previewInvite(store: Store, id: string): Result {
-  const invite = store.invite(id);
+export async function previewInvite(store: Store, id: string): Promise<Result> {
+  const invite = await store.invite(id);
   if (!invite) return missing("that invite link is not valid");
-  const organization = store.organization(invite.orgId);
+  const organization = await store.organization(invite.orgId);
   if (!organization) return missing("that organization is gone");
 
   const usable = !invite.revokedAt && !invite.acceptedAt && invite.expiresAt > Date.now();
@@ -208,30 +208,30 @@ export function previewInvite(store: Store, id: string): Result {
   });
 }
 
-export function removeMember(store: Store, membership: Membership, uid: string): Result {
+export async function removeMember(store: Store, membership: Membership, uid: string): Promise<Result> {
   if (!can(membership.role, "remove-member")) return denied("you cannot remove people");
   if (uid === membership.uid) return bad("you cannot remove yourself");
-  const target = store.members(membership.orgId).find((entry) => entry.uid === uid);
+  const target = (await store.members(membership.orgId)).find((entry) => entry.uid === uid);
   if (!target) return missing("no such member");
   if (!outranks(membership.role, target.role)) {
     return denied(`you cannot remove ${target.role === "owner" ? "the owner" : "another admin"}`);
   }
-  store.removeMember(membership.orgId, uid);
+  await store.removeMember(membership.orgId, uid);
   return ok({ removed: true });
 }
 
-export function changeRole(
+export async function changeRole(
   store: Store,
   membership: Membership,
   uid: string,
   role: string,
-): Result {
+): Promise<Result> {
   if (!can(membership.role, "change-role")) return denied("only the owner can change roles");
   if (uid === membership.uid) return bad("you cannot change your own role");
   if (role !== "admin" && role !== "member") return bad("unknown role");
-  const target = store.members(membership.orgId).find((entry) => entry.uid === uid);
+  const target = (await store.members(membership.orgId)).find((entry) => entry.uid === uid);
   if (!target) return missing("no such member");
   if (target.role === "owner") return denied("the owner's role cannot be changed");
-  store.setRole(membership.orgId, uid, role);
+  await store.setRole(membership.orgId, uid, role);
   return ok({ changed: true });
 }

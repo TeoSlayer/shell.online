@@ -14,21 +14,21 @@ export type Outcome<T> =
  * Notifying is derived from the same parse the reader sees, so nobody is
  * notified about a mention that is not visible, and nobody visible is missed.
  */
-export function addComment(
+export async function addComment(
   store: Store,
   membership: Membership,
   sessionId: string,
   body: string,
-): Outcome<Comment> {
+): Promise<Outcome<Comment>> {
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, status: 400, error: "write something first" };
   if (trimmed.length > MAX_COMMENT) {
     return { ok: false, status: 400, error: "that comment is too long" };
   }
-  const session = store.sessionInOrg(membership.orgId, sessionId);
+  const session = await store.sessionInOrg(membership.orgId, sessionId);
   if (!session) return { ok: false, status: 404, error: "no such session" };
 
-  const members = store.members(membership.orgId);
+  const members = await store.members(membership.orgId);
   const mentions = findMentions(trimmed, members)
     /* Mentioning yourself is not news. */
     .filter((uid) => uid !== membership.uid);
@@ -42,10 +42,10 @@ export function addComment(
     at: Date.now(),
     mentions,
   };
-  store.putComment(comment);
+  await store.putComment(comment);
 
   for (const uid of mentions) {
-    store.putNotification({
+    await store.putNotification({
       id: newId("ntf"),
       orgId: membership.orgId,
       uid,
@@ -61,16 +61,16 @@ export function addComment(
 }
 
 /** Tells someone a session is now theirs. */
-export function notifyAssigned(
+export async function notifyAssigned(
   store: Store,
   membership: Membership,
   sessionId: string,
   assigneeUid: string,
   sessionLabel: string,
-): void {
+): Promise<void> {
   /* Assigning to yourself is not news either. */
   if (assigneeUid === membership.uid) return;
-  store.putNotification({
+  await store.putNotification({
     id: newId("ntf"),
     orgId: membership.orgId,
     uid: assigneeUid,
@@ -89,16 +89,16 @@ export function notifyAssigned(
  * every session a colleague starts, so it must not shout the way an
  * assignment does.
  */
-export function notifySessionStarted(
+export async function notifySessionStarted(
   store: Store,
   orgId: string,
   ownerUid: string,
   sessionId: string,
   label: string,
-): void {
-  for (const member of store.members(orgId)) {
+): Promise<void> {
+  for (const member of await store.members(orgId)) {
     if (member.uid === ownerUid) continue;
-    store.putNotification({
+    await store.putNotification({
       id: newId("ntf"),
       orgId,
       uid: member.uid,
@@ -111,12 +111,11 @@ export function notifySessionStarted(
   }
 }
 
-export function inbox(store: Store, membership: Membership): {
-  notifications: Notification[];
-  unread: number;
-  unreadAssignments: number;
-} {
-  const notifications = store.notificationsFor(membership.uid);
+export async function inbox(
+  store: Store,
+  membership: Membership,
+): Promise<{ notifications: Notification[]; unread: number; unreadAssignments: number }> {
+  const notifications = await store.notificationsFor(membership.uid);
   return {
     notifications,
     unread: notifications.filter((entry) => !entry.readAt).length,

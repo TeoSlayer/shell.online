@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, beforeAll } from "vitest";
 import { randomBytes } from "node:crypto";
 import { exportJWK, generateKeyPair, SignJWT, type KeyObject } from "jose";
 import { createApp } from "./app";
-import { Store } from "./lib/store";
+import { MemoryStore } from "./lib/store-memory";
+import type { Store } from "./lib/store";
 import { createVerifier, localKeySet } from "./lib/firebase-token";
 import { base64url, deriveChallenge } from "./lib/pkce";
 
@@ -81,8 +82,8 @@ beforeAll(async () => {
   verifyIdToken = createVerifier(PROJECT, localKeySet({ keys: [{ ...jwk, kid: "test-key", alg: "RS256" }] })) as never;
 });
 
-beforeEach(() => {
-  store = Store.memory();
+beforeEach(async () => {
+  store = MemoryStore.memory();
   verifier = base64url(randomBytes(48));
   handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
 });

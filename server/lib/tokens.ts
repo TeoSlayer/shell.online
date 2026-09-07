@@ -60,12 +60,12 @@ export type AccessCheck =
   | { ok: true; token: CliToken }
   | { ok: false; reason: "unknown" | "revoked" | "expired" };
 
-export function checkAccessToken(store: Store, presented: string, now = Date.now()): AccessCheck {
-  const token = store.findByAccessHash(hashSecret(presented));
+export async function checkAccessToken(store: Store, presented: string, now = Date.now()): Promise<AccessCheck> {
+  const token = await store.findByAccessHash(hashSecret(presented));
   if (!token) return { ok: false, reason: "unknown" };
   if (token.revokedAt) return { ok: false, reason: "revoked" };
   if (token.accessExpiresAt <= now) return { ok: false, reason: "expired" };
-  store.touchToken(token.id, now);
+  await store.touchToken(token.id, now);
   return { ok: true, token };
 }
 
@@ -73,25 +73,25 @@ export type RefreshResult =
   | { ok: true; accessToken: string; expiresIn: number; token: CliToken }
   | { ok: false; reason: "unknown" | "revoked" };
 
-export function refreshAccessToken(
+export async function refreshAccessToken(
   store: Store,
   presented: string,
   now = Date.now(),
-): RefreshResult {
-  const token = store.findByRefreshHash(hashSecret(presented));
+): Promise<RefreshResult> {
+  const token = await store.findByRefreshHash(hashSecret(presented));
   if (!token) return { ok: false, reason: "unknown" };
   if (token.revokedAt) return { ok: false, reason: "revoked" };
   const accessToken = mintSecret("sha");
-  store.updateToken(token.refreshHash, {
+  await store.updateToken(token.refreshHash, {
     accessHash: hashSecret(accessToken),
     accessExpiresAt: now + ACCESS_TTL_MS,
   });
   return { ok: true, accessToken, expiresIn: Math.floor(ACCESS_TTL_MS / 1000), token };
 }
 
-export function revokeByRefreshToken(store: Store, presented: string, now = Date.now()): boolean {
-  const token = store.findByRefreshHash(hashSecret(presented));
+export async function revokeByRefreshToken(store: Store, presented: string, now = Date.now()): Promise<boolean> {
+  const token = await store.findByRefreshHash(hashSecret(presented));
   if (!token || token.revokedAt) return false;
-  store.updateToken(token.refreshHash, { revokedAt: now });
+  await store.updateToken(token.refreshHash, { revokedAt: now });
   return true;
 }

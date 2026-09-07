@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { Store } from "./lib/store";
-import { createVerifier, type VerifyResult } from "./lib/firebase-token";
+import type { Store } from "./lib/store";
+import type { VerifyResult } from "./lib/firebase-token";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
   checkAccessToken,
@@ -101,12 +101,12 @@ export function createApp(options: AppOptions) {
   async function requireMember(request: IncomingMessage, inviteId?: string) {
     const identity = await requireUser(request);
     if (!identity) return null;
-    return ensureMembership(store, identity, inviteId).membership;
+    return (await ensureMembership(store, identity, inviteId)).membership;
   }
 
   /* The CLI authenticates with an opaque access token issued by this service. */
-  function requireCli(request: IncomingMessage) {
-    const check = checkAccessToken(store, bearer(request));
+  async function requireCli(request: IncomingMessage) {
+    const check = await checkAccessToken(store, bearer(request));
     return check.ok ? check.token : null;
   }
 
@@ -120,7 +120,7 @@ export function createApp(options: AppOptions) {
 
     const url = new URL(request.url ?? "/", "http://localhost");
     const route = `${request.method} ${url.pathname}`;
-    store.purgeExpired();
+    await store.purgeExpired();
 
     try {
       /* ---- Approve a pending CLI login. Called by the web app. ---- */
@@ -146,7 +146,7 @@ export function createApp(options: AppOptions) {
           return send(response, 400, { error: "invalid code_challenge" });
         }
 
-        const code = issueCode(store, {
+        const code = await issueCode(store, {
           uid: identity.uid,
           email: identity.email,
           name: identity.name,
@@ -159,7 +159,7 @@ export function createApp(options: AppOptions) {
       /* ---- Exchange the one-time code for CLI tokens. Called by the CLI. ---- */
       if (route === "POST /api/cli/token") {
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = exchangeCode(store, {
+        const result = await exchangeCode(store, {
           code: String(body.code ?? ""),
           verifier: String(body.code_verifier ?? ""),
           redirectUri: String(body.redirect_uri ?? ""),
@@ -183,7 +183,7 @@ export function createApp(options: AppOptions) {
 
       if (route === "POST /api/cli/refresh") {
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = refreshAccessToken(store, String(body.refresh_token ?? ""));
+        const result = await refreshAccessToken(store, String(body.refresh_token ?? ""));
         if (!result.ok) return send(response, 401, { error: `refresh token ${result.reason}` });
         return send(response, 200, {
           access_token: result.accessToken,
@@ -198,12 +198,12 @@ export function createApp(options: AppOptions) {
 
       if (route === "POST /api/cli/revoke") {
         const body = (await readBody(request)) as Record<string, unknown>;
-        const revoked = revokeByRefreshToken(store, String(body.refresh_token ?? ""));
+        const revoked = await revokeByRefreshToken(store, String(body.refresh_token ?? ""));
         return send(response, 200, { revoked });
       }
 
       if (route === "GET /api/cli/me") {
-        const token = requireCli(request);
+        const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         return send(response, 200, {
           account: { uid: token.uid, email: token.email, name: token.name },
@@ -217,12 +217,12 @@ export function createApp(options: AppOptions) {
         const invite = url.searchParams.get("invite") ?? undefined;
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
-        const resolved = ensureMembership(store, identity, invite);
+        const resolved = await ensureMembership(store, identity, invite);
         /* Publishing the browser key here keeps it current without a
            separate call on every sign-in. */
         const publicKey = url.searchParams.get("key");
-        if (publicKey) store.setMemberKey(identity.uid, publicKey);
-        const described = describeOrganization(store, resolved.membership);
+        if (publicKey) await store.setMemberKey(identity.uid, publicKey);
+        const described = await describeOrganization(store, resolved.membership);
         return send(response, described.status, {
           ...(described.body as Record<string, unknown>),
           joined: resolved.joined,
@@ -234,14 +234,14 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = renameOrganization(store, membership, String(body.name ?? ""));
+        const result = await renameOrganization(store, membership, String(body.name ?? ""));
         return send(response, result.status, result.body);
       }
 
       /* Readable before signing in, so an invite link can say what it is. */
       const invitePreview = url.pathname.match(/^\/api\/invites\/(inv_[a-f0-9]{32})$/);
       if (request.method === "GET" && invitePreview) {
-        const result = previewInvite(store, invitePreview[1]);
+        const result = await previewInvite(store, invitePreview[1]);
         return send(response, result.status, result.body);
       }
 
@@ -249,7 +249,7 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = createInvite(store, membership, {
+        const result = await createInvite(store, membership, {
           role: typeof body.role === "string" ? body.role : undefined,
           email: typeof body.email === "string" ? body.email : undefined,
         });
@@ -260,7 +260,7 @@ export function createApp(options: AppOptions) {
       if (request.method === "DELETE" && inviteRoute) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const result = revokeInvite(store, membership, inviteRoute[1]);
+        const result = await revokeInvite(store, membership, inviteRoute[1]);
         return send(response, result.status, result.body);
       }
 
@@ -268,14 +268,14 @@ export function createApp(options: AppOptions) {
       if (request.method === "DELETE" && memberRoute) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const result = removeMember(store, membership, memberRoute[1]);
+        const result = await removeMember(store, membership, memberRoute[1]);
         return send(response, result.status, result.body);
       }
       if (request.method === "PATCH" && memberRoute) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = changeRole(store, membership, memberRoute[1], String(body.role ?? ""));
+        const result = await changeRole(store, membership, memberRoute[1], String(body.role ?? ""));
         return send(response, result.status, result.body);
       }
 
@@ -289,7 +289,7 @@ export function createApp(options: AppOptions) {
         const written = [];
         for (const entry of entries.slice(0, 100)) {
           const candidate = entry as Record<string, unknown>;
-          const result = recordAudit(store, membership, {
+          const result = await recordAudit(store, membership, {
             sessionId: String(candidate.session_id ?? ""),
             kind: String(candidate.kind ?? "input"),
             text: String(candidate.text ?? ""),
@@ -304,10 +304,10 @@ export function createApp(options: AppOptions) {
       if (request.method === "GET" && auditRoute) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        if (!store.sessionInOrg(membership.orgId, auditRoute[1])) {
+        if (!await store.sessionInOrg(membership.orgId, auditRoute[1])) {
           return send(response, 404, { error: "no such session" });
         }
-        return send(response, 200, { events: store.auditFor(membership.orgId, auditRoute[1]) });
+        return send(response, 200, { events: await store.auditFor(membership.orgId, auditRoute[1]) });
       }
 
       if (route === "GET /api/audit.csv") {
@@ -315,9 +315,9 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const sessionId = url.searchParams.get("session");
         const events = sessionId
-          ? store.auditFor(membership.orgId, sessionId)
-          : store.auditForOrg(membership.orgId);
-        const csv = auditCsv(events, store.listOrgSessions(membership.orgId));
+          ? await store.auditFor(membership.orgId, sessionId)
+          : await store.auditForOrg(membership.orgId);
+        const csv = auditCsv(events, await store.listOrgSessions(membership.orgId));
         response.writeHead(200, {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="shell-online-audit.csv"`,
@@ -329,11 +329,11 @@ export function createApp(options: AppOptions) {
 
       /* ---- Session registry ---- */
       if (route === "POST /api/sessions") {
-        const token = requireCli(request);
+        const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const membership = store.membershipOf(token.uid);
-        const result = registerSession(store, token.uid, {
+        const membership = await store.membershipOf(token.uid);
+        const result = await registerSession(store, token.uid, {
           id: String(body.id ?? ""),
           shareUrl: String(body.share_url ?? ""),
           command: String(body.command ?? ""),
@@ -351,7 +351,7 @@ export function createApp(options: AppOptions) {
         if (!result.ok) return send(response, 400, { error: result.reason });
         /* Only on first sight, so a persistent session restarting is silent. */
         if (result.isNew && membership) {
-          notifySessionStarted(
+          await notifySessionStarted(
             store,
             membership.orgId,
             token.uid,
@@ -364,11 +364,11 @@ export function createApp(options: AppOptions) {
 
       const closeMatch = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})$/);
       if (request.method === "PATCH" && closeMatch) {
-        const token = requireCli(request);
+        const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         const body = (await readBody(request)) as Record<string, unknown>;
         const exitCode = typeof body.exit_code === "number" ? body.exit_code : undefined;
-        const session = closeSession(store, token.uid, closeMatch[1], exitCode);
+        const session = await closeSession(store, token.uid, closeMatch[1], exitCode);
         if (!session) return send(response, 404, { error: "no such session" });
         return send(response, 200, { session });
       }
@@ -377,7 +377,7 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/devices") {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
-        return send(response, 200, { devices: store.listDevices(identity.uid) });
+        return send(response, 200, { devices: await store.listDevices(identity.uid) });
       }
 
       const deviceMatch = url.pathname.match(/^\/api\/devices\/(dev_[A-Za-z0-9_-]{1,64})$/);
@@ -388,7 +388,7 @@ export function createApp(options: AppOptions) {
          * Scoped by uid inside the store, so a guessed id cannot unlink a
          * machine belonging to another account.
          */
-        const revoked = store.revokeDevice(identity.uid, deviceMatch[1]);
+        const revoked = await store.revokeDevice(identity.uid, deviceMatch[1]);
         if (!revoked) return send(response, 404, { error: "no such machine" });
         return send(response, 200, { revoked: true });
       }
@@ -402,13 +402,13 @@ export function createApp(options: AppOptions) {
          * everyone's would be pointless, since they cannot open them, and
          * would put more sealed material on the wire than anyone needs.
          */
-        const sessions = store.listOrgSessions(membership.orgId).map((session) => {
+        const sessions = (await store.listOrgSessions(membership.orgId)).map((session) => {
           const mine = session.keyShares?.find((share) => share.uid === membership.uid);
           return { ...session, keyShares: undefined, keyShare: mine };
         });
         return send(response, 200, {
           sessions,
-          members: store.members(membership.orgId),
+          members: await store.members(membership.orgId),
           you: membership,
         });
       }
@@ -428,7 +428,7 @@ export function createApp(options: AppOptions) {
             senderPublicKey: String(entry.sender_public_key ?? ""),
             sealed: String(entry.sealed),
           }));
-        if (!store.putKeyShares(membership.orgId, shareRoute[1], shares)) {
+        if (!await store.putKeyShares(membership.orgId, shareRoute[1], shares)) {
           return send(response, 404, { error: "no such session" });
         }
         return send(response, 200, { shared: shares.length });
@@ -439,9 +439,9 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = assignSession(store, membership, assignRoute[1], String(body.uid ?? ""));
+        const result = await assignSession(store, membership, assignRoute[1], String(body.uid ?? ""));
         if (!result.ok) return send(response, result.status, { error: result.error });
-        notifyAssigned(
+        await notifyAssigned(
           store,
           membership,
           assignRoute[1],
@@ -465,7 +465,7 @@ export function createApp(options: AppOptions) {
         const deviceId = String(body.device_id ?? "");
         const kind = String(body.kind ?? "");
 
-        const device = store.listDevices(identity.uid).find((entry) => entry.id === deviceId);
+        const device = (await store.listDevices(identity.uid)).find((entry) => entry.id === deviceId);
         if (!device) return send(response, 404, { error: "no such machine" });
 
         /*
@@ -501,17 +501,17 @@ export function createApp(options: AppOptions) {
             sealedPassword: sealedPassword || undefined,
             createdAt: Date.now(),
           };
-          store.putCommand(queued);
+          await store.putCommand(queued);
           return send(response, 202, { command: queued });
         }
 
         if (kind === "kill") {
           const sessionId = String(body.session_id ?? "");
           /* Scoped by uid, so one account cannot stop another's session. */
-          const scope = store.membershipOf(identity.uid);
+          const scope = await store.membershipOf(identity.uid);
           const owned = scope
-            ? Boolean(store.sessionInOrg(scope.orgId, sessionId))
-            : listSessions(store, identity.uid).some((s) => s.id === sessionId);
+            ? Boolean(await store.sessionInOrg(scope.orgId, sessionId))
+            : (await listSessions(store, identity.uid)).some((s) => s.id === sessionId);
           if (!owned) return send(response, 404, { error: "no such session" });
           const queued = {
             id: mintSecret("cmd"),
@@ -521,7 +521,7 @@ export function createApp(options: AppOptions) {
             sessionId,
             createdAt: Date.now(),
           };
-          store.putCommand(queued);
+          await store.putCommand(queued);
           return send(response, 202, { command: queued });
         }
 
@@ -530,20 +530,20 @@ export function createApp(options: AppOptions) {
 
       /* ---- The agent side, authenticated as the machine ---- */
       if (route === "GET /api/agent/commands") {
-        const token = requireCli(request);
+        const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         /* The agent publishes its key on every poll, so a restart re-keys. */
-        store.markAgentSeen(token.id, url.searchParams.get("key") ?? undefined);
-        return send(response, 200, { commands: store.claimCommands(token.id) });
+        await store.markAgentSeen(token.id, url.searchParams.get("key") ?? undefined);
+        return send(response, 200, { commands: await store.claimCommands(token.id) });
       }
 
       const doneMatch = url.pathname.match(/^\/api\/agent\/commands\/(cmd_[A-Za-z0-9_-]{1,128})$/);
       if (request.method === "POST" && doneMatch) {
-        const token = requireCli(request);
+        const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         const body = (await readBody(request)) as Record<string, unknown>;
         const error = typeof body.error === "string" && body.error ? body.error : undefined;
-        const finished = store.finishCommand(token.id, doneMatch[1], error);
+        const finished = await store.finishCommand(token.id, doneMatch[1], error);
         if (!finished) return send(response, 404, { error: "no such command" });
         return send(response, 200, { ok: true });
       }
@@ -551,7 +551,7 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/commands") {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
-        return send(response, 200, { commands: store.listCommands(identity.uid) });
+        return send(response, 200, { commands: await store.listCommands(identity.uid) });
       }
 
       /* ---- One session, in detail ---- */
@@ -560,15 +560,15 @@ export function createApp(options: AppOptions) {
       if (request.method === "GET" && oneSession) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const session = store.sessionInOrg(membership.orgId, oneSession[1]);
+        const session = await store.sessionInOrg(membership.orgId, oneSession[1]);
         if (!session) return send(response, 404, { error: "no such session" });
         const mine = session.keyShares?.find((share) => share.uid === membership.uid);
         return send(response, 200, {
           session: { ...session, keyShares: undefined, keyShare: mine },
-          members: store.members(membership.orgId),
+          members: await store.members(membership.orgId),
           you: membership,
-          comments: store.comments(membership.orgId, oneSession[1]),
-          audit: store.auditFor(membership.orgId, oneSession[1]),
+          comments: await store.comments(membership.orgId, oneSession[1]),
+          audit: await store.auditFor(membership.orgId, oneSession[1]),
         });
       }
 
@@ -579,7 +579,7 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = addComment(store, membership, commentRoute[1], String(body.body ?? ""));
+        const result = await addComment(store, membership, commentRoute[1], String(body.body ?? ""));
         if (!result.ok) return send(response, result.status, { error: result.error });
         return send(response, 201, { comment: result.value });
       }
@@ -589,8 +589,8 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/notifications") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const view = inbox(store, membership);
-        return send(response, 200, { ...view, members: store.members(membership.orgId) });
+        const view = await inbox(store, membership);
+        return send(response, 200, { ...view, members: await store.members(membership.orgId) });
       }
 
       if (route === "POST /api/notifications/read") {
@@ -598,11 +598,11 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
         if (typeof body.id === "string") {
-          store.markNotificationRead(membership.uid, body.id);
+          await store.markNotificationRead(membership.uid, body.id);
         } else {
-          store.markAllNotificationsRead(membership.uid);
+          await store.markAllNotificationsRead(membership.uid);
         }
-        return send(response, 200, inbox(store, membership));
+        return send(response, 200, await inbox(store, membership));
       }
 
       if (route === "GET /api/health") {
