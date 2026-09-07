@@ -223,6 +223,9 @@ describe("session registry", () => {
     expect(listed.status).toBe(200);
     expect(listed.body.sessions).toHaveLength(1);
     expect(listed.body.sessions[0].command).toBe("claude");
+    /* The list now carries who else is in the organization. */
+    expect(listed.body.members).toHaveLength(1);
+    expect(listed.body.you.role).toBe("owner");
   });
 
   it("refuses registration without a CLI token", async () => {
@@ -241,6 +244,7 @@ describe("session registry", () => {
     const tokens = await login();
     await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
 
+    /* A different account is a different organization, so it sees nothing. */
     const other = await call("GET", "/api/sessions", { auth: await idToken({ sub: "uid-2" }) });
     expect(other.body.sessions).toEqual([]);
   });
@@ -628,5 +632,378 @@ describe("relaying a sealed password", () => {
     const listed = await call("GET", "/api/sessions", { auth: await idToken() });
     /* This is how the browser recognises the session it started. */
     expect(listed.body.sessions[0].origin).toBe("cmd_abc");
+  });
+});
+
+describe("organizations", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "claude",
+  };
+
+  async function orgFor(sub: string, email: string) {
+    const result = await call("GET", "/api/org", { auth: await idToken({ sub, email }) });
+    return result.body;
+  }
+
+  it("gives a new account its own organization, named from the work domain", async () => {
+    const body = await orgFor("uid-1", "alex@vulturelabs.io");
+    expect(body.organization.name).toBe("Vulturelabs");
+    expect(body.you.role).toBe("owner");
+    expect(body.members).toHaveLength(1);
+  });
+
+  it("does not put two unrelated accounts in one organization", async () => {
+    const first = await orgFor("uid-1", "a@one.com");
+    const second = await orgFor("uid-2", "b@two.com");
+    expect(first.organization.id).not.toBe(second.organization.id);
+  });
+
+  it("puts someone who follows an invite into that organization", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: { role: "member" },
+    });
+
+    const joined = await call(
+      `GET`,
+      `/api/org?invite=${invite.body.invite.id}`,
+      { auth: await idToken({ sub: "uid-2", email: "new@acme.com" }) },
+    );
+    expect(joined.body.joined).toBe(true);
+    expect(joined.body.you.role).toBe("member");
+    expect(joined.body.members).toHaveLength(2);
+  });
+
+  it("shows colleagues each other's sessions", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+
+    /* This is the point of the feature. */
+    const seen = await call("GET", "/api/sessions", { auth: colleague });
+    expect(seen.body.sessions).toHaveLength(1);
+    expect(seen.body.sessions[0].command).toBe("claude");
+  });
+
+  it("still shows nothing to someone in another organization", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const stranger = await call("GET", "/api/sessions", {
+      auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
+    });
+    expect(stranger.body.sessions).toEqual([]);
+  });
+
+  it("refuses an invite that was issued for another address", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: { role: "member", email: "wanted@acme.com" },
+    });
+    const wrong = await call(`GET`, `/api/org?invite=${invite.body.invite.id}`, {
+      auth: await idToken({ sub: "uid-3", email: "someone@else.com" }),
+    });
+    /* They still get an organization, and are told why it is not the one. */
+    expect(wrong.body.joined).toBe(false);
+    expect(wrong.body.inviteError).toContain("different email");
+  });
+
+  it("cannot use one invite twice", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: {},
+    });
+    const link = `/api/org?invite=${invite.body.invite.id}`;
+    const first = await call("GET", link, { auth: await idToken({ sub: "uid-2", email: "a@acme.com" }) });
+    const second = await call("GET", link, { auth: await idToken({ sub: "uid-3", email: "b@acme.com" }) });
+    expect(first.body.joined).toBe(true);
+    expect(second.body.joined).toBe(false);
+    expect(second.body.inviteError).toContain("already been used");
+  });
+
+  it("describes an invite before anyone signs in", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: {},
+    });
+    const preview = await call("GET", `/api/invites/${invite.body.invite.id}`);
+    expect(preview.status).toBe(200);
+    expect(preview.body.organization.name).toBe("Acme");
+    expect(preview.body.usable).toBe(true);
+  });
+
+  it("does not let a member invite, remove or rename", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: {},
+    });
+    const member = await idToken({ sub: "uid-2", email: "member@acme.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: member });
+
+    expect((await call("POST", "/api/org/invites", { auth: member, body: {} })).status).toBe(403);
+    expect((await call("PATCH", "/api/org", { auth: member, body: { name: "Mine" } })).status).toBe(403);
+    expect((await call("DELETE", "/api/org/members/uid-1", { auth: member })).status).toBe(403);
+  });
+
+  it("does not let anyone remove the owner", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: { role: "admin" },
+    });
+    const admin = await idToken({ sub: "uid-2", email: "admin@acme.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: admin });
+
+    const attempt = await call("DELETE", "/api/org/members/uid-1", { auth: admin });
+    expect(attempt.status).toBe(403);
+  });
+
+  it("lets the owner rename the organization", async () => {
+    await orgFor("uid-1", "owner@acme.com");
+    const renamed = await call("PATCH", "/api/org", {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+      body: { name: "Acme Rockets" },
+    });
+    expect(renamed.body.organization.name).toBe("Acme Rockets");
+  });
+});
+
+describe("session ownership and handoff", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "claude",
+  };
+
+  async function orgWithColleague() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    return { colleague };
+  }
+
+  it("assigns a new session to whoever started it", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].ownerUid).toBe("uid-1");
+    expect(listed.body.sessions[0].assigneeUid).toBe("uid-1");
+  });
+
+  it("lets the owner hand it to a colleague", async () => {
+    await orgWithColleague();
+    const handed = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+    expect(handed.status).toBe(200);
+    expect(handed.body.session.assigneeUid).toBe("uid-2");
+    /* The owner does not change; responsibility does. */
+    expect(handed.body.session.ownerUid).toBe("uid-1");
+  });
+
+  it("records the handoff in the audit log", async () => {
+    await orgWithColleague();
+    await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+    const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
+    expect(log.body.events.at(-1)).toMatchObject({
+      kind: "handoff",
+      text: "assigned to colleague@example.com",
+    });
+  });
+
+  it("does not let a plain member reassign someone else's session", async () => {
+    const { colleague } = await orgWithColleague();
+    const attempt = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: colleague,
+      body: { uid: "uid-2" },
+    });
+    expect(attempt.status).toBe(403);
+  });
+
+  it("will not assign to someone outside the organization", async () => {
+    await orgWithColleague();
+    const attempt = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-stranger" },
+    });
+    expect(attempt.status).toBe(404);
+  });
+
+  it("keeps an assignment when a persistent session re-registers", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: {} });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, {
+      auth: await idToken({ sub: "uid-2", email: "colleague@example.com" }),
+    });
+    await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+
+    /* A restart re-registers with the owner as assignee; that must not win. */
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].assigneeUid).toBe("uid-2");
+  });
+});
+
+describe("audit log", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "claude",
+  };
+
+  async function withSession() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    return tokens;
+  }
+
+  it("records what was entered, attributed to who entered it", async () => {
+    await withSession();
+    await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: {
+        entries: [
+          { session_id: session.id, kind: "input", text: "refactor the parser" },
+          { session_id: session.id, kind: "interrupt", text: "" },
+        ],
+      },
+    });
+
+    const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
+    expect(log.body.events).toHaveLength(2);
+    expect(log.body.events[0]).toMatchObject({
+      kind: "input",
+      text: "refactor the parser",
+      actorEmail: "ana@example.com",
+    });
+  });
+
+  it("will not write into another organization's session", async () => {
+    await withSession();
+    const written = await call("POST", "/api/audit", {
+      auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
+      body: { entries: [{ session_id: session.id, kind: "input", text: "sneaky" }] },
+    });
+    expect(written.body.written).toBe(0);
+  });
+
+  it("will not read another organization's log", async () => {
+    await withSession();
+    const read = await call("GET", `/api/audit/${session.id}`, {
+      auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
+    });
+    expect(read.status).toBe(404);
+  });
+
+  it("lets a colleague read the log, which is the point of an organization", async () => {
+    await withSession();
+    await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: { entries: [{ session_id: session.id, kind: "input", text: "npm test" }] },
+    });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: {} });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+
+    const read = await call("GET", `/api/audit/${session.id}`, { auth: colleague });
+    expect(read.body.events[0].text).toBe("npm test");
+  });
+
+  it("rejects an unknown kind rather than storing it", async () => {
+    await withSession();
+    const written = await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: { entries: [{ session_id: session.id, kind: "nonsense", text: "x" }] },
+    });
+    expect(written.body.written).toBe(0);
+  });
+});
+
+describe("accepting an invite when you already have an organization", () => {
+  async function orgFor(sub: string, email: string) {
+    const result = await call("GET", "/api/org", { auth: await idToken({ sub, email }) });
+    return result.body;
+  }
+
+  async function inviteFrom(sub: string, email: string, forEmail?: string) {
+    await orgFor(sub, email);
+    const created = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub, email }),
+      body: { role: "member", email: forEmail },
+    });
+    return created.body.invite.id as string;
+  }
+
+  it("moves someone who is alone in the organization made for them", async () => {
+    /* Signing in creates one; an invite arriving later must still work. */
+    const solo = await orgFor("uid-2", "joiner@example.com");
+    const inviteId = await inviteFrom("uid-1", "owner@acme.com");
+
+    const joined = await call("GET", `/api/org?invite=${inviteId}`, {
+      auth: await idToken({ sub: "uid-2", email: "joiner@example.com" }),
+    });
+    expect(joined.body.joined).toBe(true);
+    expect(joined.body.organization.id).not.toBe(solo.organization.id);
+    expect(joined.body.members).toHaveLength(2);
+  });
+
+  it("refuses to strand people in an organization the joiner owns", async () => {
+    await orgFor("uid-2", "boss@own.com");
+    const theirInvite = await call("POST", "/api/org/invites", {
+      auth: await idToken({ sub: "uid-2", email: "boss@own.com" }),
+      body: {},
+    });
+    await call("GET", `/api/org?invite=${theirInvite.body.invite.id}`, {
+      auth: await idToken({ sub: "uid-3", email: "staff@own.com" }),
+    });
+
+    const inviteId = await inviteFrom("uid-1", "owner@acme.com");
+    const attempt = await call("GET", `/api/org?invite=${inviteId}`, {
+      auth: await idToken({ sub: "uid-2", email: "boss@own.com" }),
+    });
+    expect(attempt.body.joined).toBe(false);
+    expect(attempt.body.inviteError).toContain("Hand ownership over");
+  });
+
+  it("says so when the invite is for the organization you are already in", async () => {
+    const inviteId = await inviteFrom("uid-1", "owner@acme.com");
+    const attempt = await call("GET", `/api/org?invite=${inviteId}`, {
+      auth: await idToken({ sub: "uid-1", email: "owner@acme.com" }),
+    });
+    expect(attempt.body.inviteError).toContain("already in that organization");
+  });
+
+  it("leaves the joiner where they were when the invite is bad", async () => {
+    const before = await orgFor("uid-2", "joiner@example.com");
+    const attempt = await call("GET", "/api/org?invite=inv_00000000000000000000000000000000", {
+      auth: await idToken({ sub: "uid-2", email: "joiner@example.com" }),
+    });
+    expect(attempt.body.organization.id).toBe(before.organization.id);
+    expect(attempt.body.inviteError).toBeTruthy();
   });
 });

@@ -11,6 +11,8 @@ export interface SessionInput {
   persistent?: boolean;
   host?: string;
   startedAt?: number;
+  orgId?: string;
+  ownerUid?: string;
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{6,64}$/;
@@ -42,6 +44,10 @@ export function registerSession(
   const session: SessionRecord = {
     id: input.id,
     uid,
+    orgId: input.orgId,
+    ownerUid: input.ownerUid ?? uid,
+    /* The person who started it is responsible until they hand it over. */
+    assigneeUid: input.ownerUid ?? uid,
     shareUrl: input.shareUrl,
     command: input.command.slice(0, 300),
     name: typeof input.name === "string" && input.name.trim()

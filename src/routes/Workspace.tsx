@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
+import { Copy, Check, X, Terminal as TerminalIcon, List, Plus, ClockCounterClockwise } from "@phosphor-icons/react";
 import { NewSessionModal } from "../components/NewSessionModal";
+import { AuditDrawer } from "../components/AuditDrawer";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -10,7 +11,9 @@ import {
   fetchSessions,
   startSession,
   stopSession,
+  assignSession,
   type Device,
+  type Member,
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
@@ -56,6 +59,9 @@ export function Workspace() {
   const [machine, setMachine] = useState("");
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
+  const [members, setMembers] = useState<Member[]>([]);
+  const [you, setYou] = useState<Member | null>(null);
+  const [auditing, setAuditing] = useState<SessionRecord | null>(null);
   const loadedOnce = useRef(false);
 
   const load = useCallback(async () => {
@@ -64,6 +70,8 @@ export function Workspace() {
       /* A session that came from this browser inherits the password it chose. */
       for (const session of result.sessions) adoptOrigin(session.origin, session.id);
       setSessions(result.sessions);
+      setMembers(result.members ?? []);
+      setYou(result.you ?? null);
       setError("");
       loadedOnce.current = true;
     } catch (caught) {
@@ -143,6 +151,19 @@ export function Workspace() {
       setError(caught instanceof Error ? caught.message : "Could not stop that session.");
     } finally {
       setKilling("");
+    }
+  }
+
+  async function handleAssign(session: SessionRecord, uid: string) {
+    setError("");
+    setNotice("");
+    try {
+      await assignSession(session.id, uid);
+      const to = members.find((member) => member.uid === uid);
+      setNotice(`${session.name || session.command} is now assigned to ${to?.email ?? "them"}.`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not hand it off.");
     }
   }
 
@@ -256,8 +277,12 @@ export function Workspace() {
                 now={now}
                 live
                 killing={killing}
+                members={members}
+                you={you}
                 onOpen={(session) => dispatch({ type: "open", session })}
                 onKill={handleKill}
+                onAssign={handleAssign}
+                onAudit={setAuditing}
               />
             )}
             {finished.length > 0 && (
@@ -267,13 +292,21 @@ export function Workspace() {
                 now={now}
                 live={false}
                 killing={killing}
+                members={members}
+                you={you}
                 onOpen={(session) => dispatch({ type: "open", session })}
                 onKill={handleKill}
+                onAssign={handleAssign}
+                onAudit={setAuditing}
               />
             )}
           </>
         )}
       </div>
+
+      {auditing && (
+        <AuditDrawer session={auditing} onClose={() => setAuditing(null)} />
+      )}
 
       {composing && (
         <NewSessionModal
@@ -286,22 +319,55 @@ export function Workspace() {
   );
 }
 
+/** Who owns a session and who it is assigned to, when that is worth saying. */
+function describePeople(
+  session: SessionRecord,
+  members: Member[],
+  you: Member | null,
+): string {
+  const nameOf = (uid?: string) => {
+    if (!uid) return "";
+    if (uid === you?.uid) return "you";
+    const member = members.find((entry) => entry.uid === uid);
+    return member?.name?.split(/\s+/)[0] || member?.email || "someone";
+  };
+
+  const owner = nameOf(session.ownerUid);
+  const assignee = nameOf(session.assigneeUid);
+  if (!owner) return "";
+  if (assignee && assignee !== owner) return `${owner} → ${assignee} · `;
+  return `${owner} · `;
+}
+
+function canHandOff(session: SessionRecord, you: Member | null): boolean {
+  if (!you) return false;
+  return session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
+}
+
 function SessionGroup({
   heading,
   sessions,
   now,
   live,
   killing,
+  members,
+  you,
   onOpen,
   onKill,
+  onAssign,
+  onAudit,
 }: {
   heading: string;
   sessions: SessionRecord[];
   now: number;
   live: boolean;
   killing: string;
+  members: Member[];
+  you: Member | null;
   onOpen: (session: SessionRecord) => void;
   onKill: (session: SessionRecord) => void;
+  onAssign: (session: SessionRecord, uid: string) => void;
+  onAudit: (session: SessionRecord) => void;
 }) {
   return (
     <section className="sessions-group">
@@ -329,6 +395,7 @@ function SessionGroup({
                     {" · "}
                   </>
                 ) : null}
+                {describePeople(session, members, you)}
                 {session.host || "unknown host"}
                 {" · "}
                 {live
@@ -341,6 +408,30 @@ function SessionGroup({
             </button>
 
             <div className="session-actions">
+              <button
+                type="button"
+                className="session-copy"
+                title="Audit log"
+                aria-label={`Audit log for ${session.name || session.command}`}
+                onClick={() => onAudit(session)}
+              >
+                <ClockCounterClockwise size={15} />
+              </button>
+              {live && members.length > 1 && canHandOff(session, you) && (
+                <select
+                  className="launcher-machine"
+                  value={session.assigneeUid ?? ""}
+                  onChange={(event) => onAssign(session, event.target.value)}
+                  aria-label={`Assign ${session.name || session.command}`}
+                  title="Hand this session to someone"
+                >
+                  {members.map((member) => (
+                    <option key={member.uid} value={member.uid}>
+                      {member.uid === you?.uid ? "me" : member.email}
+                    </option>
+                  ))}
+                </select>
+              )}
               {live ? (
                 <>
                   <button

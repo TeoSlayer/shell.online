@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Terminal, Desktop, User, SignOut, Copy, Check } from "@phosphor-icons/react";
+import { Terminal, Desktop, User, UsersThree, SignOut, Copy, Check } from "@phosphor-icons/react";
 import { Wordmark } from "./Wordmark";
 import { useAuth } from "../auth/AuthProvider";
 
 const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
   { to: "/machines", label: "Machines", Icon: Desktop },
+  { to: "/organization", label: "Organization", Icon: UsersThree },
   { to: "/account", label: "Account", Icon: User },
 ] as const;
 

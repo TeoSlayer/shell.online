@@ -6,6 +6,8 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
 import { forget, passwordFor } from "../lib/session-passwords";
+import { AuditSink } from "./audit-sink";
+import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 
@@ -115,7 +117,18 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
     });
     connection.current = connected;
 
-    const typed = term.onData((data) => connected.send(data));
+    /*
+     * Input is recorded per session so an organization can see what was run
+     * or asked. It watches the same stream the terminal receives, so it sees
+     * exactly what was entered and nothing else.
+     */
+    const audit = sessionIdFromShareUrl(shareUrl);
+    const sink = audit ? new AuditSink(audit, postAudit) : null;
+
+    const typed = term.onData((data) => {
+      connected.send(data);
+      sink?.observe(data);
+    });
 
     /*
      * A session this browser started already has its password here, so unlock
@@ -135,6 +148,7 @@ export function TerminalPane({ shareUrl, active }: TerminalPaneProps) {
       cancelAnimationFrame(frame);
       observer.disconnect();
       typed.dispose();
+      sink?.close();
       connected.close();
       term.dispose();
       terminal.current = null;

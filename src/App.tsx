@@ -7,6 +7,8 @@ import { ResetPassword } from "./routes/ResetPassword";
 import { Account } from "./routes/Account";
 import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
+import { Organization } from "./routes/Organization";
+import { Join } from "./routes/Join";
 import { CliAuthorize } from "./routes/CliAuthorize";
 
 export default function App() {
@@ -47,6 +49,16 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/organization"
+            element={
+              <RequireAuth>
+                <Organization />
+              </RequireAuth>
+            }
+          />
+          {/* Its own guard, so signing in returns to the invite. */}
+          <Route path="/join/:inviteId" element={<Join />} />
           <Route
             path="/machines"
             element={

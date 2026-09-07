@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import type { Invite, Membership, Organization, Role } from "./orgs";
 import { dirname, join } from "node:path";
 
 export interface AuthorizationCode {
@@ -48,9 +49,26 @@ export interface Device {
   revokedAt?: number;
 }
 
+export interface AuditEvent {
+  id: string;
+  orgId: string;
+  sessionId: string;
+  at: number;
+  actorUid: string;
+  actorEmail: string;
+  kind: "input" | "interrupt" | "opened" | "handoff";
+  text: string;
+}
+
 export interface SessionRecord {
   id: string;
   uid: string;
+  /** The organization the session belongs to, so colleagues can see it. */
+  orgId?: string;
+  /** Who started it. */
+  ownerUid?: string;
+  /** Who is responsible for it now; the owner until handed off. */
+  assigneeUid?: string;
   shareUrl: string;
   command: string;
   /** The queued request this session came from, when it came from one. */
@@ -99,9 +117,16 @@ interface Shape {
   tokens: CliToken[];
   sessions: SessionRecord[];
   commands: AgentCommand[];
+  organizations: Organization[];
+  memberships: Membership[];
+  invites: Invite[];
+  audit: AuditEvent[];
 }
 
-const EMPTY: Shape = { codes: [], tokens: [], sessions: [], commands: [] };
+const EMPTY: Shape = {
+  codes: [], tokens: [], sessions: [], commands: [],
+  organizations: [], memberships: [], invites: [], audit: [],
+};
 
 /**
  * File-backed store for local development. Every read and write goes through
@@ -149,6 +174,10 @@ export class Store {
         tokens: parsed.tokens ?? [],
         sessions: parsed.sessions ?? [],
         commands: parsed.commands ?? [],
+        organizations: parsed.organizations ?? [],
+        memberships: parsed.memberships ?? [],
+        invites: parsed.invites ?? [],
+        audit: parsed.audit ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -262,7 +291,17 @@ export class Store {
       (entry) => entry.id === session.id && entry.uid === session.uid,
     );
     if (index >= 0) {
-      this.data.sessions[index] = { ...this.data.sessions[index], ...session };
+      const existing = this.data.sessions[index];
+      this.data.sessions[index] = {
+        ...existing,
+        ...session,
+        /*
+         * A persistent session re-registers on every restart, carrying the
+         * owner as assignee. Letting that through would silently undo a
+         * handoff, so an assignment already made stands.
+         */
+        assigneeUid: existing.assigneeUid ?? session.assigneeUid,
+      };
     } else {
       this.data.sessions.push(session);
     }
@@ -282,6 +321,27 @@ export class Store {
     return this.data.sessions
       .filter((entry) => entry.uid === uid)
       .sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  /** Every session in an organization, which is what colleagues can see. */
+  listOrgSessions(orgId: string): SessionRecord[] {
+    return this.data.sessions
+      .filter((entry) => entry.orgId === orgId)
+      .sort((a, b) => b.startedAt - a.startedAt);
+  }
+
+  sessionInOrg(orgId: string, id: string): SessionRecord | null {
+    return this.data.sessions.find(
+      (entry) => entry.id === id && entry.orgId === orgId,
+    ) ?? null;
+  }
+
+  assignSession(orgId: string, id: string, assigneeUid: string): SessionRecord | null {
+    const session = this.sessionInOrg(orgId, id);
+    if (!session) return null;
+    session.assigneeUid = assigneeUid;
+    this.flush();
+    return session;
   }
 
   putCommand(command: AgentCommand): void {
@@ -319,6 +379,114 @@ export class Store {
       .filter((entry) => entry.uid === uid)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
+  }
+
+  /* ---------------------------------------------------------------
+     Organizations
+     --------------------------------------------------------------- */
+
+  putOrganization(organization: Organization): void {
+    this.data.organizations.push(organization);
+    this.flush();
+  }
+
+  organization(orgId: string): Organization | null {
+    return this.data.organizations.find((entry) => entry.id === orgId) ?? null;
+  }
+
+  renameOrganization(orgId: string, name: string): boolean {
+    const organization = this.organization(orgId);
+    if (!organization) return false;
+    organization.name = name;
+    this.flush();
+    return true;
+  }
+
+  putMembership(membership: Membership): void {
+    this.data.memberships = this.data.memberships.filter(
+      (entry) => !(entry.orgId === membership.orgId && entry.uid === membership.uid),
+    );
+    this.data.memberships.push(membership);
+    this.flush();
+  }
+
+  /** The single organization a person belongs to, or null before signup. */
+  membershipOf(uid: string): Membership | null {
+    return this.data.memberships.find((entry) => entry.uid === uid) ?? null;
+  }
+
+  members(orgId: string): Membership[] {
+    return this.data.memberships
+      .filter((entry) => entry.orgId === orgId)
+      .sort((a, b) => a.joinedAt - b.joinedAt);
+  }
+
+  removeMember(orgId: string, uid: string): boolean {
+    const before = this.data.memberships.length;
+    this.data.memberships = this.data.memberships.filter(
+      (entry) => !(entry.orgId === orgId && entry.uid === uid),
+    );
+    if (this.data.memberships.length === before) return false;
+    this.flush();
+    return true;
+  }
+
+  setRole(orgId: string, uid: string, role: Role): boolean {
+    const membership = this.data.memberships.find(
+      (entry) => entry.orgId === orgId && entry.uid === uid,
+    );
+    if (!membership) return false;
+    membership.role = role;
+    this.flush();
+    return true;
+  }
+
+  /* ---------------------------------------------------------------
+     Invites
+     --------------------------------------------------------------- */
+
+  putInvite(invite: Invite): void {
+    this.data.invites.push(invite);
+    this.flush();
+  }
+
+  invite(id: string): Invite | undefined {
+    return this.data.invites.find((entry) => entry.id === id);
+  }
+
+  invites(orgId: string): Invite[] {
+    return this.data.invites
+      .filter((entry) => entry.orgId === orgId)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  updateInvite(id: string, patch: Partial<Invite>): void {
+    const invite = this.data.invites.find((entry) => entry.id === id);
+    if (!invite) return;
+    Object.assign(invite, patch);
+    this.flush();
+  }
+
+  /* ---------------------------------------------------------------
+     Audit
+     --------------------------------------------------------------- */
+
+  putAudit(event: AuditEvent): void {
+    this.data.audit.push(event);
+    this.flush();
+  }
+
+  auditFor(orgId: string, sessionId: string): AuditEvent[] {
+    return this.data.audit
+      .filter((entry) => entry.orgId === orgId && entry.sessionId === sessionId)
+      .sort((a, b) => a.at - b.at);
+  }
+
+  auditForOrg(orgId: string, limit = 2000): AuditEvent[] {
+    return this.data.audit
+      .filter((entry) => entry.orgId === orgId)
+      .sort((a, b) => a.at - b.at)
+      .slice(-limit);
   }
 
   purgeExpired(now = Date.now()): void {
