@@ -28,6 +28,39 @@ const server = createAccountsServer({
   store,
   verifyIdToken: createVerifier(config.projectId),
   allowedOrigins: [config.webOrigin, "http://127.0.0.1:5173"],
+  trustProxy: config.trustProxy,
+});
+
+/*
+ * A request that stalls holds a connection and, with Postgres, a pooled one
+ * behind it. These caps are well above any honest request to this service and
+ * well below the point where slow clients become a way to exhaust it.
+ */
+server.requestTimeout = 30_000;
+server.headersTimeout = 15_000;
+server.keepAliveTimeout = 65_000;
+
+/*
+ * Housekeeping on a timer rather than on the request path. It used to run on
+ * every request, which with a database meant two DELETE statements per call
+ * for work that only needs doing every few minutes. Unreferenced, so it never
+ * keeps the process alive on its own.
+ */
+const purge = setInterval(() => {
+  void store.purgeExpired().catch((error) => console.error("accounts: purge failed", error));
+}, config.purgeIntervalMs);
+purge.unref();
+
+/*
+ * A rejection nobody handled would otherwise take the process down with it and
+ * print nothing useful. Logging and staying up is right here: one request went
+ * wrong, and every other session in flight should not pay for it.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("accounts: unhandled rejection", reason);
+});
+process.on("uncaughtException", (error) => {
+  console.error("accounts: uncaught exception", error);
 });
 
 server.listen(config.port, config.host, () => {
@@ -45,6 +78,7 @@ server.listen(config.port, config.host, () => {
  */
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, () => {
+    clearInterval(purge);
     server.close(() => {
       void store.close().then(() => process.exit(0));
     });

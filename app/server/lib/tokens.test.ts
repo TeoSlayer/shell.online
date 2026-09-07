@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
+import { deferred } from "./store-deferred";
 import type { Store } from "./store";
 import {
   ACCESS_TTL_MS,
@@ -33,7 +34,7 @@ describe("mintSecret", () => {
 
 describe("issueTokens", () => {
   it("stores only hashes, never the secrets", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     const serialised = JSON.stringify(store);
     expect(serialised).not.toContain(tokens.accessToken);
     expect(serialised).not.toContain(tokens.refreshToken);
@@ -41,14 +42,14 @@ describe("issueTokens", () => {
   });
 
   it("issues distinct access and refresh secrets", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     expect(tokens.accessToken).not.toBe(tokens.refreshToken);
   });
 });
 
 describe("checkAccessToken", () => {
   it("accepts a fresh token and returns the bound identity", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     const result = await checkAccessToken(store, tokens.accessToken);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.token.uid).toBe("uid-1");
@@ -60,7 +61,7 @@ describe("checkAccessToken", () => {
 
   it("rejects a token past its ttl", async () => {
     const issuedAt = 1_000_000;
-    const tokens = issueTokens(store, identity, issuedAt);
+    const tokens = await issueTokens(store, identity, issuedAt);
     expect(await checkAccessToken(store, tokens.accessToken, issuedAt + ACCESS_TTL_MS)).toEqual({
       ok: false,
       reason: "expired",
@@ -68,20 +69,20 @@ describe("checkAccessToken", () => {
   });
 
   it("rejects a revoked token", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     await revokeByRefreshToken(store, tokens.refreshToken);
     expect(await checkAccessToken(store, tokens.accessToken)).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("does not accept the refresh token as an access token", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     expect((await checkAccessToken(store, tokens.refreshToken)).ok).toBe(false);
   });
 });
 
 describe("refreshAccessToken", () => {
   it("issues a new access token and retires the old one", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     const refreshed = await refreshAccessToken(store, tokens.refreshToken);
     expect(refreshed.ok).toBe(true);
     if (!refreshed.ok) return;
@@ -95,7 +96,7 @@ describe("refreshAccessToken", () => {
   });
 
   it("rejects a revoked refresh token", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     await revokeByRefreshToken(store, tokens.refreshToken);
     expect(await refreshAccessToken(store, tokens.refreshToken)).toEqual({
       ok: false,
@@ -106,7 +107,7 @@ describe("refreshAccessToken", () => {
 
 describe("revokeByRefreshToken", () => {
   it("reports true once and false thereafter", async () => {
-    const tokens = issueTokens(store, identity);
+    const tokens = await issueTokens(store, identity);
     expect(await revokeByRefreshToken(store, tokens.refreshToken)).toBe(true);
     expect(await revokeByRefreshToken(store, tokens.refreshToken)).toBe(false);
   });
@@ -118,5 +119,24 @@ describe("constantTimeEqual", () => {
     expect(constantTimeEqual("abc", "abd")).toBe(false);
     expect(constantTimeEqual("abc", "abcd")).toBe(false);
     expect(constantTimeEqual("", "")).toBe(true);
+  });
+});
+
+describe("issuing against a store that does not write synchronously", () => {
+  /*
+   * A database write completes on a later turn of the event loop. Returning
+   * credentials before the device row exists would hand a machine a token
+   * that authenticates nothing, and would turn a failed insert into an
+   * unhandled rejection rather than an error the caller sees.
+   */
+  it("does not return credentials before the device row exists", async () => {
+    const slow = deferred(MemoryStore.memory());
+    const tokens = await issueTokens(slow, {
+      uid: "uid-1",
+      email: "ana@example.com",
+      name: "Ana Ruiz",
+      label: "laptop",
+    });
+    expect(await slow.findByAccessHash(hashSecret(tokens.accessToken))).not.toBeNull();
   });
 });

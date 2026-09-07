@@ -20,6 +20,14 @@ export interface Config {
   dataFile: string;
   /** Serve the built client from this directory, making the app single-origin. */
   clientDir?: string;
+  /**
+   * Whether a proxy in front rewrites X-Forwarded-For. Off by default: an
+   * unproxied deployment that believed the header would let any caller pick a
+   * new address per request and walk past the rate limiter.
+   */
+  trustProxy: boolean;
+  /** How often expired codes and finished commands are swept. */
+  purgeIntervalMs: number;
 }
 
 export class ConfigError extends Error {}
@@ -68,5 +76,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl,
     dataFile: env.ACCOUNTS_DATA?.trim() ?? ".data/accounts.json",
     clientDir: env.CLIENT_DIR?.trim() || undefined,
+    trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
+    purgeIntervalMs: 5 * 60_000,
   };
 }

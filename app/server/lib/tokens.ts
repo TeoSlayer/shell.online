@@ -28,15 +28,15 @@ export interface IssuedTokens {
   deviceId: string;
 }
 
-export function issueTokens(
+export async function issueTokens(
   store: Store,
   identity: { uid: string; email: string; name: string; label: string },
   now = Date.now(),
-): IssuedTokens {
+): Promise<IssuedTokens> {
   const accessToken = mintSecret("sha");
   const refreshToken = mintSecret("shr");
   const deviceId = mintSecret("dev");
-  store.putToken({
+  await store.putToken({
     id: deviceId,
     accessHash: hashSecret(accessToken),
     refreshHash: hashSecret(refreshToken),

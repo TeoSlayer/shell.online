@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { exportJWK, generateKeyPair, SignJWT, type KeyObject } from "jose";
 import { createApp } from "./app";
 import { MemoryStore } from "./lib/store-memory";
+import { deferred } from "./lib/store-deferred";
 import type { Store } from "./lib/store";
 import { createVerifier, localKeySet } from "./lib/firebase-token";
 import { base64url, deriveChallenge } from "./lib/pkce";
@@ -33,7 +34,7 @@ async function idToken(overrides: Record<string, unknown> = {}) {
 async function call(
   method: string,
   path: string,
-  options: { body?: unknown; auth?: string; origin?: string } = {},
+  options: { body?: unknown; auth?: string; origin?: string; address?: string } = {},
 ) {
   const chunks: Buffer[] = [];
   if (options.body !== undefined) chunks.push(Buffer.from(JSON.stringify(options.body)));
@@ -45,6 +46,7 @@ async function call(
       ...(options.auth ? { authorization: `Bearer ${options.auth}` } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
     },
+    socket: { remoteAddress: options.address ?? "10.0.0.1" },
     on(event: string, handler: (arg?: unknown) => void) {
       if (event === "data") chunks.forEach((chunk) => handler(chunk));
       if (event === "end") handler();
@@ -83,7 +85,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  store = MemoryStore.memory();
+  /* Deferred, so a write the routes forget to await fails here. */
+  store = deferred(MemoryStore.memory());
   verifier = base64url(randomBytes(48));
   handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
 });
@@ -1073,5 +1076,149 @@ describe("being told a colleague started a session", () => {
       auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
     });
     expect(stranger.body.notifications).toEqual([]);
+  });
+});
+
+describe("guarding the service itself", () => {
+  it("answers liveness without touching the store", async () => {
+    /* A store that throws stands in for a database that is unreachable. */
+    const broken = new Proxy({} as Store, {
+      get: () => () => Promise.reject(new Error("connection refused")),
+    });
+    const guarded = createApp({
+      store: broken,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      log: () => {},
+    });
+    const request = { method: "GET", url: "/api/health", headers: {}, socket: {}, on: () => {}, destroy() {} };
+    let status = 0;
+    const response = {
+      writeHead(code: number) { status = code; return response; },
+      setHeader() {},
+      end() {},
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await guarded(request as any, response as any);
+    expect(status).toBe(200);
+  });
+
+  it("reports itself unready when the store cannot answer", async () => {
+    const broken = new Proxy({} as Store, {
+      get: () => () => Promise.reject(new Error("connection refused")),
+    });
+    handle = createApp({
+      store: broken,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      log: () => {},
+    });
+    const result = await call("GET", "/api/ready");
+    expect(result.status).toBe(503);
+  });
+
+  it("is ready when the store answers", async () => {
+    expect((await call("GET", "/api/ready")).status).toBe(200);
+  });
+
+  /*
+   * A driver's message describes this service's schema. The caller who caused
+   * the fault gets a status; the detail goes to the log.
+   */
+  it("does not describe an internal fault to the caller", async () => {
+    const messages: string[] = [];
+    handle = createApp({
+      store: new Proxy({} as Store, {
+        get: () => () => Promise.reject(new Error('relation "cli_tokens" does not exist')),
+      }),
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      log: (message) => messages.push(message),
+    });
+    const result = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(result.status).toBe(500);
+    expect(JSON.stringify(result.body)).not.toContain("cli_tokens");
+    expect(messages.join(" ")).toContain("/api/sessions");
+  });
+
+  it("still explains a mistake the caller made", async () => {
+    const result = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      body: { redirect_uri: "https://evil.example.com/callback", code_challenge_method: "S256" },
+    });
+    expect(result.status).toBe(400);
+    expect(result.body.error).toContain("loopback");
+  });
+
+  it("sends the sandboxing headers on every response", async () => {
+    const result = await call("GET", "/api/health");
+    expect(result.headers["X-Content-Type-Options"]).toBe("nosniff");
+    expect(result.headers["X-Frame-Options"]).toBe("DENY");
+    expect(result.headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+  });
+
+  it("refuses a flood of credential attempts and says when to come back", async () => {
+    let refused: { status: number; headers: Record<string, string> } | null = null;
+    for (let attempt = 0; attempt < 40 && !refused; attempt += 1) {
+      const result = await call("POST", "/api/cli/token", {
+        body: { code: `shc_${attempt}`, code_verifier: verifier, redirect_uri: REDIRECT },
+        address: "203.0.113.7",
+      });
+      if (result.status === 429) refused = result;
+    }
+    expect(refused?.status).toBe(429);
+    expect(Number(refused?.headers["Retry-After"])).toBeGreaterThan(0);
+  });
+
+  it("holds one caller's flood against that caller alone", async () => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await call("POST", "/api/cli/token", {
+        body: { code: `shc_${attempt}`, code_verifier: verifier, redirect_uri: REDIRECT },
+        address: "203.0.113.8",
+      });
+    }
+    const elsewhere = await call("POST", "/api/cli/authorize", {
+      auth: await idToken(),
+      address: "198.51.100.4",
+      body: {
+        redirect_uri: REDIRECT,
+        code_challenge: deriveChallenge(verifier),
+        code_challenge_method: "S256",
+      },
+    });
+    expect(elsewhere.status).toBe(200);
+  });
+
+  /*
+   * An agent polls every two seconds and a browser keeps several panes open.
+   * Neither may ever meet the limiter.
+   */
+  it("lets an ordinary signed-in session poll freely", async () => {
+    const auth = await idToken();
+    for (let poll = 0; poll < 200; poll += 1) {
+      expect((await call("GET", "/api/sessions", { auth })).status).toBe(200);
+    }
+  });
+
+  it("does not believe a forwarded address unless a proxy is trusted", async () => {
+    /*
+     * Without this, a caller sets X-Forwarded-For to a new value per request
+     * and the limiter never sees the same caller twice.
+     */
+    handle = createApp({
+      store: deferred(MemoryStore.memory()),
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      log: () => {},
+    });
+    let refused = false;
+    for (let attempt = 0; attempt < 40 && !refused; attempt += 1) {
+      const result = await call("POST", "/api/cli/token", {
+        body: { code: `shc_${attempt}`, code_verifier: verifier, redirect_uri: REDIRECT },
+        address: "203.0.113.9",
+      });
+      refused = result.status === 429;
+    }
+    expect(refused).toBe(true);
   });
 });

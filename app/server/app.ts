@@ -23,14 +23,66 @@ import {
 } from "./routes/organizations";
 import { assignSession, auditCsv, recordAudit } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
+import { callerAddress, rateLimiter } from "./lib/rate-limit";
 
 export interface AppOptions {
   store: Store;
   verifyIdToken: (token: string) => Promise<VerifyResult>;
   allowedOrigins: string[];
+  /**
+   * Whether an X-Forwarded-For header may be believed. Only true when the
+   * deployment puts a proxy in front that rewrites it; see callerAddress.
+   */
+  trustProxy?: boolean;
+  /** Where server-side faults go. Overridden in tests to keep them quiet. */
+  log?: (message: string, error?: unknown) => void;
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * An error the caller caused, safe to describe back to them.
+ *
+ * Anything else is a fault on this side: the caller gets a status and nothing
+ * more, because a database driver's message describes our schema, not their
+ * mistake.
+ */
+export class RequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/*
+ * Minting or exchanging credentials is the expensive thing to guess at, so it
+ * gets a budget a person cannot notice and a script runs out of in a second.
+ * Everything else shares a larger one: an agent polls every two seconds and a
+ * browser has several panes open, and neither may ever be refused.
+ */
+const CREDENTIAL_ROUTES = new Set([
+  "POST /api/cli/authorize",
+  "POST /api/cli/token",
+  "POST /api/cli/refresh",
+  "POST /api/cli/revoke",
+]);
+const CREDENTIAL_BUCKET = { burst: 12, perSecond: 0.2 };
+const GENERAL_BUCKET = { burst: 240, perSecond: 40 };
+
+/*
+ * This service answers JSON to a known origin and serves no markup of its own,
+ * so the sandboxing headers can be absolute. They cost nothing and mean a
+ * response reflected somewhere unexpected cannot be made to do anything.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+  "Cross-Origin-Resource-Policy": "same-site",
+};
 
 /* An agent polls every 2s, so this is generous enough to survive a hiccup. */
 export const AGENT_ONLINE_MS = 15_000;
@@ -42,7 +94,7 @@ function readBody(request: IncomingMessage): Promise<unknown> {
     request.on("data", (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error("body too large"));
+        reject(new RequestError(413, "body too large"));
         request.destroy();
         return;
       }
@@ -53,7 +105,7 @@ function readBody(request: IncomingMessage): Promise<unknown> {
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
-        reject(new Error("body is not valid JSON"));
+        reject(new RequestError(400, "body is not valid JSON"));
       }
     });
     request.on("error", reject);
@@ -67,12 +119,17 @@ function bearer(request: IncomingMessage): string {
 
 export function createApp(options: AppOptions) {
   const { store, verifyIdToken, allowedOrigins } = options;
+  const trustProxy = options.trustProxy ?? false;
+  const log = options.log ?? ((message: string, error?: unknown) => console.error(message, error));
+  const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
+  const generalLimit = rateLimiter(GENERAL_BUCKET);
 
   function send(response: ServerResponse, status: number, body: unknown): void {
     const payload = JSON.stringify(body);
     response.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      ...SECURITY_HEADERS,
     });
     response.end(payload);
   }
@@ -120,7 +177,21 @@ export function createApp(options: AppOptions) {
 
     const url = new URL(request.url ?? "/", "http://localhost");
     const route = `${request.method} ${url.pathname}`;
-    await store.purgeExpired();
+
+    /*
+     * Liveness is answered before anything else can refuse it. It says the
+     * process is running and nothing more, so an orchestrator does not restart
+     * a healthy container because the database it depends on is busy.
+     */
+    if (route === "GET /api/health") return send(response, 200, { ok: true });
+
+    const caller = callerAddress(request.headers, request.socket?.remoteAddress, trustProxy);
+    const limiter = CREDENTIAL_ROUTES.has(route) ? credentialLimit : generalLimit;
+    const decision = limiter.take(caller);
+    if (!decision.ok) {
+      response.setHeader("Retry-After", String(Math.ceil(decision.retryAfterMs / 1000)));
+      return send(response, 429, { error: "too many requests" });
+    }
 
     try {
       /* ---- Approve a pending CLI login. Called by the web app. ---- */
@@ -167,7 +238,7 @@ export function createApp(options: AppOptions) {
         if (!result.ok) {
           return send(response, 400, { error: `authorization code ${result.reason}` });
         }
-        const tokens = issueTokens(store, {
+        const tokens = await issueTokens(store, {
           uid: result.uid,
           email: result.email,
           name: result.name,
@@ -605,14 +676,34 @@ export function createApp(options: AppOptions) {
         return send(response, 200, await inbox(store, membership));
       }
 
-      if (route === "GET /api/health") {
-        return send(response, 200, { ok: true });
+      /*
+       * Readiness, unlike health, reports whether this instance can actually
+       * serve: a cheap read that fails when the database is unreachable, so a
+       * rolling deploy waits rather than sending traffic into errors.
+       */
+      if (route === "GET /api/ready") {
+        try {
+          await store.membershipOf("readiness-probe");
+          return send(response, 200, { ok: true });
+        } catch (error) {
+          log("accounts: readiness probe failed", error);
+          return send(response, 503, { error: "not ready" });
+        }
       }
 
       return send(response, 404, { error: "no such route" });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "unexpected error";
-      return send(response, 400, { error: message });
+      if (error instanceof RequestError) {
+        return send(response, error.status, { error: error.message });
+      }
+      /*
+       * Nothing here described a caller's mistake, so it is one of ours. The
+       * detail goes to the log, where it can be read; the caller gets a status
+       * and a fixed sentence, because a driver error message describes this
+       * service's internals rather than their request.
+       */
+      log(`accounts: ${route} failed`, error);
+      return send(response, 500, { error: "internal error" });
     }
   };
 }
