@@ -15,6 +15,26 @@ import type {
   SessionRecord,
 } from "./types";
 
+/*
+ * Orders records that share a timestamp.
+ *
+ * Two audit events a millisecond apart are common, and two in the same
+ * millisecond are not rare. Sorting on the timestamp alone leaves their order
+ * to the backing store, so a trace can reorder between two reads of the same
+ * history. The id breaks the tie, compared by code unit so that Postgres
+ * ordering the same column with COLLATE "C" agrees.
+ */
+function byTime<T>(time: (record: T) => number, id: (record: T) => string, descending = false) {
+  return (a: T, b: T): number => {
+    const difference = descending ? time(b) - time(a) : time(a) - time(b);
+    if (difference !== 0) return difference;
+    /* The tiebreaker follows the direction of the sort, as ORDER BY does. */
+    const left = descending ? id(b) : id(a);
+    const right = descending ? id(a) : id(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  };
+}
+
 interface Shape {
   codes: AuthorizationCode[];
   tokens: CliToken[];
@@ -192,7 +212,7 @@ export class MemoryStore implements Store {
   async listDevices(uid: string): Promise<Device[]> {
     return this.data.tokens
       .filter((entry) => entry.uid === uid && !entry.revokedAt)
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(byTime<CliToken>((t) => t.createdAt, (t) => t.id, true))
       .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, agentPublicKey, revokedAt }) => ({
         id,
         label,
@@ -251,14 +271,14 @@ export class MemoryStore implements Store {
   async listSessions(uid: string): Promise<SessionRecord[]> {
     return this.data.sessions
       .filter((entry) => entry.uid === uid)
-      .sort((a, b) => b.startedAt - a.startedAt);
+      .sort(byTime((entry) => entry.startedAt, (entry) => entry.id, true));
   }
 
   /** Every session in an organization, which is what colleagues can see. */
   async listOrgSessions(orgId: string): Promise<SessionRecord[]> {
     return this.data.sessions
       .filter((entry) => entry.orgId === orgId)
-      .sort((a, b) => b.startedAt - a.startedAt);
+      .sort(byTime((entry) => entry.startedAt, (entry) => entry.id, true));
   }
 
   async sessionInOrg(orgId: string, id: string): Promise<SessionRecord | null> {
@@ -308,7 +328,7 @@ export class MemoryStore implements Store {
   async listCommands(uid: string, limit = 20): Promise<AgentCommand[]> {
     return this.data.commands
       .filter((entry) => entry.uid === uid)
-      .sort((a, b) => b.createdAt - a.createdAt)
+      .sort(byTime((entry) => entry.createdAt, (entry) => entry.id, true))
       .slice(0, limit);
   }
 
@@ -334,8 +354,14 @@ export class MemoryStore implements Store {
   }
 
   async putMembership(membership: Membership): Promise<void> {
+    /*
+     * Every row for this person goes, not just the one in this organization.
+     * A person belongs to one organization -- membershipOf looks one up by
+     * uid alone -- so leaving the old row behind would let a stale membership
+     * win the lookup after someone moved.
+     */
     this.data.memberships = this.data.memberships.filter(
-      (entry) => !(entry.orgId === membership.orgId && entry.uid === membership.uid),
+      (entry) => entry.uid !== membership.uid,
     );
     this.data.memberships.push(membership);
     this.flush();
@@ -349,7 +375,7 @@ export class MemoryStore implements Store {
   async members(orgId: string): Promise<Membership[]> {
     return this.data.memberships
       .filter((entry) => entry.orgId === orgId)
-      .sort((a, b) => a.joinedAt - b.joinedAt);
+      .sort(byTime((entry) => entry.joinedAt, (entry) => entry.uid));
   }
 
   async removeMember(orgId: string, uid: string): Promise<boolean> {
@@ -388,7 +414,7 @@ export class MemoryStore implements Store {
   async invites(orgId: string): Promise<Invite[]> {
     return this.data.invites
       .filter((entry) => entry.orgId === orgId)
-      .sort((a, b) => b.createdAt - a.createdAt);
+      .sort(byTime((entry) => entry.createdAt, (entry) => entry.id, true));
   }
 
   async updateInvite(id: string, patch: Partial<Invite>): Promise<void> {
@@ -410,13 +436,13 @@ export class MemoryStore implements Store {
   async auditFor(orgId: string, sessionId: string): Promise<AuditEvent[]> {
     return this.data.audit
       .filter((entry) => entry.orgId === orgId && entry.sessionId === sessionId)
-      .sort((a, b) => a.at - b.at);
+      .sort(byTime((entry) => entry.at, (entry) => entry.id));
   }
 
   async auditForOrg(orgId: string, limit = 2000): Promise<AuditEvent[]> {
     return this.data.audit
       .filter((entry) => entry.orgId === orgId)
-      .sort((a, b) => a.at - b.at)
+      .sort(byTime((entry) => entry.at, (entry) => entry.id))
       .slice(-limit);
   }
 
@@ -432,7 +458,7 @@ export class MemoryStore implements Store {
   async comments(orgId: string, sessionId: string): Promise<Comment[]> {
     return this.data.comments
       .filter((entry) => entry.orgId === orgId && entry.sessionId === sessionId)
-      .sort((a, b) => a.at - b.at);
+      .sort(byTime((entry) => entry.at, (entry) => entry.id));
   }
 
   async putNotification(notification: Notification): Promise<void> {
@@ -443,7 +469,7 @@ export class MemoryStore implements Store {
   async notificationsFor(uid: string, limit = 100): Promise<Notification[]> {
     return this.data.notifications
       .filter((entry) => entry.uid === uid)
-      .sort((a, b) => b.at - a.at)
+      .sort(byTime((entry) => entry.at, (entry) => entry.id, true))
       .slice(0, limit);
   }
 
@@ -480,6 +506,35 @@ export class MemoryStore implements Store {
     if (this.data.codes.length !== before || this.data.commands.length !== commandsBefore) {
       this.flush();
     }
+  }
+
+  /* ---------------------------------------------------------------
+     Import helpers
+
+     Deliberately not on the Store interface. Every read there is scoped to an
+     account or an organization so a route cannot forget to scope it; these
+     return everything, which is exactly what a one-off copy into a database
+     needs and what nothing serving a request should have.
+     --------------------------------------------------------------- */
+
+  async organizationsForImport(): Promise<Organization[]> {
+    return this.data.organizations;
+  }
+
+  async tokensForImport(): Promise<CliToken[]> {
+    return this.data.tokens;
+  }
+
+  async sessionsForImport(): Promise<SessionRecord[]> {
+    return this.data.sessions;
+  }
+
+  async commentsForImport(): Promise<Comment[]> {
+    return this.data.comments;
+  }
+
+  async notificationsForImport(): Promise<Notification[]> {
+    return this.data.notifications;
   }
 
   /* Nothing to release; the interface asks so a database can be closed. */

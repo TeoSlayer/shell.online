@@ -1,0 +1,997 @@
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import pg from "pg";
+import type { Invite, Membership, Organization, Role } from "./orgs";
+import type { Store } from "./store";
+import type {
+  AgentCommand,
+  AuditEvent,
+  AuthorizationCode,
+  CliToken,
+  Comment,
+  Device,
+  Notification,
+  SessionKeyShare,
+  SessionRecord,
+} from "./types";
+
+/*
+ * Every timestamp in this application is a millisecond epoch in a JavaScript
+ * number, and BIGINT is how they are stored. node-postgres hands BIGINT back
+ * as a string by default, because the range does not fit a double in general.
+ * Ours do -- a millisecond epoch stays exact until the year 287396 -- so they
+ * are parsed as numbers here rather than at each of the two hundred places a
+ * timestamp is read.
+ */
+pg.types.setTypeParser(pg.types.builtins.INT8, (value) => Number(value));
+
+const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "migrations");
+
+/* An arbitrary constant; only this application takes this advisory lock. */
+const MIGRATION_LOCK = 731_099_431;
+
+/** Drops keys whose value is null, so an absent column reads as `undefined`. */
+function defined<T extends object>(record: T): T {
+  for (const [key, value] of Object.entries(record)) {
+    if (value === null) delete (record as Record<string, unknown>)[key];
+  }
+  return record;
+}
+
+type Row = Record<string, unknown>;
+
+/*
+ * Column names for the fields a patch may carry. A patch arrives as a partial
+ * record, so the update statement has to be built from whichever keys are
+ * present; listing the mapping once keeps an unmapped field a missing update
+ * rather than a chance for a caller's key to reach SQL.
+ */
+const TOKEN_COLUMNS: Record<string, string> = {
+  id: "id",
+  accessHash: "access_hash",
+  refreshHash: "refresh_hash",
+  uid: "uid",
+  email: "email",
+  name: "name",
+  label: "label",
+  accessExpiresAt: "access_expires_at",
+  createdAt: "created_at",
+  lastSeenAt: "last_seen_at",
+  agentSeenAt: "agent_seen_at",
+  agentPublicKey: "agent_public_key",
+  revokedAt: "revoked_at",
+};
+
+const SESSION_COLUMNS: Record<string, string> = {
+  id: "id",
+  uid: "uid",
+  orgId: "org_id",
+  ownerUid: "owner_uid",
+  assigneeUid: "assignee_uid",
+  shareUrl: "share_url",
+  command: "command",
+  origin: "origin",
+  name: "name",
+  readOnly: "read_only",
+  encrypted: "encrypted",
+  persistent: "persistent",
+  host: "host",
+  startedAt: "started_at",
+  closedAt: "closed_at",
+  exitCode: "exit_code",
+};
+
+const INVITE_COLUMNS: Record<string, string> = {
+  id: "id",
+  orgId: "org_id",
+  createdBy: "created_by",
+  role: "role",
+  email: "email",
+  createdAt: "created_at",
+  expiresAt: "expires_at",
+  acceptedAt: "accepted_at",
+  acceptedBy: "accepted_by",
+  revokedAt: "revoked_at",
+};
+
+/**
+ * Builds `SET a = $2, b = $3` from a partial record, along with its values.
+ *
+ * Keys the column map does not know are ignored rather than interpolated,
+ * which is what keeps a request body from choosing columns. Returns null when
+ * the patch would change nothing, so the caller can skip the statement.
+ */
+function setClause(
+  columns: Record<string, string>,
+  patch: Record<string, unknown>,
+  firstParameter: number,
+): { text: string; values: unknown[] } | null {
+  const parts: string[] = [];
+  const values: unknown[] = [];
+  for (const [key, value] of Object.entries(patch)) {
+    const column = columns[key];
+    if (!column) continue;
+    parts.push(`${column} = $${firstParameter + values.length}`);
+    values.push(value ?? null);
+  }
+  if (parts.length === 0) return null;
+  return { text: parts.join(", "), values };
+}
+
+function toToken(row: Row): CliToken {
+  return defined({
+    id: row.id,
+    accessHash: row.access_hash,
+    refreshHash: row.refresh_hash,
+    uid: row.uid,
+    email: row.email,
+    name: row.name,
+    label: row.label,
+    accessExpiresAt: row.access_expires_at,
+    createdAt: row.created_at,
+    lastSeenAt: row.last_seen_at,
+    agentSeenAt: row.agent_seen_at,
+    agentPublicKey: row.agent_public_key,
+    revokedAt: row.revoked_at,
+  }) as unknown as CliToken;
+}
+
+function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
+  const session = defined({
+    id: row.id,
+    uid: row.uid,
+    orgId: row.org_id,
+    ownerUid: row.owner_uid,
+    assigneeUid: row.assignee_uid,
+    shareUrl: row.share_url,
+    command: row.command,
+    origin: row.origin,
+    name: row.name,
+    readOnly: row.read_only,
+    encrypted: row.encrypted,
+    persistent: row.persistent,
+    host: row.host,
+    startedAt: row.started_at,
+    closedAt: row.closed_at,
+    exitCode: row.exit_code,
+  }) as unknown as SessionRecord;
+  /*
+   * An empty list and an absent one mean different things to the browser: the
+   * first says nobody can open this session, the second that it was never
+   * sealed. The file store omits the field when it was never set, so this
+   * one does too.
+   */
+  if (shares.length > 0) session.keyShares = shares;
+  return session;
+}
+
+function toCommand(row: Row): AgentCommand {
+  return defined({
+    id: row.id,
+    uid: row.uid,
+    deviceId: row.device_id,
+    kind: row.kind,
+    command: row.command,
+    name: row.name,
+    senderPublicKey: row.sender_public_key,
+    sealedPassword: row.sealed_password,
+    sessionId: row.session_id,
+    createdAt: row.created_at,
+    claimedAt: row.claimed_at,
+    doneAt: row.done_at,
+    error: row.error,
+  }) as unknown as AgentCommand;
+}
+
+function toMembership(row: Row): Membership {
+  return defined({
+    orgId: row.org_id,
+    uid: row.uid,
+    email: row.email,
+    name: row.name,
+    role: row.role,
+    joinedAt: row.joined_at,
+    publicKey: row.public_key,
+  }) as unknown as Membership;
+}
+
+function toInvite(row: Row): Invite {
+  return defined({
+    id: row.id,
+    orgId: row.org_id,
+    createdBy: row.created_by,
+    role: row.role,
+    email: row.email,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    acceptedAt: row.accepted_at,
+    acceptedBy: row.accepted_by,
+    revokedAt: row.revoked_at,
+  }) as unknown as Invite;
+}
+
+function toAudit(row: Row): AuditEvent {
+  return {
+    id: row.id as string,
+    orgId: row.org_id as string,
+    sessionId: row.session_id as string,
+    at: row.at as number,
+    actorUid: row.actor_uid as string,
+    actorEmail: row.actor_email as string,
+    kind: row.kind as AuditEvent["kind"],
+    text: row.text as string,
+  };
+}
+
+function toComment(row: Row): Comment {
+  return {
+    id: row.id as string,
+    orgId: row.org_id as string,
+    sessionId: row.session_id as string,
+    authorUid: row.author_uid as string,
+    body: row.body as string,
+    at: row.at as number,
+    mentions: row.mentions as string[],
+  };
+}
+
+function toNotification(row: Row): Notification {
+  return defined({
+    id: row.id,
+    orgId: row.org_id,
+    uid: row.uid,
+    kind: row.kind,
+    sessionId: row.session_id,
+    actorUid: row.actor_uid,
+    body: row.body,
+    at: row.at,
+    readAt: row.read_at,
+  }) as unknown as Notification;
+}
+
+/**
+ * The production store.
+ *
+ * Reads that belong to one account or organization carry that scope into the
+ * WHERE clause rather than filtering afterwards, and writes that have to be
+ * atomic -- claiming queued work, marking a code consumed -- are single
+ * statements, so two instances of the service can serve the same database.
+ */
+export class PostgresStore implements Store {
+  private constructor(private readonly pool: pg.Pool) {}
+
+  /**
+   * Connects, applies any migrations not yet recorded, and hands back a store.
+   *
+   * Migrating on connect means a container start is the whole deploy: there is
+   * no second command to remember, and a rolled-back image finds the schema it
+   * expects because migrations only ever add.
+   */
+  static async connect(url: string, options: pg.PoolConfig = {}): Promise<PostgresStore> {
+    const pool = new pg.Pool({ connectionString: url, ...options });
+    const store = new PostgresStore(pool);
+    await store.migrate();
+    return store;
+  }
+
+  /**
+   * Applies every migration file not yet recorded, in filename order.
+   *
+   * Files are numbered and never edited once applied: the recorded checksum
+   * makes an edit an error at boot rather than a schema that differs between
+   * two databases that both claim to be at the same version. A change to the
+   * schema is therefore always a new file, which is also what makes a rolled
+   * back deploy safe -- the old code meets a schema that only gained things.
+   */
+  private async migrate(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      /*
+       * A lock, because two instances starting together would otherwise both
+       * see the same work to do. Postgres holds it for this connection until
+       * released, and queues the second instance rather than failing it.
+       */
+      await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK]);
+      await client.query(
+        `CREATE TABLE IF NOT EXISTS schema_migrations (
+           name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL
+         )`,
+      );
+      const applied = new Map(
+        (
+          await client.query<{ name: string; checksum: string }>(
+            "SELECT name, checksum FROM schema_migrations",
+          )
+        ).rows.map((row) => [row.name, row.checksum]),
+      );
+
+      const files = readdirSync(MIGRATIONS)
+        .filter((name) => name.endsWith(".sql"))
+        .sort();
+      for (const name of files) {
+        const sql = readFileSync(join(MIGRATIONS, name), "utf8");
+        const checksum = createHash("sha256").update(sql).digest("hex");
+        const previous = applied.get(name);
+        if (previous) {
+          if (previous !== checksum) {
+            throw new Error(
+              `migration ${name} changed after it was applied. Add a new migration ` +
+                `instead of editing one, so every database reaches the same schema.`,
+            );
+          }
+          continue;
+        }
+        /*
+         * One transaction per file, with the record written inside it, so a
+         * migration that fails halfway leaves nothing behind to reconcile.
+         */
+        await client.query("BEGIN");
+        try {
+          await client.query(sql);
+          await client.query(
+            "INSERT INTO schema_migrations (name, checksum, applied_at) VALUES ($1, $2, $3)",
+            [name, checksum, Date.now()],
+          );
+          await client.query("COMMIT");
+          console.log(`accounts: applied migration ${name}`);
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw new Error(`migration ${name} failed: ${(error as Error).message}`);
+        }
+      }
+    } finally {
+      await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK]);
+      client.release();
+    }
+  }
+
+  private async rows(text: string, values: unknown[] = []): Promise<Row[]> {
+    return (await this.pool.query(text, values)).rows;
+  }
+
+  private async row(text: string, values: unknown[] = []): Promise<Row | null> {
+    return (await this.rows(text, values))[0] ?? null;
+  }
+
+  /* ---- CLI login ---- */
+
+  async putCode(code: AuthorizationCode): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO auth_codes (code, uid, email, name, code_challenge, redirect_uri, expires_at, consumed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (code) DO UPDATE SET
+         uid = EXCLUDED.uid, email = EXCLUDED.email, name = EXCLUDED.name,
+         code_challenge = EXCLUDED.code_challenge, redirect_uri = EXCLUDED.redirect_uri,
+         expires_at = EXCLUDED.expires_at, consumed_at = EXCLUDED.consumed_at`,
+      [
+        code.code,
+        code.uid,
+        code.email,
+        code.name,
+        code.codeChallenge,
+        code.redirectUri,
+        code.expiresAt,
+        code.consumedAt ?? null,
+      ],
+    );
+  }
+
+  /*
+   * Marks the code consumed and reports whether it already was, in one
+   * statement: the CTE stamps only an unconsumed row, so two clients racing
+   * the same code cannot both be told they were first.
+   */
+  async takeCode(
+    code: string,
+    now = Date.now(),
+  ): Promise<{ entry: AuthorizationCode; alreadyConsumed: boolean } | null> {
+    const row = await this.row(
+      `WITH claimed AS (
+         UPDATE auth_codes SET consumed_at = $2
+         WHERE code = $1 AND consumed_at IS NULL
+         RETURNING code
+       )
+       SELECT auth_codes.*, (claimed.code IS NULL) AS already_consumed
+       FROM auth_codes LEFT JOIN claimed ON claimed.code = auth_codes.code
+       WHERE auth_codes.code = $1`,
+      [code, now],
+    );
+    if (!row) return null;
+    const entry = defined({
+      code: row.code,
+      uid: row.uid,
+      email: row.email,
+      name: row.name,
+      codeChallenge: row.code_challenge,
+      redirectUri: row.redirect_uri,
+      expiresAt: row.expires_at,
+      consumedAt: row.consumed_at,
+    }) as unknown as AuthorizationCode;
+    return { entry, alreadyConsumed: row.already_consumed as boolean };
+  }
+
+  async putToken(token: CliToken): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO cli_tokens
+         (id, access_hash, refresh_hash, uid, email, name, label,
+          access_expires_at, created_at, last_seen_at, agent_seen_at, agent_public_key, revoked_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        token.id,
+        token.accessHash,
+        token.refreshHash,
+        token.uid,
+        token.email,
+        token.name,
+        token.label,
+        token.accessExpiresAt,
+        token.createdAt,
+        token.lastSeenAt,
+        token.agentSeenAt ?? null,
+        token.agentPublicKey ?? null,
+        token.revokedAt ?? null,
+      ],
+    );
+  }
+
+  async findByAccessHash(hash: string): Promise<CliToken | null> {
+    const row = await this.row("SELECT * FROM cli_tokens WHERE access_hash = $1", [hash]);
+    return row ? toToken(row) : null;
+  }
+
+  async findByRefreshHash(hash: string): Promise<CliToken | null> {
+    const row = await this.row("SELECT * FROM cli_tokens WHERE refresh_hash = $1", [hash]);
+    return row ? toToken(row) : null;
+  }
+
+  async updateToken(refreshHash: string, patch: Partial<CliToken>): Promise<void> {
+    const set = setClause(TOKEN_COLUMNS, patch, 2);
+    if (!set) return;
+    await this.pool.query(`UPDATE cli_tokens SET ${set.text} WHERE refresh_hash = $1`, [
+      refreshHash,
+      ...set.values,
+    ]);
+  }
+
+  /*
+   * Touching lastSeenAt on every authenticated call would mean a write per
+   * request. The resolution only needs to be useful to a person reading a
+   * device list, so the WHERE clause settles for a minute -- and does the
+   * comparison in the database, which makes it a no-op rather than a read
+   * followed by a conditional write.
+   */
+  async touchToken(id: string, now = Date.now(), resolutionMs = 60_000): Promise<void> {
+    await this.pool.query(
+      "UPDATE cli_tokens SET last_seen_at = $2 WHERE id = $1 AND $2 - last_seen_at >= $3",
+      [id, now, resolutionMs],
+    );
+  }
+
+  /* ---- Machines ---- */
+
+  async setMemberKey(uid: string, publicKey: string): Promise<void> {
+    await this.pool.query("UPDATE memberships SET public_key = $2 WHERE uid = $1", [uid, publicKey]);
+  }
+
+  async markAgentSeen(id: string, publicKey?: string, now = Date.now()): Promise<void> {
+    await this.pool.query(
+      `UPDATE cli_tokens
+       SET agent_seen_at = $2, agent_public_key = COALESCE($3, agent_public_key)
+       WHERE id = $1`,
+      [id, now, publicKey ?? null],
+    );
+  }
+
+  async listDevices(uid: string): Promise<Device[]> {
+    const rows = await this.rows(
+      `SELECT id, label, created_at, last_seen_at, agent_seen_at, agent_public_key, revoked_at
+       FROM cli_tokens WHERE uid = $1 AND revoked_at IS NULL ORDER BY created_at DESC, id COLLATE "C" DESC`,
+      [uid],
+    );
+    return rows.map(
+      (row) =>
+        defined({
+          id: row.id,
+          label: row.label,
+          createdAt: row.created_at,
+          lastSeenAt: row.last_seen_at,
+          agentSeenAt: row.agent_seen_at,
+          agentPublicKey: row.agent_public_key,
+          revokedAt: row.revoked_at,
+        }) as unknown as Device,
+    );
+  }
+
+  /* Scoped by uid so one account cannot revoke another account's machine. */
+  async revokeDevice(uid: string, id: string, now = Date.now()): Promise<boolean> {
+    const result = await this.pool.query(
+      "UPDATE cli_tokens SET revoked_at = $3 WHERE id = $2 AND uid = $1 AND revoked_at IS NULL",
+      [uid, id, now],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /* ---- Sessions ---- */
+
+  /** Returns true when this session had not been seen before. */
+  async upsertSession(session: SessionRecord): Promise<boolean> {
+    /*
+     * `xmax = 0` distinguishes an insert from an update on the conflicting
+     * row, which is the answer the caller wants and the only way to get it
+     * without a second round trip.
+     *
+     * A persistent session re-registers on every restart, carrying the owner
+     * as assignee. Letting that through would silently undo a handoff, so an
+     * assignment already made stands.
+     */
+    const row = await this.row(
+      `INSERT INTO sessions
+         (uid, id, org_id, owner_uid, assignee_uid, share_url, command, origin, name,
+          read_only, encrypted, persistent, host, started_at, closed_at, exit_code)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       ON CONFLICT (uid, id) DO UPDATE SET
+         org_id = EXCLUDED.org_id,
+         owner_uid = EXCLUDED.owner_uid,
+         assignee_uid = COALESCE(sessions.assignee_uid, EXCLUDED.assignee_uid),
+         share_url = EXCLUDED.share_url,
+         command = EXCLUDED.command,
+         origin = EXCLUDED.origin,
+         name = EXCLUDED.name,
+         read_only = EXCLUDED.read_only,
+         encrypted = EXCLUDED.encrypted,
+         persistent = EXCLUDED.persistent,
+         host = EXCLUDED.host,
+         started_at = EXCLUDED.started_at,
+         closed_at = EXCLUDED.closed_at,
+         exit_code = EXCLUDED.exit_code
+       RETURNING (xmax = 0) AS inserted`,
+      [
+        session.uid,
+        session.id,
+        session.orgId ?? null,
+        session.ownerUid ?? null,
+        session.assigneeUid ?? null,
+        session.shareUrl,
+        session.command,
+        session.origin ?? null,
+        session.name ?? null,
+        session.readOnly,
+        session.encrypted,
+        session.persistent,
+        session.host,
+        session.startedAt,
+        session.closedAt ?? null,
+        session.exitCode ?? null,
+      ],
+    );
+    if (session.keyShares?.length) {
+      await this.writeShares(session.uid, session.id, session.keyShares);
+    }
+    return row?.inserted === true;
+  }
+
+  private async writeShares(
+    sessionUid: string,
+    sessionId: string,
+    shares: SessionKeyShare[],
+  ): Promise<void> {
+    for (const share of shares) {
+      await this.pool.query(
+        `INSERT INTO session_key_shares (session_uid, session_id, uid, sender_public_key, sealed)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (session_uid, session_id, uid)
+         DO UPDATE SET sender_public_key = EXCLUDED.sender_public_key, sealed = EXCLUDED.sealed`,
+        [sessionUid, sessionId, share.uid, share.senderPublicKey, share.sealed],
+      );
+    }
+  }
+
+  /** Loads the sealed passwords for a batch of sessions in one query. */
+  private async sharesFor(rows: Row[]): Promise<Map<string, SessionKeyShare[]>> {
+    const byKey = new Map<string, SessionKeyShare[]>();
+    if (rows.length === 0) return byKey;
+    const shares = await this.rows(
+      `SELECT * FROM session_key_shares
+       WHERE (session_uid, session_id) IN (SELECT unnest($1::text[]), unnest($2::text[]))`,
+      [rows.map((row) => row.uid), rows.map((row) => row.id)],
+    );
+    for (const share of shares) {
+      const key = `${share.session_uid} ${share.session_id}`;
+      const list = byKey.get(key) ?? [];
+      list.push({
+        uid: share.uid as string,
+        senderPublicKey: share.sender_public_key as string,
+        sealed: share.sealed as string,
+      });
+      byKey.set(key, list);
+    }
+    return byKey;
+  }
+
+  private async hydrate(rows: Row[]): Promise<SessionRecord[]> {
+    const shares = await this.sharesFor(rows);
+    return rows.map((row) => toSession(row, shares.get(`${row.uid} ${row.id}`) ?? []));
+  }
+
+  async patchSession(
+    uid: string,
+    id: string,
+    patch: Partial<SessionRecord>,
+  ): Promise<SessionRecord | null> {
+    const { keyShares, ...columns } = patch;
+    const set = setClause(SESSION_COLUMNS, columns, 3);
+    if (set) {
+      await this.pool.query(`UPDATE sessions SET ${set.text} WHERE uid = $1 AND id = $2`, [
+        uid,
+        id,
+        ...set.values,
+      ]);
+    }
+    if (keyShares?.length) await this.writeShares(uid, id, keyShares);
+    const row = await this.row("SELECT * FROM sessions WHERE uid = $1 AND id = $2", [uid, id]);
+    return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  /* Scoped by uid at the store boundary so a route cannot leak another account. */
+  async listSessions(uid: string): Promise<SessionRecord[]> {
+    return this.hydrate(
+      await this.rows('SELECT * FROM sessions WHERE uid = $1 ORDER BY started_at DESC, id COLLATE "C" DESC', [uid]),
+    );
+  }
+
+  /** Every session in an organization, which is what colleagues can see. */
+  async listOrgSessions(orgId: string): Promise<SessionRecord[]> {
+    return this.hydrate(
+      await this.rows('SELECT * FROM sessions WHERE org_id = $1 ORDER BY started_at DESC, id COLLATE "C" DESC', [orgId]),
+    );
+  }
+
+  async sessionInOrg(orgId: string, id: string): Promise<SessionRecord | null> {
+    const row = await this.row("SELECT * FROM sessions WHERE org_id = $1 AND id = $2", [orgId, id]);
+    return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  async assignSession(
+    orgId: string,
+    id: string,
+    assigneeUid: string,
+  ): Promise<SessionRecord | null> {
+    const row = await this.row(
+      "UPDATE sessions SET assignee_uid = $3 WHERE org_id = $1 AND id = $2 RETURNING *",
+      [orgId, id, assigneeUid],
+    );
+    return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  /** Stores sealed copies of a session password, replacing any for the same uid. */
+  async putKeyShares(
+    orgId: string,
+    sessionId: string,
+    shares: SessionKeyShare[],
+  ): Promise<boolean> {
+    const session = await this.row("SELECT uid FROM sessions WHERE org_id = $1 AND id = $2", [
+      orgId,
+      sessionId,
+    ]);
+    if (!session) return false;
+    await this.writeShares(session.uid as string, sessionId, shares);
+    return true;
+  }
+
+  /* ---- Agent commands ---- */
+
+  async putCommand(command: AgentCommand): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO agent_commands
+         (id, uid, device_id, kind, command, name, sender_public_key, sealed_password,
+          session_id, created_at, claimed_at, done_at, error)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        command.id,
+        command.uid,
+        command.deviceId,
+        command.kind,
+        command.command ?? null,
+        command.name ?? null,
+        command.senderPublicKey ?? null,
+        command.sealedPassword ?? null,
+        command.sessionId ?? null,
+        command.createdAt,
+        command.claimedAt ?? null,
+        command.doneAt ?? null,
+        command.error ?? null,
+      ],
+    );
+  }
+
+  /*
+   * Hands a machine everything queued for it and marks it claimed in the same
+   * statement, so two agents on one device cannot both run the same command.
+   */
+  async claimCommands(deviceId: string, now = Date.now()): Promise<AgentCommand[]> {
+    const rows = await this.rows(
+      `UPDATE agent_commands SET claimed_at = $2
+       WHERE device_id = $1 AND claimed_at IS NULL
+       RETURNING *`,
+      [deviceId, now],
+    );
+    return rows.map(toCommand);
+  }
+
+  async finishCommand(
+    deviceId: string,
+    id: string,
+    error: string | undefined,
+    now = Date.now(),
+  ): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE agent_commands SET done_at = $3, error = COALESCE($4, error)
+       WHERE id = $2 AND device_id = $1 AND done_at IS NULL`,
+      [deviceId, id, now, error ?? null],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async listCommands(uid: string, limit = 20): Promise<AgentCommand[]> {
+    const rows = await this.rows(
+      'SELECT * FROM agent_commands WHERE uid = $1 ORDER BY created_at DESC, id COLLATE "C" DESC LIMIT $2',
+      [uid, limit],
+    );
+    return rows.map(toCommand);
+  }
+
+  /* ---- Organizations ---- */
+
+  async putOrganization(organization: Organization): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO organizations (id, name, created_at, created_by) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+      [organization.id, organization.name, organization.createdAt, organization.createdBy],
+    );
+  }
+
+  async organization(orgId: string): Promise<Organization | null> {
+    const row = await this.row("SELECT * FROM organizations WHERE id = $1", [orgId]);
+    if (!row) return null;
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      createdAt: row.created_at as number,
+      createdBy: row.created_by as string,
+    };
+  }
+
+  async renameOrganization(orgId: string, name: string): Promise<boolean> {
+    const result = await this.pool.query("UPDATE organizations SET name = $2 WHERE id = $1", [
+      orgId,
+      name,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async putMembership(membership: Membership): Promise<void> {
+    /*
+     * A person belongs to one organization, and the unique index on uid says
+     * so. Joining a second would otherwise fail the insert rather than move
+     * them, so an existing membership elsewhere is cleared first.
+     */
+    await this.pool.query("DELETE FROM memberships WHERE uid = $1 AND org_id <> $2", [
+      membership.uid,
+      membership.orgId,
+    ]);
+    await this.pool.query(
+      `INSERT INTO memberships (org_id, uid, email, name, role, joined_at, public_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (org_id, uid) DO UPDATE SET
+         email = EXCLUDED.email, name = EXCLUDED.name, role = EXCLUDED.role,
+         joined_at = EXCLUDED.joined_at, public_key = EXCLUDED.public_key`,
+      [
+        membership.orgId,
+        membership.uid,
+        membership.email,
+        membership.name,
+        membership.role,
+        membership.joinedAt,
+        membership.publicKey ?? null,
+      ],
+    );
+  }
+
+  /** The single organization a person belongs to, or null before signup. */
+  async membershipOf(uid: string): Promise<Membership | null> {
+    const row = await this.row("SELECT * FROM memberships WHERE uid = $1", [uid]);
+    return row ? toMembership(row) : null;
+  }
+
+  async members(orgId: string): Promise<Membership[]> {
+    const rows = await this.rows(
+      'SELECT * FROM memberships WHERE org_id = $1 ORDER BY joined_at ASC, uid COLLATE "C" ASC',
+      [orgId],
+    );
+    return rows.map(toMembership);
+  }
+
+  async removeMember(orgId: string, uid: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM memberships WHERE org_id = $1 AND uid = $2",
+      [orgId, uid],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async setRole(orgId: string, uid: string, role: Role): Promise<boolean> {
+    const result = await this.pool.query(
+      "UPDATE memberships SET role = $3 WHERE org_id = $1 AND uid = $2",
+      [orgId, uid, role],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /* ---- Invites ---- */
+
+  async putInvite(invite: Invite): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO invites
+         (id, org_id, created_by, role, email, created_at, expires_at, accepted_at, accepted_by, revoked_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [
+        invite.id,
+        invite.orgId,
+        invite.createdBy,
+        invite.role,
+        invite.email ?? null,
+        invite.createdAt,
+        invite.expiresAt,
+        invite.acceptedAt ?? null,
+        invite.acceptedBy ?? null,
+        invite.revokedAt ?? null,
+      ],
+    );
+  }
+
+  async invite(id: string): Promise<Invite | undefined> {
+    const row = await this.row("SELECT * FROM invites WHERE id = $1", [id]);
+    return row ? toInvite(row) : undefined;
+  }
+
+  async invites(orgId: string): Promise<Invite[]> {
+    const rows = await this.rows(
+      'SELECT * FROM invites WHERE org_id = $1 ORDER BY created_at DESC, id COLLATE "C" DESC',
+      [orgId],
+    );
+    return rows.map(toInvite);
+  }
+
+  async updateInvite(id: string, patch: Partial<Invite>): Promise<void> {
+    const set = setClause(INVITE_COLUMNS, patch, 2);
+    if (!set) return;
+    await this.pool.query(`UPDATE invites SET ${set.text} WHERE id = $1`, [id, ...set.values]);
+  }
+
+  /* ---- Audit ---- */
+
+  async putAudit(event: AuditEvent): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO audit_events (id, org_id, session_id, at, actor_uid, actor_email, kind, text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        event.id,
+        event.orgId,
+        event.sessionId,
+        event.at,
+        event.actorUid,
+        event.actorEmail,
+        event.kind,
+        event.text,
+      ],
+    );
+  }
+
+  async auditFor(orgId: string, sessionId: string): Promise<AuditEvent[]> {
+    const rows = await this.rows(
+      'SELECT * FROM audit_events WHERE org_id = $1 AND session_id = $2 ORDER BY at ASC, id COLLATE "C" ASC',
+      [orgId, sessionId],
+    );
+    return rows.map(toAudit);
+  }
+
+  /*
+   * The most recent `limit` events, back in ascending order. The audit page
+   * reads a window of history and draws it left to right, so the newest are
+   * the ones worth keeping when there are more than fit.
+   */
+  async auditForOrg(orgId: string, limit = 2000): Promise<AuditEvent[]> {
+    const rows = await this.rows(
+      `SELECT * FROM (
+         SELECT * FROM audit_events WHERE org_id = $1 ORDER BY at DESC, id COLLATE "C" DESC LIMIT $2
+       ) recent ORDER BY at ASC, id COLLATE "C" ASC`,
+      [orgId, limit],
+    );
+    return rows.map(toAudit);
+  }
+
+  /* ---- Comments and notifications ---- */
+
+  async putComment(comment: Comment): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO comments (id, org_id, session_id, author_uid, body, at, mentions)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        comment.id,
+        comment.orgId,
+        comment.sessionId,
+        comment.authorUid,
+        comment.body,
+        comment.at,
+        comment.mentions,
+      ],
+    );
+  }
+
+  async comments(orgId: string, sessionId: string): Promise<Comment[]> {
+    const rows = await this.rows(
+      'SELECT * FROM comments WHERE org_id = $1 AND session_id = $2 ORDER BY at ASC, id COLLATE "C" ASC',
+      [orgId, sessionId],
+    );
+    return rows.map(toComment);
+  }
+
+  async putNotification(notification: Notification): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO notifications (id, org_id, uid, kind, session_id, actor_uid, body, at, read_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        notification.id,
+        notification.orgId,
+        notification.uid,
+        notification.kind,
+        notification.sessionId,
+        notification.actorUid,
+        notification.body,
+        notification.at,
+        notification.readAt ?? null,
+      ],
+    );
+  }
+
+  async notificationsFor(uid: string, limit = 100): Promise<Notification[]> {
+    const rows = await this.rows(
+      'SELECT * FROM notifications WHERE uid = $1 ORDER BY at DESC, id COLLATE "C" DESC LIMIT $2',
+      [uid, limit],
+    );
+    return rows.map(toNotification);
+  }
+
+  async markNotificationRead(uid: string, id: string, now = Date.now()): Promise<boolean> {
+    const result = await this.pool.query(
+      "UPDATE notifications SET read_at = $3 WHERE id = $2 AND uid = $1 AND read_at IS NULL",
+      [uid, id, now],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async markAllNotificationsRead(uid: string, now = Date.now()): Promise<number> {
+    const result = await this.pool.query(
+      "UPDATE notifications SET read_at = $2 WHERE uid = $1 AND read_at IS NULL",
+      [uid, now],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  /* ---- Housekeeping ---- */
+
+  async purgeExpired(now = Date.now()): Promise<void> {
+    await this.pool.query("DELETE FROM auth_codes WHERE expires_at <= $1", [now]);
+    /* Finished commands are only kept long enough to be reported back. */
+    await this.pool.query("DELETE FROM agent_commands WHERE done_at IS NOT NULL AND done_at < $1", [
+      now - 10 * 60_000,
+    ]);
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+}

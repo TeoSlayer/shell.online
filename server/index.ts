@@ -1,28 +1,52 @@
-import { join } from "node:path";
+import { resolve } from "node:path";
 import { createAccountsServer } from "./app";
-import { MemoryStore } from "./lib/store-memory";
+import { ConfigError, readConfig, type Config } from "./lib/config";
 import { createVerifier } from "./lib/firebase-token";
+import { MemoryStore } from "./lib/store-memory";
+import { PostgresStore } from "./lib/store-postgres";
+import type { Store } from "./lib/store";
 
-const port = Number(process.env.ACCOUNTS_PORT ?? 8787);
-const projectId = process.env.FIREBASE_PROJECT_ID ?? process.env.VITE_FIREBASE_PROJECT_ID;
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
-
-if (!projectId) {
-  console.error(
-    "accounts: set FIREBASE_PROJECT_ID (or VITE_FIREBASE_PROJECT_ID) so ID tokens can be verified",
-  );
+let config: Config;
+try {
+  config = readConfig();
+} catch (error) {
+  if (!(error instanceof ConfigError)) throw error;
+  console.error(`accounts: ${error.message}`);
   process.exit(1);
 }
 
-const store = new MemoryStore(process.env.ACCOUNTS_DATA ?? join(process.cwd(), ".data", "accounts.json"));
+/*
+ * Postgres when there is one, the file otherwise. readConfig has already
+ * refused the file store under NODE_ENV=production, so this only chooses
+ * between two things that are both correct where they run.
+ */
+const store: Store = config.databaseUrl
+  ? await PostgresStore.connect(config.databaseUrl)
+  : new MemoryStore(resolve(config.dataFile));
 
 const server = createAccountsServer({
   store,
-  verifyIdToken: createVerifier(projectId),
-  allowedOrigins: [webOrigin, "http://127.0.0.1:5173"],
+  verifyIdToken: createVerifier(config.projectId),
+  allowedOrigins: [config.webOrigin, "http://127.0.0.1:5173"],
 });
 
-/* Loopback only. This service holds live credentials and is not for the LAN. */
-server.listen(port, "127.0.0.1", () => {
-  console.log(`accounts: http://127.0.0.1:${port} (project ${projectId}, web ${webOrigin})`);
+server.listen(config.port, config.host, () => {
+  const backing = config.databaseUrl ? "postgres" : config.dataFile;
+  console.log(
+    `accounts: http://${config.host}:${config.port} ` +
+      `(project ${config.projectId}, web ${config.webOrigin}, store ${backing})`,
+  );
 });
+
+/*
+ * A container is stopped with SIGTERM and killed shortly after. Closing the
+ * listener first lets requests in flight finish; releasing the pool after that
+ * means the last of them still has a connection to finish on.
+ */
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, () => {
+    server.close(() => {
+      void store.close().then(() => process.exit(0));
+    });
+  });
+}
