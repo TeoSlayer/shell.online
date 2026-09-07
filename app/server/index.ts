@@ -72,15 +72,33 @@ const purge = setInterval(() => {
 purge.unref();
 
 /*
- * A rejection nobody handled would otherwise take the process down with it and
- * print nothing useful. Logging and staying up is right here: one request went
- * wrong, and every other session in flight should not pay for it.
+ * A rejection nobody handled is almost always one request going wrong, and
+ * every other session in flight should not pay for it. So it is logged and
+ * the process carries on.
  */
 process.on("unhandledRejection", (reason) => {
   console.error("accounts: unhandled rejection", reason);
 });
+
+/*
+ * An uncaught exception is different: by definition nothing anticipated it, so
+ * what the process is now doing is unknown. Logging and carrying on would have
+ * meant a container that failed to bind its port sat there answering nothing
+ * and exiting 0, which reads as a healthy deploy. Say what happened, then let
+ * the orchestrator restart it.
+ */
 process.on("uncaughtException", (error) => {
   console.error("accounts: uncaught exception", error);
+  process.exit(1);
+});
+
+server.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE") {
+    console.error(`accounts: port ${config.port} is already in use`);
+  } else {
+    console.error("accounts: server error", error);
+  }
+  process.exit(1);
 });
 
 server.listen(config.port, config.host, () => {

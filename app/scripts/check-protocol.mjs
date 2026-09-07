@@ -9,7 +9,12 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const upstream = process.env.SHELL_ONLINE_REPO ?? join(here, "..", "..", "shell.online");
+/*
+ * The app lives inside the shell.online repository, so upstream is the
+ * directory above it. It used to be a sibling checkout; pointing at the old
+ * path here would make this check pass by finding nothing to compare.
+ */
+const upstream = process.env.SHELL_ONLINE_REPO ?? join(here, "..", "..");
 
 const FILES = [
   { vendored: "src/terminal/protocol.ts", source: "shared/protocol.ts" },
