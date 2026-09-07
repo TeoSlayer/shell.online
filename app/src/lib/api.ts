@@ -1,6 +1,6 @@
 import { auth } from "./firebase";
 
-export { agentOnline } from "./agent";
+export { machineOnline } from "./agent";
 
 const BASE = (import.meta.env.VITE_ACCOUNTS_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
 

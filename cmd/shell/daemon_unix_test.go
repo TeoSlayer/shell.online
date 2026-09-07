@@ -1,0 +1,197 @@
+//go:build !windows
+
+package main
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+// The daemon is built once and run as a real process, because what is being
+// tested is what happens between processes: whether a second one can take the
+// lock, and whether the socket it leaves behind blocks the next one.
+func buildShell(t *testing.T) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "shell")
+	build := exec.Command("go", "build", "-o", binary, "shell.online/cmd/shell")
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		t.Fatalf("build shell: %v", err)
+	}
+	return binary
+}
+
+// shortTempDir is a temporary directory under /tmp rather than t.TempDir().
+//
+// A unix socket path has about a hundred bytes to fit in, and the per-test
+// directory macOS hands out is most of that on its own -- so a test would pass
+// or fail on the length of its own name.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	directory, err := os.MkdirTemp("/tmp", "sh")
+	if err != nil {
+		t.Fatalf("create a temporary directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	return directory
+}
+
+// linkedMachine writes a credentials file that says this machine agreed.
+func linkedMachine(t *testing.T, remoteStart bool) (configPath, runtimeDirectory string) {
+	t.Helper()
+	directory := shortTempDir(t)
+	configPath = filepath.Join(directory, "credentials.json")
+	consent := ""
+	if remoteStart {
+		consent = `"remote_start": true,`
+	}
+	// Far enough ahead that the loop never tries to refresh against a service
+	// that is not there.
+	expires := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	contents := `{
+  "server": "http://127.0.0.1:9",
+  "access_token": "sha_test",
+  "refresh_token": "shr_test",
+  "expires_at": "` + expires + `",
+  ` + consent + `
+  "uid": "uid-1",
+  "email": "ana@example.com"
+}`
+	if err := os.WriteFile(configPath, []byte(contents), 0o600); err != nil {
+		t.Fatalf("write credentials: %v", err)
+	}
+	return configPath, directory
+}
+
+func daemonCommand(t *testing.T, binary, configPath, runtime string, arguments ...string) *exec.Cmd {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
+	command.Env = append(os.Environ(),
+		"SHELL_ONLINE_CONFIG="+configPath,
+		// Keeps the control socket inside the test's own directory.
+		"SHELL_ONLINE_RUNTIME_DIR="+filepath.Join(runtime, "run"),
+	)
+	return command
+}
+
+func waitForDaemon(t *testing.T, binary, configPath, runtime string, want bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		status := daemonCommand(t, binary, configPath, runtime, "daemon", "status")
+		running := status.Run() == nil
+		if running == want {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("daemon running=%v never became %v", !want, want)
+}
+
+// Two pollers on one machine is not merely wasteful. The browser seals a
+// session password to one public key on the device record, and queued work
+// goes to whichever poller claims it first, so the second one receives
+// commands it cannot open. Only one may hold the lock.
+func TestSecondDaemonDoesNotStart(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, true)
+
+	first := daemonCommand(t, binary, configPath, runtime, "daemon")
+	if err := first.Start(); err != nil {
+		t.Fatalf("start the first daemon: %v", err)
+	}
+	defer func() {
+		_ = first.Process.Kill()
+		_, _ = first.Process.Wait()
+	}()
+	waitForDaemon(t, binary, configPath, runtime, true)
+
+	second := daemonCommand(t, binary, configPath, runtime, "daemon")
+	output, err := second.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the second daemon should exit cleanly, got %v: %s", err, output)
+	}
+	if !strings.Contains(string(output), "already running") {
+		t.Fatalf("the second daemon should say one is already running, got: %s", output)
+	}
+}
+
+// A daemon that was killed leaves its socket behind. Nothing would ever start
+// again if that file were treated as a running daemon.
+func TestDaemonStartsOverASocketLeftByADeadDaemon(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, true)
+
+	first := daemonCommand(t, binary, configPath, runtime, "daemon")
+	if err := first.Start(); err != nil {
+		t.Fatalf("start the first daemon: %v", err)
+	}
+	waitForDaemon(t, binary, configPath, runtime, true)
+
+	// SIGKILL, so nothing gets the chance to clean up after itself.
+	_ = first.Process.Kill()
+	_, _ = first.Process.Wait()
+	waitForDaemon(t, binary, configPath, runtime, false)
+
+	replacement := daemonCommand(t, binary, configPath, runtime, "daemon")
+	if err := replacement.Start(); err != nil {
+		t.Fatalf("start the replacement daemon: %v", err)
+	}
+	defer func() {
+		_ = replacement.Process.Kill()
+		_, _ = replacement.Process.Wait()
+	}()
+	waitForDaemon(t, binary, configPath, runtime, true)
+}
+
+// The daemon is the machine's answer to "may a browser run things here". A
+// machine that never agreed must not get one, however it is started.
+func TestDaemonRefusesWithoutConsent(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, false)
+
+	output, err := daemonCommand(t, binary, configPath, runtime, "daemon").CombinedOutput()
+	if err == nil {
+		t.Fatalf("the daemon should refuse without consent, got: %s", output)
+	}
+	if !strings.Contains(string(output), "--allow-remote-start") {
+		t.Fatalf("the refusal should say how to grant it, got: %s", output)
+	}
+}
+
+// An ordinary command brings the daemon back, which is what makes a machine
+// reachable again after a reboot without anyone thinking about it.
+func TestAnOrdinaryCommandStartsTheDaemon(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, true)
+
+	// `list` needs nothing from the network and exits immediately.
+	if err := daemonCommand(t, binary, configPath, runtime, "list").Run(); err != nil {
+		t.Fatalf("shell list: %v", err)
+	}
+	waitForDaemon(t, binary, configPath, runtime, true)
+
+	stop := daemonCommand(t, binary, configPath, runtime, "daemon", "stop")
+	if err := stop.Run(); err != nil {
+		t.Fatalf("shell daemon stop: %v", err)
+	}
+	waitForDaemon(t, binary, configPath, runtime, false)
+}
+
+// Without consent nothing should appear, however many commands are run.
+func TestAnOrdinaryCommandStartsNoDaemonWithoutConsent(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, false)
+
+	if err := daemonCommand(t, binary, configPath, runtime, "list").Run(); err != nil {
+		t.Fatalf("shell list: %v", err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if daemonCommand(t, binary, configPath, runtime, "daemon", "status").Run() == nil {
+		t.Fatal("a machine that did not agree should have no daemon")
+	}
+}

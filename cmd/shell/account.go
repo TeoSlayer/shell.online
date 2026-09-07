@@ -78,8 +78,10 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	webURL := flags.String("web", defaultWebURL(), "web app that approves the login")
 	label := flags.String("label", "", "name for this machine in your account")
 	noBrowser := flags.Bool("no-browser", false, "print the sign-in URL instead of opening a browser")
+	allowRemote := flags.Bool("allow-remote-start", false, "let your signed-in browser start sessions on this machine")
+	denyRemote := flags.Bool("no-remote-start", false, "keep this machine publish-only")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: shell login [--label <name>] [--no-browser]")
+		fmt.Fprintln(stderr, "Usage: shell login [--label <name>] [--no-browser] [--allow-remote-start]")
 		fmt.Fprintln(stderr, "Opens a browser to link this machine to your shell.online account.")
 	}
 	if err := flags.Parse(arguments); err != nil {
@@ -90,6 +92,10 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	}
 	if flags.NArg() > 0 {
 		fmt.Fprintln(stderr, "shell: login takes no positional arguments")
+		return 2
+	}
+	if *allowRemote && *denyRemote {
+		fmt.Fprintln(stderr, "shell: --allow-remote-start and --no-remote-start cannot be used together")
 		return 2
 	}
 
@@ -109,6 +115,12 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "\n  Approving at %s\n  Tokens from  %s\n", *webURL, *accountsURL)
 	}
 
+	// Whether this machine already accepts remote starts is asked before the
+	// browser opens, so a person who is about to be asked is not answering a
+	// question about an account they have not finished signing in to yet.
+	previous, previousErr := account.Load(path)
+	alreadyGranted := previousErr == nil && previous.RemoteStart
+
 	client := account.NewClient(*accountsURL, "shell/"+version)
 	credentials, err := account.Login(ctx, client, account.Options{
 		WebURL:    *webURL,
@@ -120,13 +132,51 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "shell: login failed: %v\n", err)
 		return 1
 	}
+	grant, ask := decideRemoteStart(
+		alreadyGranted,
+		remoteStartFlags{allow: *allowRemote, deny: *denyRemote},
+		interactiveTerminal(stderr),
+	)
+	if ask {
+		grant = askRemoteStart(os.Stdin, stderr, credentials.Email)
+	}
+	credentials.RemoteStart = grant
+
 	if err := account.Save(path, credentials); err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 1
 	}
 
+	// The daemon is what makes the answer mean anything, so it starts here
+	// rather than waiting for the next command.
+	if grant {
+		ensureDaemon()
+	} else {
+		stopDaemon()
+	}
+
 	printAccountCard(stdout, credentials, resolvedLabel(*label))
+	printRemoteStartNote(stdout, grant, ask)
 	return 0
+}
+
+// printRemoteStartNote says what this machine will and will not do.
+//
+// Printed on every login, not only the one that asked: a decision made months
+// ago still governs what a browser can do here, and it should not take reading
+// a config file to find out which way it went.
+func printRemoteStartNote(writer io.Writer, granted, asked bool) {
+	color := sessionOutputUsesColor(writer)
+	dim := func(text string) string { return styleSessionText(color, "2", text) }
+	if granted {
+		fmt.Fprintf(writer, "  %s\n\n", dim("Your browser can start sessions here. Turn it off with 'shell logout'."))
+		return
+	}
+	if asked {
+		fmt.Fprintf(writer, "  %s\n\n", dim("Left as publish-only. Sessions you start with 'shell <command>' still appear."))
+		return
+	}
+	fmt.Fprintf(writer, "  %s\n\n", dim("Publish-only. Run 'shell login --allow-remote-start' to start sessions from the browser."))
 }
 
 func runLogout(arguments []string, stdout, stderr io.Writer) int {
@@ -148,6 +198,10 @@ func runLogout(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 1
 	}
+	// Stopped first: it is the thing acting on these credentials, and leaving
+	// it polling with a revoked token would only generate failures.
+	stopDaemon()
+
 	credentials, err := account.Load(path)
 	if errors.Is(err, account.ErrNotLinked) {
 		fmt.Fprintln(stdout, "Not signed in.")

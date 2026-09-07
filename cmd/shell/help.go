@@ -37,7 +37,7 @@ Your account (optional)
   shell login --no-browser         Print the sign-in URL instead of opening a browser
   shell whoami                     Show which account this machine is linked to
   shell logout                     Unlink this machine and revoke its token
-  shell agent                      Let your browser start and stop sessions here
+  shell daemon status              Say whether your browser can start sessions here
 
 Manage sessions
   shell list                       Show uptime, relay status, URL, and browser password
@@ -149,13 +149,27 @@ What is published
 
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine and revoke its token
-  shell agent                      Let your browser start and stop sessions here
+  shell daemon status              Say whether your browser can start sessions here
+  shell daemon stop                Stop accepting browser-started sessions now
 
 Driving this machine from the browser
-  shell agent runs in the foreground and lets your signed-in browser start and
-  stop sessions on this machine. It is opt-in for a reason: while it runs, the
-  browser can launch processes here. It stops with Ctrl-C, and sessions it
-  started keep running.
+  shell login asks, once, whether your signed-in browser may start sessions on
+  this machine. Say yes and a small daemon runs in the background for as long
+  as you stay signed in, so the machine is there in the web app whether or not
+  a terminal is open. Say no and nothing runs: shell <command> still publishes
+  sessions to your account exactly as before.
+
+  It is asked rather than assumed because it is a real capability. While it is
+  allowed, anyone signed in to your account can launch processes here, as you,
+  without touching this terminal.
+
+    shell login --allow-remote-start   Agree without being asked
+    shell login --no-remote-start      Withdraw it on this machine
+    shell daemon stop                  Stop until the next shell command
+    shell logout                       Stop it and unlink the machine
+
+  shell agent does the same thing in the foreground, printing each session as
+  it starts, for anyone who would rather watch it than have it run unattended.
 
 Running against a local stack
   Every address defaults to production, so setting only some of them aims the

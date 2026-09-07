@@ -339,7 +339,8 @@ export function Workspace() {
             <p>No sessions yet.</p>
             <ol>
               <li>
-                Run <code>shell agent</code> on a linked machine.
+                Run <code>shell login</code> on a machine and allow
+                browser-started sessions.
               </li>
               <li>
                 Press <b>+ Session</b> and pick what to run.

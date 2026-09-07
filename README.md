@@ -131,20 +131,47 @@ raw key, is stripped instead.
 
 ### Driving a machine from the browser
 
-```sh
-shell agent
+`shell login` asks, once, whether your signed-in browser may start sessions on
+this machine:
+
+```
+  Start sessions from the browser?
+  Anyone signed in to you@example.com could start processes on this
+  machine, as you, without touching this terminal.
+  You can say no and still publish sessions with 'shell <command>'.
+
+  Allow it? [y/N]
 ```
 
-While this runs, your signed-in browser can start and stop sessions on this
-machine. It is opt-in for a reason: the browser can launch processes here. It
-runs in the foreground, prints exactly what it permits, and stops with Ctrl-C.
-Sessions it started keep running after it exits.
+It is asked rather than assumed because it is a real capability, and only a
+yes is remembered: saying no leaves the machine publish-only and the question
+is put again next time you sign in.
 
-The agent generates an ephemeral key pair each run and publishes the public
+Say yes and a small daemon runs in the background for as long as the machine
+stays signed in, so it is there in the web app whether or not a terminal is
+open. Any `shell` command starts it again if it is not running, which is how a
+machine comes back after a reboot.
+
+```sh
+shell daemon status              # is my browser able to start sessions here?
+shell daemon stop                # stop until the next shell command
+shell login --no-remote-start    # withdraw it on this machine
+shell logout                     # stop it and unlink the machine
+```
+
+`shell agent` does the same work in the foreground, printing each session as
+it starts, for anyone who would rather watch it than have it run unattended.
+
+The daemon generates an ephemeral key pair each run and publishes the public
 half. A browser starting a session picks the browser password itself and seals
 it to that key, so the accounts service relays an envelope it cannot open, and
 the browser can open the terminal without asking for a password nobody was
-shown. Stopping the agent ends the ability to open anything sealed to it.
+shown. Stopping the daemon ends the ability to open anything sealed to it.
+
+Exactly one poller runs per machine, held by a lock the kernel releases even
+if the process is killed. Two would each publish their own key while queued
+work went to whichever asked first, so a session would come up on a password
+the browser that started it never had.
 
 ### Running against a local stack
 

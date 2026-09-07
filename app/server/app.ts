@@ -563,13 +563,15 @@ export function createApp(options: AppOptions) {
         if (!device) return send(response, 404, { error: "no such machine" });
 
         /*
-         * Only a polling agent can carry work out. Queuing for a machine with
-         * none would sit there silently forever, which is a worse answer than
-         * saying so now.
+         * Only a machine that is polling can carry work out. Queuing for one
+         * that is not would sit there silently forever, which is a worse
+         * answer than saying so now.
          */
         if (!device.agentSeenAt || Date.now() - device.agentSeenAt > AGENT_ONLINE_MS) {
           return send(response, 409, {
-            error: `No agent is listening on ${device.label}. Run 'shell agent' there and try again.`,
+            error:
+              `${device.label} is not reachable. Sign in there with 'shell login' ` +
+              `and allow browser-started sessions, then try again.`,
           });
         }
 

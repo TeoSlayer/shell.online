@@ -80,6 +80,8 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runAccountCommand(arguments, stdout, stderr)
 	case "agent":
 		return runAgent(arguments[1:], stdout, stderr), true
+	case "daemon":
+		return runDaemonCommand(arguments[1:], stdout, stderr), true
 	case "list", "ps":
 		return runSessionList(arguments[1:], stdout, stderr), true
 	case "attach":

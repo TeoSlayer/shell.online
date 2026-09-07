@@ -521,14 +521,14 @@ describe("driving a machine from the browser", () => {
   });
 });
 
-describe("starting on a machine with no agent", () => {
+describe("starting on a machine that is not reachable", () => {
   async function deviceWithoutAgent() {
     await login();
     const listed = await call("GET", "/api/devices", { auth: await idToken() });
     return listed.body.devices[0].id as string;
   }
 
-  it("refuses, and names the command that fixes it", async () => {
+  it("refuses, and says what would make the machine reachable", async () => {
     /*
      * Queuing for a machine with nothing listening used to sit there silently
      * forever, which is a worse answer than saying so at the point of asking.
@@ -539,10 +539,12 @@ describe("starting on a machine with no agent", () => {
       body: { device_id: deviceId, kind: "start", command: "top" },
     });
     expect(result.status).toBe(409);
-    expect(result.body.error).toContain("shell agent");
+    /* Naming the machine and the fix, so the message is actionable. */
+    expect(result.body.error).toContain("shell login");
+    expect(result.body.error).toContain("not reachable");
   });
 
-  it("accepts once the agent has polled", async () => {
+  it("accepts once the machine has polled", async () => {
     const tokens = await login();
     const listed = await call("GET", "/api/devices", { auth: await idToken() });
     const deviceId = listed.body.devices[0].id;

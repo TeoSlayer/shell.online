@@ -7,30 +7,27 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 
 	"shell.online/internal/account"
 )
 
-// agentPollInterval is how often the machine asks for queued work.
-const agentPollInterval = 2 * time.Second
-
-// runAgent lets the web app start and stop sessions on this machine.
+// runAgent runs the poll loop in the foreground.
 //
-// This is opt-in on purpose. Running it means the browser can start processes
-// here, so it only ever runs while a person is deliberately running it, prints
-// exactly what it will do, and stops with the terminal it was started in.
+// The daemon does this already on a machine that agreed to it at login, so
+// this is for the person who would rather see it: it prints what it will
+// allow, and stops with the terminal it was started in. It does not take the
+// daemon's lock, because it is not the daemon -- if one is running, that one
+// keeps the browser's key and this would only take work away from it.
 func runAgent(arguments []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("shell agent", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	shellPath := flags.String("shell", "", "path to the shell binary the agent launches (default: this one)")
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: shell agent")
-		fmt.Fprintln(stderr, "Lets your signed-in browser start and stop sessions on this machine.")
+		fmt.Fprintln(stderr, "Watches for browser-started sessions in this terminal.")
+		fmt.Fprintln(stderr, "A machine that agreed to this at login already does it in the background.")
 	}
 	if err := flags.Parse(arguments); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -58,141 +55,38 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	self := *shellPath
-	if self == "" {
-		self, err = os.Executable()
-		if err != nil {
-			fmt.Fprintf(stderr, "shell: locate this binary: %v\n", err)
-			return 1
-		}
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// One key per agent run. Stopping the agent ends the ability to open
-	// anything a browser sealed to it.
-	agentKey, err := account.NewAgentKey()
+	self, err := shellBinaryPath(*shellPath)
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 1
 	}
 
-	client := account.NewClient(credentials.Server, "shell/"+version)
+	// Two pollers on one machine would take turns claiming work, and only one
+	// of them holds the key the browser sealed the password to. Say so rather
+	// than start a second and let sessions fail at random.
+	if daemonAnswering() {
+		fmt.Fprintln(stderr, "shell: the background daemon is already watching for this account.")
+		fmt.Fprintln(stderr, "Stop it with 'shell daemon stop' to watch here instead.")
+		return 1
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	printAgentCard(stdout, credentials)
-
-	for {
-		if credentials.Expired(time.Now()) {
-			refreshed, refreshErr := client.Refresh(ctx, credentials)
-			if refreshErr != nil {
-				if ctx.Err() != nil {
-					break
-				}
-				fmt.Fprintf(stderr, "shell: could not renew this machine's token: %v\n", refreshErr)
-				if !sleepOrDone(ctx, agentPollInterval) {
-					break
-				}
-				continue
-			}
-			credentials = refreshed
-			if saveErr := account.Save(path, credentials); saveErr != nil {
-				fmt.Fprintf(stderr, "shell: could not store the renewed token: %v\n", saveErr)
-			}
-		}
-
-		commands, pollErr := client.PollCommands(ctx, credentials.AccessToken, agentKey.PublicKey())
-		if pollErr != nil {
-			if ctx.Err() != nil {
-				break
-			}
-			fmt.Fprintf(stderr, "shell: %v\n", pollErr)
-		}
-		for _, command := range commands {
-			runErr := performAgentCommand(ctx, self, agentKey, command, stdout, stderr)
-			if finishErr := client.FinishCommand(ctx, credentials.AccessToken, command.ID, runErr); finishErr != nil {
-				fmt.Fprintf(stderr, "shell: could not report a command as done: %v\n", finishErr)
-			}
-		}
-
-		if !sleepOrDone(ctx, agentPollInterval) {
-			break
-		}
+	loop := &agentLoop{
+		credentialsPath: path,
+		credentials:     credentials,
+		self:            self,
+		report:          stdout,
+	}
+	if err := loop.run(ctx); err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
 	}
 
 	fmt.Fprintln(stdout, "\n  Agent stopped. Sessions it started keep running.")
 	return 0
-}
-
-// performAgentCommand carries out one queued instruction.
-func performAgentCommand(
-	ctx context.Context,
-	self string,
-	agentKey *account.AgentKey,
-	command account.AgentCommand,
-	stdout, stderr io.Writer,
-) error {
-	switch command.Kind {
-	case "start":
-		fields := strings.Fields(command.Command)
-		if len(fields) == 0 {
-			return errors.New("empty command")
-		}
-		fmt.Fprintf(stdout, "  start  %s\n", command.Command)
-		// Launched exactly as a person would launch it, so it backgrounds
-		// itself and publishes through the usual path.
-		launch := exec.CommandContext(ctx, self, fields...)
-		launch.Env = os.Environ()
-		if command.Name != "" {
-			// The launched shell reads this when it publishes the session, so
-			// the name chosen in the browser survives to the session list.
-			launch.Env = append(launch.Env, sessionNameEnvironment+"="+command.Name)
-		}
-		// The browser that asked for this session chose its password and kept
-		// a copy, so it can open the terminal without prompting anyone.
-		if command.SealedPassword != "" {
-			password, openErr := agentKey.Open(command.SenderPublicKey, command.SealedPassword)
-			if openErr != nil {
-				return fmt.Errorf("read the sealed password: %w", openErr)
-			}
-			launch.Env = append(launch.Env, "SHELL_ONLINE_E2EE_PASSWORD="+password)
-		}
-		launch.Env = append(launch.Env, sessionOriginEnvironment+"="+command.ID)
-		launch.Stdout = io.Discard
-		launch.Stderr = io.Discard
-		if err := launch.Run(); err != nil {
-			return fmt.Errorf("start %q: %w", command.Command, err)
-		}
-		return nil
-
-	case "kill":
-		if command.SessionID == "" {
-			return errors.New("no session to stop")
-		}
-		fmt.Fprintf(stdout, "  stop   %s\n", shortSessionID(command.SessionID))
-		launch := exec.CommandContext(ctx, self, "kill", shortSessionID(command.SessionID))
-		launch.Env = os.Environ()
-		launch.Stdout = io.Discard
-		launch.Stderr = io.Discard
-		if err := launch.Run(); err != nil {
-			return fmt.Errorf("stop %s: %w", shortSessionID(command.SessionID), err)
-		}
-		return nil
-
-	default:
-		return fmt.Errorf("unknown command %q", command.Kind)
-	}
-}
-
-// sleepOrDone waits, and reports false when the context ended first.
-func sleepOrDone(ctx context.Context, duration time.Duration) bool {
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
 }
 
 func printAgentCard(writer io.Writer, credentials account.Credentials) {

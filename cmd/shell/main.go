@@ -21,11 +21,35 @@ import (
 
 var version = "dev"
 
+// wantsDaemonRunning reports whether this command should bring the daemon up.
+//
+// The commands that decide the daemon's own fate are excluded: login starts it
+// once it knows the answer, logout stops it, and daemon is it.
+func wantsDaemonRunning(arguments []string) bool {
+	if len(arguments) == 0 {
+		return false
+	}
+	switch arguments[0] {
+	case "daemon", "login", "logout", "agent", "help", "--help", "-h", "--version":
+		return false
+	default:
+		return true
+	}
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(arguments []string, stdout, stderr io.Writer) int {
+	// A machine that agreed to remote starts should be reachable whenever its
+	// owner is using the tool, so any command is enough to bring the daemon
+	// back after a reboot. It costs a failed connect when there is nothing
+	// there, and does nothing at all unless someone has agreed to it.
+	if wantsDaemonRunning(arguments) {
+		ensureDaemon()
+	}
+
 	if exitCode, handled := runSessionCommand(arguments, stdout, stderr); handled {
 		return exitCode
 	}

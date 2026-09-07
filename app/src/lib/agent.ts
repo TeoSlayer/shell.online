@@ -2,17 +2,18 @@
 export const AGENT_ONLINE_MS = 15_000;
 
 export interface AgentLiveness {
-  /** When `shell agent` last asked the service for work. */
+  /** When this machine's daemon last asked the service for work. */
   agentSeenAt?: number;
 }
 
 /**
- * True while `shell agent` is polling on that machine.
+ * True while this machine is reachable from here.
  *
- * Only a polling agent can carry work out, so this deliberately ignores every
- * other sign of life: a machine that publishes sessions but runs no agent is
- * linked, not listening.
+ * A machine becomes reachable when someone agrees to it at `shell login`, and
+ * its daemon then polls for as long as it is signed in. This deliberately
+ * ignores every other sign of life: a machine that publishes sessions but
+ * whose owner did not agree to remote starts is linked, not reachable.
  */
-export function agentOnline(device: AgentLiveness, now = Date.now()): boolean {
+export function machineOnline(device: AgentLiveness, now = Date.now()): boolean {
   return typeof device.agentSeenAt === "number" && now - device.agentSeenAt < AGENT_ONLINE_MS;
 }

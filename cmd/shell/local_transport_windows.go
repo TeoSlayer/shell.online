@@ -55,7 +55,15 @@ func ensureLocalSessionDirectory() (string, error) {
 	return directory, nil
 }
 
+// localSessionDirectory holds this user's session records. The daemon's own
+// lock is the named pipe, not a file here.
+//
+// SHELL_ONLINE_RUNTIME_DIR overrides it so a test can have a machine to
+// itself, matching the unix build.
 func localSessionDirectory() (string, error) {
+	if override := os.Getenv("SHELL_ONLINE_RUNTIME_DIR"); override != "" {
+		return override, nil
+	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		return "", err

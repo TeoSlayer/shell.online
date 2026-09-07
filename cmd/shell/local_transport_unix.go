@@ -69,7 +69,17 @@ func ensureLocalSessionDirectory() (string, error) {
 	return directory, nil
 }
 
+// localSessionDirectory holds the control sockets for this user's sessions and
+// the daemon lock beside them.
+//
+// A fixed path, because every shell command has to find the same one without
+// being told. SHELL_ONLINE_RUNTIME_DIR overrides it so a test can have a
+// machine to itself: without that, two tests -- or a test and the daemon the
+// developer is actually running -- contend for one lock.
 func localSessionDirectory() (string, error) {
+	if override := os.Getenv("SHELL_ONLINE_RUNTIME_DIR"); override != "" {
+		return override, nil
+	}
 	return filepath.Join("/tmp", fmt.Sprintf("shell-online-%d", os.Getuid())), nil
 }
 

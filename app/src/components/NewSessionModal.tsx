@@ -10,7 +10,7 @@ import {
   type SessionKind,
 } from "../lib/session-kinds";
 import type { Device } from "../lib/api";
-import { agentOnline } from "../lib/agent";
+import { machineOnline } from "../lib/agent";
 
 interface NewSessionModalProps {
   devices: Device[];
@@ -59,7 +59,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
 
   const command = kind.build(values);
   const chosenMachine = devices.find((device) => device.id === machine);
-  const machineReady = chosenMachine ? agentOnline(chosenMachine) : false;
+  const machineReady = chosenMachine ? machineOnline(chosenMachine) : false;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -182,7 +182,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                   {devices.map((device) => (
                     <option key={device.id} value={device.id}>
                       {device.label}
-                      {agentOnline(device) ? "" : " (no agent)"}
+                      {machineOnline(device) ? "" : " (offline)"}
                     </option>
                   ))}
                 </select>
@@ -193,9 +193,9 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />
                 <span>
-                  The agent on <b>{chosenMachine.label}</b> is an older build
-                  that cannot receive a password. Restart <code>shell agent</code>{" "}
-                  there, or the session will ask for one you cannot see.
+                  <b>{chosenMachine.label}</b> is running an older build that
+                  cannot receive a password. Update shell there, or the session
+                  will ask for one you cannot see.
                 </span>
               </p>
             )}
@@ -204,8 +204,9 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />
                 <span>
-                  No agent is listening on <b>{chosenMachine.label}</b>. Run{" "}
-                  <code>shell agent</code> there, and this will light up.
+                  <b>{chosenMachine.label}</b> is not reachable. Sign in there
+                  with <code>shell login</code> and allow browser-started
+                  sessions, and this will light up.
                 </span>
               </p>
             )}
@@ -234,7 +235,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
 
             {devices.length === 0 && (
               <p className="sheet-help">
-                No linked machine is available. Run <code>shell agent</code> on one.
+                No linked machine is available. Run <code>shell login</code> on one.
               </p>
             )}
           </form>

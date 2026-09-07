@@ -18,6 +18,14 @@ type Credentials struct {
 	UID          string    `json:"uid"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name,omitempty"`
+
+	// RemoteStart records that the person agreed, on this machine, to let
+	// their signed-in browser start processes here.
+	//
+	// Absent means they have not. Only agreement is remembered: declining is
+	// not a decision worth holding someone to, so the next login asks again,
+	// while agreeing is never asked about twice.
+	RemoteStart bool `json:"remote_start,omitempty"`
 }
 
 // ErrNotLinked reports that no account has been linked on this machine.
