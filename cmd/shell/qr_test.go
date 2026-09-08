@@ -46,8 +46,11 @@ func TestTerminalQRCodeIsCompact(t *testing.T) {
 	if len(lines) > 30 {
 		t.Fatalf("terminal QR is %d rows high", len(lines))
 	}
-	if !strings.Contains(rendered, "▀") || !strings.Contains(rendered, "▄") || !strings.Contains(rendered, "\x1b[47m") {
+	if !strings.Contains(rendered, "█") || !strings.Contains(rendered, "▀") || !strings.Contains(rendered, "▄") || !strings.Contains(rendered, "\x1b[30;107m") {
 		t.Fatalf("terminal QR lacks half blocks or explicit colours")
+	}
+	if sequences := strings.Count(rendered, "\x1b["); sequences != len(lines)*2 {
+		t.Fatalf("terminal QR emitted %d ANSI sequences for %d rows", sequences, len(lines))
 	}
 }
 

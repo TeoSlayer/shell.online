@@ -1,6 +1,6 @@
 {
   "name": "shell-online",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Turn any terminal process into a collaborative browser link.",
   "private": true,
   "license": "MIT",
@@ -23,7 +23,7 @@
     "deploy:production": "sh ./scripts/deploy-production.sh",
     "verify:downloads": "node ./scripts/verify-downloads.mjs",
     "check": "npm run typecheck && npm test",
-    "test": "vitest run && node --test .github/scripts/moderation.node.mjs && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs && node ./scripts/check-formula.mjs",
+    "test": "vitest run && node --test .github/scripts/moderation.node.mjs && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs && node ./scripts/test-mobile-controls.mjs && node ./scripts/check-formula.mjs",
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
     "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test:app": "npm --prefix app ci && npm --prefix app test"

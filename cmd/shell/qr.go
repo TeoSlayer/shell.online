@@ -46,19 +46,22 @@ func terminalQRCode(content string) (string, error) {
 
 	var rendered strings.Builder
 	for topRow := 0; topRow < len(bitmap); topRow += 2 {
-		rendered.WriteString("  ")
+		// One foreground/background pair per row avoids making slower terminals
+		// visibly repaint the QR one module at a time. The glyphs themselves
+		// carry both vertical modules while the palette stays fixed.
+		rendered.WriteString("  \x1b[30;107m")
 		for column := range bitmap[topRow] {
 			top := bitmap[topRow][column]
 			bottom := topRow+1 < len(bitmap) && bitmap[topRow+1][column]
 			switch {
 			case top && bottom:
-				rendered.WriteString("\x1b[40m ")
+				rendered.WriteRune('█')
 			case top:
-				rendered.WriteString("\x1b[30;47m▀")
+				rendered.WriteRune('▀')
 			case bottom:
-				rendered.WriteString("\x1b[30;47m▄")
+				rendered.WriteRune('▄')
 			default:
-				rendered.WriteString("\x1b[47m ")
+				rendered.WriteByte(' ')
 			}
 		}
 		rendered.WriteString("\x1b[0m\n")

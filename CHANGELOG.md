@@ -4,6 +4,13 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.10.1] — 2026-09-08
+
+### Fixed
+
+- Render terminal QR codes with one color transition per row instead of one per module, eliminating visible repaint noise and reducing their ANSI payload by roughly an order of magnitude.
+- Give every mobile terminal navigation key a full 44-pixel touch target with more legible labels.
+
 ## [0.10.0] — 2026-09-08
 
 ### Added
