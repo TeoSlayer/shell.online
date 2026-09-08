@@ -219,6 +219,11 @@ describe("session lifecycle", () => {
     await new Promise((resolve) => setTimeout(resolve, 900));
     expect(FakeSocket.created).toBe(2);
     expect(recorded.statuses.at(-1)?.status).toBe("full");
+
+    FakeSocket.last!.opened();
+    expect(recorded.statuses.at(-1)?.status).toBe("full");
+    FakeSocket.last!.control({ type: "welcome" });
+    expect(recorded.statuses.at(-1)?.status).toBe("connected");
   });
 
   it("reports exit from a control message", async () => {

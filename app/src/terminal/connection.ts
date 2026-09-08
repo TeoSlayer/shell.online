@@ -159,12 +159,17 @@ export class TerminalConnection {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
-      this.waitingForCapacity = false;
-      this.retryAttempt = 0;
-      this.options.events.onStatus("connected");
+      // A deliberately rejected capacity socket still reaches "open" before
+      // its 4005 close. Keep the honest waiting state until the relay sends a
+      // real session message proving this retry was admitted.
+      if (!this.waitingForCapacity) {
+        this.retryAttempt = 0;
+        this.options.events.onStatus("connected");
+      }
     });
 
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
+      this.markAdmitted();
       if (typeof event.data === "string") {
         this.handleControl(event.data);
         return;
@@ -200,6 +205,13 @@ export class TerminalConnection {
       this.options.events.onStatus("disconnected");
       this.scheduleRetry();
     });
+  }
+
+  private markAdmitted(): void {
+    if (!this.waitingForCapacity) return;
+    this.waitingForCapacity = false;
+    this.retryAttempt = 0;
+    this.options.events.onStatus("connected");
   }
 
   private async handleFrame(received: Uint8Array): Promise<void> {
