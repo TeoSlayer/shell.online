@@ -98,7 +98,7 @@ func startDaemonCommand(stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "Run 'shell login --allow-remote-start' to change that.")
 			return 1
 		}
-		if !askRemoteStart(os.Stdin, stderr, credentials.Email) {
+		if !askRemoteStart(os.Stdin, stderr, credentials.Email, credentials.RemoteStart) {
 			fmt.Fprintln(stdout, "Left as publish-only.")
 			return 1
 		}

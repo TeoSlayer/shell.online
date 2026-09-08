@@ -163,7 +163,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		interactiveTerminal(stderr),
 	)
 	if ask {
-		grant = askRemoteStart(os.Stdin, stderr, credentials.Email)
+		grant = askRemoteStart(os.Stdin, stderr, credentials.Email, alreadyGranted)
 	}
 	credentials.RemoteStart = grant
 

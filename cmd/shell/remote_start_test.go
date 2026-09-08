@@ -13,12 +13,20 @@ func TestDecideRemoteStartAsksWhenNothingIsKnown(t *testing.T) {
 	}
 }
 
-// Agreeing is remembered. Being asked every time trains people to say yes
-// without reading, which is the opposite of consent.
-func TestDecideRemoteStartNeverAsksAgainOnceGranted(t *testing.T) {
+// The question is put on every interactive login, including when the answer is
+// already yes.
+//
+// It used to be asked once and never again, which left --allow-remote-start as
+// the only way to reach a decision anyone had already made, and no way at all
+// to find it if they had missed the question. The previous answer is the
+// default, so agreeing again is one keystroke.
+func TestDecideRemoteStartAsksAgainEvenOnceGranted(t *testing.T) {
 	grant, ask := decideRemoteStart(true, remoteStartFlags{}, true)
-	if !grant || ask {
-		t.Fatalf("a granted machine should not be asked again, got grant=%v ask=%v", grant, ask)
+	if !ask {
+		t.Fatal("a machine that already agreed should still be asked")
+	}
+	if !grant {
+		t.Fatal("the standing answer should be the default offered")
 	}
 }
 
@@ -61,14 +69,14 @@ func TestDecideRemoteStartKeepsAGrantWithoutATerminal(t *testing.T) {
 func TestAskRemoteStartAcceptsOnlyAnExplicitYes(t *testing.T) {
 	for _, answer := range []string{"y\n", "Y\n", "yes\n", "YES\n", " y \n"} {
 		var output bytes.Buffer
-		if !askRemoteStart(strings.NewReader(answer), &output, "ana@example.com") {
+		if !askRemoteStart(strings.NewReader(answer), &output, "ana@example.com", false) {
 			t.Fatalf("%q should have been taken as yes", answer)
 		}
 	}
 	// Enter on its own is the common case of not reading the question.
 	for _, answer := range []string{"\n", "n\n", "no\n", "sure\n", "ok\n", ""} {
 		var output bytes.Buffer
-		if askRemoteStart(strings.NewReader(answer), &output, "ana@example.com") {
+		if askRemoteStart(strings.NewReader(answer), &output, "ana@example.com", false) {
 			t.Fatalf("%q should not have been taken as yes", answer)
 		}
 	}
@@ -78,7 +86,7 @@ func TestAskRemoteStartAcceptsOnlyAnExplicitYes(t *testing.T) {
 // access?" would be true and useless.
 func TestAskRemoteStartSaysWhatItGrants(t *testing.T) {
 	var output bytes.Buffer
-	askRemoteStart(strings.NewReader("n\n"), &output, "ana@example.com")
+	askRemoteStart(strings.NewReader("n\n"), &output, "ana@example.com", false)
 	text := output.String()
 	for _, phrase := range []string{"ana@example.com", "start processes", "without touching this terminal"} {
 		if !strings.Contains(text, phrase) {
@@ -101,5 +109,33 @@ func TestWantsDaemonRunning(t *testing.T) {
 	}
 	if wantsDaemonRunning(nil) {
 		t.Fatal("no arguments should not bring the daemon up")
+	}
+}
+
+// Enter keeps whatever is already true, in both directions.
+//
+// A machine that has never agreed must not be granted by somebody pressing
+// enter without reading, and a machine that has agreed must not lose it the
+// same way. That is the whole reason the default follows the current answer
+// rather than being fixed.
+func TestAskRemoteStartTreatsEnterAsLeaveItAlone(t *testing.T) {
+	for _, current := range []bool{false, true} {
+		var output bytes.Buffer
+		if got := askRemoteStart(strings.NewReader("\n"), &output, "ana@example.com", current); got != current {
+			t.Fatalf("enter with current=%v returned %v; it should change nothing", current, got)
+		}
+	}
+}
+
+// The prompt shows which way enter will go.
+func TestAskRemoteStartShowsTheStandingAnswerAsTheDefault(t *testing.T) {
+	var granted, fresh bytes.Buffer
+	askRemoteStart(strings.NewReader("\n"), &granted, "ana@example.com", true)
+	askRemoteStart(strings.NewReader("\n"), &fresh, "ana@example.com", false)
+	if !strings.Contains(granted.String(), "[Y/n]") {
+		t.Fatalf("a machine that agreed should offer [Y/n], got: %s", granted.String())
+	}
+	if !strings.Contains(fresh.String(), "[y/N]") {
+		t.Fatalf("a machine that has not agreed should offer [y/N], got: %s", fresh.String())
 	}
 }
