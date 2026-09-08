@@ -25,6 +25,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 ### Fixed
 
 - Point `shell login` at the deployment that serves it. The accounts address had never resolved, and the approval screen resolved to the marketing site, so either would have failed on the first release carrying the command.
+- Update `golang.org/x/crypto` to a patched release. The Windows binaries linked its SSH package, reached through the PTY library, and so carried thirteen advisories including seven rated critical. No shell.online code path called into it, and the other platforms never linked it at all.
 
 ## [0.8.1] — 2026-09-04
 

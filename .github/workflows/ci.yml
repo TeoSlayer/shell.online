@@ -185,6 +185,28 @@ jobs:
           go-version-file: go.mod
           go-package: ./...
 
+      # The step above analyses the Linux build. Imports differ by platform:
+      # the PTY library pulls in golang.org/x/crypto/ssh on Windows and on no
+      # other target, so a whole dependency tree ships to users without ever
+      # being looked at here. Analysed rather than built, so this needs no
+      # Windows runner.
+      #
+      # govulncheck reports what the code actually calls. A module that is
+      # linked but never entered stays quiet here and is still worth updating,
+      # which is what Dependabot is for; the two answer different questions.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check the Windows build for reachable vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          GOOS=windows GOARCH=amd64 "$(go env GOPATH)/bin/govulncheck" ./...
+
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 15
