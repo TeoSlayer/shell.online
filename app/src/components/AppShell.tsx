@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
-  Terminal, Desktop, User, UsersThree, SignOut, Copy, Check,
+  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check,
 } from "@phosphor-icons/react";
 import { Inbox } from "./Inbox";
 import { Avatar } from "./Avatar";
@@ -11,6 +11,7 @@ import { useAuth } from "../auth/AuthProvider";
 const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
   { to: "/machines", label: "Machines", Icon: Desktop },
+  { to: "/audit", label: "Audit log", Icon: ClockCounterClockwise },
   { to: "/organization", label: "Organization", Icon: UsersThree },
   { to: "/account", label: "Account", Icon: User },
 ] as const;
