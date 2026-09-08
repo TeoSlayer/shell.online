@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { createAccountsServer } from "./app";
-import { ConfigError, readConfig, type Config } from "./lib/config";
+import { ConfigError, readConfig, withoutCredentials, type Config } from "./lib/config";
 import { createVerifier } from "./lib/firebase-token";
 import { createMailer } from "./lib/mail";
 import { relayProxy } from "./lib/relay-proxy";
@@ -105,11 +105,19 @@ server.on("error", (error: NodeJS.ErrnoException) => {
 });
 
 server.listen(config.port, config.host, () => {
-  const backing = config.databaseUrl ? "postgres" : config.dataFile;
-  const serving = config.clientDir ? `client ${config.clientDir}, relay ${config.relayUrl}` : "api only";
+  /*
+   * Names what is configured, never the values. The data file path can carry a
+   * home directory, and any of these URLs may carry credentials, so the line
+   * says which store and which relay in the abstract and leaves the rest to
+   * whoever set them.
+   */
+  const backing = config.databaseUrl ? "postgres" : "file";
+  const serving = config.clientDir
+    ? `client, relay ${withoutCredentials(config.relayUrl)}`
+    : "api only";
   console.log(
-    `accounts: http://${config.host}:${config.port} ` +
-      `(project ${config.projectId}, web ${config.webOrigin}, store ${backing}, ${serving})`,
+    `accounts: listening on ${config.host}:${config.port} ` +
+      `(web ${withoutCredentials(config.webOrigin)}, store ${backing}, ${serving})`,
   );
 });
 

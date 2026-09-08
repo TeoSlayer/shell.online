@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, readConfig } from "./config";
+import { ConfigError, readConfig, withoutCredentials } from "./config";
 
 /**
  * A container that is going to fail should fail while it is starting, with a
@@ -79,5 +79,41 @@ describe("readConfig", () => {
   it("treats a blank variable as absent rather than as a value", () => {
     expect(readConfig({ ...MINIMAL, DATABASE_URL: "   " }).databaseUrl).toBeUndefined();
     expect(readConfig({ ...MINIMAL, CLIENT_DIR: "" }).clientDir).toBeUndefined();
+  });
+});
+
+describe("withoutCredentials", () => {
+  /*
+   * A URL may carry a username and password. Several of these settings are
+   * URLs an operator supplies, and a startup line often ends up in a log an
+   * aggregator keeps for a year.
+   */
+  it("strips userinfo from a URL", () => {
+    expect(withoutCredentials("postgres://app:s3cret@10.0.0.4:5432/shell")).toBe("postgres://***@10.0.0.4:5432");
+    expect(withoutCredentials("https://user@relay.example.com")).toBe("https://***@relay.example.com");
+  });
+
+  it("keeps a URL that carries none of it readable", () => {
+    expect(withoutCredentials("https://app.shell.online")).toBe("https://app.shell.online");
+    expect(withoutCredentials("http://127.0.0.1:8788")).toBe("http://127.0.0.1:8788");
+  });
+
+  /* Saying nothing beats guessing what an unparseable value holds. */
+  it("says only that something is set when it is not a URL", () => {
+    expect(withoutCredentials("/srv/data/accounts.json")).toBe("set");
+    expect(withoutCredentials(undefined)).toBe("none");
+    expect(withoutCredentials("")).toBe("none");
+  });
+
+  it("never echoes a password back, whatever the shape", () => {
+    for (const value of [
+      "postgres://u:p@h/db",
+      "https://:onlypassword@h",
+      "redis://user:pa$$w0rd@h:6379",
+    ]) {
+      const printed = withoutCredentials(value);
+      expect(printed).not.toContain("p@");
+      expect(printed).not.toMatch(/onlypassword|pa\$\$w0rd|:p@/);
+    }
   });
 });

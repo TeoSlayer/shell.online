@@ -43,6 +43,27 @@ export interface Config {
 
 export class ConfigError extends Error {}
 
+/**
+ * A URL with any credentials taken out, for printing.
+ *
+ * A URL is allowed to carry a username and password, and several of these
+ * settings are URLs an operator supplies. Echoing one back into the startup
+ * line, or into a log an aggregator keeps for a year, would publish a
+ * credential nobody meant to share. The host is the useful part; the userinfo
+ * never is.
+ */
+export function withoutCredentials(value: string | undefined): string {
+  if (!value) return "none";
+  try {
+    const url = new URL(value);
+    if (!url.username && !url.password) return `${url.protocol}//${url.host}${url.pathname === "/" ? "" : url.pathname}`;
+    return `${url.protocol}//***@${url.host}`;
+  } catch {
+    /* Not a URL. Say nothing about it rather than guess what it holds. */
+    return "set";
+  }
+}
+
 function required(env: NodeJS.ProcessEnv, ...names: string[]): string {
   for (const name of names) {
     const value = env[name]?.trim();
