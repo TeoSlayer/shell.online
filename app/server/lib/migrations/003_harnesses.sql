@@ -1,0 +1,13 @@
+-- What the agent on a machine found on its PATH.
+--
+-- The browser offers to start Claude Code, Codex, Hermes and OpenClaw on a
+-- linked machine, and until now had no way to tell whether any of them were
+-- there. The polling agent looks, and reports the ids it found; the service
+-- keeps only ids it recognises, so this column never holds a string a client
+-- invented.
+--
+-- Nullable, and distinct from an empty array on purpose. NULL means the
+-- machine has never reported -- an older CLI, or one that has not polled since
+-- it was linked -- and the browser stays quiet about it. '{}' means the agent
+-- looked and found none, which the browser may act on.
+ALTER TABLE cli_tokens ADD COLUMN IF NOT EXISTS harnesses TEXT[];

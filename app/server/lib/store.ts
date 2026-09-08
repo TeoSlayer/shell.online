@@ -44,7 +44,17 @@ export interface Store {
    */
   deviceForMachine(uid: string, machineId: string): Promise<CliToken | null>;
   setMemberKey(uid: string, publicKey: string): Promise<void>;
-  markAgentSeen(id: string, publicKey?: string, now?: number): Promise<void>;
+  /**
+   * Records a poll. `harnesses` left undefined keeps whatever the machine
+   * reported last, so an older CLI that does not send them does not erase
+   * them; an empty array is a report of none and does replace it.
+   */
+  markAgentSeen(
+    id: string,
+    publicKey?: string,
+    harnesses?: string[],
+    now?: number,
+  ): Promise<void>;
   listDevices(uid: string): Promise<Device[]>;
   revokeDevice(uid: string, id: string, now?: number): Promise<boolean>;
 

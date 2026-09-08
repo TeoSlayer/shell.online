@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -368,5 +369,75 @@ func TestRegisterSessionPublishesAWorkingEncryptedLink(t *testing.T) {
 	shareURL, _ := body["share_url"].(string)
 	if !strings.Contains(shareURL, "#salt=") {
 		t.Fatalf("the published link cannot be opened without the salt: %q", shareURL)
+	}
+}
+
+func TestPollCommandsPublishesTheKeyAndTheHarnesses(t *testing.T) {
+	var query url.Values
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			query = request.URL.Query()
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"commands": []map[string]string{{"id": "cmd_1", "kind": "start", "command": "htop"}},
+			})
+		}))
+	defer service.Close()
+
+	commands, err := NewClient(service.URL, "test").PollCommands(
+		context.Background(), "sha_token", "AGENT_KEY", []string{"claude-code", "openclaw"})
+	if err != nil {
+		t.Fatalf("PollCommands: %v", err)
+	}
+	if len(commands) != 1 || commands[0].ID != "cmd_1" {
+		t.Fatalf("commands = %+v", commands)
+	}
+	if got := query.Get("key"); got != "AGENT_KEY" {
+		t.Fatalf("key = %q", got)
+	}
+	if got := query.Get("harnesses"); got != "claude-code,openclaw" {
+		t.Fatalf("harnesses = %q", got)
+	}
+}
+
+// A machine with none of them installed still says so. Sending nothing would
+// leave the browser unable to tell "reported none" from "never reported".
+func TestPollCommandsReportsAnEmptyHarnessList(t *testing.T) {
+	var query url.Values
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			query = request.URL.Query()
+			writeJSON(writer, http.StatusOK, map[string]any{})
+		}))
+	defer service.Close()
+
+	if _, err := NewClient(service.URL, "test").PollCommands(
+		context.Background(), "sha_token", "", []string{}); err != nil {
+		t.Fatalf("PollCommands: %v", err)
+	}
+	if _, ok := query["harnesses"]; !ok {
+		t.Fatalf("query = %v, want an empty harnesses parameter", query)
+	}
+	if got := query.Get("harnesses"); got != "" {
+		t.Fatalf("harnesses = %q, want empty", got)
+	}
+}
+
+// An older caller that knows nothing about harnesses sends no parameter at
+// all, which the service leaves alone rather than recording as "none".
+func TestPollCommandsOmitsHarnessesWhenNoneWereDetected(t *testing.T) {
+	var raw string
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			raw = request.URL.RawQuery
+			writeJSON(writer, http.StatusOK, map[string]any{})
+		}))
+	defer service.Close()
+
+	if _, err := NewClient(service.URL, "test").PollCommands(
+		context.Background(), "sha_token", "", nil); err != nil {
+		t.Fatalf("PollCommands: %v", err)
+	}
+	if strings.Contains(raw, "harnesses") {
+		t.Fatalf("query = %q, want no harnesses parameter", raw)
 	}
 }

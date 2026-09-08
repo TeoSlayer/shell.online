@@ -261,13 +261,45 @@ for (const implementation of implementations) {
 
       it("records an agent poll separately from any authenticated call", async () => {
         await store.putToken(token());
-        await store.markAgentSeen("dev_1", "pub-key", 7000);
+        await store.markAgentSeen("dev_1", "pub-key", undefined, 7000);
         const [device] = await store.listDevices("uid-1");
         expect(device.agentSeenAt).toBe(7000);
         expect(device.agentPublicKey).toBe("pub-key");
         /* A later poll without a key keeps the one already published. */
-        await store.markAgentSeen("dev_1", undefined, 8000);
+        await store.markAgentSeen("dev_1", undefined, undefined, 8000);
         expect((await store.listDevices("uid-1"))[0].agentPublicKey).toBe("pub-key");
+      });
+
+      it("keeps the harnesses a polling agent reported", async () => {
+        await store.putToken(token());
+        /* Nothing reported yet is not a claim that the machine has none. */
+        expect((await store.listDevices("uid-1"))[0].harnesses).toBeUndefined();
+
+        await store.markAgentSeen("dev_1", "pub-key", ["claude-code", "openclaw"], 7000);
+        expect((await store.listDevices("uid-1"))[0].harnesses).toEqual([
+          "claude-code",
+          "openclaw",
+        ]);
+
+        /* A poll that carries no list leaves the last report standing. */
+        await store.markAgentSeen("dev_1", undefined, undefined, 8000);
+        expect((await store.listDevices("uid-1"))[0].harnesses).toEqual([
+          "claude-code",
+          "openclaw",
+        ]);
+
+        /* One that carries an empty list is a report of none, and replaces it. */
+        await store.markAgentSeen("dev_1", undefined, [], 9000);
+        expect((await store.listDevices("uid-1"))[0].harnesses).toEqual([]);
+      });
+
+      it("scopes a harness report to the device that sent it", async () => {
+        await store.putToken(token());
+        await store.putToken(token({ id: "dev_2", accessHash: "a2", refreshHash: "r2" }));
+        await store.markAgentSeen("dev_2", undefined, ["codex"], 7000);
+        const devices = await store.listDevices("uid-1");
+        expect(devices.find((device) => device.id === "dev_2")?.harnesses).toEqual(["codex"]);
+        expect(devices.find((device) => device.id === "dev_1")?.harnesses).toBeUndefined();
       });
 
       it("ignores an unknown id", async () => {

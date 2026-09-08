@@ -62,6 +62,7 @@ const TOKEN_COLUMNS: Record<string, string> = {
   lastSeenAt: "last_seen_at",
   agentSeenAt: "agent_seen_at",
   agentPublicKey: "agent_public_key",
+  harnesses: "harnesses",
   revokedAt: "revoked_at",
 };
 
@@ -136,6 +137,7 @@ function toToken(row: Row): CliToken {
     lastSeenAt: row.last_seen_at,
     agentSeenAt: row.agent_seen_at,
     agentPublicKey: row.agent_public_key,
+    harnesses: row.harnesses,
     revokedAt: row.revoked_at,
   }) as unknown as CliToken;
 }
@@ -436,8 +438,9 @@ export class PostgresStore implements Store {
     await this.pool.query(
       `INSERT INTO cli_tokens
          (id, access_hash, refresh_hash, uid, email, name, label, machine_id,
-          access_expires_at, created_at, last_seen_at, agent_seen_at, agent_public_key, revoked_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+          access_expires_at, created_at, last_seen_at, agent_seen_at, agent_public_key,
+          harnesses, revoked_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
       [
         token.id,
         token.accessHash,
@@ -452,6 +455,7 @@ export class PostgresStore implements Store {
         token.lastSeenAt,
         token.agentSeenAt ?? null,
         token.agentPublicKey ?? null,
+        token.harnesses ?? null,
         token.revokedAt ?? null,
       ],
     );
@@ -512,18 +516,32 @@ export class PostgresStore implements Store {
     await this.pool.query("UPDATE memberships SET public_key = $2 WHERE uid = $1", [uid, publicKey]);
   }
 
-  async markAgentSeen(id: string, publicKey?: string, now = Date.now()): Promise<void> {
+  /*
+   * COALESCE on both published fields, so a poll that carries neither -- an
+   * older CLI, or one that has not re-keyed -- records the visit without
+   * erasing what the machine said last. An empty harness list is not null, so
+   * a machine that reports none does overwrite.
+   */
+  async markAgentSeen(
+    id: string,
+    publicKey?: string,
+    harnesses?: string[],
+    now = Date.now(),
+  ): Promise<void> {
     await this.pool.query(
       `UPDATE cli_tokens
-       SET agent_seen_at = $2, agent_public_key = COALESCE($3, agent_public_key)
+       SET agent_seen_at = $2,
+           agent_public_key = COALESCE($3, agent_public_key),
+           harnesses = COALESCE($4::text[], harnesses)
        WHERE id = $1`,
-      [id, now, publicKey ?? null],
+      [id, now, publicKey ?? null, harnesses ?? null],
     );
   }
 
   async listDevices(uid: string): Promise<Device[]> {
     const rows = await this.rows(
-      `SELECT id, label, created_at, last_seen_at, agent_seen_at, agent_public_key, revoked_at
+      `SELECT id, label, created_at, last_seen_at, agent_seen_at, agent_public_key,
+              harnesses, revoked_at
        FROM cli_tokens WHERE uid = $1 AND revoked_at IS NULL ORDER BY created_at DESC, id COLLATE "C" DESC`,
       [uid],
     );
@@ -536,6 +554,7 @@ export class PostgresStore implements Store {
           lastSeenAt: row.last_seen_at,
           agentSeenAt: row.agent_seen_at,
           agentPublicKey: row.agent_public_key,
+          harnesses: row.harnesses,
           revokedAt: row.revoked_at,
         }) as unknown as Device,
     );

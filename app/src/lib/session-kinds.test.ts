@@ -22,12 +22,16 @@ describe("the catalogue", () => {
     }
   });
 
-  it("marks which flag sets were read from the tool itself", () => {
-    /* claude and openclaw are installed here; the other two are not. */
-    expect(claude.verified).toBe(true);
-    expect(openclaw.verified).toBe(true);
-    expect(codex.verified).toBe(false);
-    expect(hermes.verified).toBe(false);
+  it("marks which flag sets came from a published interface rather than --help", () => {
+    /*
+     * A property of how each builder was written, not of any machine. What a
+     * given machine can actually run is reported by its agent; see
+     * harnessMissing.
+     */
+    expect(claude.flagsFromPublishedInterface).toBeFalsy();
+    expect(openclaw.flagsFromPublishedInterface).toBeFalsy();
+    expect(codex.flagsFromPublishedInterface).toBe(true);
+    expect(hermes.flagsFromPublishedInterface).toBe(true);
   });
 });
 

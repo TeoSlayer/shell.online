@@ -45,6 +45,11 @@ func (loop *agentLoop) run(ctx context.Context) error {
 		return err
 	}
 	client := account.NewClient(loop.credentials.Server, "shell/"+version)
+	// Detected once per run, not once per poll. Which agent tools are on PATH
+	// does not change while the daemon is up in any way worth a filesystem
+	// search every two seconds, and restarting re-detects -- the same
+	// granularity the agent key above already has.
+	harnesses := installedHarnesses()
 
 	for {
 		if loop.credentials.Expired(time.Now()) {
@@ -65,7 +70,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 			}
 		}
 
-		commands, pollErr := client.PollCommands(ctx, loop.credentials.AccessToken, agentKey.PublicKey())
+		commands, pollErr := client.PollCommands(ctx, loop.credentials.AccessToken, agentKey.PublicKey(), harnesses)
 		if pollErr != nil {
 			if ctx.Err() != nil {
 				return nil

@@ -38,6 +38,14 @@ export interface CliToken {
   agentSeenAt?: number;
   /** Published by a running agent so a browser can seal a password to it. */
   agentPublicKey?: string;
+  /**
+   * The agent harnesses the polling agent found on this machine's PATH.
+   *
+   * Absent means the machine has never reported, which is not the same as
+   * reporting none: the browser may say a tool is missing from a machine only
+   * when that machine has said so itself.
+   */
+  harnesses?: string[];
   revokedAt?: number;
 }
 
@@ -49,6 +57,8 @@ export interface Device {
   lastSeenAt: number;
   agentSeenAt?: number;
   agentPublicKey?: string;
+  /** What the agent reported finding on PATH; absent until it has reported. */
+  harnesses?: string[];
   revokedAt?: number;
 }
 

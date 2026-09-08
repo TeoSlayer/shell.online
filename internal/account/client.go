@@ -255,16 +255,30 @@ type AgentCommand struct {
 }
 
 // PollCommands claims everything queued for this machine, publishing the key
-// a browser should seal a password to.
+// a browser should seal a password to and the agent harnesses installed here.
 //
 // Claiming happens server-side in the same step as the read, so two agents on
 // one machine cannot both run the same command.
+//
+// harnesses rides along on the poll rather than getting an endpoint of its
+// own: it is only useful while a machine is reachable, which is exactly the
+// window in which it is polling. It is joined with commas because this request
+// goes out every two seconds and the ids are short and few.
 func (client *Client) PollCommands(
-	ctx context.Context, accessToken, agentPublicKey string,
+	ctx context.Context, accessToken, agentPublicKey string, harnesses []string,
 ) ([]AgentCommand, error) {
 	path := "/api/agent/commands"
+	query := url.Values{}
 	if agentPublicKey != "" {
-		path += "?key=" + url.QueryEscape(agentPublicKey)
+		query.Set("key", agentPublicKey)
+	}
+	if harnesses != nil {
+		// An empty value still says "this machine reported, and has none of
+		// them", which the browser must not read as "not known yet".
+		query.Set("harnesses", strings.Join(harnesses, ","))
+	}
+	if len(query) > 0 {
+		path += "?" + query.Encode()
 	}
 	contents, err := client.do(ctx, http.MethodGet, path, accessToken, nil)
 	if err != nil {

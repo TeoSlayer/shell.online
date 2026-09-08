@@ -212,12 +212,19 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  /** Records that `shell agent` is polling, and the key it publishes. */
-  async markAgentSeen(id: string, publicKey?: string, now = Date.now()): Promise<void> {
+  /** Records that `shell agent` is polling, and what it publishes about itself. */
+  async markAgentSeen(
+    id: string,
+    publicKey?: string,
+    harnesses?: string[],
+    now = Date.now(),
+  ): Promise<void> {
     const token = this.data.tokens.find((entry) => entry.id === id);
     if (!token) return;
     token.agentSeenAt = now;
     if (publicKey) token.agentPublicKey = publicKey;
+    /* An empty report is still a report, so this tests for absence only. */
+    if (harnesses) token.harnesses = [...harnesses];
     this.flush();
   }
 
@@ -226,13 +233,14 @@ export class MemoryStore implements Store {
     return this.data.tokens
       .filter((entry) => entry.uid === uid && !entry.revokedAt)
       .sort(byTime<CliToken>((t) => t.createdAt, (t) => t.id, true))
-      .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, agentPublicKey, revokedAt }) => ({
+      .map(({ id, label, createdAt, lastSeenAt, agentSeenAt, agentPublicKey, harnesses, revokedAt }) => ({
         id,
         label,
         createdAt,
         lastSeenAt,
         agentSeenAt,
         agentPublicKey,
+        harnesses,
         revokedAt,
       }));
   }

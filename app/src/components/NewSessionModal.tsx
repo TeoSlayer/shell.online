@@ -11,6 +11,7 @@ import {
 } from "../lib/session-kinds";
 import type { Device } from "../lib/api";
 import { machineOnline } from "../lib/agent";
+import { harnessMissing } from "../lib/harnesses";
 
 interface NewSessionModalProps {
   devices: Device[];
@@ -160,13 +161,13 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
               </div>
             ))}
 
-            {!kind.verified && (
+            {kind.flagsFromPublishedInterface && (
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />
                 <span>
-                  {kind.title} is not installed on this machine, so these flags come
-                  from its published interface rather than its own help. Check the
-                  command below before starting.
+                  These flags come from the published interface for {kind.title}
+                  rather than from its own help output, so check the command
+                  below before starting.
                 </span>
               </p>
             )}
@@ -188,6 +189,17 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                   ))}
                 </select>
               </div>
+            )}
+
+            {chosenMachine && harnessMissing(kind.id, chosenMachine) && (
+              <p className="sheet-note">
+                <Warning size={14} weight="fill" />
+                <span>
+                  {kind.title} was not found on <b>{chosenMachine.label}</b>. The
+                  command will still be sent, and will fail there if the tool is
+                  not installed.
+                </span>
+              </p>
             )}
 
             {chosenMachine && machineReady && !chosenMachine.agentPublicKey && (

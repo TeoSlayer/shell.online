@@ -116,6 +116,30 @@ const SECURITY_HEADERS: Record<string, string> = {
 /* An agent polls every 2s, so this is generous enough to survive a hiccup. */
 export const AGENT_ONLINE_MS = 15_000;
 
+/*
+ * The agent harnesses a machine may report having. The same ids appear in the
+ * CLI's detection table and in the browser's session catalogue; keeping the
+ * accepted set here means a machine cannot make this service store a string
+ * nobody asked for, and that a harness added to one side is dropped until it
+ * is added to all three.
+ */
+const KNOWN_HARNESSES = new Set(["claude-code", "codex", "hermes", "openclaw"]);
+
+/**
+ * The harnesses a polling agent claims, keeping only the recognised ones.
+ *
+ * Returns undefined when the agent said nothing at all, which the store reads
+ * as "leave the last report alone". An agent that reports only unknown ids has
+ * still reported, so the answer is an empty list rather than silence: the
+ * browser can then say a tool is absent, which is what the machine claimed.
+ */
+function readHarnesses(url: URL): string[] | undefined {
+  const raw = url.searchParams.getAll("harnesses");
+  if (raw.length === 0) return undefined;
+  const named = raw.flatMap((value) => value.split(",")).map((id) => id.trim());
+  return [...new Set(named.filter((id) => KNOWN_HARNESSES.has(id)))].sort();
+}
+
 function readBody(request: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -669,7 +693,11 @@ export function createApp(options: AppOptions) {
         const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         /* The agent publishes its key on every poll, so a restart re-keys. */
-        await store.markAgentSeen(token.id, url.searchParams.get("key") ?? undefined);
+        await store.markAgentSeen(
+          token.id,
+          url.searchParams.get("key") ?? undefined,
+          readHarnesses(url),
+        );
         return send(response, 200, { commands: await store.claimCommands(token.id) });
       }
 

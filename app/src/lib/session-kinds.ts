@@ -28,8 +28,15 @@ export interface SessionKind {
   /** Shown under the form so the command is never a surprise. */
   build(values: FieldValues): string;
   fields: Field[];
-  /** True when the flags were read from the tool's own --help on this machine. */
-  verified: boolean;
+  /**
+   * True when this flag set was taken from the tool's published interface
+   * rather than read from its own --help.
+   *
+   * A fact about how the builder above was written, fixed when it was written.
+   * It says nothing about any machine: whether a machine can run the tool is
+   * reported by the agent on it, and read through harnessMissing.
+   */
+  flagsFromPublishedInterface?: boolean;
 }
 
 function text(values: FieldValues, name: string): string {
@@ -60,7 +67,6 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "Claude Code",
     blurb: "Anthropic's coding agent, in a shared terminal.",
     icon: "/icons/claude-code.svg",
-    verified: true,
     fields: [
       {
         name: "sessionId",
@@ -90,9 +96,7 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "GPT Codex",
     blurb: "OpenAI's coding agent.",
     icon: "/icons/codex.webp",
-    // Not installed on this machine, so these flags come from the tool's
-    // published interface rather than its own --help. Worth re-checking.
-    verified: false,
+    flagsFromPublishedInterface: true,
     fields: [
       {
         name: "sessionId",
@@ -122,9 +126,9 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "Hermes Agent",
     blurb: "Your Hermes agent, wrapped in a shareable terminal.",
     icon: "/icons/hermes.png",
-    // Not installed here, so the builder stays a pass-through rather than
-    // inventing a flag set that may not exist.
-    verified: false,
+    // The builder stays a pass-through rather than inventing a flag set that
+    // was never read from the tool.
+    flagsFromPublishedInterface: true,
     fields: [
       {
         name: "args",
@@ -145,7 +149,6 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "OpenClaw",
     blurb: "All your chats, one OpenClaw.",
     icon: "/icons/openclaw.png",
-    verified: true,
     fields: [
       {
         name: "subcommand",
@@ -181,7 +184,6 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "Terminal process",
     blurb: "Any command at all.",
     icon: "/icons/terminal.png",
-    verified: true,
     fields: [
       {
         name: "command",

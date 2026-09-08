@@ -701,6 +701,40 @@ describe("relaying a sealed password", () => {
     expect(listed.body.devices[0].agentPublicKey).toBe("AGENT_PUBLIC_KEY");
   });
 
+  it("records the harnesses a polling agent found on its machine", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?key=K&harnesses=claude-code,openclaw", {
+      auth: tokens.access_token,
+    });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(listed.body.devices[0].harnesses).toEqual(["claude-code", "openclaw"]);
+  });
+
+  it("stores none of an id it does not know", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?harnesses=claude-code,rm%20-rf,made-up", {
+      auth: tokens.access_token,
+    });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    /* The recognised half survives; the rest is dropped, not stored. */
+    expect(listed.body.devices[0].harnesses).toEqual(["claude-code"]);
+  });
+
+  it("says nothing about a machine that has never reported its harnesses", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?key=K", { auth: tokens.access_token });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    /* Undefined is "not known", which the browser must not read as "absent". */
+    expect(listed.body.devices[0].harnesses).toBeUndefined();
+  });
+
+  it("takes an agent's report of having none of them", async () => {
+    const tokens = await login();
+    await call("GET", "/api/agent/commands?harnesses=", { auth: tokens.access_token });
+    const listed = await call("GET", "/api/devices", { auth: await idToken() });
+    expect(listed.body.devices[0].harnesses).toEqual([]);
+  });
+
   it("takes a new key when the agent restarts", async () => {
     const tokens = await login();
     await call("GET", "/api/agent/commands?key=FIRST", { auth: tokens.access_token });

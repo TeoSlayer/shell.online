@@ -272,6 +272,11 @@ export interface Device {
   agentSeenAt?: number;
   /** Published by a running agent so a password can be sealed to it. */
   agentPublicKey?: string;
+  /**
+   * The agent harnesses this machine's agent found on its PATH. Absent until
+   * it has reported, which is not the same as having none of them.
+   */
+  harnesses?: string[];
 }
 
 
