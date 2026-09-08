@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { Opcode, encodeFrame } from "./protocol";
 import { BrowserFrameCipher } from "./e2ee";
+import {
+  DESKTOP_TERMINAL_GRID,
+  MOBILE_TERMINAL_GRID,
+  type TerminalGrid,
+} from "./terminal-grid";
 
 /* A WebSocket stand-in that lets a test drive both directions by hand. */
 class FakeSocket {
@@ -61,10 +66,11 @@ interface Recorded {
   statuses: { status: ConnectionStatus; detail?: string }[];
   writes: { text: string; reset: boolean }[];
   readOnly: boolean[];
+  grids: TerminalGrid[];
 }
 
 function connect(fragment = "") {
-  const recorded: Recorded = { statuses: [], writes: [], readOnly: [] };
+  const recorded: Recorded = { statuses: [], writes: [], readOnly: [], grids: [] };
   const connection = new TerminalConnection({
     url: "ws://localhost:5173/relay/api/sessions/x/ws",
     fragment,
@@ -73,6 +79,7 @@ function connect(fragment = "") {
       onStatus: (status, detail) => recorded.statuses.push({ status, detail }),
       onData: (bytes, reset) => recorded.writes.push({ text: new TextDecoder().decode(bytes), reset }),
       onReadOnly: (value) => recorded.readOnly.push(value),
+      onGrid: (grid) => recorded.grids.push(grid),
     },
   });
   return { connection, recorded };
@@ -150,44 +157,22 @@ describe("plaintext session", () => {
     expect(FakeSocket.last!.sent).toHaveLength(0);
   });
 
-  it("sends a resize once and not again for the same size", async () => {
+  it("never asks the relay to resize the shared PTY", async () => {
+    /*
+     * The process keeps one grid for the whole session and every viewer scales
+     * it locally. A viewer that sent its own size would be asking for a size
+     * the relay discards anyway.
+     */
     const { connection } = connect();
     await connection.start();
     FakeSocket.last!.opened();
-    connection.resize(80, 24);
-    connection.resize(80, 24);
+    connection.send("ls\r");
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(FakeSocket.last!.sent).toHaveLength(1);
-    expect(new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer)[0]).toBe(Opcode.Resize);
-  });
-
-  it("ignores a nonsense size", async () => {
-    const { connection } = connect();
-    await connection.start();
-    FakeSocket.last!.opened();
-    connection.resize(0, 0);
-    connection.resize(-1, 24);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(FakeSocket.last!.sent).toHaveLength(0);
-  });
-
-  it("re-asserts the size after a reconnect", async () => {
-    /* The PTY follows this viewer, so a fresh socket has to be told again. */
-    const { connection } = connect();
-    await connection.start();
-    FakeSocket.last!.opened();
-    connection.resize(120, 40);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const first = FakeSocket.last!;
-
-    first.closedWith(1006);
-    await new Promise((resolve) => setTimeout(resolve, 900));
-    FakeSocket.last!.opened();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(FakeSocket.created).toBe(2);
-    expect(new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer)[0]).toBe(Opcode.Resize);
+    const opcodes = FakeSocket.last!.sent.map(
+      (payload) => new Uint8Array(payload as ArrayBuffer)[0],
+    );
+    expect(opcodes).not.toContain(Opcode.Resize);
   });
 });
 
@@ -328,7 +313,7 @@ describe("encrypted session", () => {
   });
 });
 
-describe("resize safety", () => {
+describe("the session grid", () => {
   async function connected() {
     const { connection, recorded } = connect();
     await connection.start();
@@ -336,54 +321,53 @@ describe("resize safety", () => {
     return { connection, recorded, socket: FakeSocket.last! };
   }
 
-  function resizes(socket: FakeSocket) {
-    return socket.sent
-      .map((payload) => new Uint8Array(payload as ArrayBuffer))
-      .filter((frame) => frame[0] === Opcode.Resize)
-      .map((frame) => {
-        const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
-        return { cols: view.getUint16(1), rows: view.getUint16(3) };
-      });
-  }
-
-  it("refuses a size a real terminal would never have", async () => {
+  it("starts on the grid the CLI opens a PTY at", async () => {
     /*
-     * A hidden pane used to measure about one column wide. Forwarding that
-     * resized the shared PTY to one column and wrecked anything full-screen.
+     * A viewer that connects before the first announcement still has to draw
+     * something, and desktop is what the process is actually running at.
      */
-    const { connection, socket } = await connected();
-    connection.resize(1, 24);
-    connection.resize(80, 1);
-    connection.resize(2, 2);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(resizes(socket)).toEqual([]);
+    const { connection } = await connected();
+    expect(connection.grid).toEqual(DESKTOP_TERMINAL_GRID);
   });
 
-  it("keeps the last good size when a degenerate one arrives", async () => {
-    const { connection, socket } = await connected();
-    connection.resize(120, 40);
-    connection.resize(1, 1);
-    connection.resize(120, 40);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    /* The second 120x40 is a duplicate of the size still in force, not a
-       recovery from the sliver, so exactly one resize should have gone out. */
-    expect(resizes(socket)).toEqual([{ cols: 120, rows: 40 }]);
+  it("follows the relay onto the mobile grid and back", async () => {
+    const { connection, recorded, socket } = await connected();
+    socket.control({ type: "terminal_size", ...MOBILE_TERMINAL_GRID });
+    expect(connection.grid).toEqual(MOBILE_TERMINAL_GRID);
+    socket.control({ type: "terminal_size", ...DESKTOP_TERMINAL_GRID });
+    expect(connection.grid).toEqual(DESKTOP_TERMINAL_GRID);
+    expect(recorded.grids).toEqual([MOBILE_TERMINAL_GRID, DESKTOP_TERMINAL_GRID]);
   });
 
-  it("still accepts a small but plausible terminal", async () => {
-    const { connection, socket } = await connected();
-    connection.resize(20, 4);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(resizes(socket)).toEqual([{ cols: 20, rows: 4 }]);
+  it("reports a grid change once", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({ type: "terminal_size", ...MOBILE_TERMINAL_GRID });
+    socket.control({ type: "terminal_size", ...MOBILE_TERMINAL_GRID });
+    expect(recorded.grids).toEqual([MOBILE_TERMINAL_GRID]);
   });
 
-  it("ignores a non-finite size rather than sending garbage", async () => {
+  it("refuses a grid the CLI would reject", async () => {
+    /*
+     * cmd/shell/session_unix.go only resizes the PTY to one of the two
+     * canonical grids. Drawing anything else means rendering a shape the
+     * process is not writing, which is the bug this whole model prevents.
+     */
+    const { connection, recorded, socket } = await connected();
+    socket.control({ type: "terminal_size", cols: 94, rows: 28 });
+    socket.control({ type: "terminal_size", cols: 0, rows: 0 });
+    socket.control({ type: "terminal_size", cols: "120", rows: "36" });
+    expect(connection.grid).toEqual(DESKTOP_TERMINAL_GRID);
+    expect(recorded.grids).toEqual([]);
+  });
+
+  it("keeps the grid across a reconnect", async () => {
     const { connection, socket } = await connected();
-    connection.resize(Number.NaN, 24);
-    connection.resize(80, Number.POSITIVE_INFINITY);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(resizes(socket)).toEqual([]);
+    socket.control({ type: "terminal_size", ...MOBILE_TERMINAL_GRID });
+    socket.closedWith(1006);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    FakeSocket.last!.opened();
+
+    expect(FakeSocket.created).toBe(2);
+    expect(connection.grid).toEqual(MOBILE_TERMINAL_GRID);
   });
 });
