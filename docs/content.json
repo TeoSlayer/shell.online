@@ -28,7 +28,7 @@
         ],
         [
           "Link a machine",
-          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. Use shell login --no-browser on a headless box, shell whoami to see the linked account, and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
+          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell login --no-browser prints the URL instead of launching the browser, but the URL must still be opened on that same machine because the callback is deliberately loopback-only. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
         ],
         [
           "Work from the web app",
@@ -277,7 +277,7 @@
             ],
             [
               "shell login --no-browser",
-              "Print the sign-in URL instead of opening a browser."
+              "Print the sign-in URL instead of opening a browser. Open it on the same machine so its loopback callback can reach the CLI."
             ],
             [
               "shell login --allow-remote-start",

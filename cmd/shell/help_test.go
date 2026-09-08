@@ -164,6 +164,7 @@ func TestHelpLoginTopicExplainsWhatIsPublished(t *testing.T) {
 	for _, expected := range []string{
 		"--no-browser",
 		"127.0.0.1",
+		"same machine",
 		"What is published",
 		"never the E2EE key",
 		"SHELL_ONLINE_CONFIG",

@@ -135,8 +135,8 @@ Linking a machine to an account is optional. The CLI works exactly the same
 without it; linking only adds a list of your shares at shell.online.
 
   1. Run shell login. A browser opens on the approval screen.
-     On a headless box use shell login --no-browser and open the printed URL
-     yourself, on any machine.
+     shell login --no-browser prints the URL instead, but you must open it in
+     a browser on this same machine: the callback is deliberately loopback-only.
   2. Approve the request. The browser hands a one-time code back to a listener
      bound to 127.0.0.1, so the code never leaves this computer.
   3. Run shell as usual. Each share is published to your account as it starts,

@@ -106,7 +106,7 @@ without it; linking adds a list of your shares on the web.
 
 ```sh
 shell login                 # opens a browser to approve this machine
-shell login --no-browser    # prints the URL instead, for headless boxes and CI
+shell login --no-browser    # prints the URL; open it on this same machine
 shell whoami                # show the linked account
 shell logout                # unlink and revoke this machine's token
 ```
