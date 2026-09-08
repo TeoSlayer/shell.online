@@ -329,3 +329,39 @@ func ensureDaemon() {
 	}
 	startDetachedDaemon(self)
 }
+
+// restartDaemon replaces a running daemon, and starts one if none is running.
+//
+// For after a login, and only after a login. A daemon holds the credentials it
+// started with in memory and never reads the file again, so a fresh login
+// leaves the running one stale by definition: it goes on presenting the tokens
+// it already had, and once those stop working it presents them every couple of
+// seconds for as long as the machine is up.
+//
+// That is what "shell login does nothing" looks like from outside. The login
+// succeeds, writes working credentials, and the machine still reports itself
+// offline because the process doing the polling never looks at them. Found on
+// a machine that had been refusing to renew for eight and a half hours across
+// several logins.
+//
+// ensureDaemon above deliberately does not do this. It runs on every ordinary
+// command, and restarting there would re-key the agent on each one, which
+// throws away the key a browser has already sealed a session password to.
+func restartDaemon() {
+	path, err := account.DefaultPath()
+	if err != nil {
+		return
+	}
+	credentials, err := account.Load(path)
+	if err != nil || !credentials.RemoteStart {
+		return
+	}
+	if daemonAnswering() {
+		stopDaemon()
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	startDetachedDaemon(self)
+}

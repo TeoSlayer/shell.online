@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -212,4 +213,45 @@ func TestAnOrdinaryCommandStartsNoDaemonWithoutConsent(t *testing.T) {
 	if daemonCommand(t, binary, configPath, runtime, "daemon", "status").Run() == nil {
 		t.Fatal("a machine that did not agree should have no daemon")
 	}
+}
+
+// An ordinary command must leave a running daemon alone.
+//
+// ensureDaemon runs on every command, and restarting there would re-key the
+// agent each time. A browser seals a session password to the key the daemon
+// published, so throwing it away mid-session makes work already queued
+// impossible to open. Only `shell login` replaces a daemon, because only a
+// login produces credentials the running one cannot know about.
+func TestAnOrdinaryCommandLeavesTheDaemonAlone(t *testing.T) {
+	binary := buildShell(t)
+	configPath, runtime := linkedMachine(t, true)
+
+	first := daemonCommand(t, binary, configPath, runtime, "daemon")
+	if err := first.Start(); err != nil {
+		t.Fatalf("start the daemon: %v", err)
+	}
+	defer func() {
+		_ = first.Process.Kill()
+		_, _ = first.Process.Wait()
+	}()
+	waitForDaemon(t, binary, configPath, runtime, true)
+	original := first.Process.Pid
+
+	ordinary := daemonCommand(t, binary, configPath, runtime, "true")
+	if output, err := ordinary.CombinedOutput(); err != nil {
+		t.Fatalf("run an ordinary command: %v: %s", err, output)
+	}
+
+	if !processAlive(original) {
+		t.Fatalf("daemon %d was replaced by an ordinary command; that re-keys the agent", original)
+	}
+}
+
+// processAlive reports whether a pid still names a live process.
+func processAlive(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return process.Signal(syscall.Signal(0)) == nil
 }

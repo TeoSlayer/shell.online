@@ -175,7 +175,12 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	// The daemon is what makes the answer mean anything, so it starts here
 	// rather than waiting for the next command.
 	if grant {
-		ensureDaemon()
+		/*
+		 * Restart rather than ensure. The credentials just written are new,
+		 * and a daemon that is already running is holding the previous ones
+		 * in memory where nothing will ever replace them.
+		 */
+		restartDaemon()
 	} else {
 		stopDaemon()
 	}

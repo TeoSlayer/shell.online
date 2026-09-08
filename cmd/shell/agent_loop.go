@@ -16,6 +16,11 @@ import (
 // agentPollInterval is how often the machine asks for queued work.
 const agentPollInterval = 2 * time.Second
 
+// maxRefreshBackoff caps the wait between refusals to renew this machine's
+// token. Long enough that a revoked token is not a stream of requests, short
+// enough that a machine comes back within a minute of being fixed.
+const maxRefreshBackoff = 60 * time.Second
+
 // agentLoop asks the accounts service for work and carries it out.
 //
 // Two things run this: the daemon, which is how a signed-in machine is
@@ -51,6 +56,9 @@ func (loop *agentLoop) run(ctx context.Context) error {
 	// granularity the agent key above already has.
 	harnesses := installedHarnesses()
 
+	/* Grows while renewal keeps being refused, so a dead token is quiet. */
+	refreshBackoff := agentPollInterval
+
 	for {
 		if loop.credentials.Expired(time.Now()) {
 			refreshed, refreshErr := client.Refresh(ctx, loop.credentials)
@@ -58,12 +66,33 @@ func (loop *agentLoop) run(ctx context.Context) error {
 				if ctx.Err() != nil {
 					return nil
 				}
+				/*
+				 * A refusal is not a blip. The token is revoked or unknown
+				 * and asking again in two seconds will be refused in exactly
+				 * the same way, so retrying at the poll interval is a request
+				 * every two seconds for as long as the machine is up. That
+				 * earns a rate limit, which then hides any real recovery
+				 * behind a second failure.
+				 *
+				 * Two things break the loop instead. Credentials are re-read
+				 * from disk first, because a login in another terminal has
+				 * written working ones and this process would otherwise never
+				 * look. Failing that, the wait grows.
+				 */
+				if reloaded, loadErr := account.Load(loop.credentialsPath); loadErr == nil &&
+					reloaded.RefreshToken != loop.credentials.RefreshToken {
+					loop.credentials = reloaded
+					refreshBackoff = agentPollInterval
+					continue
+				}
 				fmt.Fprintf(loop.report, "shell: could not renew this machine's token: %v\n", refreshErr)
-				if !sleepOrDone(ctx, agentPollInterval) {
+				if !sleepOrDone(ctx, refreshBackoff) {
 					return nil
 				}
+				refreshBackoff = min(refreshBackoff*2, maxRefreshBackoff)
 				continue
 			}
+			refreshBackoff = agentPollInterval
 			loop.credentials = refreshed
 			if saveErr := account.Save(loop.credentialsPath, loop.credentials); saveErr != nil {
 				fmt.Fprintf(loop.report, "shell: could not store the renewed token: %v\n", saveErr)
