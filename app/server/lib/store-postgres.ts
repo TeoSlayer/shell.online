@@ -27,7 +27,16 @@ import type {
  */
 pg.types.setTypeParser(pg.types.builtins.INT8, (value) => Number(value));
 
-const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "migrations");
+/*
+ * Where the .sql files live, resolved when one is about to be applied rather
+ * than at import. The Worker build imports this module for the store and never
+ * migrates -- that is `npm run db:migrate` -- and there `import.meta.url` is
+ * undefined, so resolving eagerly would throw before a store could be built at
+ * all.
+ */
+function migrationsDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "migrations");
+}
 
 /* An arbitrary constant; only this application takes this advisory lock. */
 const MIGRATION_LOCK = 731_099_431;
@@ -273,7 +282,10 @@ export class PostgresStore implements Store {
    * no second command to remember, and a rolled-back image finds the schema it
    * expects because migrations only ever add.
    */
-  static async connect(url: string, options: pg.PoolConfig = {}): Promise<PostgresStore> {
+  static async connect(
+    url: string,
+    options: pg.PoolConfig & { migrate?: boolean } = {},
+  ): Promise<PostgresStore> {
     /*
      * A small pool on purpose. Postgres counts connections per server, not per
      * client, so the limit is shared by every instance of this service: the
@@ -295,8 +307,19 @@ export class PostgresStore implements Store {
       ...options,
     });
     const store = new PostgresStore(pool);
-    await store.migrate();
+    /*
+     * Migrating on connect suits a long-lived process that starts once. It
+     * does not suit a Worker, where every isolate would race the same DDL on
+     * its first request, so the caller decides. `npm run db:migrate` is the
+     * deliberate path; see migrations.ts.
+     */
+    if (options.migrate !== false) await store.migrate();
     return store;
+  }
+
+  /** Applies pending migrations. Exposed so a deploy step can call it. */
+  async migrateNow(): Promise<void> {
+    await this.migrate();
   }
 
   /**
@@ -340,11 +363,12 @@ export class PostgresStore implements Store {
         ).rows.map((row) => [row.name, row.checksum]),
       );
 
-      const files = readdirSync(MIGRATIONS)
+      const directory = migrationsDir();
+      const files = readdirSync(directory)
         .filter((name) => name.endsWith(".sql"))
         .sort();
       for (const name of files) {
-        const sql = readFileSync(join(MIGRATIONS, name), "utf8");
+        const sql = readFileSync(join(directory, name), "utf8");
         const checksum = createHash("sha256").update(sql).digest("hex");
         if (applied.has(name)) {
           const previous = applied.get(name);

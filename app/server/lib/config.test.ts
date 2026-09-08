@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, readConfig, withoutCredentials } from "./config";
+import { ConfigError, allowedOriginsFor, readConfig, withoutCredentials } from "./config";
 
 /**
  * A container that is going to fail should fail while it is starting, with a
@@ -115,5 +115,28 @@ describe("withoutCredentials", () => {
       expect(printed).not.toContain("p@");
       expect(printed).not.toMatch(/onlypassword|pa\$\$w0rd|:p@/);
     }
+  });
+});
+
+describe("allowedOriginsFor", () => {
+  /*
+   * A page on somebody's own machine must not be able to call production with
+   * a token it was given. The dev origin exists only because Vite serves the
+   * client on a different port from the service.
+   */
+  it("allows only the deployment's own origin in production", () => {
+    expect(allowedOriginsFor("https://app.shell.online")).toEqual(["https://app.shell.online"]);
+    expect(allowedOriginsFor("https://shell-online-app.workers.dev")).not.toContain(
+      "http://127.0.0.1:5173",
+    );
+  });
+
+  it("adds the dev server when the deployment is itself loopback", () => {
+    expect(allowedOriginsFor("http://localhost:5173")).toContain("http://127.0.0.1:5173");
+    expect(allowedOriginsFor("http://127.0.0.1:8787")).toContain("http://localhost:5173");
+  });
+
+  it("does not widen an origin it cannot parse", () => {
+    expect(allowedOriginsFor("not a url")).toEqual(["not a url"]);
   });
 });

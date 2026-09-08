@@ -50,6 +50,28 @@ export interface Config {
 export class ConfigError extends Error {}
 
 /**
+ * Which browser origins may call the API.
+ *
+ * The Vite dev server runs on a different port from the service, so
+ * development needs its loopback origin allowed. A deployment must not: a page
+ * on someone's own machine could otherwise make cross-origin calls against
+ * production with a token it had been given.
+ *
+ * Rather than a separate switch to forget, the deployment tells us which it is
+ * by where it says it is served from. A loopback WEB_ORIGIN is development.
+ */
+export function allowedOriginsFor(webOrigin: string): string[] {
+  let host = "";
+  try {
+    host = new URL(webOrigin).hostname;
+  } catch {
+    return [webOrigin];
+  }
+  const loopback = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  return loopback ? [webOrigin, "http://localhost:5173", "http://127.0.0.1:5173"] : [webOrigin];
+}
+
+/**
  * A URL with any credentials taken out, for printing.
  *
  * A URL is allowed to carry a username and password, and several of these

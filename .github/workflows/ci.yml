@@ -122,6 +122,60 @@ jobs:
       - name: Run full test suite under QEMU
         run: sh ./scripts/test-qemu-linux.sh ${{ matrix.targets }}
 
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The store has two implementations and a conformance suite that holds both
+    # to the same behaviour. Running it against a real Postgres rather than only
+    # the in-memory stand-in is the point: it is what caught a pool deadlock and
+    # a lost membership that the in-memory store passed happily.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: shell_online
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - name: Typecheck
+        run: npx tsc -b --force
+        working-directory: app
+      - name: Lint
+        run: npx oxlint
+        working-directory: app
+      - name: Test, including the store against a real Postgres
+        run: npx vitest run
+        working-directory: app
+        env:
+          TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/shell_online
+      - name: Check vendored modules have not drifted
+        run: node scripts/check-protocol.mjs
+        working-directory: app
+      - name: Build the client and the server bundle
+        run: npm run build
+        working-directory: app
+        env:
+          VITE_FIREBASE_API_KEY: ci
+          VITE_FIREBASE_AUTH_DOMAIN: ci.example.com
+          VITE_FIREBASE_PROJECT_ID: ci
+          VITE_FIREBASE_APP_ID: ci
+
   vulnerabilities:
     runs-on: ubuntu-latest
     timeout-minutes: 10

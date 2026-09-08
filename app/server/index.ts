@@ -1,6 +1,12 @@
 import { resolve } from "node:path";
 import { createAccountsServer } from "./app";
-import { ConfigError, readConfig, withoutCredentials, type Config } from "./lib/config";
+import {
+  ConfigError,
+  allowedOriginsFor,
+  readConfig,
+  withoutCredentials,
+  type Config,
+} from "./lib/config";
 import { createVerifier } from "./lib/firebase-token";
 import { createMailer } from "./lib/mail";
 import { relayProxy } from "./lib/relay-proxy";
@@ -38,7 +44,7 @@ const forward = config.relayUrl ? relayProxy(config.relayUrl) : null;
 const server = createAccountsServer({
   store,
   verifyIdToken: createVerifier(config.projectId),
-  allowedOrigins: [config.webOrigin, "http://127.0.0.1:5173"],
+  allowedOrigins: allowedOriginsFor(config.webOrigin),
   webOrigin: config.webOrigin,
   trustProxy: config.trustProxy,
   mailer: createMailer(config.mail),

@@ -8,6 +8,7 @@
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist-server/index.js && cp -R server/lib/migrations dist-server/migrations",
     "check:protocol": "node scripts/check-protocol.mjs",
     "db:import": "tsx server/import-json.ts",
+    "db:migrate": "tsx server/migrate.ts",
     "db:up": "docker run -d --name shell-online-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=shell_online -p 5433:5432 postgres:16-alpine",
     "dev": "vite",
     "dev:accounts": "tsx watch --env-file-if-exists=.env.local server/index.ts",

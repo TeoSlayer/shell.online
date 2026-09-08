@@ -1,0 +1,70 @@
+{
+  // The accounts service on Cloudflare Workers. worker/index.ts is the entry;
+  // server/app.ts is the router it shares with the Node build.
+  //
+  //   npm run build            # the client, into ./dist
+  //   npx wrangler deploy --config wrangler.jsonc
+  //
+  // The relay is a different Worker with its own config, deployed separately.
+  // Nothing here touches it.
+  //
+  // Secrets are never in this file. Set them once per environment with
+  // `npx wrangler secret put <name>`:
+  //
+  //   MAIL_API_KEY   the SendGrid key, or the key for whatever MAIL_API_URL is
+  //
+  // That is the whole list. The database credentials belong to the Hyperdrive
+  // configuration rather than to this Worker: `wrangler hyperdrive create`
+  // takes the connection string and hands back the id below, and the Worker
+  // only ever sees env.HYPERDRIVE.connectionString, which is local to it.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "shell-online-app",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-01",
+  // pg speaks to Hyperdrive over a socket, and the router's tokens and codes
+  // are hashed with node:crypto.
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // The client is a single page with its own router, so /sessions/abc is a
+    // page rather than a file and a miss has to reach index.html.
+    "not_found_handling": "single-page-application"
+  },
+
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // The Cloud SQL instance, reached over a Workers VPC service on a
+      // Cloudflare Tunnel. An identifier, not a credential: the database
+      // username and password belong to the Hyperdrive configuration.
+      "id": "c51f052c29fb43b58a0aa57b66cb62f6",
+      // Used only by `wrangler dev`, which connects directly rather than
+      // through Hyperdrive. A local Postgres, never the deployed database.
+      "localConnectionString": "postgres://postgres:dev@localhost:5433/shell_online"
+    }
+  ],
+
+  // Expired codes and finished commands, swept on the same five minutes the
+  // Node build uses for its timer.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+
+  "vars": {
+    // The Firebase project whose ID tokens are accepted.
+    "FIREBASE_PROJECT_ID": "vv-cloud-firebase",
+    // Where browsers reach this deployment. CORS is checked against it and
+    // invitation links are built from it, so it is the public host rather than
+    // whatever a request happened to arrive on.
+    "WEB_ORIGIN": "https://app.shell.online",
+    // The relay /relay/* is forwarded to.
+    "RELAY_URL": "https://shell.online",
+    "MAIL_PROVIDER": "sendgrid",
+    // The display name is free-form; the address has to be one the provider
+    // will send as.
+    "MAIL_FROM": "shell.online <no-reply@pilotprotocol.network>"
+    // "MAIL_API_URL": "https://api.resend.com/emails"  // MAIL_PROVIDER=json only
+  }
+}
