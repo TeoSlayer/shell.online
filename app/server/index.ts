@@ -24,7 +24,7 @@ try {
  * between two things that are both correct where they run.
  */
 const store: Store = config.databaseUrl
-  ? await PostgresStore.connect(config.databaseUrl)
+  ? await PostgresStore.connect(config.databaseUrl, { max: config.databasePoolMax })
   : new MemoryStore(resolve(config.dataFile));
 
 /*

@@ -34,6 +34,12 @@ export interface Config {
   /** How often expired codes and finished commands are swept. */
   purgeIntervalMs: number;
   /**
+   * Connections this instance may hold. Postgres counts them per server, so
+   * this multiplied by the instance count has to stay under the database's
+   * max_connections with room to spare for administration.
+   */
+  databasePoolMax: number;
+  /**
    * Where to post outgoing mail, and as whom. All three are needed before
    * anything is sent; with any of them missing the message is logged instead,
    * so an unconfigured deployment still creates a perfectly good invite.
@@ -128,6 +134,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     clientDir,
     relayUrl,
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
+    databasePoolMax: Number(env.DATABASE_POOL_MAX ?? 5),
     purgeIntervalMs: 5 * 60_000,
     mail: {
       /*

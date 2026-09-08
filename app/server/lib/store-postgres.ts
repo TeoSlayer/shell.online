@@ -274,7 +274,26 @@ export class PostgresStore implements Store {
    * expects because migrations only ever add.
    */
   static async connect(url: string, options: pg.PoolConfig = {}): Promise<PostgresStore> {
-    const pool = new pg.Pool({ connectionString: url, ...options });
+    /*
+     * A small pool on purpose. Postgres counts connections per server, not per
+     * client, so the limit is shared by every instance of this service: the
+     * smallest Cloud SQL tier allows 25, node-postgres defaults to 10 per
+     * process, and a third instance would then be refused a connection rather
+     * than made to wait. Requests here are short, so a queue costs milliseconds
+     * while exhaustion costs the request.
+     *
+     * The arithmetic to keep true: instances x max <= max_connections, less a
+     * few for administration.
+     */
+    const pool = new pg.Pool({
+      connectionString: url,
+      max: 5,
+      /* Released rather than held, so a quiet instance stops occupying slots. */
+      idleTimeoutMillis: 30_000,
+      /* Better a clear failure than a request that hangs until its timeout. */
+      connectionTimeoutMillis: 10_000,
+      ...options,
+    });
     const store = new PostgresStore(pool);
     await store.migrate();
     return store;
