@@ -1,5 +1,6 @@
 import type { Store } from "../lib/store";
 import type { Identity } from "../lib/firebase-token";
+import { invitationMessage, type Mailer } from "../lib/mail";
 import {
   INVITE_TTL_MS,
   can,
@@ -7,6 +8,7 @@ import {
   newId,
   outranks,
   suggestOrgName,
+  type Invite,
   type Membership,
   type Role,
 } from "../lib/orgs";
@@ -234,4 +236,37 @@ export async function changeRole(
   if (target.role === "owner") return denied("the owner's role cannot be changed");
   await store.setRole(membership.orgId, uid, role);
   return ok({ changed: true });
+}
+
+/**
+ * Emails an invitation, when there is an address to send it to.
+ *
+ * Best effort by design. An invite is a link, and the link exists whether or
+ * not the mail goes out; failing the request because a mail provider is having
+ * a bad afternoon would throw away a perfectly good invite that the inviter
+ * can still copy and paste. The failure is reported to the log instead.
+ */
+export async function notifyInvited(
+  store: Store,
+  mailer: Mailer,
+  webOrigin: string,
+  inviter: Membership,
+  invite: Invite,
+  log: (message: string, error?: unknown) => void,
+): Promise<void> {
+  if (!invite.email) return;
+  const organization = await store.organization(invite.orgId);
+  try {
+    await mailer.send(
+      invitationMessage({
+        to: invite.email,
+        inviterName: inviter.name || inviter.email,
+        organizationName: organization?.name ?? "your team",
+        joinUrl: `${webOrigin.replace(/\/+$/, "")}/join/${invite.id}`,
+        expiresAt: invite.expiresAt,
+      }),
+    );
+  } catch (error) {
+    log(`accounts: could not email the invitation to ${invite.email}`, error);
+  }
 }

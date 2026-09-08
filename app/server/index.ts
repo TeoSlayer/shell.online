@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { createAccountsServer } from "./app";
 import { ConfigError, readConfig, type Config } from "./lib/config";
 import { createVerifier } from "./lib/firebase-token";
+import { createMailer } from "./lib/mail";
 import { relayProxy } from "./lib/relay-proxy";
 import { staticFiles } from "./lib/static-files";
 import { MemoryStore } from "./lib/store-memory";
@@ -38,7 +39,9 @@ const server = createAccountsServer({
   store,
   verifyIdToken: createVerifier(config.projectId),
   allowedOrigins: [config.webOrigin, "http://127.0.0.1:5173"],
+  webOrigin: config.webOrigin,
   trustProxy: config.trustProxy,
+  mailer: createMailer(config.mail),
   serveClient: config.clientDir ? staticFiles(config.clientDir) : undefined,
   relay: forward ?? undefined,
 });

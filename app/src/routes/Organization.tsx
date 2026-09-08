@@ -274,8 +274,9 @@ export function Organization() {
                 </Button>
               </form>
               <p className="sessions-note">
-                An invite link works once and expires in seven days. Leaving the
-                email blank lets anyone with the link join, so send it carefully.
+                Give an address and we email them the link. Leaving it blank
+                creates a link anyone can use, so send that one carefully.
+                Either way it works once and expires in seven days.
               </p>
 
               <h2 className="invites-heading">Invites</h2>

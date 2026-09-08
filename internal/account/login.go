@@ -142,6 +142,10 @@ type Options struct {
 	WebURL string
 	// Label names this machine in the account's device list.
 	Label string
+	// MachineID identifies this machine to the accounts service, so a repeat
+	// login updates the entry it already has. Empty when this machine could
+	// not record one.
+	MachineID string
 	// Output receives the human-readable progress and the fallback URL.
 	Output io.Writer
 	// OpenBrowser is swapped out in tests. When nil the system opener is used.
@@ -227,7 +231,7 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 		if label == "" {
 			label = defaultLabel()
 		}
-		return client.Exchange(ctx, result.code, verifier, redirectURI, label)
+		return client.Exchange(ctx, result.code, verifier, redirectURI, label, options.MachineID)
 	case <-waitContext.Done():
 		if errors.Is(waitContext.Err(), context.DeadlineExceeded) {
 			return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser", timeout)

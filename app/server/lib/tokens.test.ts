@@ -45,6 +45,51 @@ describe("issueTokens", () => {
     const tokens = await issueTokens(store, identity);
     expect(tokens.accessToken).not.toBe(tokens.refreshToken);
   });
+
+  it("reuses the device a machine already has, keeping its id and age", async () => {
+    const first = await issueTokens(store, { ...identity, machineId: "machine-a" }, 1000);
+    const second = await issueTokens(
+      store,
+      { ...identity, machineId: "machine-a", label: "renamed" },
+      9000,
+    );
+    expect(second.deviceId).toBe(first.deviceId);
+
+    const devices = await store.listDevices("uid-1");
+    expect(devices).toHaveLength(1);
+    expect(devices[0].createdAt).toBe(1000);
+    expect(devices[0].label).toBe("renamed");
+  });
+
+  it("retires the credentials the previous login on that machine was given", async () => {
+    const first = await issueTokens(store, { ...identity, machineId: "machine-a" });
+    const second = await issueTokens(store, { ...identity, machineId: "machine-a" });
+    expect((await checkAccessToken(store, second.accessToken)).ok).toBe(true);
+    expect((await checkAccessToken(store, first.accessToken)).ok).toBe(false);
+    expect(await refreshAccessToken(store, first.refreshToken)).toEqual({
+      ok: false,
+      reason: "unknown",
+    });
+  });
+
+  it("records a device per login when no machine is named", async () => {
+    await issueTokens(store, identity);
+    await issueTokens(store, identity);
+    expect(await store.listDevices("uid-1")).toHaveLength(2);
+  });
+
+  it("keeps one account's machine id away from another account's device", async () => {
+    const mine = await issueTokens(store, { ...identity, machineId: "machine-a" });
+    const theirs = await issueTokens(store, {
+      uid: "uid-2",
+      email: "bruno@example.com",
+      name: "Bruno",
+      label: "laptop",
+      machineId: "machine-a",
+    });
+    expect(theirs.deviceId).not.toBe(mine.deviceId);
+    expect((await checkAccessToken(store, mine.accessToken)).ok).toBe(true);
+  });
 });
 
 describe("checkAccessToken", () => {

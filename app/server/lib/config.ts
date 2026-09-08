@@ -33,6 +33,12 @@ export interface Config {
   trustProxy: boolean;
   /** How often expired codes and finished commands are swept. */
   purgeIntervalMs: number;
+  /**
+   * Where to post outgoing mail, and as whom. All three are needed before
+   * anything is sent; with any of them missing the message is logged instead,
+   * so an unconfigured deployment still creates a perfectly good invite.
+   */
+  mail: { apiUrl?: string; apiKey?: string; from?: string };
 }
 
 export class ConfigError extends Error {}
@@ -102,5 +108,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     relayUrl,
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
     purgeIntervalMs: 5 * 60_000,
+    mail: {
+      apiUrl: env.MAIL_API_URL?.trim() || undefined,
+      apiKey: env.MAIL_API_KEY?.trim() || undefined,
+      from: env.MAIL_FROM?.trim() || undefined,
+    },
   };
 }

@@ -56,6 +56,7 @@ const TOKEN_COLUMNS: Record<string, string> = {
   email: "email",
   name: "name",
   label: "label",
+  machineId: "machine_id",
   accessExpiresAt: "access_expires_at",
   createdAt: "created_at",
   lastSeenAt: "last_seen_at",
@@ -129,6 +130,7 @@ function toToken(row: Row): CliToken {
     email: row.email,
     name: row.name,
     label: row.label,
+    machineId: row.machine_id,
     accessExpiresAt: row.access_expires_at,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
@@ -433,9 +435,9 @@ export class PostgresStore implements Store {
   async putToken(token: CliToken): Promise<void> {
     await this.pool.query(
       `INSERT INTO cli_tokens
-         (id, access_hash, refresh_hash, uid, email, name, label,
+         (id, access_hash, refresh_hash, uid, email, name, label, machine_id,
           access_expires_at, created_at, last_seen_at, agent_seen_at, agent_public_key, revoked_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         token.id,
         token.accessHash,
@@ -444,6 +446,7 @@ export class PostgresStore implements Store {
         token.email,
         token.name,
         token.label,
+        token.machineId ?? null,
         token.accessExpiresAt,
         token.createdAt,
         token.lastSeenAt,
@@ -488,6 +491,22 @@ export class PostgresStore implements Store {
   }
 
   /* ---- Machines ---- */
+
+  /*
+   * Scoped by uid so a machine id cannot address another account's device,
+   * and to live rows so that unlinking a machine is not undone by the next
+   * login on it. Two rows can share a machine id -- two logins racing each
+   * other -- so the newest wins, which is the one a device list shows first.
+   */
+  async deviceForMachine(uid: string, machineId: string): Promise<CliToken | null> {
+    const row = await this.row(
+      `SELECT * FROM cli_tokens
+       WHERE uid = $1 AND machine_id = $2 AND revoked_at IS NULL
+       ORDER BY created_at DESC, id COLLATE "C" DESC LIMIT 1`,
+      [uid, machineId],
+    );
+    return row ? toToken(row) : null;
+  }
 
   async setMemberKey(uid: string, publicKey: string): Promise<void> {
     await this.pool.query("UPDATE memberships SET public_key = $2 WHERE uid = $1", [uid, publicKey]);

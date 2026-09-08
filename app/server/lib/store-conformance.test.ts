@@ -274,6 +274,32 @@ for (const implementation of implementations) {
         await expect(store.touchToken("dev_nope")).resolves.toBeUndefined();
         await expect(store.markAgentSeen("dev_nope")).resolves.toBeUndefined();
       });
+
+      it("finds the device a machine id names", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        const found = await store.deviceForMachine("uid-1", "machine-a");
+        expect(found?.id).toBe("dev_1");
+        expect(found?.refreshHash).toBe("refresh-hash");
+      });
+
+      it("returns null for a machine this account has never linked", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        expect(await store.deviceForMachine("uid-1", "machine-b")).toBeNull();
+        /* A row that names no machine is not a match for anything. */
+        await store.putToken(token({ id: "dev_2", accessHash: "a2", refreshHash: "r2" }));
+        expect(await store.deviceForMachine("uid-1", "")).toBeNull();
+      });
+
+      it("never crosses accounts, however the machine id was learned", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        expect(await store.deviceForMachine("uid-2", "machine-a")).toBeNull();
+      });
+
+      it("ignores a revoked device, so unlinking survives the next login", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        expect(await store.revokeDevice("uid-1", "dev_1", 4000)).toBe(true);
+        expect(await store.deviceForMachine("uid-1", "machine-a")).toBeNull();
+      });
     });
 
     describe("sessions", () => {

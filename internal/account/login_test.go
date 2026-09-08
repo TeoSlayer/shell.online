@@ -227,7 +227,7 @@ func TestLoginCompletesThroughTheLoopbackListener(t *testing.T) {
 	// End to end: Login opens the listener, a stand-in browser calls back, and
 	// the code is exchanged against a stand-in accounts service.
 	var exchanged struct {
-		code, verifier, redirectURI string
+		code, verifier, redirectURI, machineID string
 	}
 	service := httptest.NewServer(http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -239,11 +239,13 @@ func TestLoginCompletesThroughTheLoopbackListener(t *testing.T) {
 				Code        string `json:"code"`
 				Verifier    string `json:"code_verifier"`
 				RedirectURI string `json:"redirect_uri"`
+				MachineID   string `json:"machine_id"`
 			}
 			decodeJSON(t, request, &body)
 			exchanged.code = body.Code
 			exchanged.verifier = body.Verifier
 			exchanged.redirectURI = body.RedirectURI
+			exchanged.machineID = body.MachineID
 			writeJSON(writer, http.StatusOK, map[string]any{
 				"access_token":  "sha_new",
 				"refresh_token": "shr_new",
@@ -254,9 +256,10 @@ func TestLoginCompletesThroughTheLoopbackListener(t *testing.T) {
 	defer service.Close()
 
 	credentials, err := Login(context.Background(), NewClient(service.URL, "test"), Options{
-		WebURL:  "http://localhost:5173",
-		Label:   "test-box",
-		Timeout: 5 * time.Second,
+		WebURL:    "http://localhost:5173",
+		Label:     "test-box",
+		MachineID: "machine-under-test",
+		Timeout:   5 * time.Second,
 		OpenBrowser: func(target string) error {
 			parsed, parseErr := url.Parse(target)
 			if parseErr != nil {
@@ -295,6 +298,9 @@ func TestLoginCompletesThroughTheLoopbackListener(t *testing.T) {
 	}
 	if Challenge(exchanged.verifier) == "" || len(exchanged.verifier) < 43 {
 		t.Fatalf("verifier was not sent intact: %q", exchanged.verifier)
+	}
+	if exchanged.machineID != "machine-under-test" {
+		t.Fatalf("machine_id = %q, want the one Login was given", exchanged.machineID)
 	}
 	if !strings.HasPrefix(exchanged.redirectURI, "http://127.0.0.1:") {
 		t.Fatalf("redirect_uri = %q, want a loopback callback", exchanged.redirectURI)

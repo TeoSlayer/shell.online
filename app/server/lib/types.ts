@@ -21,6 +21,12 @@ export interface CliToken {
   email: string;
   name: string;
   label: string;
+  /**
+   * The machine this login came from, when the CLI could name one. Signing in
+   * again from the same machine rotates this row rather than adding another,
+   * so an account's device list stays one entry per physical machine.
+   */
+  machineId?: string;
   accessExpiresAt: number;
   createdAt: number;
   lastSeenAt: number;

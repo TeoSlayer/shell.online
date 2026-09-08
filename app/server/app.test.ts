@@ -91,10 +91,13 @@ beforeEach(async () => {
   handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
 });
 
-/* Walks the whole login handshake and returns the CLI's tokens. */
-async function login() {
+/*
+ * Walks the whole login handshake and returns the CLI's tokens. `extra` goes
+ * into the token request, which is where a real CLI names its machine.
+ */
+async function login(extra: Record<string, unknown> = {}, subject = "uid-1") {
   const authorize = await call("POST", "/api/cli/authorize", {
-    auth: await idToken(),
+    auth: await idToken({ sub: subject }),
     body: {
       redirect_uri: REDIRECT,
       code_challenge: deriveChallenge(verifier),
@@ -102,9 +105,15 @@ async function login() {
     },
   });
   const token = await call("POST", "/api/cli/token", {
-    body: { code: authorize.body.code, code_verifier: verifier, redirect_uri: REDIRECT },
+    body: { code: authorize.body.code, code_verifier: verifier, redirect_uri: REDIRECT, ...extra },
   });
   return token.body as { access_token: string; refresh_token: string };
+}
+
+/* The machines this account has linked, newest first. */
+async function devices(subject = "uid-1") {
+  const result = await call("GET", "/api/devices", { auth: await idToken({ sub: subject }) });
+  return result.body.devices as { id: string; label: string; createdAt: number }[];
 }
 
 describe("POST /api/cli/authorize", () => {
@@ -301,6 +310,82 @@ describe("cors", () => {
   it("does not echo an unlisted origin", async () => {
     const result = await call("GET", "/api/health", { origin: "http://evil.example.com" });
     expect(result.headers["Access-Control-Allow-Origin"]).toBeUndefined();
+  });
+});
+
+describe("signing in again on the same machine", () => {
+  /*
+   * The reason any of this exists: `shell login` run three times on one laptop
+   * used to leave three identical entries in the device list.
+   */
+  it("updates the machine's entry instead of adding another", async () => {
+    const first = await login({ machine_id: "machine-a", label: "laptop" });
+    const before = await devices();
+    const second = await login({ machine_id: "machine-a", label: "laptop-renamed" });
+    const after = await devices();
+
+    expect(after).toHaveLength(1);
+    expect(after[0].id).toBe(before[0].id);
+    expect(after[0].createdAt).toBe(before[0].createdAt);
+    expect(after[0].label).toBe("laptop-renamed");
+    expect(second.refresh_token).not.toBe(first.refresh_token);
+  });
+
+  it("hands out working credentials and retires the ones it replaced", async () => {
+    const first = await login({ machine_id: "machine-a" });
+    const second = await login({ machine_id: "machine-a" });
+
+    expect((await call("GET", "/api/cli/me", { auth: second.access_token })).status).toBe(200);
+    const renewed = await call("POST", "/api/cli/refresh", {
+      body: { refresh_token: second.refresh_token },
+    });
+    expect(renewed.status).toBe(200);
+
+    /* A copy of the earlier credentials is no longer a way into the account. */
+    const stale = await call("POST", "/api/cli/refresh", {
+      body: { refresh_token: first.refresh_token },
+    });
+    expect(stale.status).toBe(401);
+    expect((await call("GET", "/api/cli/me", { auth: first.access_token })).status).toBe(401);
+  });
+
+  it("keeps two machines apart", async () => {
+    await login({ machine_id: "machine-a" });
+    await login({ machine_id: "machine-b" });
+    expect(await devices()).toHaveLength(2);
+  });
+
+  it("records a machine per login when the CLI names none", async () => {
+    await login();
+    await login();
+    expect(await devices()).toHaveLength(2);
+  });
+
+  it("treats an unusable machine id as none rather than refusing the login", async () => {
+    const first = await login({ machine_id: "not a machine id" });
+    expect(first.access_token).toMatch(/^sha_/);
+    await login({ machine_id: "not a machine id" });
+    expect(await devices()).toHaveLength(2);
+  });
+
+  it("never lets one account's machine id reach another's device", async () => {
+    await login({ machine_id: "machine-a" });
+    await login({ machine_id: "machine-a" }, "uid-2");
+    expect(await devices()).toHaveLength(1);
+    expect(await devices("uid-2")).toHaveLength(1);
+    expect((await devices())[0].id).not.toBe((await devices("uid-2"))[0].id);
+  });
+
+  it("gives an unlinked machine a new entry rather than reviving the old one", async () => {
+    await login({ machine_id: "machine-a" });
+    const [linked] = await devices();
+    const removed = await call("DELETE", `/api/devices/${linked.id}`, { auth: await idToken() });
+    expect(removed.status).toBe(200);
+
+    await login({ machine_id: "machine-a" });
+    const relinked = await devices();
+    expect(relinked).toHaveLength(1);
+    expect(relinked[0].id).not.toBe(linked.id);
   });
 });
 
@@ -1222,5 +1307,79 @@ describe("guarding the service itself", () => {
       refused = result.status === 429;
     }
     expect(refused).toBe(true);
+  });
+});
+
+describe("inviting someone by email", () => {
+  function withMailer() {
+    const sent: { to: string; subject: string; html: string; text: string }[] = [];
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      webOrigin: "https://app.example.com",
+      mailer: { send: async (message) => void sent.push(message) },
+      log: () => {},
+    });
+    return sent;
+  }
+
+  it("sends the invitation, with a link that opens this deployment", async () => {
+    const sent = withMailer();
+    const created = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member", email: "bruno@example.com" },
+    });
+    expect(created.status).toBe(201);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe("bruno@example.com");
+    /* Built from the configured origin, not from whatever host was asked. */
+    expect(sent[0].html).toContain(`https://app.example.com/join/${created.body.invite.id}`);
+    expect(sent[0].text).toContain(`https://app.example.com/join/${created.body.invite.id}`);
+  });
+
+  /* An open link is for handing out in person; there is nowhere to send it. */
+  it("sends nothing when the invite has no address", async () => {
+    const sent = withMailer();
+    const created = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    expect(created.status).toBe(201);
+    expect(sent).toEqual([]);
+  });
+
+  /*
+   * The link exists whether or not the mail goes out. Failing the request
+   * would throw away a perfectly good invite the inviter can still copy.
+   */
+  it("still creates the invite when the mail provider refuses", async () => {
+    const complaints: string[] = [];
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      webOrigin: "https://app.example.com",
+      mailer: { send: async () => { throw new Error("from address is not verified"); } },
+      log: (message) => complaints.push(message),
+    });
+    const created = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member", email: "bruno@example.com" },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.invite.id).toBeTruthy();
+    /* Silence here would mean nobody ever learns the mail is not going out. */
+    expect(complaints.join(" ")).toContain("bruno@example.com");
+  });
+
+  it("names the organization and the person inviting", async () => {
+    const sent = withMailer();
+    await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member", email: "bruno@example.com" },
+    });
+    expect(sent[0].subject).toContain("Ana Ferreira");
+    expect(sent[0].html).toContain(">Join</a>");
   });
 });

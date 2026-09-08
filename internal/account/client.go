@@ -105,15 +105,24 @@ func (client *Client) do(ctx context.Context, method, path, bearer string, body 
 }
 
 // Exchange trades a one-time authorization code for scoped CLI tokens.
+//
+// machineID names the machine this login is happening on, so the service can
+// recognise one it has already linked instead of recording another. An empty
+// one is left out of the request: a machine that cannot identify itself gets
+// the older behaviour of a fresh device per login rather than a rejection.
 func (client *Client) Exchange(
-	ctx context.Context, code, verifier, redirectURI, label string,
+	ctx context.Context, code, verifier, redirectURI, label, machineID string,
 ) (Credentials, error) {
-	contents, err := client.do(ctx, http.MethodPost, "/api/cli/token", "", map[string]string{
+	body := map[string]string{
 		"code":          code,
 		"code_verifier": verifier,
 		"redirect_uri":  redirectURI,
 		"label":         label,
-	})
+	}
+	if machineID != "" {
+		body["machine_id"] = machineID
+	}
+	contents, err := client.do(ctx, http.MethodPost, "/api/cli/token", "", body)
 	if err != nil {
 		return Credentials{}, err
 	}

@@ -28,13 +28,47 @@ export interface IssuedTokens {
   deviceId: string;
 }
 
+/**
+ * Mints CLI credentials, reusing the device row the account already has for
+ * this machine when there is one.
+ *
+ * A login is not a new machine. Recording one every time is what leaves three
+ * identical laptops in a device list, so an identity that names its machine
+ * updates that row -- keeping the id the browser addresses it by and the
+ * createdAt it is ordered by -- and only an unknown machine adds a row.
+ *
+ * Rotating the hashes retires whatever the previous login on that machine was
+ * handed. That is the point rather than a side effect: a copy of the old
+ * credentials, taken from a backup or left behind on a machine that changed
+ * hands, stops working the moment someone signs in there again.
+ */
 export async function issueTokens(
   store: Store,
-  identity: { uid: string; email: string; name: string; label: string },
+  identity: { uid: string; email: string; name: string; label: string; machineId?: string },
   now = Date.now(),
 ): Promise<IssuedTokens> {
   const accessToken = mintSecret("sha");
   const refreshToken = mintSecret("shr");
+
+  const existing = identity.machineId
+    ? await store.deviceForMachine(identity.uid, identity.machineId)
+    : null;
+  if (existing) {
+    await store.updateToken(existing.refreshHash, {
+      accessHash: hashSecret(accessToken),
+      refreshHash: hashSecret(refreshToken),
+      accessExpiresAt: now + ACCESS_TTL_MS,
+      label: identity.label,
+      lastSeenAt: now,
+    });
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+      deviceId: existing.id,
+    };
+  }
+
   const deviceId = mintSecret("dev");
   await store.putToken({
     id: deviceId,
@@ -44,6 +78,7 @@ export async function issueTokens(
     email: identity.email,
     name: identity.name,
     label: identity.label,
+    machineId: identity.machineId,
     accessExpiresAt: now + ACCESS_TTL_MS,
     createdAt: now,
     lastSeenAt: now,

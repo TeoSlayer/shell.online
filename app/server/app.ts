@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
+import type { Invite } from "./lib/orgs";
 import type { VerifyResult } from "./lib/firebase-token";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
@@ -19,16 +20,24 @@ import {
   previewInvite,
   removeMember,
   renameOrganization,
+  notifyInvited,
   revokeInvite,
 } from "./routes/organizations";
 import { assignSession, auditCsv, recordAudit } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
+import { logMailer, type Mailer } from "./lib/mail";
 
 export interface AppOptions {
   store: Store;
   verifyIdToken: (token: string) => Promise<VerifyResult>;
   allowedOrigins: string[];
+  /**
+   * Where browsers reach this deployment. Links sent by email are built from
+   * it, so it has to be the public URL rather than whatever the request
+   * happened to arrive on.
+   */
+  webOrigin?: string;
   /**
    * Whether an X-Forwarded-For header may be believed. Only true when the
    * deployment puts a proxy in front that rewrites it; see callerAddress.
@@ -36,6 +45,12 @@ export interface AppOptions {
   trustProxy?: boolean;
   /** Where server-side faults go. Overridden in tests to keep them quiet. */
   log?: (message: string, error?: unknown) => void;
+  /**
+   * Sends invitations. Absent means they are logged instead, which is what
+   * development wants and what keeps an unconfigured deployment from failing
+   * an invite whose link is perfectly good.
+   */
+  mailer?: Mailer;
   /**
    * Serves the built client for anything that is not an API route. Present
    * only in a deployment that serves the app and the API together; in
@@ -135,6 +150,9 @@ export function createApp(options: AppOptions) {
   const { store, verifyIdToken, allowedOrigins } = options;
   const trustProxy = options.trustProxy ?? false;
   const log = options.log ?? ((message: string, error?: unknown) => console.error(message, error));
+  const mailer = options.mailer ?? logMailer();
+  /* The first allowed origin is the web app's; see readConfig. */
+  const webOrigin = options.webOrigin ?? allowedOrigins[0] ?? "";
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
 
@@ -261,11 +279,24 @@ export function createApp(options: AppOptions) {
         if (!result.ok) {
           return send(response, 400, { error: `authorization code ${result.reason}` });
         }
+        /*
+         * A machine id only ever selects a device inside the account that just
+         * proved itself, so its shape is the whole check. One that does not
+         * fit is treated as absent rather than refused: a CLI with a damaged
+         * identifier should still be able to sign in, and pays for it with a
+         * duplicate entry rather than a failure it cannot act on.
+         */
+        const claimed = body.machine_id;
+        const machineId =
+          typeof claimed === "string" && claimed.length <= 128 && /^[A-Za-z0-9_-]+$/.test(claimed)
+            ? claimed
+            : undefined;
         const tokens = await issueTokens(store, {
           uid: result.uid,
           email: result.email,
           name: result.name,
           label: String(body.label ?? "shell cli").slice(0, 80),
+          machineId,
         });
         return send(response, 200, {
           access_token: tokens.accessToken,
@@ -347,6 +378,15 @@ export function createApp(options: AppOptions) {
           role: typeof body.role === "string" ? body.role : undefined,
           email: typeof body.email === "string" ? body.email : undefined,
         });
+        /*
+         * Awaited so a mail provider's refusal is in the log by the time the
+         * request is answered, but never fatal: the invite exists either way
+         * and the link can still be copied out of the page.
+         */
+        if (result.status === 201) {
+          const invite = (result.body as { invite?: Invite }).invite;
+          if (invite) await notifyInvited(store, mailer, webOrigin, membership, invite, log);
+        }
         return send(response, result.status, result.body);
       }
 

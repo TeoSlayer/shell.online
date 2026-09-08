@@ -1,6 +1,11 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { PostgresStore } from "./store-postgres";
+
+const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), "migrations");
 
 /**
  * Migration bookkeeping, which the conformance suite cannot reach because it
@@ -34,9 +39,15 @@ describe.skipIf(!DATABASE_URL)("migrations", () => {
 
     const pool = new pg.Pool({ connectionString: url });
     openPools.push(pool);
+    /*
+     * One row per file on disk, whatever that number grows to. Asserting a
+     * literal count here would fail on the next migration anyone adds, which
+     * teaches people to edit the test rather than read it.
+     */
+    const files = readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql"));
     const rows = (await pool.query("SELECT name, checksum FROM schema_migrations")).rows;
-    expect(rows).toHaveLength(1);
-    expect(rows[0].checksum).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows.map((row) => row.name).sort()).toEqual(files.sort());
+    for (const row of rows) expect(row.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("refuses to start when an applied migration has been edited", async () => {
@@ -63,13 +74,22 @@ describe.skipIf(!DATABASE_URL)("migrations", () => {
       "CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at BIGINT NOT NULL)",
     );
     await pool.query("INSERT INTO schema_migrations VALUES ('001_initial.sql', 1)");
-    /* The tables that migration would have created, as that build left them. */
-    await pool.query("CREATE TABLE organizations (id TEXT PRIMARY KEY)");
+    /*
+     * The schema that migration really did create, applied from the file
+     * itself. A hand-written stand-in for one table would leave every later
+     * migration altering something that does not exist -- which is not what a
+     * database written by that build looks like, and would make this test fail
+     * for a reason it is not about.
+     */
+    await pool.query(readFileSync(join(MIGRATIONS, "001_initial.sql"), "utf8"));
 
     const store = await PostgresStore.connect(url);
     await store.close();
 
-    const rows = (await pool.query("SELECT checksum FROM schema_migrations")).rows;
-    expect(rows[0].checksum).toMatch(/^[0-9a-f]{64}$/);
+    /* The recorded checksum is backfilled, and later migrations still run. */
+    const rows = (await pool.query("SELECT name, checksum FROM schema_migrations")).rows;
+    const files = readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql"));
+    expect(rows.map((row) => row.name).sort()).toEqual(files.sort());
+    for (const row of rows) expect(row.checksum).toMatch(/^[0-9a-f]{64}$/);
   });
 });

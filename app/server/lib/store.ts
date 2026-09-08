@@ -38,6 +38,11 @@ export interface Store {
   touchToken(id: string, now?: number, resolutionMs?: number): Promise<void>;
 
   /* ---- Machines ---- */
+  /**
+   * The live device this account has for a machine, if any. Scoped by uid, so
+   * a machine id learned elsewhere can never select another account's device.
+   */
+  deviceForMachine(uid: string, machineId: string): Promise<CliToken | null>;
   setMemberKey(uid: string, publicKey: string): Promise<void>;
   markAgentSeen(id: string, publicKey?: string, now?: number): Promise<void>;
   listDevices(uid: string): Promise<Device[]>;

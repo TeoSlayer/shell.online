@@ -121,10 +121,19 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	previous, previousErr := account.Load(path)
 	alreadyGranted := previousErr == nil && previous.RemoteStart
 
+	// A machine that cannot record an identifier still signs in; it just
+	// appears as a new entry in the device list each time, which is what
+	// every machine did before identifiers existed.
+	machineID, err := account.MachineID(account.MachineIDPath(path))
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+	}
+
 	client := account.NewClient(*accountsURL, "shell/"+version)
 	credentials, err := account.Login(ctx, client, account.Options{
 		WebURL:    *webURL,
 		Label:     *label,
+		MachineID: machineID,
 		Output:    stderr,
 		NoBrowser: *noBrowser,
 	})

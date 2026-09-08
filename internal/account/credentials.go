@@ -101,6 +101,11 @@ func Save(path string, credentials Credentials) error {
 }
 
 // Clear removes the linked account. Removing an absent file is not an error.
+//
+// The machine-id file beside it is deliberately left alone. Signing out and
+// back in is the same machine, and the identifier is what tells the accounts
+// service that: dropping it here would put a second entry in the device list
+// on the next login, which is the thing it exists to prevent.
 func Clear(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("remove credentials: %w", err)

@@ -44,7 +44,7 @@ func TestExchangeStoresTokensAndAccount(t *testing.T) {
 	defer service.Close()
 
 	credentials, err := NewClient(service.URL, "test").
-		Exchange(context.Background(), "shc_c", "verifier", "http://127.0.0.1:1/callback", "box")
+		Exchange(context.Background(), "shc_c", "verifier", "http://127.0.0.1:1/callback", "box", "m1")
 	if err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestExchangeSendsTheVerifierAndRedirect(t *testing.T) {
 	defer service.Close()
 
 	if _, err := NewClient(service.URL, "test").
-		Exchange(context.Background(), "code1", "verifier1", "http://127.0.0.1:9/callback", "box"); err != nil {
+		Exchange(context.Background(), "code1", "verifier1", "http://127.0.0.1:9/callback", "box", "m1"); err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
 	if seen["code"] != "code1" || seen["code_verifier"] != "verifier1" {
@@ -79,6 +79,31 @@ func TestExchangeSendsTheVerifierAndRedirect(t *testing.T) {
 	}
 	if seen["redirect_uri"] != "http://127.0.0.1:9/callback" || seen["label"] != "box" {
 		t.Fatalf("payload = %+v", seen)
+	}
+	if seen["machine_id"] != "m1" {
+		t.Fatalf("payload = %+v", seen)
+	}
+}
+
+func TestExchangeOmitsAnAbsentMachineID(t *testing.T) {
+	var seen map[string]string
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			decodeJSON(t, request, &seen)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"access_token": "a", "refresh_token": "r", "expires_in": 60,
+			})
+		}))
+	defer service.Close()
+
+	if _, err := NewClient(service.URL, "test").
+		Exchange(context.Background(), "code1", "verifier1", "http://127.0.0.1:9/callback", "box", ""); err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+	// An empty string is not an identifier; sending one would ask the service
+	// to match on it.
+	if _, present := seen["machine_id"]; present {
+		t.Fatalf("payload = %+v, want no machine_id", seen)
 	}
 }
 
@@ -92,7 +117,7 @@ func TestExchangeSurfacesTheServiceErrorMessage(t *testing.T) {
 	defer service.Close()
 
 	_, err := NewClient(service.URL, "test").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box")
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1")
 	if err == nil {
 		t.Fatal("Exchange accepted a 400")
 	}
@@ -110,7 +135,7 @@ func TestExchangeRejectsAResponseWithoutTokens(t *testing.T) {
 	defer service.Close()
 
 	if _, err := NewClient(service.URL, "test").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box"); err == nil {
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1"); err == nil {
 		t.Fatal("Exchange accepted a response with no tokens")
 	}
 }
@@ -231,7 +256,7 @@ func TestCloseSessionOmitsAnUnknownExitCode(t *testing.T) {
 
 func TestClientRejectsAnInvalidBaseURL(t *testing.T) {
 	_, err := NewClient("not a url", "test").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box")
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1")
 	if err == nil {
 		t.Fatal("client accepted an invalid base URL")
 	}
@@ -243,7 +268,7 @@ func TestClientReportsAnUnreachableService(t *testing.T) {
 	service.Close()
 
 	_, err := NewClient(address, "test").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box")
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1")
 	if err == nil || !strings.Contains(err.Error(), "contact accounts service") {
 		t.Fatalf("error = %v, want a connection failure", err)
 	}
@@ -258,7 +283,7 @@ func TestClientHandlesANonJSONErrorBody(t *testing.T) {
 	defer service.Close()
 
 	_, err := NewClient(service.URL, "test").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box")
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1")
 	if err == nil || !strings.Contains(err.Error(), "502") {
 		t.Fatalf("error = %v, want the status code", err)
 	}
@@ -276,7 +301,7 @@ func TestClientSendsTheUserAgent(t *testing.T) {
 	defer service.Close()
 
 	if _, err := NewClient(service.URL, "shell/1.2.3").
-		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box"); err != nil {
+		Exchange(context.Background(), "c", "v", "http://127.0.0.1:1/callback", "box", "m1"); err != nil {
 		t.Fatalf("Exchange: %v", err)
 	}
 	if agent != "shell/1.2.3" {

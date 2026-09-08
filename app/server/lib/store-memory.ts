@@ -180,6 +180,19 @@ export class MemoryStore implements Store {
     this.flush();
   }
 
+  /*
+   * Scoped by uid so a machine id cannot address another account's device,
+   * and to live rows so that unlinking a machine is not undone by the next
+   * login on it. Two rows can share a machine id -- two logins racing each
+   * other -- so the newest wins, which is the one a device list shows first.
+   */
+  async deviceForMachine(uid: string, machineId: string): Promise<CliToken | null> {
+    const matches = this.data.tokens
+      .filter((entry) => entry.uid === uid && entry.machineId === machineId && !entry.revokedAt)
+      .sort(byTime<CliToken>((t) => t.createdAt, (t) => t.id, true));
+    return matches[0] ?? null;
+  }
+
   async setMemberKey(uid: string, publicKey: string): Promise<void> {
     const membership = this.data.memberships.find((entry) => entry.uid === uid);
     if (!membership || membership.publicKey === publicKey) return;

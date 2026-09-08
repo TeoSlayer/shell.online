@@ -33,6 +33,7 @@ start on a bad value rather than failing on the first request that needs it.
 | `CLIENT_DIR` | to serve the client | Directory holding the built client. Set in the image. |
 | `PORT` / `HOST` | no | Defaults to 8080, and to `0.0.0.0` under `NODE_ENV=production`. |
 | `TRUST_PROXY` | no | Set to `1` only behind a proxy that rewrites `X-Forwarded-For`. Believing it otherwise lets a caller pick a new address per request and walk past the rate limiter. |
+| `MAIL_API_URL`, `MAIL_API_KEY`, `MAIL_FROM` | no | Where to post an invitation email, and as whom. All three or none: with any missing, invitations are logged instead of sent and the link still works. |
 
 The `VITE_*` values are compiled into the client, so they are build arguments
 rather than container environment. Changing one needs a rebuild.
@@ -46,6 +47,22 @@ docker compose up --build
 
 Anywhere that runs a container — Fly, Render, Cloud Run — takes the same image
 with the same variables and a managed Postgres.
+
+## Sending invitations
+
+An invite is a link, and a link somebody has to be told about by hand mostly
+does not get accepted. When an invite is created with an email address, the
+service sends it.
+
+There is no mail library and no vendor in the code. `server/lib/mail.ts` posts
+one JSON body — `{from, to, subject, html, text}` — to `MAIL_API_URL`, which is
+the shape Resend, Postmark and Mailgun all accept, so the deployment picks the
+provider. With the three `MAIL_*` variables unset the message is logged, link
+included, which is what a developer wants and what stops an unconfigured
+deployment from failing an invite that is otherwise perfectly good.
+
+Sending is best effort: a provider having a bad afternoon must not throw away
+an invite the inviter can still copy and paste.
 
 ## The schema
 
