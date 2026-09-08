@@ -58,9 +58,9 @@ const TYPING_LEASE_MS = 1_800;
 const PILOT_PROTOCOL_URL = "https://pilotprotocol.network/";
 
 /*
- * Where the web app is served. It is a separate deployment from this site --
- * the relay serves the marketing pages and /s/<id>, nothing else -- so its
- * host is not derivable from anything here and lives in one place instead.
+ * Where the web app is served. It is a separate Worker from this one -- the
+ * relay serves the marketing pages and /s/<id>, nothing else -- so its host is
+ * not derivable from anything here and lives in one place instead.
  */
 const WEB_APP_URL = "https://app.shell.online";
 const SIGNUP_URL = `${WEB_APP_URL}/signup`;

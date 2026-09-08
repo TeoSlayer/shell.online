@@ -25,6 +25,17 @@
   // are hashed with node:crypto.
   "compatibility_flags": ["nodejs_compat"],
 
+  // A custom domain rather than a route pattern: Cloudflare provisions the DNS
+  // record and the certificate for it, and the Worker answers on the host that
+  // invitation links and the landing page point at. The relay keeps
+  // shell.online itself; this is only the app subdomain.
+  "routes": [
+    {
+      "pattern": "app.shell.online",
+      "custom_domain": true
+    }
+  ],
+
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
