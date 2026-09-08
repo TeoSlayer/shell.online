@@ -244,6 +244,16 @@ export function approveCliLogin(input: AuthorizeInput) {
   });
 }
 
+export interface AuditEvent {
+  id: string;
+  sessionId: string;
+  at: number;
+  actorUid: string;
+  actorEmail: string;
+  kind: "input" | "interrupt" | "opened" | "handoff";
+  text: string;
+}
+
 export interface Device {
   id: string;
   label: string;
@@ -307,3 +317,21 @@ export function fetchSessions() {
 }
 
 export const accountsBaseUrl = BASE;
+
+export function fetchAudit(sessionId: string) {
+  return request<{ events: AuditEvent[] }>(`/api/audit/${encodeURIComponent(sessionId)}`);
+}
+
+
+/** The audit export needs the same bearer token, so it is fetched not linked. */
+export async function downloadAuditCsv(sessionId?: string): Promise<Blob> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("You are signed out.");
+  const token = await user.getIdToken();
+  const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
+  const response = await fetch(`${BASE}/api/audit.csv${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error("Could not export the audit log.");
+  return response.blob();
+}
