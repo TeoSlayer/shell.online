@@ -182,7 +182,8 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
                   {devices.map((device) => (
                     <option key={device.id} value={device.id}>
                       {device.label}
-                      {machineOnline(device) ? "" : " (offline)"}
+                      {/* An <option> cannot hold the status badge markup. */}
+                      {machineOnline(device) ? "" : " — offline"}
                     </option>
                   ))}
                 </select>

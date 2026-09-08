@@ -129,7 +129,7 @@ export function Workspace() {
   }, []);
 
   /*
-   * Machines are polled, not fetched once: whether an agent is listening is a
+   * Machines are polled, not fetched once: whether a machine is reachable is a
    * live fact, and a stale snapshot silently disables the Start button.
    */
   useEffect(() => {
@@ -356,13 +356,19 @@ export function Workspace() {
             <p>No sessions yet.</p>
             <ol>
               <li>
-                Run <code>shell login</code> on a machine and allow
-                browser-started sessions.
+                Install shell on the machine you want to run on.
+                <code className="empty-command">
+                  curl -fsSL https://shell.online/install | sh
+                </code>
               </li>
               <li>
-                Press <b>+ Session</b> and pick what to run.
+                Sign that machine in, and allow browser-started sessions.
+                <code className="empty-command">shell login</code>
               </li>
-              <li>It opens here as a tab you can type into.</li>
+              <li>
+                Press <b>+ Session</b> and pick what to run. It opens here as a
+                tab you can type into.
+              </li>
             </ol>
           </div>
         ) : (

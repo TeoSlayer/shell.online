@@ -25,7 +25,7 @@ export function Machines() {
 
   useEffect(() => {
     void load();
-    /* Refresh so the listening state reflects the agent starting or stopping. */
+    /* Refresh so the badge reflects a machine becoming reachable, or dropping. */
     const poll = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(poll);
   }, [load]);
@@ -43,7 +43,7 @@ export function Machines() {
     }
   }
 
-  /* Ticks so "agent listening" goes stale on its own rather than lying. */
+  /* Ticks so an Online badge goes stale on its own rather than lying. */
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 3000);
@@ -78,12 +78,16 @@ export function Machines() {
           <p>No machines linked yet.</p>
           <ol>
             <li>
-              Run <code>shell login</code> on the machine you want to share from.
+              Install shell on the machine you want to share from.
+              <code className="empty-command">
+                curl -fsSL https://shell.online/install | sh
+              </code>
             </li>
-            <li>Approve the request in this browser.</li>
             <li>
-              Every <code>shell</code> command on that machine then publishes here.
+              Sign that machine in, then approve the request in this browser.
+              <code className="empty-command">shell login</code>
             </li>
+            <li>The machine appears in this list.</li>
           </ol>
         </div>
       ) : (
@@ -97,9 +101,9 @@ export function Machines() {
                 </span>
                 <span className="session-meta">
                   {machineOnline(device, now) ? (
-                    <b className="agent-live">agent listening</b>
+                    <span className="status-badge status-badge-online">Online</span>
                   ) : (
-                    <span className="agent-idle">no agent</span>
+                    <span className="status-badge status-badge-offline">Offline</span>
                   )}
                   {" · "}
                   linked {ago(device.createdAt, now)} · last used{" "}

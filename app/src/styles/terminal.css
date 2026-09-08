@@ -547,6 +547,12 @@ button.tab {
 .signed-in .btn {
   margin-top: 4px;
   min-width: 120px;
+  /* Transparent, not none, so the button keeps the shared .btn box height. */
+  border-color: transparent;
+}
+
+.signed-in .btn:hover:not(:disabled) {
+  border-color: transparent;
 }
 
 .sheet-head {
@@ -869,13 +875,49 @@ button.tab {
   }
 }
 
-.agent-live {
+/*
+ * The dot is a pseudo-element rather than an inline-flex child so it stays on
+ * the text baseline inside .session-meta, which is a plain block of prose.
+ */
+.status-badge::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: currentcolor;
+  content: "";
+  vertical-align: 0.08em;
+}
+
+.status-badge-online {
   color: var(--success);
   font-weight: 540;
 }
 
-.agent-idle {
+.status-badge-offline {
   color: var(--faint);
+}
+
+/*
+ * Overrides the inline code chip .sessions-empty already sets: a command
+ * someone has to copy reads as its own line, not as a word in a sentence.
+ */
+.sessions-empty .empty-command {
+  display: block;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  margin: 8px 0 2px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+  /* One click takes the whole command, and there is no prompt glyph to strip. */
+  user-select: all;
 }
 
 /* ---------------------------------------------------------------

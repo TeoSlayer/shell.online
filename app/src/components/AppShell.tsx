@@ -23,7 +23,7 @@ function LinkHint() {
   const [copied, setCopied] = useState(false);
   return (
     <div className="rail-hint">
-      <p>Link another machine</p>
+      <p>Link a machine</p>
       <button
         type="button"
         className="rail-command"
