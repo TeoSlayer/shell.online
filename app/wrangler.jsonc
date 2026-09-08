@@ -50,6 +50,10 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
+    // Static files must pass through worker/index.ts so the browser receives
+    // the same anti-framing, referrer and popup-auth headers in production as
+    // it does from the Node and Vite servers.
+    "run_worker_first": true,
     // The client is a single page with its own router, so /sessions/abc is a
     // page rather than a file and a miss has to reach index.html.
     "not_found_handling": "single-page-application"

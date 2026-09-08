@@ -16,11 +16,6 @@ on:
         description: Apply pending database migrations before deploying
         type: boolean
         default: true
-  push:
-    branches: [main]
-    paths:
-      - app/**
-      - .github/workflows/deploy-app.yml
 
 permissions:
   contents: read
