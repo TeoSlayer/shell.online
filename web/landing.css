@@ -502,6 +502,48 @@
   transform: translateY(3px);
 }
 
+/*
+ * The account route in, beside the install command rather than instead of it.
+ * Underlined rather than boxed: two filled controls next to each other would
+ * argue about which is the thing to press, and the install one-liner is still
+ * the faster start.
+ */
+.hero-signup,
+.platform-signup {
+  color: #22241f;
+  font-size: 13px;
+  font-weight: 560;
+  text-decoration: underline;
+  text-decoration-color: #b9b6ab;
+  text-underline-offset: 4px;
+  white-space: nowrap;
+  transition: text-decoration-color 150ms ease;
+}
+
+.hero-signup:hover,
+.platform-signup:hover {
+  text-decoration-color: #22241f;
+}
+
+.hero-signup span,
+.platform-signup span {
+  display: inline-block;
+  margin-left: 4px;
+  transition: transform 150ms ease;
+}
+
+.hero-signup:hover span,
+.platform-signup:hover span {
+  transform: translateX(3px);
+}
+
+.platform-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
 .product-demo {
   position: relative;
   min-width: 0;

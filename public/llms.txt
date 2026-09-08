@@ -90,7 +90,10 @@ Accounts are optional. Every command above works without one, and an
 unlinked machine behaves exactly as described.
 
 `shell login` links a machine to an account. It opens a browser to approve the
-request, then returns to the sessions page. `shell whoami` shows which account
+request, then returns to the sessions page; a browser with no account yet is
+sent to the sign-up page first, which asks for a name for the organization
+being created. Signing in again from the same machine updates that machine's
+entry rather than adding a second one. `shell whoami` shows which account
 a machine is linked to; `shell logout` unlinks it and revokes its token. Once
 linked, sessions started with `shell` appear in the account automatically. What
 is published is the share URL, the command line, the host name, the session
@@ -110,6 +113,12 @@ daemon polls for work and can start and stop sessions on that machine.
 
 The browser chooses the session password and seals it to an ephemeral key the
 daemon publishes, so the accounts service relays an envelope it cannot open.
+
+The daemon also reports which agent harnesses this machine can run, so the web
+app offers the ones that are actually there. It looks up four command names on
+PATH -- claude, codex, hermes, openclaw -- once per daemon run. It does not
+execute them, read their configuration, or read anything in your projects. The
+list of which of those four exist is what is sent.
 
     shell daemon status              is this machine reachable from a browser
     shell daemon stop                stop until the next shell command

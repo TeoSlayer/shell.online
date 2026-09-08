@@ -86,13 +86,15 @@ leaking `auth/internal-error` into the UI.
 
 ### Which project this points at
 
-It currently runs against the `shell.online` web app inside the **`vv-cloud-firebase`**
-Google Cloud project. That project already has Identity Platform configured with
-email/password and Google sign-in enabled, so this works today.
+Whichever one `.env.local` names. Development borrows an existing Google Cloud
+project from elsewhere in the organization, because it already has Identity
+Platform configured with email/password and Google sign-in, so the flow works
+without provisioning anything.
 
-It is an interim host. That project is Vulture Vision's, which means a shared user
-pool and password reset emails signed "Vulture Labs team". Moving to a dedicated
-project is a `.env.local` change, nothing in the code.
+That is an interim arrangement: a borrowed project means a shared user pool and
+password-reset mail signed by another team. Anything real needs its own project
+with Identity Platform enabled and billing on, which is a `.env.local` change
+and nothing in the code.
 
 `shell-online-auth` was created for that purpose and has the Firebase and Identity
 Toolkit APIs enabled, but Identity Platform on a fresh project needs a billing
