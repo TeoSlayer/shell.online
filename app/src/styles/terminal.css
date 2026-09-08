@@ -951,10 +951,10 @@ button.tab {
 }
 
 /* ---------------------------------------------------------------
-   Organization
+   Team
    --------------------------------------------------------------- */
 
-.org-name {
+.team-name {
   display: flex;
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
@@ -963,7 +963,7 @@ button.tab {
   gap: 16px;
 }
 
-.org-name span {
+.team-name span {
   color: var(--ink);
   font-size: 20px;
   font-weight: 500;

@@ -23,6 +23,7 @@ import {
 } from "../lib/api";
 import { splitMentions } from "../lib/mentions";
 import { displayName, findPerson } from "../lib/people";
+import { usePageTitle } from "../lib/page-title";
 import { ago, elapsed } from "../lib/time";
 
 function CommentBody({ body, members }: { body: string; members: Member[] }) {
@@ -60,6 +61,7 @@ function CommentRow({ comment, members }: { comment: Comment; members: Member[] 
 }
 
 export function Session() {
+  usePageTitle("Session");
   const { sessionId = "" } = useParams();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [error, setError] = useState("");

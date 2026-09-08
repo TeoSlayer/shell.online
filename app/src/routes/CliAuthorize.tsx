@@ -7,9 +7,11 @@ import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
 import { Booting } from "../components/Booting";
 import { approveCliLogin } from "../lib/api";
+import { usePageTitle } from "../lib/page-title";
 import { buildCallback, parseAuthorizeRequest } from "../lib/cli-authorize";
 
 export function CliAuthorize() {
+  usePageTitle("Link a machine");
   const { user, initializing } = useAuth();
   const location = useLocation();
   const parsed = useMemo(() => parseAuthorizeRequest(location.search), [location.search]);

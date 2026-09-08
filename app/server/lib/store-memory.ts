@@ -316,6 +316,21 @@ export class MemoryStore implements Store {
     return session;
   }
 
+  async deleteSession(orgId: string, id: string): Promise<boolean> {
+    const before = this.data.sessions.length;
+    this.data.sessions = this.data.sessions.filter(
+      (entry) => !(entry.id === id && entry.orgId === orgId),
+    );
+    /*
+     * The audit trail outlives the session it describes. Removing a row is
+     * itself an audited act, and a trail that vanished with its subject would
+     * record nothing worth keeping.
+     */
+    if (this.data.sessions.length === before) return false;
+    this.flush();
+    return true;
+  }
+
   async putCommand(command: AgentCommand): Promise<void> {
     this.data.commands.push(command);
     this.flush();

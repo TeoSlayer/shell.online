@@ -30,7 +30,7 @@ export interface Member {
   publicKey?: string;
 }
 
-export interface Organization {
+export interface Team {
   id: string;
   name: string;
   createdAt: number;
@@ -48,7 +48,7 @@ export interface Invite {
 }
 
 export interface OrgView {
-  organization: Organization;
+  organization: Team;
   you: Member;
   members: Member[];
   invites: Invite[];
@@ -66,7 +66,7 @@ export function fetchOrg(inviteId?: string, publicKey?: string) {
 }
 
 export function renameOrg(name: string) {
-  return request<{ organization: Organization }>("/api/org", {
+  return request<{ organization: Team }>("/api/org", {
     method: "PATCH",
     body: JSON.stringify({ name }),
   });
@@ -250,7 +250,7 @@ export interface AuditEvent {
   at: number;
   actorUid: string;
   actorEmail: string;
-  kind: "input" | "interrupt" | "opened" | "handoff";
+  kind: "input" | "interrupt" | "opened" | "handoff" | "stopped" | "deleted";
   text: string;
 }
 
@@ -323,6 +323,24 @@ export function postAudit(entries: { session_id: string; kind: string; text: str
     method: "POST",
     body: JSON.stringify({ entries }),
   });
+}
+
+/*
+ * Removes a session from the lists.
+ *
+ * The row, not the machine. The process has already exited, or is being
+ * abandoned deliberately; what it left on disk belongs to whoever ran it.
+ */
+export function deleteSession(sessionId: string) {
+  return request<{ deleted: boolean }>(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+/** The whole team's trail, including sessions that have since been removed. */
+export function fetchOrgAudit(limit?: number) {
+  const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+  return request<{ events: AuditEvent[] }>(`/api/audit${query}`);
 }
 
 export function fetchAudit(sessionId: string) {

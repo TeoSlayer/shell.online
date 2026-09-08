@@ -16,6 +16,7 @@ import {
 import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { displayName } from "../lib/people";
+import { usePageTitle } from "../lib/page-title";
 import { publicKey } from "../lib/keypair";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -57,7 +58,8 @@ function CopyInvite({ invite }: { invite: Invite }) {
   );
 }
 
-export function Organization() {
+export function Team() {
+  usePageTitle("Team");
   const [view, setView] = useState<OrgView | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -74,7 +76,7 @@ export function Organization() {
       setDraftName(result.organization.name);
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load the organization.");
+      setError(caught instanceof Error ? caught.message : "Could not load the team.");
     }
   }, []);
 
@@ -112,7 +114,7 @@ export function Organization() {
 
   return (
     <AppShell
-      title="Organization"
+      title="Team"
       aside={
         view ? (
           <span className="topbar-count">
@@ -145,7 +147,7 @@ export function Organization() {
                 <input
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
-                  aria-label="Organization name"
+                  aria-label="Team name"
                   autoFocus
                 />
                 <Button type="submit" busy={busy} busyLabel="Saving">
@@ -156,7 +158,7 @@ export function Organization() {
                 </Button>
               </form>
             ) : (
-              <div className="org-name">
+              <div className="team-name">
                 <span>{view.organization.name}</span>
                 {isOwner && (
                   <button type="button" className="session-action" onClick={() => setRenaming(true)}>

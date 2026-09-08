@@ -12,7 +12,7 @@ const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
   { to: "/machines", label: "Machines", Icon: Desktop },
   { to: "/audit", label: "Audit log", Icon: ClockCounterClockwise },
-  { to: "/organization", label: "Organization", Icon: UsersThree },
+  { to: "/team", label: "Team", Icon: UsersThree },
   { to: "/account", label: "Account", Icon: User },
 ] as const;
 

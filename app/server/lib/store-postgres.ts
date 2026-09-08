@@ -764,6 +764,19 @@ export class PostgresStore implements Store {
     return row ? (await this.hydrate([row]))[0] : null;
   }
 
+  /*
+   * The row only. Sealed password copies go with it because they are useless
+   * without it, and the audit trail deliberately does not: removing a session
+   * is an audited act and the record of it outlives the subject.
+   */
+  async deleteSession(orgId: string, id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM sessions WHERE org_id = $1 AND id = $2", [
+      orgId,
+      id,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /** Stores sealed copies of a session password, replacing any for the same uid. */
   async putKeyShares(
     orgId: string,

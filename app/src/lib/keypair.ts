@@ -2,7 +2,7 @@
  * This browser's key pair, used to receive session passwords from colleagues.
  *
  * A session's password is chosen by whoever starts it. For anyone else in the
- * organization to open that session, the password has to reach them without
+ * team to open that session, the password has to reach them without
  * the accounts service being able to read it. So every browser publishes an
  * ECDH public key with its membership, and a session password is sealed once
  * per member.

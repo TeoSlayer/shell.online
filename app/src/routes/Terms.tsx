@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { usePageTitle } from "../lib/page-title";
 import { Wordmark } from "../components/Wordmark";
 
 /*
@@ -11,7 +12,7 @@ import { Wordmark } from "../components/Wordmark";
 const SECTIONS = [
   { id: "scope", title: "Scope of These Terms" },
   { id: "tiers", title: "Service Tiers" },
-  { id: "accounts", title: "Accounts and Organizations" },
+  { id: "accounts", title: "Accounts and Teams" },
   { id: "your-machine", title: "What Runs on Your Machine" },
   { id: "browser-sessions", title: "Browser-Started Sessions" },
   { id: "harness-discovery", title: "Harness Discovery" },
@@ -82,6 +83,7 @@ function Tier({
 const CONTACT = "founders@pilotprotocol.network";
 
 export function Terms() {
+  usePageTitle("Terms of service");
   return (
     <main className="terms">
       <header className="terms-head">
@@ -139,7 +141,7 @@ export function Terms() {
             <div>
               <dt>The accounts service</dt>
               <dd>
-                The service that holds accounts, organizations, machine
+                The service that holds accounts, teams, machine
                 records, session metadata and collaboration records.
               </dd>
             </div>
@@ -225,13 +227,13 @@ export function Terms() {
             machine&rsquo;s token.
           </p>
           <p>
-            Signing up creates an organization for you, unless you arrived
-            through an invite link, in which case you join the organization that
+            Signing up creates a team for you, unless you arrived
+            through an invite link, in which case you join the team that
             issued it.
           </p>
           <p>
-            An organization is a shared workspace, and it is shared in a strong
-            sense. <b>Everyone in your organization can see every member&rsquo;s
+            A team is a shared workspace, and it is shared in a strong
+            sense. <b>Everyone in your team can see every member&rsquo;s
             sessions</b> and can read their comments and handoff history. A
             session has an owner and an assignee, and
             only they can edit it — but visibility is not restricted that way.
@@ -240,7 +242,7 @@ export function Terms() {
             Anyone signed in to your account can start processes on any machine
             of yours that allowed browser-started sessions, as described in{" "}
             <Ref id="browser-sessions" />. Keep your account credentials to
-            yourself, and invite people to your organization only when you mean
+            yourself, and invite people to your team only when you mean
             them to see all of this.
           </p>
         </Section>
@@ -339,7 +341,7 @@ export function Terms() {
                 The share URL, the command line, the host name of the machine,
                 the session name, timings, the session flags, and the exit code.
                 The command line is stored as written, so treat a command line
-                the way you would treat anything else your organization can
+                the way you would treat anything else your team can
                 read.
               </dd>
             </div>
@@ -377,7 +379,7 @@ export function Terms() {
               Commands, prompts, and anything else entered at the keyboard are
               sent to the accounts service as you commit them, stored without
               encryption, and can be read and exported by every member of your
-              organization. That includes anything typed by mistake, such as a
+              team. That includes anything typed by mistake, such as a
               password or a key pasted into the wrong window.
             </p>
           </div>
@@ -390,7 +392,7 @@ export function Terms() {
             We also retain the collaboration information people deliberately
             create outside the terminal: session ownership and assignment,
             handoffs, comments, mentions, and notifications. Members of the
-            organization can see those records.
+            team can see those records.
           </p>
           <p>
             If this is not what you want for a particular session, do not type
@@ -532,7 +534,7 @@ export function Terms() {
               a browser signed in to that account.
             </li>
             <li>
-              Who you invite into your organization, given that every member can
+              Who you invite into your team, given that every member can
               see its shared sessions and collaboration records.
             </li>
             <li>
@@ -660,7 +662,7 @@ export function Terms() {
           </p>
           <p>
             Ending an account does not by itself undo collaboration records that
-            other members of your organization have already seen.
+            other members of your team have already seen.
           </p>
         </Section>
 

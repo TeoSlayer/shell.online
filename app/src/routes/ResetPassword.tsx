@@ -5,9 +5,11 @@ import { Field } from "../components/Field";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
+import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 
 export function ResetPassword() {
+  usePageTitle("Reset your password");
   const { resetPassword } = useAuth();
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState("");

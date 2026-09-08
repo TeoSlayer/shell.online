@@ -6,9 +6,11 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { GoogleMark } from "../components/GoogleMark";
 import { useAuth } from "../auth/AuthProvider";
+import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 
 export function SignIn() {
+  usePageTitle("Sign in");
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();

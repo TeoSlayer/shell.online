@@ -11,6 +11,20 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+
+    <!--
+      Saved to a phone's home screen, this opens as its own window rather than
+      a browser tab: the manifest asks for it, and the two apple- meta tags are
+      what iOS reads instead, since Safari still ignores display: standalone.
+      apple-mobile-web-app-title is the name under the icon; without it iOS
+      uses the document title, which is a sentence.
+    -->
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="shell" />
+    <!-- Translucent, so the page's own colour runs under the status bar. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link
       rel="preload"
       href="/fonts/uncut-sans-variable.woff2"
@@ -18,7 +32,7 @@
       type="font/woff2"
       crossorigin
     />
-    <title>Sign in | shell.online</title>
+    <title>shell.online</title>
   </head>
   <body>
     <div id="root"></div>

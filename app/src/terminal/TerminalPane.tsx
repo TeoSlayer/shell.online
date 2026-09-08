@@ -22,7 +22,7 @@ export interface TerminalPaneProps {
   keyShare?: { senderPublicKey: string; sealed: string };
   /**
    * False for a colleague who is neither owner nor assignee. They can watch
-   * but not type, which is what "readable by the organization, editable by
+   * but not type, which is what "readable by the team, editable by
    * the people responsible" means in a terminal.
    */
   canType?: boolean;
@@ -187,7 +187,7 @@ export function TerminalPane({
     connection.current = connected;
 
     /*
-     * Input is recorded per session so an organization can see what was run
+     * Input is recorded per session so a team can see what was run
      * or asked. It watches the same stream the terminal receives, so it sees
      * exactly what was entered and nothing else.
      */

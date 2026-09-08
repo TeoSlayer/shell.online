@@ -7,7 +7,7 @@ import { ResetPassword } from "./routes/ResetPassword";
 import { Account } from "./routes/Account";
 import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
-import { Organization } from "./routes/Organization";
+import { Team } from "./routes/Team";
 import { Join } from "./routes/Join";
 import { Terms } from "./routes/Terms";
 import { Session } from "./routes/Session";
@@ -69,10 +69,10 @@ export default function App() {
             }
           />
           <Route
-            path="/organization"
+            path="/team"
             element={
               <RequireAuth>
-                <Organization />
+                <Team />
               </RequireAuth>
             }
           />

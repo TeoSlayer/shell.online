@@ -1,5 +1,5 @@
 /**
- * The organization name offered at signup.
+ * The team name offered at signup.
  *
  * Mirrors `suggestOrgName` in server/lib/orgs.ts, which is what the service
  * falls back to when nobody chooses one. Showing the same guess as the
@@ -19,17 +19,17 @@ const PERSONAL_DOMAINS = new Set([
 ]);
 
 function titleCase(value: string): string {
-  if (!value) return "Organization";
+  if (!value) return "Team";
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-export function suggestedOrgName(email: string, displayName?: string): string {
+export function suggestedTeamName(email: string, displayName?: string): string {
   const [local, domain] = email.trim().toLowerCase().split("@");
   if (!local) return "";
   if (domain && domain.includes(".") && !PERSONAL_DOMAINS.has(domain)) {
     return titleCase(domain.split(".")[0] ?? domain);
   }
   const person = (displayName ?? "").trim();
-  if (person) return `${person.split(/\s+/)[0]}'s organization`;
-  return `${titleCase(local)}'s organization`;
+  if (person) return `${person.split(/\s+/)[0]}'s team`;
+  return `${titleCase(local)}'s team`;
 }

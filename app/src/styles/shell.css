@@ -444,3 +444,77 @@
     padding: 24px 18px 64px;
   }
 }
+
+/* ---------------------------------------------------------------
+   Phones, and the home-screen app
+   ---------------------------------------------------------------
+   Saved to a home screen this opens without browser chrome, so the layout
+   has to carry the navigation itself. A 264px rail beside the content does
+   not fit, and a hidden drawer would put every destination behind a tap on
+   a device where the whole point is glanceability. The rail becomes a bottom
+   bar instead: the reachable edge on a phone, and what a native application
+   would do.
+
+   Standalone mode has no browser chrome to absorb the notch or the home
+   indicator either, hence the safe-area insets. Without them the wordmark
+   sits under the status bar and the last nav item under the gesture bar.
+   --------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rail {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: auto;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    flex-direction: row;
+  }
+
+  /* The wordmark, the copy-command hint and the account row all live in the
+     topbar or the account sheet on a phone; the bar holds destinations. */
+  .rail-head,
+  .rail-hint,
+  .rail-foot {
+    display: none;
+  }
+
+  .rail-nav {
+    display: flex;
+    width: 100%;
+    gap: 0;
+    justify-content: space-around;
+  }
+
+  .rail-link {
+    padding: 7px 4px;
+    flex-direction: column;
+    font-size: 10.5px;
+    gap: 3px;
+    text-align: center;
+  }
+
+  .rail-link.is-active {
+    background: none;
+    color: var(--ink);
+  }
+
+  /* Clear of the bar, so the last row of a table is not under it. */
+  .shell-content {
+    padding-bottom: calc(74px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .topbar-inner {
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
+}

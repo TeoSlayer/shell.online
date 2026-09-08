@@ -69,7 +69,7 @@ export interface AuditEvent {
   at: number;
   actorUid: string;
   actorEmail: string;
-  kind: "input" | "interrupt" | "opened" | "handoff";
+  kind: "input" | "interrupt" | "opened" | "handoff" | "stopped" | "deleted";
   text: string;
 }
 

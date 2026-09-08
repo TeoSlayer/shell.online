@@ -5,9 +5,11 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { fetchDevices, revokeDevice, type Device } from "../lib/api";
 import { machineOnline } from "../lib/agent";
+import { usePageTitle } from "../lib/page-title";
 import { ago } from "../lib/time";
 
 export function Machines() {
+  usePageTitle("Machines");
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState("");
   const [unlinking, setUnlinking] = useState("");

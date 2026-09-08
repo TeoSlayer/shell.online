@@ -1126,6 +1126,40 @@ describe("audit log", () => {
    * terms say so. This test is where the choice is written down, so that
    * removing it again is a decision somebody takes rather than a regression.
    */
+  it("records the removal of a session and keeps the entry after the row is gone", async () => {
+    await withSession();
+    const removed = await call("DELETE", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(removed.status).toBe(200);
+
+    /* The session is gone from the lists. */
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions).toEqual([]);
+
+    /*
+     * The entry is not. Read from the team's trail rather than the session's,
+     * because the session is the thing that just stopped existing.
+     */
+    const log = await call("GET", "/api/audit", { auth: await idToken() });
+    const kinds = log.body.events
+      .filter((event: { sessionId: string }) => event.sessionId === session.id)
+      .map((event: { kind: string }) => event.kind);
+    expect(kinds).toEqual(["deleted"]);
+  });
+
+  it("refuses to remove a session belonging to somebody else", async () => {
+    await withSession();
+    const other = await idToken({ sub: "uid-outsider", email: "outsider@example.com" });
+    const result = await call("DELETE", `/api/sessions/${session.id}`, { auth: other });
+    expect([401, 403, 404]).toContain(result.status);
+  });
+
+  it("has nothing to remove twice", async () => {
+    await withSession();
+    await call("DELETE", `/api/sessions/${session.id}`, { auth: await idToken() });
+    const again = await call("DELETE", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(again.status).toBe(404);
+  });
+
   it("records what was typed, in plaintext, for the whole organization", async () => {
     await withSession();
     const result = await call("POST", "/api/audit", {

@@ -65,6 +65,14 @@ export interface Store {
   listOrgSessions(orgId: string): Promise<SessionRecord[]>;
   sessionInOrg(orgId: string, id: string): Promise<SessionRecord | null>;
   assignSession(orgId: string, id: string, assigneeUid: string): Promise<SessionRecord | null>;
+  /**
+   * Removes a session's record from an organization.
+   *
+   * The row only. Whatever the session left on the machine that ran it is not
+   * ours to touch, and the process is already gone by the time anyone can ask
+   * for this.
+   */
+  deleteSession(orgId: string, id: string): Promise<boolean>;
   putKeyShares(orgId: string, sessionId: string, shares: SessionKeyShare[]): Promise<boolean>;
 
   /* ---- Agent commands ---- */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Copy, Check, X, Terminal as TerminalIcon, List, Plus, CaretRight } from "@phosphor-icons/react";
+import { Copy, Check, X, Lock, Trash, Terminal as TerminalIcon, List, Plus, CaretRight } from "@phosphor-icons/react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PersonChip } from "../components/Avatar";
 import { PersonPicker } from "../components/PersonPicker";
@@ -12,20 +12,22 @@ import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { EMPTY, reduce } from "../terminal/tabs";
 import {
+  assignSession,
+  deleteSession,
   fetchDevices,
   fetchSessions,
   startSession,
   stopSession,
-  assignSession,
   type Device,
   type Member,
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { publicKey, sealForMembers } from "../lib/keypair";
+import { openSealed, publicKey, sealForMembers } from "../lib/keypair";
 import { fetchOrg, shareSessionKeys } from "../lib/api";
-import { adoptOrigin, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
+import { adoptOrigin, forget, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
 import { elapsed } from "../lib/time";
+import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 
 const POLL_MS = 4000;
@@ -57,7 +59,123 @@ function CopyLink({ url }: { url: string }) {
   );
 }
 
+/*
+ * Copies the session password, for people entitled to have it.
+ *
+ * The service never sees a password, so there is nothing to fetch: this is
+ * either the copy this browser kept from starting the session, or one a
+ * colleague sealed to this browser's key. Anyone else has neither, and the
+ * button does not appear for them rather than appearing and failing.
+ */
+function CopyPassword({ session }: { session: SessionRecord }) {
+  const [state, setState] = useState<"idle" | "copied" | "gone">("idle");
+  const [available, setAvailable] = useState(() => passwordFor(session.id) !== null);
+
+  useEffect(() => {
+    let live = true;
+    if (passwordFor(session.id)) {
+      setAvailable(true);
+      return;
+    }
+    /* A sealed copy has to be opened before we know we have one. */
+    const share = session.keyShare;
+    if (!share) {
+      setAvailable(false);
+      return;
+    }
+    void openSealed(share.senderPublicKey, share.sealed).then((password) => {
+      if (live) setAvailable(Boolean(password));
+    });
+    return () => {
+      live = false;
+    };
+  }, [session.id, session.keyShare]);
+
+  if (!available) return null;
+
+  return (
+    <button
+      type="button"
+      className="session-copy"
+      onClick={async () => {
+        const own = passwordFor(session.id);
+        const share = session.keyShare;
+        const password =
+          own ?? (share ? await openSealed(share.senderPublicKey, share.sealed) : null);
+        if (!password) {
+          setState("gone");
+          window.setTimeout(() => setState("idle"), 2400);
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(password);
+          setState("copied");
+          window.setTimeout(() => setState("idle"), 1600);
+        } catch {
+          /* clipboard is unavailable outside a secure context */
+        }
+      }}
+      aria-label={state === "copied" ? "Password copied" : "Copy the session password"}
+      title={state === "gone" ? "That password is no longer here" : "Copy the session password"}
+    >
+      {state === "copied" ? <Check size={15} weight="bold" /> : <Lock size={15} />}
+    </button>
+  );
+}
+
+/*
+ * Removes a session from the lists. Asks first, because it cannot be undone
+ * and the row is the only place the session appears.
+ *
+ * It does not touch the machine. Whatever the session wrote is still there,
+ * and the audit trail keeps the record of the removal.
+ */
+function RemoveSession({
+  session,
+  onRemove,
+  busy,
+}: {
+  session: SessionRecord;
+  onRemove: (session: SessionRecord) => void;
+  busy: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = window.setTimeout(() => setConfirming(false), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirming]);
+
+  if (confirming) {
+    return (
+      <button
+        type="button"
+        className="session-action is-destructive"
+        onClick={() => onRemove(session)}
+        disabled={busy}
+      >
+        {busy ? "Removing" : "Remove?"}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="session-copy"
+      onClick={() => setConfirming(true)}
+      disabled={busy}
+      aria-label={`Remove ${session.name || session.command} from the list`}
+      title="Remove from the list. The machine is not touched."
+    >
+      <Trash size={15} />
+    </button>
+  );
+}
+
 export function Workspace() {
+  usePageTitle("Sessions");
   const [state, dispatch] = useReducer(reduce, EMPTY);
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -66,6 +184,7 @@ export function Workspace() {
   const [now, setNow] = useState(() => Date.now());
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
+  const [removing, setRemoving] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
   /*
@@ -197,11 +316,33 @@ export function Workspace() {
   }
 
   /*
+   * Removes the row, not the session's leavings on the machine that ran it.
+   * The list is reloaded from the service rather than filtered here, so what
+   * is on screen is what the service has.
+   */
+  async function handleRemove(session: SessionRecord) {
+    setRemoving(session.id);
+    setError("");
+    setNotice("");
+    try {
+      await deleteSession(session.id);
+      forget(session.id);
+      dispatch({ type: "close", id: session.id });
+      setNotice(`Removed ${session.name || session.command} from the list.`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not remove that session.");
+    } finally {
+      setRemoving("");
+    }
+  }
+
+  /*
    * Sessions started here have a password only this browser knows. Seal it to
    * every colleague so they can read the session too.
    *
    * Runs on each poll rather than once, because someone can join the
-   * organization after a session started, and should still be able to open it.
+   * team after a session started, and should still be able to open it.
    */
   async function shareAnyPending(all: SessionRecord[], roster: Member[], me: Member | null) {
     const targets = roster.filter((member) => member.publicKey);
@@ -392,12 +533,14 @@ export function Workspace() {
                 now={now}
                 live
                 killing={killing}
+                removing={removing}
                 members={members}
                 you={you}
                 onOpen={(session) =>
                   dispatch({ type: "open", session, canType: canEdit(session, you) })
                 }
                 onKill={handleKill}
+                onRemove={handleRemove}
                 onAssign={handleAssign}
               />
             )}
@@ -408,12 +551,14 @@ export function Workspace() {
                 now={now}
                 live={false}
                 killing={killing}
+                removing={removing}
                 members={members}
                 you={you}
                 onOpen={(session) =>
                   dispatch({ type: "open", session, canType: canEdit(session, you) })
                 }
                 onKill={handleKill}
+                onRemove={handleRemove}
                 onAssign={handleAssign}
               />
             )}
@@ -435,7 +580,7 @@ export function Workspace() {
 }
 
 /**
- * Everyone in the organization can watch a session. Typing into it belongs to
+ * Everyone in the team can watch a session. Typing into it belongs to
  * the person who started it and the person it is assigned to.
  */
 export function canEdit(session: SessionRecord, you: Member | null): boolean {
@@ -449,6 +594,18 @@ function canHandOff(session: SessionRecord, you: Member | null): boolean {
   return session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
 }
 
+/*
+ * Removing the row is not stopping the process, so it is not tied to owning
+ * the machine. The person whose session it is can tidy their own list, and
+ * whoever runs the team can tidy anybody's.
+ */
+export function canRemove(session: SessionRecord, you: Member | null): boolean {
+  if (!you) return false;
+  return (
+    session.ownerUid === you.uid || you.role === "owner" || you.role === "admin"
+  );
+}
+
 /** Stopping controls the owner's local process, so assignment is not enough. */
 export function canStop(session: SessionRecord, you: Member | null): boolean {
   return Boolean(you && session.ownerUid === you.uid && session.deviceId);
@@ -460,10 +617,12 @@ function SessionGroup({
   now,
   live,
   killing,
+  removing,
   members,
   you,
   onOpen,
   onKill,
+  onRemove,
   onAssign,
 }: {
   heading: string;
@@ -471,10 +630,12 @@ function SessionGroup({
   now: number;
   live: boolean;
   killing: string;
+  removing: string;
   members: Member[];
   you: Member | null;
   onOpen: (session: SessionRecord) => void;
   onKill: (session: SessionRecord) => void;
+  onRemove: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uid: string) => void;
 }) {
   /*
@@ -584,6 +745,7 @@ function SessionGroup({
                           {canEdit(session, you) ? "Open" : "Watch"}
                         </button>
                         <CopyLink url={session.shareUrl} />
+                        {canEdit(session, you) && <CopyPassword session={session} />}
                         {canStop(session, you) && (
                           <button
                             type="button"
@@ -594,9 +756,18 @@ function SessionGroup({
                             {killing === session.id ? "Stopping" : "Stop"}
                           </button>
                         )}
+                        {canRemove(session, you) && (
+                          <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
+                        )}
                       </>
                     ) : (
-                      <CopyLink url={session.shareUrl} />
+                      <>
+                        <CopyLink url={session.shareUrl} />
+                        {canEdit(session, you) && <CopyPassword session={session} />}
+                        {canRemove(session, you) && (
+                          <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
+                        )}
+                      </>
                     )}
                   </div>
                 </td>

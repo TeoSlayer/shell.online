@@ -938,6 +938,20 @@
   color: var(--ink);
 }
 
+/*
+ * Removing a row cannot be undone, so the confirm step says so in colour
+ * rather than only in the word.
+ */
+.session-action.is-destructive {
+  border-color: color-mix(in srgb, var(--danger, #b3261e) 45%, var(--line));
+  color: var(--danger, #b3261e);
+}
+
+.session-action.is-destructive:hover {
+  background: color-mix(in srgb, var(--danger, #b3261e) 10%, transparent);
+}
+
+
 .session-open {
   display: inline-flex;
   height: 38px;

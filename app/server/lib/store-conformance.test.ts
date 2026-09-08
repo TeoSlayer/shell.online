@@ -387,6 +387,30 @@ for (const implementation of implementations) {
         expect(shares.find((share) => share.uid === "uid-1")?.sealed).toBe("one");
       });
 
+      it("removes a session's row and reports whether there was one", async () => {
+        await store.upsertSession(session());
+        expect(await store.deleteSession("org_1", "s1")).toBe(true);
+        expect(await store.sessionInOrg("org_1", "s1")).toBeNull();
+        expect(await store.deleteSession("org_1", "s1")).toBe(false);
+      });
+
+      it("refuses to delete another organization's session", async () => {
+        await store.upsertSession(session());
+        expect(await store.deleteSession("org_2", "s1")).toBe(false);
+        expect(await store.sessionInOrg("org_1", "s1")).not.toBeNull();
+      });
+
+      /*
+       * Removing a session is itself an audited act. A trail that vanished
+       * with its subject would record nothing worth keeping.
+       */
+      it("keeps the audit trail of a session it deleted", async () => {
+        await store.upsertSession(session());
+        await store.putAudit(auditEvent({ id: "gone", kind: "deleted", text: "htop" }));
+        await store.deleteSession("org_1", "s1");
+        expect((await store.auditFor("org_1", "s1")).map((entry) => entry.id)).toEqual(["gone"]);
+      });
+
       it("says so when the session is not in the organization", async () => {
         await store.upsertSession(session());
         expect(await store.putKeyShares("org_2", "s1", [])).toBe(false);

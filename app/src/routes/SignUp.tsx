@@ -9,11 +9,13 @@ import { GoogleMark } from "../components/GoogleMark";
 import { useAuth } from "../auth/AuthProvider";
 import { authErrorMessage } from "../lib/auth-errors";
 import { renameOrg } from "../lib/api";
-import { suggestedOrgName } from "../lib/org-name";
+import { usePageTitle } from "../lib/page-title";
+import { suggestedTeamName } from "../lib/team-name";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function SignUp() {
+  usePageTitle("Create an account");
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,13 +30,13 @@ export function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accepted, setAccepted] = useState(false);
-  const [organization, setOrganization] = useState("");
+  const [team, setTeam] = useState("");
   /*
-   * Signing up creates an organization. Naming it here rather than leaving a
+   * Signing up creates a team. Naming it here rather than leaving a
    * guess derived from the email address means the first thing colleagues see
    * on an invite is a name somebody chose.
    */
-  const suggestion = suggestedOrgName(email, name);
+  const suggestion = suggestedTeamName(email, name);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [pending, setPending] = useState<"none" | "email" | "google">("none");
@@ -53,8 +55,8 @@ export function SignUp() {
     if (password.length < 8) {
       next.password = "Use at least 8 characters.";
     }
-    if (!organization.trim() && !suggestion) {
-      next.organization = "Give your organization a name.";
+    if (!team.trim() && !suggestion) {
+      next.team = "Give your team a name.";
     }
     if (!accepted) {
       next.terms = "Accept the terms of service to create an account.";
@@ -71,7 +73,7 @@ export function SignUp() {
     setPending("email");
     try {
       await signUp(name, email, password);
-      await nameTheOrganization();
+      await nameTheTeam();
       navigate(destination, { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
@@ -81,16 +83,16 @@ export function SignUp() {
   }
 
   /**
-   * Names the organization signing up just created.
+   * Names the team signing up just created.
    *
-   * The organization is made on the first authenticated call, so this is that
+   * The team is made on the first authenticated call, so this is that
    * call: it establishes one and renames it in a single step. Best effort --
-   * an account that exists with a guessed organization name is a far better
+   * an account that exists with a guessed team name is a far better
    * outcome than a sign-up that appears to fail after the account was already
-   * created, and the name is editable on the organization page.
+   * created, and the name is editable on the team page.
    */
-  async function nameTheOrganization() {
-    const chosen = organization.trim() || suggestion;
+  async function nameTheTeam() {
+    const chosen = team.trim() || suggestion;
     if (!chosen) return;
     try {
       await renameOrg(chosen);
@@ -114,7 +116,7 @@ export function SignUp() {
     setPending("google");
     try {
       await signInWithGoogle();
-      await nameTheOrganization();
+      await nameTheTeam();
       navigate(destination, { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
@@ -149,7 +151,7 @@ export function SignUp() {
           Terminal content stays end-to-end encrypted either way. The{" "}
           <a href="https://shell.online/security/">security model</a> covers the
           cryptography; the terms describe the limited account and session
-          metadata visible to your organization. Terminal input is not copied
+          metadata visible to your team. Terminal input is not copied
           into the accounts service.
         </>
       }
@@ -180,12 +182,12 @@ export function SignUp() {
         />
 
         <Field
-          label="Organization"
-          value={organization}
-          onChange={setOrganization}
+          label="Team"
+          value={team}
+          onChange={setTeam}
           autoComplete="organization"
           placeholder={suggestion || "Vulture Labs"}
-          error={fieldErrors.organization}
+          error={fieldErrors.team}
           note="Your team's space. You can rename it later."
         />
 

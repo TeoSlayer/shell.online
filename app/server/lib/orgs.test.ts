@@ -132,7 +132,7 @@ describe("newId", () => {
 
 /*
  * The sign-up form shows a suggested organization name as its placeholder,
- * derived by src/lib/org-name.ts, and this file is what the service falls back
+ * derived by src/lib/team-name.ts, and this file is what the service falls back
  * to when the rename after sign-up does not land. Two different answers would
  * mean the organization is not called what the placeholder promised, so the
  * personal-domain lists have to stay identical -- checked here rather than
@@ -147,6 +147,6 @@ describe("the personal domains the sign-up form knows", () => {
       const list = block.slice(0, block.indexOf("]);"));
       return [...list.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
     };
-    expect(domainsIn("src/lib/org-name.ts")).toEqual(domainsIn("server/lib/orgs.ts"));
+    expect(domainsIn("src/lib/team-name.ts")).toEqual(domainsIn("server/lib/orgs.ts"));
   });
 });

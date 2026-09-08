@@ -13,8 +13,8 @@ import { Alert } from "../components/Alert";
 import { Button } from "../components/Button";
 import {
   downloadAuditCsv,
+  fetchOrgAudit,
   fetchSessions,
-  fetchAudit,
   type AuditEvent,
   type Member,
   type SessionRecord,
@@ -31,6 +31,7 @@ import {
   topCommands,
   type Filters,
 } from "../lib/audit-view";
+import { usePageTitle } from "../lib/page-title";
 import { displayName } from "../lib/people";
 
 const RANGES = [
@@ -45,6 +46,8 @@ const KINDS = [
   { label: "Commands and prompts", value: "input" },
   { label: "Interrupts", value: "interrupt" },
   { label: "Handoffs", value: "handoff" },
+  { label: "Stopped", value: "stopped" },
+  { label: "Removed", value: "deleted" },
 ];
 
 /** A bar chart of when things happened. Inline SVG; no charting library. */
@@ -118,6 +121,7 @@ function RankChart({
 }
 
 export function Audit() {
+  usePageTitle("Audit log");
   const [params, setParams] = useSearchParams();
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -132,20 +136,15 @@ export function Audit() {
 
   const load = useCallback(async () => {
     try {
-      const list = await fetchSessions();
+      const [list, trail] = await Promise.all([fetchSessions(), fetchOrgAudit()]);
       setSessions(list.sessions);
       setMembers(list.members ?? []);
       /*
-       * The log lives per session, so the whole organization's history is the
-       * union. Fetched in parallel; a session whose log fails is skipped
-       * rather than failing the page.
+       * Read as one trail rather than session by session. Asking each session
+       * for its own log cannot return the entry for a session that has been
+       * removed, and that entry is exactly what somebody comes here to find.
        */
-      const logs = await Promise.all(
-        list.sessions.map((session) =>
-          fetchAudit(session.id).then((r) => r.events).catch(() => []),
-        ),
-      );
-      setEvents(logs.flat().sort((a, b) => b.at - a.at));
+      setEvents([...trail.events].sort((a, b) => b.at - a.at));
       setError("");
     } catch (caught) {
       setEvents([]);
@@ -205,7 +204,7 @@ export function Audit() {
       }
     >
       <p className="page-dek">
-        Everything entered in this organization's sessions: commands in a
+        Everything entered in this team's sessions: commands in a
         terminal, prompts to an agent, and who entered them.
       </p>
 

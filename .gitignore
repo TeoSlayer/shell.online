@@ -28,3 +28,7 @@ coverage/
 wrangler.local.jsonc
 .wrangler
 .gstack/
+
+# Worktrees made inside the repository, and CLI state that is not ours.
+.claude/worktrees/
+.local/

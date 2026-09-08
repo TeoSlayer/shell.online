@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { SealCheck, Warning } from "@phosphor-icons/react";
+import { SealCheck, SignOut, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
+import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 
 export function Account() {
-  const { user, resendVerification } = useAuth();
+  usePageTitle("Account");
+  const { user, resendVerification, signOutUser } = useAuth();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,8 +70,14 @@ export function Account() {
         </div>
       </dl>
 
-      {!user.emailVerified && (
-        <div className="account-actions">
+      {/*
+        Sign out lives here as well as in the sidebar. On a phone the sidebar
+        becomes a bar of destinations with no room for the account row, and
+        this is the destination that row would have led to, so leaving it out
+        would strand anybody who opened the app from a home screen.
+      */}
+      <div className="account-actions">
+        {!user.emailVerified && (
           <Button
             type="button"
             variant="ghost"
@@ -79,8 +87,12 @@ export function Account() {
           >
             Resend verification
           </Button>
-        </div>
-      )}
+        )}
+        <Button type="button" variant="ghost" onClick={() => void signOutUser()}>
+          <SignOut size={15} />
+          Sign out
+        </Button>
+      </div>
     </AppShell>
   );
 }

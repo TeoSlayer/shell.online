@@ -6,6 +6,7 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { Booting } from "../components/Booting";
 import { useAuth } from "../auth/AuthProvider";
+import { usePageTitle } from "../lib/page-title";
 import { fetchOrg, accountsBaseUrl } from "../lib/api";
 
 interface Preview {
@@ -18,11 +19,12 @@ interface Preview {
 /**
  * The screen an invite link lands on.
  *
- * It describes the organization before anyone signs in, so the recipient knows
+ * It describes the team before anyone signs in, so the recipient knows
  * what they are joining rather than being asked to authenticate first and find
  * out afterwards.
  */
 export function Join() {
+  usePageTitle("Join a team");
   const { inviteId = "" } = useParams();
   const { user, initializing } = useAuth();
   const location = useLocation();
@@ -118,7 +120,7 @@ export function Join() {
 
             <dl className="consent-rows">
               <div className="consent-row">
-                <dt>Organization</dt>
+                <dt>Team</dt>
                 <dd>{preview.organization.name}</dd>
               </div>
               <div className="consent-row">

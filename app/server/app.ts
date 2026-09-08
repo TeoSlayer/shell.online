@@ -474,6 +474,21 @@ export function createApp(options: AppOptions) {
         return send(response, 200, { written: written.length });
       }
 
+      /*
+       * The whole team's trail, which is what the page needs.
+       *
+       * Reading it session by session cannot show what happened to a session
+       * that no longer exists, and the entry recording its removal is exactly
+       * the one somebody comes here to find.
+       */
+      if (route === "GET /api/audit") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const asked = Number(url.searchParams.get("limit") ?? "");
+        const limit = Number.isFinite(asked) && asked > 0 ? Math.min(asked, 5000) : 2000;
+        return send(response, 200, { events: await store.auditForOrg(membership.orgId, limit) });
+      }
+
       const auditRoute = url.pathname.match(/^\/api\/audit\/([A-Za-z0-9_-]{6,64})$/);
       if (request.method === "GET" && auditRoute) {
         const membership = await requireMember(request);
@@ -535,6 +550,39 @@ export function createApp(options: AppOptions) {
           );
         }
         return send(response, 201, { session: sessionForApi(result.session) });
+      }
+
+      /*
+       * Removes a session from the lists without touching the machine that
+       * ran it. The process has already exited, or is being abandoned on
+       * purpose; either way what it left on disk is not ours to delete. This
+       * is the record going away, and the audit entry is what remains of it.
+       */
+      const deleteMatch = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})$/);
+      if (request.method === "DELETE" && deleteMatch) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const sessionId = deleteMatch[1];
+        const session = await store.sessionInOrg(membership.orgId, sessionId);
+        if (!session) return send(response, 404, { error: "no such session" });
+
+        /* The person whose machine ran it, or somebody who runs the team. */
+        const isOwner = (session.ownerUid ?? session.uid) === membership.uid;
+        const isAdmin = membership.role === "owner" || membership.role === "admin";
+        if (!isOwner && !isAdmin) {
+          return send(response, 403, { error: "only the session's owner can remove it" });
+        }
+
+        /* Written first: after the row is gone there is nothing to attach to. */
+        await recordAudit(store, membership, {
+          sessionId,
+          kind: "deleted",
+          text: session.name?.trim() || session.command,
+        });
+        if (!(await store.deleteSession(membership.orgId, sessionId))) {
+          return send(response, 404, { error: "no such session" });
+        }
+        return send(response, 200, { deleted: true });
       }
 
       const closeMatch = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})$/);
@@ -713,6 +761,19 @@ export function createApp(options: AppOptions) {
           if (!session) return send(response, 404, { error: "no such session" });
           if ((session.ownerUid ?? session.uid) !== identity.uid) {
             return send(response, 403, { error: "only the session owner can stop its process" });
+          }
+          /*
+           * Recorded before the machine is asked, not after. The queue is the
+           * decision; whether the process was still alive to receive it is a
+           * fact about the machine, and an organization asking who stopped
+           * this wants the person who pressed it either way.
+           */
+          if (scope) {
+            await recordAudit(store, scope, {
+              sessionId,
+              kind: "stopped",
+              text: session.name?.trim() || session.command,
+            });
           }
           const ownerDeviceId = sessionSource(session).deviceId;
           if (!ownerDeviceId) {
