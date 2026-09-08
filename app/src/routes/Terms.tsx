@@ -373,21 +373,31 @@ export function Terms() {
         <Section id="activity-records">
           <div className="terms-callout">
             <p>
-              <b>Terminal input is not copied into the accounts service.</b>{" "}
-              Prompts, commands, passwords, and other keystrokes stay inside
-              the end-to-end encrypted terminal stream.
+              <b>What you type into a session is recorded in plaintext.</b>{" "}
+              Commands, prompts, and anything else entered at the keyboard are
+              sent to the accounts service as you commit them, stored without
+              encryption, and can be read and exported by every member of your
+              organization. That includes anything typed by mistake, such as a
+              password or a key pasted into the wrong window.
             </p>
           </div>
           <p>
-            We retain the collaboration information people deliberately create
-            outside the terminal: session ownership and assignment, handoffs,
-            comments, mentions, and notifications. Members of the organization
-            can see those records.
+            The recording is of what is entered, not of what the session prints
+            back. Terminal output stays inside the end-to-end encrypted stream
+            and never reaches us.
           </p>
           <p>
-            Prerelease builds briefly offered plaintext input logging. The
-            hosted service no longer accepts those events and its housekeeping
-            sweep deletes any legacy input rows.
+            We also retain the collaboration information people deliberately
+            create outside the terminal: session ownership and assignment,
+            handoffs, comments, mentions, and notifications. Members of the
+            organization can see those records.
+          </p>
+          <p>
+            If this is not what you want for a particular session, do not type
+            into it from the browser. A session shared read-only with{" "}
+            <code>--read-only</code> accepts no browser input at all, and
+            anything typed in the terminal the session was started from is
+            never seen by the browser or by us.
           </p>
         </Section>
 
@@ -398,9 +408,10 @@ export function Terms() {
               <dt>Terminal output</dt>
               <dd>
                 Terminal traffic is end-to-end encrypted in the browser and on
-                the machine. The relay and the accounts service handle
-                ciphertext only. Neither what you type nor what your program
-                prints is readable by the accounts service.
+                the machine, and the relay handles ciphertext only, so what
+                your program prints is not readable by us. What you type is a
+                separate matter: it is recorded, in plaintext, as described
+                above.
               </dd>
             </div>
             <div>

@@ -29,7 +29,7 @@ import {
   notifyInvited,
   revokeInvite,
 } from "./routes/organizations";
-import { assignSession, auditCsv } from "./routes/audit";
+import { recordAudit, assignSession, auditCsv } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
@@ -454,6 +454,25 @@ export function createApp(options: AppOptions) {
       }
 
       /* ---- Audit ---- */
+
+      if (route === "POST /api/audit") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const entries = Array.isArray(body.entries) ? body.entries : [];
+        const written = [];
+        for (const entry of entries.slice(0, 100)) {
+          const candidate = entry as Record<string, unknown>;
+          const result = await recordAudit(store, membership, {
+            sessionId: String(candidate.session_id ?? ""),
+            kind: String(candidate.kind ?? "input"),
+            text: String(candidate.text ?? ""),
+            at: typeof candidate.at === "number" ? candidate.at : undefined,
+          });
+          if (result.ok) written.push(result.event);
+        }
+        return send(response, 200, { written: written.length });
+      }
 
       const auditRoute = url.pathname.match(/^\/api\/audit\/([A-Za-z0-9_-]{6,64})$/);
       if (request.method === "GET" && auditRoute) {

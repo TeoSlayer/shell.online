@@ -318,6 +318,13 @@ export function fetchSessions() {
 
 export const accountsBaseUrl = BASE;
 
+export function postAudit(entries: { session_id: string; kind: string; text: string; at: number }[]) {
+  return request<{ written: number }>("/api/audit", {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
+}
+
 export function fetchAudit(sessionId: string) {
   return request<{ events: AuditEvent[] }>(`/api/audit/${encodeURIComponent(sessionId)}`);
 }

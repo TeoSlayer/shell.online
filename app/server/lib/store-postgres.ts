@@ -1163,12 +1163,6 @@ export class PostgresStore implements Store {
 
   async purgeExpired(now = Date.now()): Promise<void> {
     await this.pool.query("DELETE FROM auth_codes WHERE expires_at <= $1", [now]);
-    /*
-     * Builds before 0.9.0 briefly captured committed input in plaintext.
-     * E2EE means the control plane should never receive that material, so
-     * remove any legacy rows as part of the normal five-minute sweep.
-     */
-    await this.pool.query("DELETE FROM audit_events WHERE kind IN ('input', 'interrupt')");
     /* Finished commands are only kept long enough to be reported back. */
     await this.pool.query("DELETE FROM agent_commands WHERE done_at IS NOT NULL AND done_at < $1", [
       now - 10 * 60_000,

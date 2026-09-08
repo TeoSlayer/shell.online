@@ -2,7 +2,7 @@ import type { AuditEvent, SessionRecord, Store } from "../lib/store";
 import { newId, type Membership } from "../lib/orgs";
 
 export const MAX_TEXT = 4100;
-const KINDS = new Set(["opened", "handoff"]);
+const KINDS = new Set(["input", "interrupt", "opened", "handoff"]);
 
 export interface RecordInput {
   sessionId: string;

@@ -28,6 +28,7 @@ import {
   memberOf,
   sessionLabel,
   summarise,
+  topCommands,
   type Filters,
 } from "../lib/audit-view";
 import { displayName } from "../lib/people";
@@ -39,15 +40,10 @@ const RANGES = [
   { label: "Last 7 days", value: 7 * 24 * 60 * 60 * 1000 },
 ];
 
-/*
- * Only the kinds the service records. Typed input is deliberately not one of
- * them -- the service refuses to store plaintext terminal input and
- * app.test.ts holds it to that -- so a filter for it would promise a view of
- * something nobody keeps.
- */
 const KINDS = [
   { label: "Everything", value: "" },
-  { label: "Sessions opened", value: "opened" },
+  { label: "Commands and prompts", value: "input" },
+  { label: "Interrupts", value: "interrupt" },
   { label: "Handoffs", value: "handoff" },
 ];
 
@@ -301,8 +297,8 @@ export function Audit() {
         <>
           <div className="stat-row">
             <Stat label="Entries" value={summary.total} />
-            <Stat label="Sessions opened" value={summary.opened} />
-            <Stat label="Handoffs" value={summary.handoffs} />
+            <Stat label="Commands and prompts" value={summary.inputs} />
+            <Stat label="Interrupts" value={summary.interrupts} />
             <Stat label="People" value={summary.people} />
             <Stat label="Sessions" value={summary.sessions} />
           </div>
@@ -323,6 +319,12 @@ export function Audit() {
                     </span>
                   );
                 }}
+              />
+              <RankChart
+                caption="Most used"
+                rows={topCommands(shown)}
+                onPick={(word) => set({ query: word })}
+                render={(word) => <code>{word}</code>}
               />
             </div>
           )}

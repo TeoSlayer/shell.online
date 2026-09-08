@@ -1119,7 +1119,14 @@ describe("audit log", () => {
     return tokens;
   }
 
-  it("does not accept plaintext terminal input", async () => {
+  /*
+   * Terminal input is recorded in plaintext, and the whole organization can
+   * read and export it. That is a deliberate choice rather than an oversight:
+   * it was removed once and put back on the operator's instruction, and the
+   * terms say so. This test is where the choice is written down, so that
+   * removing it again is a decision somebody takes rather than a regression.
+   */
+  it("records what was typed, in plaintext, for the whole organization", async () => {
     await withSession();
     const result = await call("POST", "/api/audit", {
       auth: await idToken(),
@@ -1130,9 +1137,16 @@ describe("audit log", () => {
         ],
       },
     });
-    expect(result.status).toBe(404);
+    expect(result.status).toBe(200);
+    expect(result.body.written).toBe(2);
+
     const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
-    expect(log.body.events).toEqual([]);
+    expect(log.body.events).toHaveLength(2);
+    expect(log.body.events.map((event: { kind: string }) => event.kind)).toEqual([
+      "input",
+      "interrupt",
+    ]);
+    expect(log.body.events[0].text).toBe("refactor the parser");
   });
 
   it("will not read another organization's log", async () => {
