@@ -72,18 +72,28 @@ const blank = [];
 for await (const path of files(directory)) {
   if (!path.endsWith(".js")) continue;
   const body = await readFile(path, "utf8");
+  if (!body.includes("VITE_")) continue;
   for (const key of REQUIRED) {
-    /* Vite inlines these as `KEY:`value`` in the env object it compiles in. */
-    const match = body.match(new RegExp(`${key}\\s*:\\s*\`([^\`]*)\``, "u"));
-    if (match && match[1].trim() === "") blank.push({ path, key });
+    /*
+     * Vite inlines these into the env object it compiles in, quoted however
+     * the minifier prefers. Absent is a failure as much as empty, and it used
+     * to be the one that got through: a build with no value at all omits the
+     * key, the pattern never matches, and the check passed while the bundle
+     * threw on load and rendered nothing.
+     */
+    const match = body.match(new RegExp(`${key}\\s*:\\s*(["'\`])((?:(?!\\1).)*)\\1`, "u"));
+    if (!match) blank.push({ path, key, why: "absent" });
+    else if (match[2].trim() === "") blank.push({ path, key, why: "empty" });
   }
 }
 
 if (blank.length > 0) {
-  console.error("check-bundle: required values are empty in the production build");
-  for (const { path, key } of blank) console.error(`  ${path}: ${key} is blank`);
-  console.error("  An unset variable overrides .env.production with an empty string.");
-  console.error("  Check the build step's env block against app/.env.production.");
+  console.error("check-bundle: required values are missing from the production build");
+  for (const { path, key, why } of blank) console.error(`  ${path}: ${key} is ${why}`);
+  console.error("  Absent means the build had no value at all: no .env.local on this");
+  console.error("  machine, or no env block in the workflow step. Empty means something");
+  console.error("  passed an empty string and overrode app/.env.production.");
+  console.error("  Either way the page throws on load and renders nothing."); 
   process.exit(1);
 }
 
