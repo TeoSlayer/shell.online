@@ -1,5 +1,5 @@
 {
-  "version": "0.8.1",
+  "version": "0.9.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -28,7 +28,7 @@
         ],
         [
           "Link a machine",
-          "shell login opens a browser on the approval screen and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. Use shell login --no-browser on a headless box, shell whoami to see the linked account, and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
+          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. Use shell login --no-browser on a headless box, shell whoami to see the linked account, and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
         ],
         [
           "Work from the web app",
@@ -47,11 +47,11 @@
     "mobile": {
       "eyebrow": "Terminal fidelity",
       "title": "A real terminal, fitted to the device in your hand.",
-      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120×36 session grid until a phone connects, then atomically switches everyone to a compatible 80×24 grid and fits it to each browser.",
+      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches everyone to a compatible 80\u00d724 grid and fits it to each browser.",
       "cards": [
         [
           "Deterministic sizing",
-          "Viewers never own PTY sizing. Desktop-only sessions use 120×36. Any connected phone selects the session-wide 80×24 compatibility grid before input is forwarded; the last phone leaving restores 120×36. Read-only phones count too."
+          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide 80\u00d724 compatibility grid before input is forwarded; the last phone leaving restores 120\u00d736. Read-only phones count too."
         ],
         [
           "Touch that scrolls",
@@ -97,7 +97,7 @@
       "cards": [
         [
           "URL plus password is a bearer capability",
-          "Anyone holding both values for an interactive share can view and type with the wrapped process’s operating-system permissions. Share them only with intended collaborators and run with least privilege."
+          "Anyone holding both values for an interactive share can view and type with the wrapped process\u2019s operating-system permissions. Share them only with intended collaborators and run with least privilege."
         ],
         [
           "Read-only is server-enforced",
@@ -352,19 +352,19 @@
           "A share always closes when its task exits. --auto-close requires a value and can only add an earlier deadline. Spaced multi-token dates are accepted directly. A missing or invalid value returns status 2 and never becomes the command.",
           [
             [
-              "5m · 2h · 3d · 1w · 2mo · 1y",
+              "5m \u00b7 2h \u00b7 3d \u00b7 1w \u00b7 2mo \u00b7 1y",
               "Relative units: ms, s, m, h, d, w, mo, and y."
             ],
             [
-              "1h30m · 2d 3h",
+              "1h30m \u00b7 2d 3h",
               "Compatible relative units can be combined, with or without spaces."
             ],
             [
-              "tomorrow 09:00 · today 18:30",
+              "tomorrow 09:00 \u00b7 today 18:30",
               "Natural local-day forms may be unquoted."
             ],
             [
-              "2026-09-01 14:30 · RFC3339",
+              "2026-09-01 14:30 \u00b7 RFC3339",
               "Local ISO-like dates and full RFC3339 timestamps."
             ],
             [
@@ -451,35 +451,35 @@
           "Static release artifacts are built from one versioned target manifest and verified before deployment. Linux targets are runtime-tested under QEMU; native Windows amd64 is runtime-tested; the remaining targets are explicitly build-verified.",
           [
             [
-              "macOS · build-verified",
+              "macOS \u00b7 build-verified",
               "amd64, arm64"
             ],
             [
-              "Windows · amd64 native; others build-verified",
+              "Windows \u00b7 amd64 native; others build-verified",
               "386, amd64, arm64"
             ],
             [
-              "Linux · QEMU runtime-tested",
+              "Linux \u00b7 QEMU runtime-tested",
               "386, amd64, armv5, armv6, armv7, arm64, loong64, mips, mipsle, mips64, mips64le, ppc64, ppc64le, riscv64, s390x"
             ],
             [
-              "FreeBSD · build-verified",
+              "FreeBSD \u00b7 build-verified",
               "386, amd64, armv7, arm64"
             ],
             [
-              "OpenBSD · build-verified",
+              "OpenBSD \u00b7 build-verified",
               "386, amd64, armv7, arm64, ppc64, riscv64"
             ],
             [
-              "NetBSD · build-verified",
+              "NetBSD \u00b7 build-verified",
               "386, amd64, armv7, arm64"
             ],
             [
-              "DragonFly BSD · build-verified",
+              "DragonFly BSD \u00b7 build-verified",
               "amd64"
             ],
             [
-              "Solaris · build-verified",
+              "Solaris \u00b7 build-verified",
               "amd64"
             ]
           ]
@@ -513,7 +513,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.8.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.9.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

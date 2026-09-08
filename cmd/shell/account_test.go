@@ -194,9 +194,27 @@ func TestLoginRejectsAnUnknownFlag(t *testing.T) {
 	}
 }
 
+/*
+ * Both halves of the account live on one host. Pointing either at a hostname
+ * that does not exist, or at the marketing site which answers every path with
+ * its own index page, is a failure only a released binary would find.
+ */
+func TestProductionURLsAreOneRealHost(t *testing.T) {
+	t.Setenv("SHELL_ONLINE_ACCOUNTS", "")
+	t.Setenv("SHELL_ONLINE_WEB", "")
+	t.Setenv("SHELL_ONLINE_LOCAL", "")
+	if defaultAccountsURL() != defaultWebURL() {
+		t.Fatalf("accounts %q and web %q should be the same deployment",
+			defaultAccountsURL(), defaultWebURL())
+	}
+	if !strings.HasPrefix(productionAppURL, "https://app.") {
+		t.Fatalf("production should be the app subdomain, got %q", productionAppURL)
+	}
+}
+
 func TestDefaultAccountsURL(t *testing.T) {
 	t.Setenv("SHELL_ONLINE_ACCOUNTS", "")
-	if got := defaultAccountsURL(); got != "https://accounts.shell.online" {
+	if got := defaultAccountsURL(); got != productionAppURL {
 		t.Fatalf("defaultAccountsURL = %q", got)
 	}
 	t.Setenv("SHELL_ONLINE_ACCOUNTS", "http://127.0.0.1:8787")
@@ -207,7 +225,7 @@ func TestDefaultAccountsURL(t *testing.T) {
 
 func TestDefaultWebURL(t *testing.T) {
 	t.Setenv("SHELL_ONLINE_WEB", "")
-	if got := defaultWebURL(); got != "https://shell.online" {
+	if got := defaultWebURL(); got != productionAppURL {
 		t.Fatalf("defaultWebURL = %q", got)
 	}
 	t.Setenv("SHELL_ONLINE_WEB", "http://localhost:5173")
@@ -296,10 +314,10 @@ func TestDefaultsAimAtProductionUnlessToldOtherwise(t *testing.T) {
 	for _, name := range []string{"SHELL_ONLINE_LOCAL", "SHELL_ONLINE_ACCOUNTS", "SHELL_ONLINE_WEB", "SHELL_ONLINE_SERVER"} {
 		t.Setenv(name, "")
 	}
-	if got := defaultAccountsURL(); got != "https://accounts.shell.online" {
+	if got := defaultAccountsURL(); got != productionAppURL {
 		t.Fatalf("defaultAccountsURL = %q", got)
 	}
-	if got := defaultWebURL(); got != "https://shell.online" {
+	if got := defaultWebURL(); got != productionAppURL {
 		t.Fatalf("defaultWebURL = %q", got)
 	}
 	if got := defaultServer(); got != "https://shell.online" {
@@ -346,7 +364,7 @@ func TestLocalSwitchIgnoresOtherValues(t *testing.T) {
 	t.Setenv("SHELL_ONLINE_WEB", "")
 	for _, value := range []string{"", "0", "no", "yes"} {
 		t.Setenv("SHELL_ONLINE_LOCAL", value)
-		if got := defaultWebURL(); got != "https://shell.online" {
+		if got := defaultWebURL(); got != productionAppURL {
 			t.Fatalf("SHELL_ONLINE_LOCAL=%q gave %q, want production", value, got)
 		}
 	}

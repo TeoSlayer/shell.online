@@ -14,6 +14,16 @@ import (
 	"shell.online/internal/account"
 )
 
+// productionAppURL serves both halves of the account: the browser screen that
+// approves a login, and the API the CLI then talks to.
+//
+// One host, because they are one deployment. An earlier split pointed the CLI
+// at accounts.shell.online, which never existed, and the approval screen at
+// shell.online, which serves the marketing site and answered /cli/authorize
+// with its own index page. Either would have failed on the first release that
+// carried `shell login`.
+const productionAppURL = "https://app.shell.online"
+
 // Local development addresses, used when SHELL_ONLINE_LOCAL is set.
 const (
 	localAccountsURL = "http://127.0.0.1:8787"
@@ -39,7 +49,7 @@ func defaultAccountsURL() string {
 	if developingLocally() {
 		return localAccountsURL
 	}
-	return "https://accounts.shell.online"
+	return productionAppURL
 }
 
 // defaultWebURL hosts the browser screen that approves a CLI login.
@@ -50,7 +60,7 @@ func defaultWebURL() string {
 	if developingLocally() {
 		return localWebURL
 	}
-	return "https://shell.online"
+	return productionAppURL
 }
 
 // runAccountCommand handles the account subcommands. The second return value
@@ -109,7 +119,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if *accountsURL != "https://accounts.shell.online" || *webURL != "https://shell.online" {
+	if *accountsURL != productionAppURL || *webURL != productionAppURL {
 		// Anything other than production is worth stating plainly, so a stray
 		// environment variable is caught before a browser opens.
 		fmt.Fprintf(stderr, "\n  Approving at %s\n  Tokens from  %s\n", *webURL, *accountsURL)

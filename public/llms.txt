@@ -24,9 +24,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.8.1 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.9.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.8.1" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.9.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -89,8 +89,10 @@ The repository includes a persistent Docker client. Run `docker compose up --bui
 Accounts are optional. Every command above works without one, and an
 unlinked machine behaves exactly as described.
 
-`shell login` links a machine to an account. It opens a browser to approve the
-request, then returns to the sessions page; a browser with no account yet is
+`shell login` links a machine to an account. The account and the web app live
+at https://app.shell.online; shell.online itself serves this site and the
+session links. It opens a browser to approve the request, then returns to the
+sessions page; a browser with no account yet is
 sent to the sign-up page first, which asks for a name for the organization
 being created. Signing in again from the same machine updates that machine's
 entry rather than adding a second one. `shell whoami` shows which account

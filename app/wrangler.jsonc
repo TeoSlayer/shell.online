@@ -25,6 +25,16 @@
   // are hashed with node:crypto.
   "compatibility_flags": ["nodejs_compat"],
 
+  // app.shell.online is the only address this Worker answers on.
+  //
+  // workers.dev is off because a second public hostname is a second way in to
+  // an app holding a database, for no benefit once the real domain exists.
+  // Preview URLs are off for the same reason and more sharply: they would put
+  // every deployed version on its own permanent public address, each with the
+  // same Hyperdrive binding.
+  "workers_dev": false,
+  "preview_urls": false,
+
   // A custom domain rather than a route pattern: Cloudflare provisions the DNS
   // record and the certificate for it, and the Worker answers on the host that
   // invitation links and the landing page point at. The relay keeps

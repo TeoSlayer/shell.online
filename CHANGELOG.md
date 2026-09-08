@@ -10,6 +10,22 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.
 - Use GitHub's current Copilot inference path rather than the retired GitHub Models endpoint.
 
+## [0.9.0] — 2026-09-08
+
+### Added
+
+- Add `shell login`, which links a machine to an account from the terminal and returns to the web app. Sessions started with `shell` then appear there on their own.
+- Add organizations. Signing up creates one; an invite link joins one. Everyone in an organization sees every member's sessions, each of which has an owner and an assignee.
+- Add a web app that lists sessions from every linked machine and opens them as tabs you can type into, rather than as links out.
+- Let a signed-in browser start and stop sessions on a linked machine, after that machine agrees to it once at `shell login`. The browser chooses the session password and seals it to a key the machine publishes, so the service relays an envelope it cannot open.
+- Add a per-session audit log of every committed input, with aggregation, filters and export.
+- Detect which coding-agent harnesses a machine can run, so the web app offers the ones that are actually there.
+- Add terms of service, accepted at sign-up.
+
+### Fixed
+
+- Point `shell login` at the deployment that serves it. The accounts address had never resolved, and the approval screen resolved to the marketing site, so either would have failed on the first release carrying the command.
+
 ## [0.8.1] — 2026-09-04
 
 ### Fixed
