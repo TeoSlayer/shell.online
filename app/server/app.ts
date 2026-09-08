@@ -186,6 +186,41 @@ function bearer(request: IncomingMessage): string {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
+/*
+ * Records that a session was stopped or removed, and does not let a failure
+ * to record it stop the thing being recorded.
+ *
+ * The set of kinds lives in the database as a check constraint as well as in
+ * this code, and the two can be out of step: a deployment that runs before its
+ * migration rejects the write. An operator stopping a runaway process should
+ * not be told "internal error" because the trail could not be written, which
+ * is exactly what happened when these two kinds were added ahead of the
+ * migration that allows them.
+ *
+ * Loud in the log, because a missing audit entry is a real gap and nobody
+ * should have to notice it by its absence.
+ */
+async function noteSessionEvent(
+  store: Store,
+  membership: Membership,
+  sessionId: string,
+  kind: "stopped" | "deleted",
+  session: { name?: string; command: string },
+): Promise<void> {
+  try {
+    await recordAudit(store, membership, {
+      sessionId,
+      kind,
+      text: session.name?.trim() || session.command,
+    });
+  } catch (error) {
+    console.error(
+      `accounts: could not record "${kind}" for session ${sessionId}`,
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 export function createApp(options: AppOptions) {
   const { store, verifyIdToken, allowedOrigins } = options;
   const trustProxy = options.trustProxy ?? false;
@@ -574,11 +609,7 @@ export function createApp(options: AppOptions) {
         }
 
         /* Written first: after the row is gone there is nothing to attach to. */
-        await recordAudit(store, membership, {
-          sessionId,
-          kind: "deleted",
-          text: session.name?.trim() || session.command,
-        });
+        await noteSessionEvent(store, membership, sessionId, "deleted", session);
         if (!(await store.deleteSession(membership.orgId, sessionId))) {
           return send(response, 404, { error: "no such session" });
         }
@@ -768,13 +799,7 @@ export function createApp(options: AppOptions) {
            * fact about the machine, and an organization asking who stopped
            * this wants the person who pressed it either way.
            */
-          if (scope) {
-            await recordAudit(store, scope, {
-              sessionId,
-              kind: "stopped",
-              text: session.name?.trim() || session.command,
-            });
-          }
+          if (scope) await noteSessionEvent(store, scope, sessionId, "stopped", session);
           const ownerDeviceId = sessionSource(session).deviceId;
           if (!ownerDeviceId) {
             return send(response, 409, {

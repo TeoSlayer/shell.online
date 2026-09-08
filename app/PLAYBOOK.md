@@ -132,6 +132,31 @@ curl -fsSL https://github.com/TeoSlayer/shell.online/archive/refs/tags/vX.Y.Z.ta
 
 4. `npm run deploy:production` publishes the binaries
 
+## A schema change and the code that needs it
+
+The set of audit kinds lives in three places that must agree: the check
+constraint in the database, `KINDS` in `server/routes/audit.ts`, and the union
+in `server/lib/types.ts`. Only the first one bites, and it bites only against
+Postgres:
+
+```
+new row for relation "audit_events" violates check constraint
+"audit_events_kind_check"
+```
+
+Every test passed. The in-memory store has no constraints, so adding a kind to
+the code and forgetting the migration is invisible until production. It took
+the service down for stopping a session, because a failed audit write was
+allowed to fail the request that triggered it.
+
+Two rules follow:
+
+1. **Migrate before deploying.** `deploy-app.yml` already does them in that
+   order. A deploy by hand has to do the same.
+2. **Never let writing the trail break the thing being recorded.** An operator
+   stopping a runaway process should not be told "internal error" because the
+   log could not be written. Failures are logged loudly instead.
+
 ## What has actually gone wrong
 
 Every one of these shipped:
