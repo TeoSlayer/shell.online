@@ -22,6 +22,21 @@ func buildShell(t *testing.T) string {
 	if err := build.Run(); err != nil {
 		t.Fatalf("build shell: %v", err)
 	}
+
+	/*
+	 * These tests run the binary they just built. The QEMU release matrix
+	 * cross-compiles the suite and runs it with `go test -exec <emulator>`, so
+	 * the test process is emulated but anything it spawns is not: the host
+	 * kernel cannot exec a binary built for another architecture, and every
+	 * one of these fails with "exec format error".
+	 *
+	 * Nothing being tested here is architecture-specific -- it is process
+	 * lifetime, a file lock and a socket -- so it is covered natively and
+	 * skipped where a spawned binary cannot run.
+	 */
+	if output, err := exec.Command(binary, "--version").CombinedOutput(); err != nil {
+		t.Skipf("cannot run a freshly built binary here (%v): %s", err, output)
+	}
 	return binary
 }
 

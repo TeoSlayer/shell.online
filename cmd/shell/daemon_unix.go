@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // The daemon's lock and socket live beside the session sockets, in a directory
@@ -51,9 +54,12 @@ func acquireDaemonLock() (*daemonLock, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	// x/sys/unix rather than syscall: syscall.Flock is absent on Solaris, which
+	// is a supported platform here, so the build broke everywhere the release
+	// matrix reaches past Linux and the BSDs.
+	if err := unix.Flock(int(file.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		_ = file.Close()
-		if err == syscall.EWOULDBLOCK {
+		if errors.Is(err, unix.EWOULDBLOCK) {
 			return nil, errDaemonAlreadyRunning
 		}
 		return nil, fmt.Errorf("lock the daemon: %w", err)
@@ -65,7 +71,7 @@ func (lock *daemonLock) release() {
 	if lock == nil || lock.file == nil {
 		return
 	}
-	_ = syscall.Flock(int(lock.file.Fd()), syscall.LOCK_UN)
+	_ = unix.Flock(int(lock.file.Fd()), unix.LOCK_UN)
 	_ = lock.file.Close()
 }
 

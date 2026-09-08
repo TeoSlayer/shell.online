@@ -50,8 +50,14 @@ func answerUnderPTY(t *testing.T, binary, configPath, runtime, reply string, arg
 	// The prompt is written before the read, so a short pause is enough to be
 	// answering a question rather than racing it.
 	time.Sleep(300 * time.Millisecond)
-	if _, err := terminal.Write([]byte(reply)); err != nil {
-		t.Fatalf("answer the prompt: %v", err)
+	if reply != "" {
+		/*
+		 * A write error is not a failure. A command that was never going to
+		 * ask -- a machine that already agreed -- can finish before the reply
+		 * arrives, and writing into the pty of an exited child reports an I/O
+		 * error. What the test asserts is the transcript, not the write.
+		 */
+		_, _ = terminal.Write([]byte(reply))
 	}
 
 	done := make(chan error, 1)
