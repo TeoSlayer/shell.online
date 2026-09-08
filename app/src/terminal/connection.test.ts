@@ -244,6 +244,15 @@ describe("session lifecycle", () => {
 });
 
 describe("encrypted session", () => {
+  it("uses a password embedded in the fragment without prompting", async () => {
+    const { connection, recorded } = connect(`${SALT}&password=hunter2`);
+    await connection.start();
+
+    expect(FakeSocket.created).toBe(1);
+    expect(connection.needsPassword).toBe(false);
+    expect(recorded.statuses.map((s) => s.status)).toEqual(["connecting"]);
+  });
+
   it("asks for a password before opening a socket", async () => {
     const { connection, recorded } = connect(SALT);
     await connection.start();

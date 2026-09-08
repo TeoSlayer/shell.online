@@ -9,6 +9,14 @@ describe("browser E2EE envelope", () => {
     expect(parseEncryptionFragment(`#key=${key}`)?.kind).toBe("key");
     const salt = encode(new Uint8Array(16).fill(9));
     expect(parseEncryptionFragment(`#salt=${salt}`)?.kind).toBe("password");
+    expect(parseEncryptionFragment(`#salt=${salt}&password=Ab3dE7-_`)).toMatchObject({
+      kind: "password",
+      password: "Ab3dE7-_",
+    });
+    expect(parseEncryptionFragment(`#salt=${salt}&password=`)).toMatchObject({
+      kind: "password",
+      password: undefined,
+    });
   });
 
   it("round-trips frames and rejects tampering", async () => {

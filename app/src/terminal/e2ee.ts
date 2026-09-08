@@ -11,7 +11,7 @@ const NONCE_BYTES = 12;
 
 export type EncryptionFragment =
   | { kind: "key"; key: Uint8Array<ArrayBuffer> }
-  | { kind: "password"; salt: Uint8Array<ArrayBuffer> };
+  | { kind: "password"; salt: Uint8Array<ArrayBuffer>; password?: string };
 
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
   if (!/^[A-Za-z0-9_-]+$/.test(value)) return null;
@@ -24,6 +24,13 @@ function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> | null {
   }
 }
 
+function containsASCIIControl(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f;
+  });
+}
+
 export function parseEncryptionFragment(hash: string): EncryptionFragment | null {
   const values = new URLSearchParams(hash.replace(/^#/, ""));
   const key = values.get("key");
@@ -34,7 +41,13 @@ export function parseEncryptionFragment(hash: string): EncryptionFragment | null
   const salt = values.get("salt");
   if (salt) {
     const decoded = decodeBase64Url(salt);
-    return decoded?.byteLength === 16 ? { kind: "password", salt: decoded } : null;
+    if (decoded?.byteLength !== 16) return null;
+    const candidate = values.get("password");
+    const bytes = candidate === null ? 0 : new TextEncoder().encode(candidate).byteLength;
+    const password = candidate !== null && bytes > 0 && bytes <= 1_024 && !containsASCIIControl(candidate)
+      ? candidate
+      : undefined;
+    return { kind: "password", salt: decoded, password };
   }
   return null;
 }

@@ -74,7 +74,7 @@ shell ros2 launch <package> <launch-file>
 shell
 ```
 
-`shell` prints a link and an eight-character browser password, then leaves the process running in the background. Send both to the person opening the terminal.
+`shell` prints a link, an eight-character browser password, and a one-scan terminal QR containing both, then leaves the process running in the background. Send the text credentials or let the intended viewer scan the QR.
 
 Useful commands:
 
@@ -93,7 +93,7 @@ While attached, press `Ctrl-X`, release it, then press `D` to detach without sto
 
 ## How access works
 
-The URL and password together are a bearer credential. Anyone with both can see the terminal and, unless the share is read-only, type with the permissions of the wrapped process. Share them only with intended viewers.
+The URL and password together are a bearer credential. The terminal QR embeds both in its URL fragment, which browsers never send to the relay. Anyone with the text credentials or QR can see the terminal and, unless the share is read-only, type with the permissions of the wrapped process. Share them only with intended viewers.
 
 E2EE is automatic: the CLI encrypts terminal frames before Cloudflare relays them, and the browser decrypts them locally. Cloudflare still sees connection and lifecycle metadata, but not terminal input or output. `--no-e2ee` deliberately makes terminal content visible to the relay while retaining HTTPS/WSS transport encryption.
 

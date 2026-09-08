@@ -16,15 +16,15 @@ Quick start
   shell                            Share a fresh instance of your default shell
 
 Every normal share is end-to-end encrypted. shell prints an eight-character browser
-password with the URL; recipients need both. Use a longer custom password for
-sensitive or long-lived sessions.
+password with the URL and, in an interactive terminal, a one-scan QR containing
+both. Use a longer custom password for sensitive or long-lived sessions.
 
 From inside Claude Code
   shell claude                     Share a fork of this conversation and workspace
 
 The guided flow
   1. Run a process with shell.
-  2. Send the printed shell.online/s/<share-ID> URL and password to someone you trust.
+  2. Send the URL and password, or let someone you trust scan the terminal QR.
      Shares are interactive by default. Use --read-only when recipients should only watch.
   3. Use shell list to see active shares and how long they have run.
   4. Use shell attach <ID> to take over locally without ending browser access.
@@ -230,9 +230,11 @@ password for sensitive or long-lived work:
 
   SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell <command>
 
-The share URL contains a random #salt= fragment, never the password. Recipients need
-both the complete URL and password. Send them separately when the channel or session
-is sensitive. The legacy --e2ee flag remains accepted but is no longer necessary.
+The printed share URL contains a random #salt= fragment, never the password. In an
+interactive terminal, the QR contains both in its fragment so a phone can unlock in
+one scan; fragments never reach the relay. Treat that QR as a bearer credential.
+Send the printed URL and password separately when the channel or session is sensitive.
+The legacy --e2ee flag remains accepted but is no longer necessary.
 Use --no-e2ee only for deliberate compatibility or debugging; HTTPS/WSS still protects
 transport hops, but Cloudflare can then access terminal payloads while relaying them.
 `)

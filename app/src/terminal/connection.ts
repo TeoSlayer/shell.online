@@ -75,6 +75,8 @@ export class TerminalConnection {
   async start(): Promise<void> {
     if (this.descriptor?.kind === "key") {
       this.cipher = await BrowserFrameCipher.fromKey(this.descriptor.key);
+    } else if (this.descriptor?.kind === "password" && this.descriptor.password) {
+      this.cipher = await BrowserFrameCipher.fromPassword(this.descriptor.password, this.descriptor.salt);
     }
     if (this.needsPassword) {
       this.awaitingPassword = true;

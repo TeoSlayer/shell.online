@@ -2158,8 +2158,16 @@ function renderTerminal(sessionId: string): void {
     if (encryptionDescriptor?.kind === "key") {
       frameCipher = await BrowserFrameCipher.fromKey(encryptionDescriptor.key);
     } else if (encryptionDescriptor?.kind === "password") {
-      showEncryptionGate("The password is processed on this device and is never sent to shell.online.", true);
-      return;
+      if (!encryptionDescriptor.password) {
+        showEncryptionGate("The password is processed on this device and is never sent to shell.online.", true);
+        return;
+      }
+      try {
+        frameCipher = await BrowserFrameCipher.fromPassword(encryptionDescriptor.password, encryptionDescriptor.salt);
+      } catch {
+        showEncryptionGate("Could not derive the key. Enter the session password to try again.", true);
+        return;
+      }
     }
     connect();
   })());

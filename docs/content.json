@@ -1,5 +1,5 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -124,7 +124,7 @@
       "cards": [
         [
           "Zero-configuration password",
-          "shell <command> generates and prints a cryptographically random eight-character base64url browser password. The salted URL and password are both required; neither contains the derived encryption key."
+          "shell <command> generates and prints a cryptographically random eight-character base64url browser password. In an interactive terminal it also renders a one-scan QR containing the salted URL and password; JSON and piped output stay machine-clean."
         ],
         [
           "Stronger custom password",
@@ -132,7 +132,7 @@
         ],
         [
           "Local key derivation",
-          "The URL contains only a random #salt= fragment. The CLI and browser derive the same AES-256-GCM key with PBKDF2-HMAC-SHA256 using 600,000 iterations. The relay receives neither password nor plaintext."
+          "The printed URL contains only a random #salt= fragment. The terminal QR adds the password to that fragment for one-scan access. URL fragments never reach Cloudflare; the CLI and browser derive the same AES-256-GCM key locally with PBKDF2-HMAC-SHA256 using 600,000 iterations."
         ],
         [
           "Protected and visible data",
@@ -513,7 +513,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.9.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.10.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

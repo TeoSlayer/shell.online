@@ -57,6 +57,25 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 		fmt.Fprintf(writer, "  %s %s\n", label("Rejoin"), value("shell attach "+shortSessionID(result.ID)))
 		fmt.Fprintf(writer, "  %s %s\n", label("Stop"), value("shell kill "+shortSessionID(result.ID)))
 	}
+
+	if color {
+		payload, payloadError := sessionQRPayload(result)
+		qr, qrError := terminalQRCode(payload)
+		if payloadError == nil && qrError == nil {
+			credential := "includes the link"
+			if result.Password != "" {
+				credential += " + password"
+			}
+			grant := "view this session"
+			if !result.ReadOnly {
+				grant = "view and type in this session"
+			}
+			fmt.Fprintln(writer)
+			fmt.Fprintf(writer, "  %s  %s\n", styleSessionText(color, "1;38;5;222", "Scan to open"), styleSessionText(color, "2", credential))
+			fmt.Fprint(writer, qr)
+			fmt.Fprintf(writer, "  %s\n", styleSessionText(color, "2", "Anyone who scans this can "+grant+"."))
+		}
+	}
 	fmt.Fprintln(writer)
 }
 
