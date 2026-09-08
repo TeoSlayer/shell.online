@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { WarningCircle } from "@phosphor-icons/react";
 import { AuthShell } from "../components/AuthShell";
 import { Field } from "../components/Field";
@@ -8,17 +8,33 @@ import { Alert } from "../components/Alert";
 import { GoogleMark } from "../components/GoogleMark";
 import { useAuth } from "../auth/AuthProvider";
 import { authErrorMessage } from "../lib/auth-errors";
+import { renameOrg } from "../lib/api";
+import { suggestedOrgName } from "../lib/org-name";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function SignUp() {
   const { signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  /*
+   * `shell login` sends people here with the authorize request it is waiting
+   * on. Landing them on the sessions page instead would leave the terminal
+   * hanging on a request they can no longer reach.
+   */
+  const destination = (location.state as { from?: string } | null)?.from ?? "/sessions";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const [organization, setOrganization] = useState("");
+  /*
+   * Signing up creates an organization. Naming it here rather than leaving a
+   * guess derived from the email address means the first thing colleagues see
+   * on an invite is a name somebody chose.
+   */
+  const suggestion = suggestedOrgName(email, name);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [pending, setPending] = useState<"none" | "email" | "google">("none");
@@ -37,6 +53,9 @@ export function SignUp() {
     if (password.length < 8) {
       next.password = "Use at least 8 characters.";
     }
+    if (!organization.trim() && !suggestion) {
+      next.organization = "Give your organization a name.";
+    }
     if (!accepted) {
       next.terms = "Accept the terms of service to create an account.";
     }
@@ -52,11 +71,31 @@ export function SignUp() {
     setPending("email");
     try {
       await signUp(name, email, password);
-      navigate("/sessions", { replace: true });
+      await nameTheOrganization();
+      navigate(destination, { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
     } finally {
       setPending("none");
+    }
+  }
+
+  /**
+   * Names the organization signing up just created.
+   *
+   * The organization is made on the first authenticated call, so this is that
+   * call: it establishes one and renames it in a single step. Best effort --
+   * an account that exists with a guessed organization name is a far better
+   * outcome than a sign-up that appears to fail after the account was already
+   * created, and the name is editable on the organization page.
+   */
+  async function nameTheOrganization() {
+    const chosen = organization.trim() || suggestion;
+    if (!chosen) return;
+    try {
+      await renameOrg(chosen);
+    } catch {
+      /* Ignored on purpose; see above. */
     }
   }
 
@@ -75,7 +114,8 @@ export function SignUp() {
     setPending("google");
     try {
       await signInWithGoogle();
-      navigate("/sessions", { replace: true });
+      await nameTheOrganization();
+      navigate(destination, { replace: true });
     } catch (error) {
       setFormError(authErrorMessage(error));
     } finally {
@@ -97,7 +137,11 @@ export function SignUp() {
       headLink={{ to: "/login", label: "Sign in" }}
       foot={
         <>
-          Already have an account? <Link to="/login">Sign in</Link>.
+          Already have an account?{" "}
+          <Link to="/login" state={location.state}>
+            Sign in
+          </Link>
+          .
         </>
       }
       legal={
@@ -132,6 +176,16 @@ export function SignUp() {
           placeholder="you@company.com"
           error={fieldErrors.email}
           disabled={busy}
+        />
+
+        <Field
+          label="Organization"
+          value={organization}
+          onChange={setOrganization}
+          autoComplete="organization"
+          placeholder={suggestion || "Vulture Labs"}
+          error={fieldErrors.organization}
+          note="Your team's space. You can rename it later."
         />
 
         <Field

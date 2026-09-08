@@ -544,15 +544,24 @@ button.tab {
   font-size: 13px;
 }
 
+/*
+ * Flat inside the modal. The shared button carries both a 1px border and a
+ * drop shadow, and on a small dialog that already has its own border and
+ * shadow the two read as one thick edge. Transparent rather than none on the
+ * border so the button keeps the shared box height.
+ */
 .signed-in .btn {
   margin-top: 4px;
   min-width: 120px;
-  /* Transparent, not none, so the button keeps the shared .btn box height. */
   border-color: transparent;
+  box-shadow: none;
 }
 
 .signed-in .btn:hover:not(:disabled) {
   border-color: transparent;
+  box-shadow: none;
+  /* Lifting a button with no shadow just makes it drift. */
+  transform: none;
 }
 
 .sheet-head {

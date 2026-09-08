@@ -21,13 +21,17 @@ export function CliAuthorize() {
   if (initializing) return <Booting label="Checking your session" />;
 
   /*
-   * Sign-in has to return to this exact URL, query string included, or the
-   * request the CLI made is lost.
+   * Signing up, not signing in: somebody running `shell login` for the first
+   * time has no account yet, and the sign-in form is a dead end for them. The
+   * page links to sign-in for everyone else, carrying this state across.
+   *
+   * Either way the return path has to be this exact URL, query string
+   * included, or the request the CLI is waiting on is lost.
    */
   if (!user) {
     return (
       <Navigate
-        to="/login"
+        to="/signup"
         replace
         state={{ from: `${location.pathname}${location.search}` }}
       />

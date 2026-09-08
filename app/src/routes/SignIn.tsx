@@ -73,7 +73,11 @@ export function SignIn() {
       headLink={{ to: "/signup", label: "Create account" }}
       foot={
         <>
-          New here? <Link to="/signup">Create an account</Link>.
+          New here?{" "}
+          <Link to="/signup" state={location.state}>
+            Create an account
+          </Link>
+          .
         </>
       }
     >

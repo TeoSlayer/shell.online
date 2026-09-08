@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   INVITE_TTL_MS,
@@ -126,5 +127,26 @@ describe("newId", () => {
       expect(seen.has(id)).toBe(false);
       seen.add(id);
     }
+  });
+});
+
+/*
+ * The sign-up form shows a suggested organization name as its placeholder,
+ * derived by src/lib/org-name.ts, and this file is what the service falls back
+ * to when the rename after sign-up does not land. Two different answers would
+ * mean the organization is not called what the placeholder promised, so the
+ * personal-domain lists have to stay identical -- checked here rather than
+ * trusted, since they are two files in two directories that nothing else ties
+ * together.
+ */
+describe("the personal domains the sign-up form knows", () => {
+  it("match the ones the service falls back on", () => {
+    const domainsIn = (path: string) => {
+      const source = readFileSync(path, "utf8");
+      const block = source.slice(source.indexOf("const PERSONAL_DOMAINS"));
+      const list = block.slice(0, block.indexOf("]);"));
+      return [...list.matchAll(/"([^"]+)"/g)].map((match) => match[1]).sort();
+    };
+    expect(domainsIn("src/lib/org-name.ts")).toEqual(domainsIn("server/lib/orgs.ts"));
   });
 });
