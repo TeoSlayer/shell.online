@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMailer, httpMailer, invitationMessage, logMailer } from "./mail";
+import {
+  SENDGRID_URL,
+  createMailer,
+  httpMailer,
+  invitationMessage,
+  logMailer,
+  parseAddress,
+  sendgridMailer,
+} from "./mail";
 
 const INVITATION = {
   to: "bruno@example.com",
@@ -127,5 +135,63 @@ describe("createMailer", () => {
 describe("logMailer", () => {
   it("does not throw when there is nowhere to send", async () => {
     await expect(logMailer(() => {}).send(invitationMessage(INVITATION, NOW))).resolves.toBeUndefined();
+  });
+});
+
+describe("sendgridMailer", () => {
+  it("sends the shape SendGrid accepts, not the flat one", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 202 }));
+    const mailer = sendgridMailer(
+      { apiKey: "SG.key", from: "shell.online <no-reply@shell.online>" },
+      fetcher as unknown as typeof fetch,
+    );
+    await mailer.send(invitationMessage(INVITATION, NOW));
+
+    const [url, options] = fetcher.mock.calls[0];
+    expect(url).toBe(SENDGRID_URL);
+    expect(options.headers.authorization).toBe("Bearer SG.key");
+    const body = JSON.parse(options.body);
+    /* Nested, which is the whole reason this cannot share a builder. */
+    expect(body.personalizations[0].to[0].email).toBe("bruno@example.com");
+    expect(body.from).toEqual({ email: "no-reply@shell.online", name: "shell.online" });
+    /* Plain text first: RFC 2046 puts the richest alternative last. */
+    expect(body.content[0].type).toBe("text/plain");
+    expect(body.content[1].type).toBe("text/html");
+  });
+
+  it("treats 202 as sent, since that is what SendGrid returns", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 202 }));
+    const mailer = sendgridMailer({ apiKey: "k", from: "a@b.c" }, fetcher as unknown as typeof fetch);
+    await expect(mailer.send(invitationMessage(INVITATION, NOW))).resolves.toBeUndefined();
+  });
+
+  /* Almost always an unverified sender, and worth reading in the log. */
+  it("surfaces what SendGrid objected to", async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(`{"errors":[{"message":"The from address does not match a verified Sender Identity"}]}`, {
+        status: 403,
+      }),
+    );
+    const mailer = sendgridMailer({ apiKey: "k", from: "a@b.c" }, fetcher as unknown as typeof fetch);
+    await expect(mailer.send(invitationMessage(INVITATION, NOW))).rejects.toThrow(
+      /403.*verified Sender Identity/,
+    );
+  });
+});
+
+describe("parseAddress", () => {
+  it("splits a display name from the address", () => {
+    expect(parseAddress("shell.online <no-reply@shell.online>")).toEqual({
+      email: "no-reply@shell.online",
+      name: "shell.online",
+    });
+  });
+
+  it("passes a bare address through", () => {
+    expect(parseAddress("no-reply@shell.online")).toEqual({ email: "no-reply@shell.online" });
+  });
+
+  it("strips quotes some clients put round the name", () => {
+    expect(parseAddress('"shell.online" <no-reply@shell.online>').name).toBe("shell.online");
   });
 });

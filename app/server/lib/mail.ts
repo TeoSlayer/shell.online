@@ -4,12 +4,11 @@
  * An invite is a link, and a link somebody has to be told about by hand is an
  * invite that mostly does not get accepted. So the service sends it.
  *
- * There is no mail dependency and no vendor in here. A mailer posts one JSON
- * body to a URL, which is the shape Resend, Postmark and Mailgun all accept,
- * so the deployment picks the provider and this file does not have an opinion.
- * With nothing configured the message is logged instead, which is what a
- * developer wants and what keeps an unconfigured deployment from failing an
- * invite that is otherwise perfectly good.
+ * No mail library: both providers below are one HTTPS POST, and a dependency
+ * that exists to build a JSON body is a dependency to keep patched for
+ * nothing. With nothing configured the message is logged instead, which is
+ * what a developer wants and what keeps an unconfigured deployment from
+ * failing an invite that is otherwise perfectly good.
  */
 
 export interface Message {
@@ -25,11 +24,34 @@ export interface Mailer {
 }
 
 export interface MailConfig {
+  /**
+   * Which provider's API shape to speak. SendGrid nests the recipient inside
+   * personalizations and the body inside content, so it cannot share a request
+   * builder with the flat providers.
+   */
+  provider?: "sendgrid" | "json";
   /** Where to POST the message. Absent means nothing is sent. */
   apiUrl?: string;
   apiKey?: string;
   /** The From address. Required alongside apiUrl. */
   from?: string;
+}
+
+/* SendGrid's only send endpoint, so the deployment need not supply it. */
+export const SENDGRID_URL = "https://api.sendgrid.com/v3/mail/send";
+
+/**
+ * Splits "Name <address@example.com>" into the parts SendGrid wants.
+ *
+ * Every other provider takes the whole string; SendGrid takes an object and
+ * rejects the combined form, so the From has to be pulled apart here rather
+ * than configured twice.
+ */
+export function parseAddress(value: string): { email: string; name?: string } {
+  const match = value.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  if (!match) return { email: value.trim() };
+  const name = match[1].replace(/^"|"$/g, "").trim();
+  return name ? { email: match[2].trim(), name } : { email: match[2].trim() };
 }
 
 /**
@@ -46,8 +68,48 @@ export function logMailer(log: (message: string) => void = console.log): Mailer 
   };
 }
 
-/** Posts the message as JSON, the way the common providers accept it. */
-export function httpMailer(config: Required<MailConfig>, fetcher = fetch): Mailer {
+/**
+ * SendGrid.
+ *
+ * It answers a successful send with 202 and an empty body, and a rejection
+ * with a JSON `errors` array that names the field it disliked -- almost always
+ * an unverified sender. That message is worth surfacing: without it the only
+ * symptom is an invitation nobody receives.
+ */
+export function sendgridMailer(
+  config: { apiKey: string; from: string },
+  fetcher = fetch,
+): Mailer {
+  const from = parseAddress(config.from);
+  return {
+    async send(message) {
+      const response = await fetcher(SENDGRID_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: message.to }] }],
+          from,
+          subject: message.subject,
+          /* Plain text first: RFC 2046 says the richest alternative goes last. */
+          content: [
+            { type: "text/plain", value: message.text },
+            { type: "text/html", value: message.html },
+          ],
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`sendgrid returned ${response.status}: ${detail.slice(0, 300)}`);
+      }
+    },
+  };
+}
+
+/** Posts the message as a flat JSON body, which Resend and Postmark accept. */
+export function httpMailer(config: { apiUrl: string; apiKey: string; from: string }, fetcher = fetch): Mailer {
   return {
     async send(message) {
       const response = await fetcher(config.apiUrl, {
@@ -77,6 +139,13 @@ export function httpMailer(config: Required<MailConfig>, fetcher = fetch): Maile
 }
 
 export function createMailer(config: MailConfig, log?: (message: string) => void): Mailer {
+  if (config.provider === "sendgrid") {
+    /* SendGrid supplies its own URL, so a key and a sender are enough. */
+    if (config.apiKey && config.from) {
+      return sendgridMailer({ apiKey: config.apiKey, from: config.from });
+    }
+    return logMailer(log);
+  }
   if (config.apiUrl && config.apiKey && config.from) {
     return httpMailer({ apiUrl: config.apiUrl, apiKey: config.apiKey, from: config.from });
   }

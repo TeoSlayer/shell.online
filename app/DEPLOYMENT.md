@@ -33,7 +33,8 @@ start on a bad value rather than failing on the first request that needs it.
 | `CLIENT_DIR` | to serve the client | Directory holding the built client. Set in the image. |
 | `PORT` / `HOST` | no | Defaults to 8080, and to `0.0.0.0` under `NODE_ENV=production`. |
 | `TRUST_PROXY` | no | Set to `1` only behind a proxy that rewrites `X-Forwarded-For`. Believing it otherwise lets a caller pick a new address per request and walk past the rate limiter. |
-| `MAIL_API_URL`, `MAIL_API_KEY`, `MAIL_FROM` | no | Where to post an invitation email, and as whom. All three or none: with any missing, invitations are logged instead of sent and the link still works. |
+| `MAIL_API_KEY`, `MAIL_FROM` | no | SendGrid credentials for invitation email. The From address must be a verified Sender Identity or every send returns 403. With either missing, invitations are logged instead of sent and the link still works. |
+| `MAIL_PROVIDER`, `MAIL_API_URL` | no | Set `MAIL_PROVIDER=json` with a `MAIL_API_URL` to post a flat `{from,to,subject,html,text}` body instead, which Resend and Postmark accept. Defaults to SendGrid. |
 
 The `VITE_*` values are compiled into the client, so they are build arguments
 rather than container environment. Changing one needs a rebuild.
@@ -54,12 +55,21 @@ An invite is a link, and a link somebody has to be told about by hand mostly
 does not get accepted. When an invite is created with an email address, the
 service sends it.
 
-There is no mail library and no vendor in the code. `server/lib/mail.ts` posts
-one JSON body — `{from, to, subject, html, text}` — to `MAIL_API_URL`, which is
-the shape Resend, Postmark and Mailgun all accept, so the deployment picks the
-provider. With the three `MAIL_*` variables unset the message is logged, link
-included, which is what a developer wants and what stops an unconfigured
-deployment from failing an invite that is otherwise perfectly good.
+There is no mail library: a send is one HTTPS POST, and a dependency that
+exists to build a JSON body is one more thing to keep patched for nothing.
+`server/lib/mail.ts` speaks SendGrid by default — which nests the recipient
+inside `personalizations` and the body inside `content`, so it cannot share a
+request builder with the flat providers — and `MAIL_PROVIDER=json` switches to
+the flat body Resend and Postmark accept.
+
+**The From address must be a verified Sender Identity in the SendGrid account.**
+An unverified one fails every send with 403, and the error message SendGrid
+returns is passed through to the log, because otherwise the only symptom is an
+invitation nobody receives.
+
+With the key or the sender unset the message is logged, link included, which is
+what a developer wants and what stops an unconfigured deployment from failing
+an invite that is otherwise perfectly good.
 
 Sending is best effort: a provider having a bad afternoon must not throw away
 an invite the inviter can still copy and paste.
@@ -102,8 +112,11 @@ constraints a live write does. Running it twice is safe.
 
 ## Before this faces real users
 
-- **Firebase.** The client currently authenticates against `vv-cloud-firebase`,
-  which is borrowed. A dedicated project needs billing enabled; see the README.
+- **Firebase.** Development points at an existing Google Cloud project borrowed
+  from elsewhere in the organization, which means a shared user pool and
+  password-reset mail signed by another team. A deployment needs its own
+  project with Identity Platform enabled and billing on. Which project is used
+  is a `.env.local` change, nothing in the code.
 - **The audit log stores plaintext input.** Prompts and commands are recorded so
   a colleague can read them back, which means they are readable by this service
   in a way terminal output deliberately is not. That is a policy decision to

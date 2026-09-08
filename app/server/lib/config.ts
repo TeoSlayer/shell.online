@@ -38,7 +38,7 @@ export interface Config {
    * anything is sent; with any of them missing the message is logged instead,
    * so an unconfigured deployment still creates a perfectly good invite.
    */
-  mail: { apiUrl?: string; apiKey?: string; from?: string };
+  mail: { provider?: "sendgrid" | "json"; apiUrl?: string; apiKey?: string; from?: string };
 }
 
 export class ConfigError extends Error {}
@@ -109,6 +109,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true",
     purgeIntervalMs: 5 * 60_000,
     mail: {
+      /*
+       * SendGrid unless told otherwise, since that is what this deployment
+       * uses. Anything else speaks the flat JSON body that Resend and
+       * Postmark accept, and needs its URL given.
+       */
+      provider: env.MAIL_PROVIDER?.trim() === "json" ? "json" : "sendgrid",
       apiUrl: env.MAIL_API_URL?.trim() || undefined,
       apiKey: env.MAIL_API_KEY?.trim() || undefined,
       from: env.MAIL_FROM?.trim() || undefined,
