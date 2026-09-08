@@ -26,7 +26,8 @@
     "test": "vitest run && node --test .github/scripts/moderation.node.mjs && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs && node ./scripts/test-mobile-controls.mjs && node ./scripts/check-formula.mjs",
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
     "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "test:app": "npm --prefix app ci && npm --prefix app test"
+    "test:app": "npm --prefix app ci && npm --prefix app test",
+    "verify:published": "node ./scripts/verify-published.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",

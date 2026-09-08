@@ -4,6 +4,8 @@ import { FitAddon } from "@xterm/addon-fit";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
+import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
+import { fittedTerminalFontSize } from "./terminal-fit";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
 import { forget, passwordFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
@@ -31,6 +33,12 @@ const THEME = {
   selectionBackground: "#3a3f33",
 };
 
+/*
+ * The size the pane would like to draw at when the grid happens to fit. Every
+ * fit scales down from here; nothing scales the grid.
+ */
+const BASE_FONT_SIZE = 13;
+
 export function TerminalPane({
   shareUrl,
   active,
@@ -51,16 +59,52 @@ export function TerminalPane({
   /*
    * Only the visible pane measures itself. A hidden one is still laid out, so
    * it would measure fine here, but refusing to refit it at all means no
-   * future layout change can quietly resize somebody's running terminal.
+   * future layout change can quietly restyle somebody's running terminal.
    */
   const activeRef = useRef(active);
   activeRef.current = active;
 
+  /*
+   * The grid the process is running at, not the grid this pane could fit. The
+   * relay announces it and the CLI opens the PTY at it; a viewer's only say in
+   * the matter is how large to draw it.
+   */
+  const grid = useRef<TerminalGrid>(DESKTOP_TERMINAL_GRID);
+
+  /**
+   * Scales the font so the whole session grid fits this pane, then pins the
+   * terminal to that grid.
+   *
+   * The obvious thing — FitAddon.fit() — is wrong here. It picks the grid that
+   * fills the pane at a fixed font size, so a pane narrower than 120 columns
+   * renders a 120-column process at, say, 94: every long line wraps a second
+   * time and full-screen output loses its bottom rows. Nothing downstream can
+   * repair that, because the PTY is not the size the emulator thinks it is.
+   */
   const refit = useCallback(() => {
-    if (!activeRef.current || !fit.current || !terminal.current) return;
+    const term = terminal.current;
+    const fitAddon = fit.current;
+    if (!activeRef.current || !fitAddon || !term) return;
     try {
-      fit.current.fit();
-      connection.current?.resize(terminal.current.cols, terminal.current.rows);
+      term.options.fontSize = BASE_FONT_SIZE;
+      /* How much fits at the base size; the scale below is derived from it. */
+      const available = fitAddon.proposeDimensions();
+      if (!available) return;
+      const { cols, rows } = grid.current;
+      const fontSize = fittedTerminalFontSize(
+        BASE_FONT_SIZE,
+        available.cols,
+        available.rows,
+        100,
+        cols,
+        rows,
+      );
+      if (term.options.fontSize !== fontSize) term.options.fontSize = fontSize;
+      if (term.cols !== cols || term.rows !== rows) {
+        term.resize(cols, rows);
+      } else {
+        term.refresh(0, term.rows - 1);
+      }
     } catch {
       /* the node can be detached mid-teardown */
     }
@@ -69,6 +113,9 @@ export function TerminalPane({
   useEffect(() => {
     const node = mount.current;
     if (!node) return;
+
+    /* A pane reused for another session starts from the default again. */
+    grid.current = DESKTOP_TERMINAL_GRID;
 
     const resolved = resolveSessionSocket(
       shareUrl,
@@ -84,7 +131,10 @@ export function TerminalPane({
 
     const term = new Terminal({
       fontFamily: 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace',
-      fontSize: 13,
+      fontSize: BASE_FONT_SIZE,
+      /* Opened at the session grid so the first frames land in the right shape. */
+      cols: grid.current.cols,
+      rows: grid.current.rows,
       lineHeight: 1.35,
       cursorBlink: true,
       convertEol: false,
@@ -124,6 +174,11 @@ export function TerminalPane({
         onReadOnly: (value) => {
           setReadOnly(value);
           term.options.disableStdin = value;
+        },
+        /* A phone joining takes the session to 80x24, and back when it leaves. */
+        onGrid: (next) => {
+          grid.current = next;
+          refit();
         },
       },
     });

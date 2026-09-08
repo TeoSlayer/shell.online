@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -b && vite build && npm run build:server",
+    "build": "tsc -b && vite build && npm run build:server && node scripts/check-bundle.mjs",
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist-server/index.js && cp -R server/lib/migrations dist-server/migrations",
     "check:protocol": "node scripts/check-protocol.mjs",
     "db:import": "tsx server/import-json.ts",
@@ -20,7 +20,9 @@
     "test": "vitest run && node scripts/check-protocol.mjs",
     "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:dev@localhost:5433/shell_online} vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --force"
+    "typecheck": "tsc -b --force",
+    "verify:deploy": "node scripts/verify-deploy.mjs",
+    "verify:bundle": "node scripts/check-bundle.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

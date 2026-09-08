@@ -1,5 +1,10 @@
-import { Opcode, encodeFrame, encodeResize, isSnapshotOpcode } from "./protocol";
+import { Opcode, encodeFrame, isSnapshotOpcode } from "./protocol";
 import { BrowserFrameCipher, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
+import {
+  DESKTOP_TERMINAL_GRID,
+  MOBILE_TERMINAL_GRID,
+  type TerminalGrid,
+} from "./terminal-grid";
 
 export type ConnectionStatus =
   | "connecting"
@@ -16,6 +21,12 @@ export interface ConnectionEvents {
   /** Terminal bytes to write. `reset` means the screen should be cleared first. */
   onData(bytes: Uint8Array, reset: boolean): void;
   onReadOnly(readOnly: boolean): void;
+  /**
+   * The grid the PTY is running at, announced by the relay. It is a property
+   * of the session rather than of this viewer, and it changes when a phone
+   * joins or leaves.
+   */
+  onGrid(grid: TerminalGrid): void;
 }
 
 export interface ConnectionOptions {
@@ -31,12 +42,6 @@ export interface ConnectionOptions {
 
 const MAX_BACKOFF_MS = 10_000;
 
-/*
- * Below this a terminal is not a terminal, it is a measurement artefact from a
- * pane that is not laid out yet or not on screen.
- */
-const MIN_COLS = 20;
-const MIN_ROWS = 4;
 const CLOSE_ENDED = 4000;
 const CLOSE_MISSING = 4004;
 const CLOSE_DECRYPT_FAILED = 4003;
@@ -60,10 +65,21 @@ export class TerminalConnection {
   private readOnly = false;
   private awaitingPassword = false;
   private waitingForCapacity = false;
-  private lastSize: { cols: number; rows: number } | null = null;
+  private currentGrid: TerminalGrid = DESKTOP_TERMINAL_GRID;
 
   constructor(private readonly options: ConnectionOptions) {
     this.descriptor = parseEncryptionFragment(options.fragment);
+  }
+
+  /**
+   * The grid the PTY is running at.
+   *
+   * Desktop until the relay says otherwise, which is what the CLI opens a PTY
+   * at, so a viewer that connects before the first announcement still renders
+   * at the right size instead of guessing from its own pixels.
+   */
+  get grid(): TerminalGrid {
+    return this.currentGrid;
   }
 
   /** True when the session is encrypted and no working key is held yet. */
@@ -109,24 +125,6 @@ export class TerminalConnection {
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
 
-  /**
-   * Reports this viewer's terminal size to the relay, which resizes the shared
-   * PTY to match.
-   *
-   * A degenerate size is refused rather than sent. A hidden pane can measure
-   * as a sliver, and forwarding that would resize the real PTY to a column or
-   * two, destroying the layout of anything full-screen like htop. No terminal
-   * that small is worth honouring, so the last good size stands.
-   */
-  resize(cols: number, rows: number): void {
-    if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
-    if (cols < MIN_COLS || rows < MIN_ROWS) return;
-    /* The relay resizes the shared PTY, so only send an actual change. */
-    if (this.lastSize?.cols === cols && this.lastSize.rows === rows) return;
-    this.lastSize = { cols, rows };
-    void this.transmit(encodeResize(cols, rows));
-  }
-
   close(): void {
     this.stopped = true;
     if (this.retryTimer !== null) clearTimeout(this.retryTimer);
@@ -164,12 +162,6 @@ export class TerminalConnection {
       this.waitingForCapacity = false;
       this.retryAttempt = 0;
       this.options.events.onStatus("connected");
-      /* The PTY size follows this viewer, so re-assert it on every connect. */
-      if (this.lastSize) {
-        const { cols, rows } = this.lastSize;
-        this.lastSize = null;
-        this.resize(cols, rows);
-      }
     });
 
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
@@ -247,7 +239,7 @@ export class TerminalConnection {
   }
 
   private handleControl(raw: string): void {
-    let message: { readOnly?: unknown; status?: unknown };
+    let message: { readOnly?: unknown; status?: unknown; type?: unknown; cols?: unknown; rows?: unknown };
     try {
       message = JSON.parse(raw) as typeof message;
     } catch {
@@ -260,6 +252,26 @@ export class TerminalConnection {
     if (message.status === "exited") {
       this.options.events.onStatus("ended");
     }
+    if (message.type === "terminal_size") {
+      this.adoptGrid(message.cols, message.rows);
+    }
+  }
+
+  /*
+   * Only the two grids the CLI will actually open a PTY at are honoured. It
+   * refuses anything else (`isCanonicalTerminalSize`), so rendering a size it
+   * would have rejected is how a viewer ends up drawing 94 columns of a
+   * 120-column process.
+   */
+  private adoptGrid(cols: unknown, rows: unknown): void {
+    if (typeof cols !== "number" || typeof rows !== "number") return;
+    const grid = [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID].find(
+      (candidate) => candidate.cols === cols && candidate.rows === rows,
+    );
+    if (!grid) return;
+    if (grid.cols === this.currentGrid.cols && grid.rows === this.currentGrid.rows) return;
+    this.currentGrid = grid;
+    this.options.events.onGrid(grid);
   }
 
   private scheduleRetry(): void {

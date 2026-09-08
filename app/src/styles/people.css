@@ -250,6 +250,23 @@
   padding-left: 4px;
 }
 
+/*
+ * The command column absorbs the slack, so every other column can size to
+ * what it holds. Without this the person cells collapse: the chip is built to
+ * truncate, min-width:0 all the way down, and auto table layout reads that as
+ * permission to give the column almost no width at all. An owner rendered as
+ * three letters and an ellipsis was the result.
+ */
+.table td:first-child,
+.table th:first-child {
+  width: 100%;
+}
+
+/* Enough for a first name and surname before the ellipsis earns its place. */
+.table-person {
+  min-width: 152px;
+}
+
 .table-end {
   text-align: right;
 }
@@ -297,13 +314,56 @@
   white-space: nowrap;
 }
 
-.table-command {
-  overflow: hidden;
+/*
+ * The command is behind this rather than beside the name. Agent commands run
+ * to a few hundred characters and one of them used to set the width of the
+ * whole table, putting every other row behind a horizontal scrollbar.
+ */
+.table-command-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  margin-left: 9px;
+  background: none;
   color: var(--faint);
+  cursor: pointer;
   font-family: var(--mono);
   font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  gap: 3px;
+}
+
+.table-command-toggle:hover {
+  color: var(--muted);
+}
+
+.table-command-toggle svg {
+  transition: transform 120ms ease;
+}
+
+.table-command-toggle svg[data-open="true"] {
+  transform: rotate(90deg);
+}
+
+/*
+ * Wraps and breaks, so however long the command is the row grows downward.
+ * A table cell that scrolls sideways hides the end of the very thing someone
+ * opened this to read.
+ */
+.table-command {
+  display: block;
+  max-width: 62ch;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  margin-top: 6px;
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .table-quiet {

@@ -65,6 +65,20 @@
       // The Cloud SQL instance, reached over a Workers VPC service on a
       // Cloudflare Tunnel. An identifier, not a credential: the database
       // username and password belong to the Hyperdrive configuration.
+      //
+      // QUERY CACHING MUST STAY OFF on this configuration. It is a Hyperdrive
+      // setting rather than a field here, so it cannot be enforced from this
+      // file:
+      //
+      //   wrangler hyperdrive update <id> --caching-disabled true
+      //
+      // It is on by default and it is wrong for this workload. Everything
+      // here is read-after-write by a person who just acted: sign up and the
+      // membership that was written a moment ago reads back missing, so the
+      // request tries to create a second one and fails on the unique index;
+      // unlink a machine and it is still listed; a machine that is polling
+      // still shows as offline. Cached reads turn all of that into an
+      // application that intermittently disagrees with itself.
       "id": "__HYPERDRIVE_ID__",
       // Used only by `wrangler dev`, which connects directly rather than
       // through Hyperdrive. A local Postgres, never the deployed database.

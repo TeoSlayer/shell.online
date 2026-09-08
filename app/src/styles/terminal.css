@@ -909,6 +909,27 @@ button.tab {
 }
 
 /*
+ * Sits under the badge rather than beside it: the line is a sentence with a
+ * command in it, and inline it would push the linked/last-used meta off the
+ * row on a narrow window.
+ */
+.device-offline-hint {
+  display: block;
+  margin-top: 3px;
+  color: var(--faint);
+}
+
+.device-offline-hint code {
+  padding: 1px 5px;
+  border-radius: var(--radius-chip);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.94em;
+  white-space: nowrap;
+}
+
+/*
  * Overrides the inline code chip .sessions-empty already sets: a command
  * someone has to copy reads as its own line, not as a word in a sentence.
  */
