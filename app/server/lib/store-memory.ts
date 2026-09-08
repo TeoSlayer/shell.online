@@ -374,6 +374,23 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  /*
+   * Single-threaded, so "check then write" cannot be interleaved here the way
+   * it can against a database. The check is still made, because the contract
+   * is the same for both stores and the tests hold them to it.
+   */
+  async claimOwnOrganization(
+    organization: Organization,
+    membership: Membership,
+  ): Promise<Membership> {
+    const existing = this.data.memberships.find((entry) => entry.uid === membership.uid);
+    if (existing) return existing;
+    this.data.organizations.push(organization);
+    this.data.memberships.push(membership);
+    this.flush();
+    return membership;
+  }
+
   async putMembership(membership: Membership): Promise<void> {
     /*
      * Every row for this person goes, not just the one in this organization.

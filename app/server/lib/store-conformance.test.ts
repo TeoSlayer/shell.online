@@ -582,5 +582,81 @@ for (const implementation of implementations) {
         expect(await store.markAllNotificationsRead("uid-2", 5000)).toBe(0);
       });
     });
+
+    describe("claiming an organization on first sight", () => {
+      /*
+       * Signing in fires several requests at once. On a new account none of
+       * them finds a membership, so each tries to create an organization and
+       * claim the same person. Against Postgres the losers hit the unique
+       * index on uid, which surfaced as a 500 on the first page load.
+       */
+      it("gives every racing caller the same membership", async () => {
+        const attempts = Array.from({ length: 8 }, (_, index) =>
+          store.claimOwnOrganization(
+            organization({ id: `org_race_${index}`, createdBy: "uid-new" }),
+            membership({ orgId: `org_race_${index}`, uid: "uid-new", role: "owner" }),
+          ),
+        );
+        const claimed = await Promise.all(attempts);
+
+        /* One organization won, and everybody was told the same one. */
+        const orgIds = new Set(claimed.map((entry) => entry.orgId));
+        expect(orgIds.size).toBe(1);
+        expect(await store.membershipOf("uid-new")).toMatchObject({ orgId: [...orgIds][0] });
+      });
+
+      /* The organizations the losers made must not be left lying around. */
+      it("leaves no organization behind for a caller that lost", async () => {
+        const claimed = await Promise.all(
+          Array.from({ length: 5 }, (_, index) =>
+            store.claimOwnOrganization(
+              organization({ id: `org_orphan_${index}`, createdBy: "uid-solo" }),
+              membership({ orgId: `org_orphan_${index}`, uid: "uid-solo", role: "owner" }),
+            ),
+          ),
+        );
+        const winner = claimed[0].orgId;
+        for (let index = 0; index < 5; index += 1) {
+          const id = `org_orphan_${index}`;
+          const found = await store.organization(id);
+          if (id === winner) expect(found).not.toBeNull();
+          else expect(found).toBeNull();
+        }
+      });
+
+      it("yields to a membership that already exists", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        const claimed = await store.claimOwnOrganization(
+          organization({ id: "org_late", createdBy: "uid-1" }),
+          membership({ orgId: "org_late", uid: "uid-1" }),
+        );
+        expect(claimed.orgId).toBe("org_1");
+        expect(await store.organization("org_late")).toBeNull();
+      });
+    });
+
+    describe("moving somebody between organizations", () => {
+      /*
+       * The old implementation deleted the person's other memberships and then
+       * inserted, which is not atomic: a caller that lost the race had already
+       * deleted the winner's row, leaving the person in no organization at all.
+       */
+      it("never leaves a person with no organization", async () => {
+        await store.putOrganization(organization());
+        await store.putOrganization(organization({ id: "org_2", name: "Other" }));
+        await store.putMembership(membership());
+
+        await Promise.all([
+          store.putMembership(membership({ orgId: "org_2" })),
+          store.putMembership(membership({ orgId: "org_1" })),
+          store.putMembership(membership({ orgId: "org_2" })),
+        ]);
+
+        const after = await store.membershipOf("uid-1");
+        expect(after).not.toBeNull();
+        expect(["org_1", "org_2"]).toContain(after?.orgId);
+      });
+    });
   });
 }

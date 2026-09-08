@@ -78,6 +78,16 @@ export interface Store {
   organization(orgId: string): Promise<Organization | null>;
   renameOrganization(orgId: string, name: string): Promise<boolean>;
   putMembership(membership: Membership): Promise<void>;
+  /**
+   * Creates an organization and its first membership together, unless this
+   * person already has one.
+   *
+   * Returns whichever membership stands afterwards, which may be one another
+   * request wrote. Signing in fires several requests at once and none of them
+   * finds a membership, so without this they each create an organization and
+   * race to claim the same person.
+   */
+  claimOwnOrganization(organization: Organization, membership: Membership): Promise<Membership>;
   membershipOf(uid: string): Promise<Membership | null>;
   members(orgId: string): Promise<Membership[]>;
   removeMember(orgId: string, uid: string): Promise<boolean>;

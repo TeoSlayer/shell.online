@@ -846,22 +846,87 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /**
+   * Creates the organization and its first membership, or yields to whoever
+   * got there first.
+   *
+   * One transaction, so the organization is not left behind when the
+   * membership is not claimed. `ON CONFLICT DO NOTHING` on the uid index is
+   * what decides the winner: exactly one caller inserts a row, the rest read
+   * back what that caller wrote.
+   */
+  async claimOwnOrganization(
+    organization: Organization,
+    membership: Membership,
+  ): Promise<Membership> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `INSERT INTO organizations (id, name, created_at, created_by) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO NOTHING`,
+        [organization.id, organization.name, organization.createdAt, organization.createdBy],
+      );
+      const claimed = await client.query(
+        `INSERT INTO memberships (org_id, uid, email, name, role, joined_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (uid) DO NOTHING
+         RETURNING *`,
+        [
+          membership.orgId,
+          membership.uid,
+          membership.email,
+          membership.name,
+          membership.role,
+          membership.joinedAt,
+        ],
+      );
+      if (claimed.rowCount === 0) {
+        /* Somebody else claimed this person; undo the organization with it. */
+        await client.query("ROLLBACK");
+        /*
+         * Read on this client, not through the pool. Every racing caller is
+         * holding a connection at this point, so asking the pool for a second
+         * one deadlocks them all against each other the moment there are more
+         * callers than connections.
+         */
+        const existing = await client.query("SELECT * FROM memberships WHERE uid = $1", [
+          membership.uid,
+        ]);
+        if (existing.rowCount) return toMembership(existing.rows[0]);
+        /*
+         * Claimed and then removed between the two statements. Vanishingly
+         * unlikely, and reporting it beats returning a membership that is not
+         * in the database.
+         */
+        throw new Error("membership was claimed and then withdrawn");
+      }
+      await client.query("COMMIT");
+      return toMembership(claimed.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async putMembership(membership: Membership): Promise<void> {
     /*
-     * A person belongs to one organization, and the unique index on uid says
-     * so. Joining a second would otherwise fail the insert rather than move
-     * them, so an existing membership elsewhere is cleared first.
+     * One statement, conflicting on the uid index rather than the primary key.
+     * A person belongs to one organization, so moving them is an update to the
+     * row they already have. This used to delete their other memberships and
+     * then insert, which is not atomic: two requests racing to place the same
+     * person could each pass the delete and then both insert, and the one that
+     * lost had already deleted the winner's row.
      */
-    await this.pool.query("DELETE FROM memberships WHERE uid = $1 AND org_id <> $2", [
-      membership.uid,
-      membership.orgId,
-    ]);
     await this.pool.query(
       `INSERT INTO memberships (org_id, uid, email, name, role, joined_at, public_key)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (org_id, uid) DO UPDATE SET
-         email = EXCLUDED.email, name = EXCLUDED.name, role = EXCLUDED.role,
-         joined_at = EXCLUDED.joined_at, public_key = EXCLUDED.public_key`,
+       ON CONFLICT (uid) DO UPDATE SET
+         org_id = EXCLUDED.org_id, email = EXCLUDED.email, name = EXCLUDED.name,
+         role = EXCLUDED.role, joined_at = EXCLUDED.joined_at,
+         public_key = EXCLUDED.public_key`,
       [
         membership.orgId,
         membership.uid,

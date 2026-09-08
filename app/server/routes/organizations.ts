@@ -122,7 +122,6 @@ async function createOwnOrg(store: Store, identity: Identity): Promise<Membershi
     createdAt: Date.now(),
     createdBy: identity.uid,
   };
-  await store.putOrganization(organization);
   const membership: Membership = {
     orgId: organization.id,
     uid: identity.uid,
@@ -131,8 +130,14 @@ async function createOwnOrg(store: Store, identity: Identity): Promise<Membershi
     role: "owner",
     joinedAt: Date.now(),
   };
-  await store.putMembership(membership);
-  return membership;
+  /*
+   * Signing in fires several requests at once, and on a new account none of
+   * them finds a membership. Each would otherwise create an organization and
+   * try to claim the same person, and the second insert violates the unique
+   * index on uid. Whoever gets there first wins; the rest adopt what they
+   * wrote and their organization is rolled back with the attempt.
+   */
+  return store.claimOwnOrganization(organization, membership);
 }
 
 export async function describeOrganization(store: Store, membership: Membership): Promise<Result> {
