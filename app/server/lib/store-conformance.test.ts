@@ -509,11 +509,20 @@ for (const implementation of implementations) {
     });
 
     describe("audit", () => {
-      it("purges legacy plaintext input while preserving collaboration metadata", async () => {
-        await store.putAudit(auditEvent({ id: "plain", kind: "input", text: "secret command" }));
+      /*
+       * The five-minute sweep used to delete every input and interrupt row,
+       * which made recording them pointless: an entry survived until the next
+       * cron tick and no longer. Input is retained on purpose now, so the
+       * sweep must leave it alone, and this is where that is written down.
+       */
+      it("keeps recorded input rather than sweeping it away", async () => {
+        await store.putAudit(auditEvent({ id: "typed", kind: "input", text: "secret command" }));
         await store.putAudit(auditEvent({ id: "handoff", kind: "handoff", text: "assigned" }));
         await store.purgeExpired();
-        expect((await store.auditFor("org_1", "s1")).map((entry) => entry.id)).toEqual(["handoff"]);
+        expect((await store.auditFor("org_1", "s1")).map((entry) => entry.id).sort()).toEqual([
+          "handoff",
+          "typed",
+        ]);
       });
 
       it("reads one session's trail in the order it happened", async () => {

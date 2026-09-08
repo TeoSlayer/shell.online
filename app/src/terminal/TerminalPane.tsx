@@ -9,6 +9,8 @@ import { fittedTerminalFontSize } from "./terminal-fit";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
 import { forget, passwordFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
+import { AuditSink } from "./audit-sink";
+import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 
@@ -184,9 +186,18 @@ export function TerminalPane({
     });
     connection.current = connected;
 
+    /*
+     * Input is recorded per session so an organization can see what was run
+     * or asked. It watches the same stream the terminal receives, so it sees
+     * exactly what was entered and nothing else.
+     */
+    const audited = sessionIdFromShareUrl(shareUrl);
+    const sink = audited ? new AuditSink(audited, postAudit) : null;
+
     const typed = term.onData((data) => {
       if (!canType) return;
       connected.send(data);
+      sink?.observe(data);
     });
     term.options.disableStdin = !canType;
 
@@ -215,6 +226,7 @@ export function TerminalPane({
       cancelAnimationFrame(frame);
       observer.disconnect();
       typed.dispose();
+      sink?.close();
       connected.close();
       term.dispose();
       terminal.current = null;

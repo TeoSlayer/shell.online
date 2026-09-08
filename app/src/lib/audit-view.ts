@@ -101,11 +101,24 @@ export function bySession(events: AuditEvent[]): Tally[] {
   return tally(events.map((event) => event.sessionId));
 }
 
+/**
+ * The most-used commands.
+ *
+ * Keyed on the first word, because "git status" and "git log" are the same
+ * tool and counting whole lines would produce a list of near-duplicates that
+ * says nothing.
+ */
+export function topCommands(events: AuditEvent[], limit = 8): Tally[] {
+  const words = events
+    .filter((event) => event.kind === "input" && event.text.trim())
+    .map((event) => event.text.trim().split(/\s+/)[0]);
+  return tally(words).slice(0, limit);
+}
 
 export interface Summary {
   total: number;
-  opened: number;
-  handoffs: number;
+  inputs: number;
+  interrupts: number;
   people: number;
   sessions: number;
   firstAt?: number;
@@ -116,8 +129,8 @@ export function summarise(events: AuditEvent[]): Summary {
   const times = events.map((event) => event.at);
   return {
     total: events.length,
-    opened: events.filter((event) => event.kind === "opened").length,
-    handoffs: events.filter((event) => event.kind === "handoff").length,
+    inputs: events.filter((event) => event.kind === "input").length,
+    interrupts: events.filter((event) => event.kind === "interrupt").length,
     people: new Set(events.map((event) => event.actorUid)).size,
     sessions: new Set(events.map((event) => event.sessionId)).size,
     firstAt: times.length ? Math.min(...times) : undefined,
