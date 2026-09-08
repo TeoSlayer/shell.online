@@ -1,230 +1,219 @@
-# DISABLED. Every line below is commented out so that nothing in this file
-# runs. Turn it back on by removing one leading "# " from each line:
-#
-#   sed -i '' 's/^# \{0,1\}//' .github/workflows/ci.yml
-#
-# Disabled deliberately to get 0.9.0 in front of real traffic without waiting
-# on the full matrix. The checks themselves still pass; they were green on the
-# commit this was done from. Nothing here is broken, it is switched off, and
-# it should go back on once production has been exercised end to end.
+name: CI
 
-# name: CI
-#
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
-#
-# permissions:
-#   contents: read
-#
-# jobs:
-#   automation-policy:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 10
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#           cache: true
-#       - name: Test automated moderation decisions
-#         run: node --test .github/scripts/moderation.node.mjs
-#       - name: Lint all GitHub Actions workflows
-#         # copilot-requests is documented by GitHub but not yet known to actionlint 1.7.12.
-#         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -ignore 'unknown permission scope "copilot-requests"' .github/workflows/*.yml
-#
-#   web:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 15
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-#         with:
-#           node-version: 22
-#           cache: npm
-#       - run: npm ci
-#       - run: npm run check
-#       - run: npm run build:web
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#           cache: true
-#       - name: Build and verify download bundle
-#         run: npm run build:cli && npm run verify:downloads
-#
-#   cli:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 15
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#           cache: true
-#       - name: Check formatting
-#         run: test -z "$(gofmt -l ./cmd ./internal)"
-#       - run: go vet ./...
-#       - run: go test -race ./...
-#
-#   windows:
-#     runs-on: windows-latest
-#     timeout-minutes: 15
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#           cache: true
-#       - name: Test native ConPTY and local session control
-#         run: go test ./...
-#       - name: Build and run the Windows CLI
-#         run: |
-#           go build -buildvcs=false -trimpath -o shell.exe ./cmd/shell
-#           if ((./shell.exe --version) -ne "shell dev") { exit 1 }
-#       - name: Parse the PowerShell installer
-#         run: |
-#           $tokens = $null
-#           $errors = $null
-#           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/public/install.ps1", [ref]$tokens, [ref]$errors)
-#           if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
-#       - name: Test the PowerShell installer and checksum verification
-#         run: ./scripts/test-install-windows.ps1
-#
-#   qemu-linux:
-#     name: qemu-linux (${{ matrix.name }})
-#     runs-on: ubuntu-24.04
-#     timeout-minutes: 30
-#     strategy:
-#       fail-fast: false
-#       matrix:
-#         include:
-#           - name: x86
-#             targets: 386 amd64
-#           - name: arm
-#             targets: armv5 armv6 armv7 arm64
-#           - name: mips
-#             targets: mips mipsle mips64 mips64le
-#           - name: power-and-mainframe
-#             targets: ppc64 ppc64le s390x
-#           - name: emerging
-#             targets: riscv64 loong64
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#           cache: true
-#       - name: Install QEMU user-mode emulators
-#         run: |
-#           sudo apt-get update
-#           sudo apt-get install --no-install-recommends qemu-user
-#       - name: Run full test suite under QEMU
-#         run: sh ./scripts/test-qemu-linux.sh ${{ matrix.targets }}
-#
-#   app:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 15
-#     # The store has two implementations and a conformance suite that holds both
-#     # to the same behaviour. Running it against a real Postgres rather than only
-#     # the in-memory stand-in is the point: it is what caught a pool deadlock and
-#     # a lost membership that the in-memory store passed happily.
-#     services:
-#       postgres:
-#         image: postgres:16-alpine
-#         env:
-#           POSTGRES_PASSWORD: ci
-#           POSTGRES_DB: shell_online
-#         ports:
-#           - 5432:5432
-#         options: >-
-#           --health-cmd "pg_isready -U postgres"
-#           --health-interval 5s
-#           --health-timeout 3s
-#           --health-retries 20
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-#         with:
-#           node-version: 22
-#           cache: npm
-#           cache-dependency-path: app/package-lock.json
-#       - run: npm ci
-#         working-directory: app
-#       - name: Typecheck
-#         run: npx tsc -b --force
-#         working-directory: app
-#       - name: Lint
-#         run: npx oxlint
-#         working-directory: app
-#       - name: Test, including the store against a real Postgres
-#         run: npx vitest run
-#         working-directory: app
-#         env:
-#           TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/shell_online
-#       - name: Check vendored modules have not drifted
-#         run: node scripts/check-protocol.mjs
-#         working-directory: app
-#       - name: Build the client and the server bundle
-#         run: npm run build
-#         working-directory: app
-#         env:
-#           VITE_FIREBASE_API_KEY: ci
-#           VITE_FIREBASE_AUTH_DOMAIN: ci.example.com
-#           VITE_FIREBASE_PROJECT_ID: ci
-#           VITE_FIREBASE_APP_ID: ci
-#
-#   vulnerabilities:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 10
-#     steps:
-#       - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
-#         with:
-#           go-version-file: go.mod
-#           go-package: ./...
-#
-#       # The step above analyses the Linux build. Imports differ by platform:
-#       # the PTY library pulls in golang.org/x/crypto/ssh on Windows and on no
-#       # other target, so a whole dependency tree ships to users without ever
-#       # being looked at here. Analysed rather than built, so this needs no
-#       # Windows runner.
-#       #
-#       # govulncheck reports what the code actually calls. A module that is
-#       # linked but never entered stays quiet here and is still worth updating,
-#       # which is what Dependabot is for; the two answer different questions.
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#
-#       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-#         with:
-#           go-version-file: go.mod
-#
-#       - name: Check the Windows build for reachable vulnerabilities
-#         run: |
-#           go install golang.org/x/vuln/cmd/govulncheck@latest
-#           GOOS=windows GOARCH=amd64 "$(go env GOPATH)/bin/govulncheck" ./...
-#
-#   container:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 15
-#     steps:
-#       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-#         with:
-#           persist-credentials: false
-#       - run: docker build --build-arg VERSION=test -t shell-online:test .
-#       - run: test "$(docker run --rm --entrypoint shell shell-online:test --version)" = "shell test"
-#       - run: test "$(docker image inspect shell-online:test --format '{{.Config.User}}')" = "shellonline"
-#
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  automation-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test automated moderation decisions
+        run: node --test .github/scripts/moderation.node.mjs
+      - name: Lint all GitHub Actions workflows
+        # copilot-requests is documented by GitHub but not yet known to actionlint 1.7.12.
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -ignore 'unknown permission scope "copilot-requests"' .github/workflows/*.yml
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:web
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build and verify download bundle
+        run: npm run build:cli && npm run verify:downloads
+
+  cli:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check formatting
+        run: test -z "$(gofmt -l ./cmd ./internal)"
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Test native ConPTY and local session control
+        run: go test ./...
+      - name: Build and run the Windows CLI
+        run: |
+          go build -buildvcs=false -trimpath -o shell.exe ./cmd/shell
+          if ((./shell.exe --version) -ne "shell dev") { exit 1 }
+      - name: Parse the PowerShell installer
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD/public/install.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) { $errors | Format-List; exit 1 }
+      - name: Test the PowerShell installer and checksum verification
+        run: ./scripts/test-install-windows.ps1
+
+  qemu-linux:
+    name: qemu-linux (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86
+            targets: 386 amd64
+          - name: arm
+            targets: armv5 armv6 armv7 arm64
+          - name: mips
+            targets: mips mipsle mips64 mips64le
+          - name: power-and-mainframe
+            targets: ppc64 ppc64le s390x
+          - name: emerging
+            targets: riscv64 loong64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install QEMU user-mode emulators
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends qemu-user
+      - name: Run full test suite under QEMU
+        run: sh ./scripts/test-qemu-linux.sh ${{ matrix.targets }}
+
+  app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The store has two implementations and a conformance suite that holds both
+    # to the same behaviour. Running it against a real Postgres rather than only
+    # the in-memory stand-in is the point: it is what caught a pool deadlock and
+    # a lost membership that the in-memory store passed happily.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: shell_online
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+        working-directory: app
+      - name: Typecheck
+        run: npx tsc -b --force
+        working-directory: app
+      - name: Lint
+        run: npx oxlint
+        working-directory: app
+      - name: Test, including the store against a real Postgres
+        run: npx vitest run
+        working-directory: app
+        env:
+          TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/shell_online
+      - name: Check vendored modules have not drifted
+        run: node scripts/check-protocol.mjs
+        working-directory: app
+      - name: Build the client and the server bundle
+        run: npm run build
+        working-directory: app
+        env:
+          VITE_FIREBASE_API_KEY: ci
+          VITE_FIREBASE_AUTH_DOMAIN: ci.example.com
+          VITE_FIREBASE_PROJECT_ID: ci
+          VITE_FIREBASE_APP_ID: ci
+
+  vulnerabilities:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          go-package: ./...
+
+      # The step above analyses the Linux build. Imports differ by platform:
+      # the PTY library pulls in golang.org/x/crypto/ssh on Windows and on no
+      # other target, so a whole dependency tree ships to users without ever
+      # being looked at here. Analysed rather than built, so this needs no
+      # Windows runner.
+      #
+      # govulncheck reports what the code actually calls. A module that is
+      # linked but never entered stays quiet here and is still worth updating,
+      # which is what Dependabot is for; the two answer different questions.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Check the Windows build for reachable vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          GOOS=windows GOARCH=amd64 "$(go env GOPATH)/bin/govulncheck" ./...
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: docker build --build-arg VERSION=test -t shell-online:test .
+      - run: test "$(docker run --rm --entrypoint shell shell-online:test --version)" = "shell test"
+      - run: test "$(docker image inspect shell-online:test --format '{{.Config.User}}')" = "shellonline"
