@@ -6,94 +6,92 @@ resource, not assumed.
 ## Done
 
 - [x] **Cloud SQL instance** `shell-online-db`, PostgreSQL 16, `db-f1-micro`,
-      10 GB SSD, `us-central1`, daily backups at 03:00 retained 7 days,
-      maintenance Sunday 04:00, encrypted connections only, **no authorized
-      networks** so it is unreachable from the internet.
+      10 GB SSD, `us-central1`, daily backups retained 7 days, encrypted
+      connections only (`sslMode: ENCRYPTED_ONLY`).
+- [x] **The database is not on the internet.** `authorizedNetworks` is exactly
+      `34.41.2.41/32`, the connector VM. Nothing else can open a socket to it.
 - [x] **Database and role** `shell_online` owned by `shell_app`, password
       generated and never written to a tracked file.
-- [x] **Migrations applied**: `001_initial`, `002_machine_id`,
-      `003_harnesses`, all three with recorded checksums. 12 tables.
+- [x] **Migrations applied**: `001_initial`, `002_machine_id`, `003_harnesses`,
+      all three with recorded checksums. 12 tables.
 - [x] **Storage tested**: the store conformance suite, 45 cases, run against
       Cloud SQL itself rather than a local Postgres. All pass.
 - [x] **Data migrated**: 79 records from the file store, both organizations
       intact, verified by reading the row counts back.
-- [x] **Connection pool bounded.** `max_connections` is 25 on this tier and
-      node-postgres defaults to 10 per process, so a third instance would have
-      been refused a connection. Capped at 5, `DATABASE_POOL_MAX`.
-- [x] **Secrets in Secret Manager**: `shell-online-database-url`,
-      `shell-online-sendgrid-key`. Neither is in the image or the service
-      definition.
-- [x] **Container built** by Cloud Build, pushed to Artifact Registry.
-- [x] **Cloud Run deployed**, reaching the database over the Cloud SQL
-      connector on a unix socket. Health, readiness, the client and the guarded
-      API all answer correctly.
+- [x] **Connector VM** `shell-online-db-connector` (`e2-micro`,
+      `us-central1-a`) running `cloudflared`, tunnel `SHELL_ONLINE_DB` healthy.
+- [x] **Workers VPC service** `shell-online-db`, `TCP:5432` over that tunnel.
+- [x] **Hyperdrive** `c51f052c29fb43b58a0aa57b66cb62f6`, pooling for the
+      Worker, `origin_connection_limit` 20 against a server ceiling of 25.
+- [x] **Worker deployed** on `app.shell.online` as a custom domain. Health,
+      readiness, the client and the guarded API all answer correctly, and
+      `/api/ready` runs a real query the whole length of the chain.
+- [x] **One public hostname.** `workers_dev` and `preview_urls` both `false`,
+      so no deployed version gets its own permanent public address.
+- [x] **Firebase authorized domains** include `app.shell.online`.
+- [x] **CLI points at one real host.** `shell login` and the links it prints
+      both resolve to `https://app.shell.online`; the old
+      `accounts.shell.online`, which never resolved, is gone from the binary.
+- [x] **Binaries built at 0.9.0**, 78 files verified, `shell login` and the
+      daemon compiled in.
 - [x] **Email tracking disabled** per message, so the link in an invitation
       goes where the body says it goes.
+- [x] **Deploy workflow written**: migrate, then deploy, then health check,
+      with Workload Identity Federation rather than a service account key.
 - [x] **CI green** on every check, including CodeQL and all seven QEMU
       architectures.
 
 ## Yours to do
 
-- [ ] **Cloudflare record for `app.shell.online`.** See below. Nothing else on
-      this list matters as much: invitations currently link to a host that does
-      not resolve, which is why they land in spam.
-- [ ] **`WEB_ORIGIN`** updated to that host once it exists. It is currently the
-      `run.app` URL, which works but is not what you want in mail.
-- [ ] **`WEB_APP_URL`** in `web/main.ts` updated to match, then redeploy the
-      relay so the landing page links to a real sign-up page.
+Two of these need permissions this account does not have; the rest are
+decisions.
+
+- [ ] **Provide `wrangler.production.jsonc` for the relay**, then
+      `npm run deploy:production`. The binaries are the relay's static assets,
+      so this is what publishes 0.9.0 at the existing install URL. Nothing
+      else on this list is blocking a release.
+- [ ] **Repository secrets**, for the deploy workflow to run on its own. Needs
+      admin on the repository, which this account does not have:
+      `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL`,
+      `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`. Variables:
+      `CLOUD_SQL_INSTANCE`, `WEB_ORIGIN`, `RELAY_URL`, and the five
+      `VITE_FIREBASE_*` values.
+- [ ] **Create the Workload Identity Federation pool.** Blocked on
+      `roles/iam.workloadIdentityPoolAdmin` for `alex@vulturelabs.io`. Until
+      it exists the workflow can deploy but cannot migrate.
+- [ ] **Tag `v0.9.0`** and put the real tarball sha256 into
+      `Formula/shell-online.rb`, which currently holds a placeholder.
 - [ ] **SendGrid domain authentication for `shell.online`**, then
       `MAIL_FROM=shell.online <no-reply@shell.online>`. Until then the From
-      address must stay on `@pilotprotocol.network`, which is the only
-      authenticated domain.
+      address must stay on `@pilotprotocol.network`, the only authenticated
+      domain.
 - [ ] **A dedicated Firebase project.** The client authenticates against one
-      borrowed from elsewhere in the organization, which means a shared user
-      pool and password-reset mail signed by another team.
+      borrowed from elsewhere in the organization: shared user pool,
+      password-reset mail signed by another team.
 - [ ] **Rotate the SendGrid key.** It has been through a terminal and a
       transcript.
-- [ ] **Deploy the relay** with your own Wrangler config.
 - [ ] **Decide on the audit log.** Every prompt and command is stored in
       plaintext and is readable and exportable by the whole organization. It is
       in the terms; it should be a decision, not a discovery.
+- [ ] **Decide on the certificate-verification gap** between Hyperdrive and
+      Cloud SQL. See `DEPLOYMENT-PLAN.md`.
 
-## The Cloudflare record
+## DNS
 
-On the **shell.online** zone:
+Nothing to add. `app.shell.online` is a Cloudflare **custom domain** on the
+Worker, which means Cloudflare created the record and issues the certificate
+itself. The earlier instruction to add a `CNAME` to `ghs.googlehosted.com` was
+for Cloud Run and is wrong now; if that record still exists on the zone,
+delete it.
 
-| Type | Name | Content | Proxy status |
-|---|---|---|---|
-| `CNAME` | `app` | `ghs.googlehosted.com` | **DNS only (grey cloud)** |
-
-Grey cloud matters. Cloud Run issues and serves its own certificate for a
-mapped domain, which needs the name to resolve to Google while that happens.
-Behind the orange cloud, Cloudflare terminates TLS and the mapping never
-validates. You can move it behind the proxy afterwards on Full (Strict).
-
-Create the mapping first, so Google is expecting the name:
-
-```sh
-gcloud beta run domain-mappings create \
-  --project=vulture-vision-cloud --region=us-central1 \
-  --service=shell-online-app --domain=app.shell.online
-```
-
-That command prints the records it wants. If it differs from the row above,
-believe the command: mappings are regional and the target can vary.
-
-**It will ask you to verify the domain** in Google Search Console first, since
-`shell.online` is not yet verified to this account. If that turns into a fight,
-the `run.app` URL is a perfectly good `WEB_ORIGIN` for a first deployment, and
-everything except the address in the invitation works identically.
+The relay keeps `shell.online` itself. This is only the app subdomain.
 
 ## Rollback
 
-Cloud Run keeps revisions. To go back:
-
 ```sh
-gcloud run services update-traffic shell-online-app \
-  --project=vulture-vision-cloud --region=us-central1 \
-  --to-revisions=<previous-revision>=100
+npx wrangler rollback --config wrangler.jsonc
 ```
 
-Migrations only ever add, and each is checksummed, so the previous image meets
-a schema it still understands. There is no down migration and there should not
-be one.
+Migrations only ever add, and each is checksummed, so the previous version
+meets a schema it still understands. There is no down migration and there
+should not be one.

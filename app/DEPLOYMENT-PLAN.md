@@ -1,130 +1,180 @@
 # Deployment plan
 
-What is already built, what is left, and what it costs. Written against the
-live project rather than from memory: every value below was read back from the
-resources themselves.
+What is built, what is left, and what it costs. Written against the live
+resources rather than from memory: every value below was read back from the
+thing itself.
 
 `DEPLOYMENT.md` explains *how* the service works. This is the plan for putting
 it somewhere.
 
 ## Where it runs
 
+The application is a Cloudflare Worker. Only the database is on Google Cloud,
+because a managed Postgres is the one piece Cloudflare does not provide.
+
 | | |
 |---|---|
-| Google Cloud project | `vulture-vision-cloud` |
-| Region | `us-central1` |
+| Worker | `shell-online-app`, account `ef9da13de5572ea8482b2921770fa0e3` |
+| Public host | `app.shell.online`, a custom domain on the `shell.online` zone |
+| Client | Served from the Worker's `ASSETS` binding out of `app/dist` |
+| Relay | A separate Worker on `shell.online`, deployed from its own config |
 | Database | Cloud SQL for PostgreSQL 16, instance `shell-online-db` |
-| Connection name | `vulture-vision-cloud:us-central1:shell-online-db` |
+| Google project | `vulture-vision-cloud`, region `us-central1` |
 | Application database | `shell_online`, owned by role `shell_app` |
-| Container image | `us-central1-docker.pkg.dev/vulture-vision-cloud/cloud-run-source-deploy/shell-online-app` |
-| Service | Cloud Run, `shell-online-app` |
-| Relay | Cloudflare Worker, deployed separately with your own Wrangler config |
 
 **Why not `shell-online-auth`.** That project exists and would be the natural
-home, but it has no billing account attached and linking one needs a
-permission this account does not have. Moving later is a database export, a
-rebuild and a redeploy; nothing in the code knows which project it is in.
+home for the database, but it has no billing account attached and linking one
+needs a permission this account does not have. Moving later is an export, a
+Hyperdrive reconfiguration and nothing else; no code knows which project it is
+in.
 
-## Resource sizing, and the two numbers that matter
+## How the Worker reaches the database
+
+Cloud SQL speaks Postgres on a TCP port. A Worker has no VPC of its own, so
+there are four hops and each one exists for a reason:
+
+```
+Worker  ->  Hyperdrive  ->  Workers VPC service  ->  Cloudflare Tunnel  ->  Cloud SQL
+```
+
+| Hop | Identifier | What it is for |
+|---|---|---|
+| Hyperdrive | `c51f052c29fb43b58a0aa57b66cb62f6` | Pools connections at the edge. Every isolate would otherwise open its own, and there are 25 in total to go round. |
+| VPC service | `shell-online-db`, `01a08046-84e0-78c0-a8e9-558710df755a` | Gives the Worker a TCP target it is allowed to dial. `TCP:5432` to `34.135.154.179`. |
+| Tunnel | `SHELL_ONLINE_DB`, `7ba18051-41a7-4a43-85c8-d4da61e7d025` | Carries that TCP to a machine inside Google Cloud. Outbound only, so nothing is opened to the internet to make it work. |
+| Connector | VM `shell-online-db-connector`, `e2-micro`, `us-central1-a` | Runs `cloudflared`. Its address `34.41.2.41` is the **only** authorized network on the instance. |
+
+The last row is the security property worth keeping: `authorizedNetworks` on
+`shell-online-db` is exactly `34.41.2.41/32`. Whatever happens to the database
+password, the only host on the internet that may open a socket to it is one
+`e2-micro` whose sole job is to terminate a tunnel.
+
+**The connector VM should be treated as part of the database.** It is not a
+place to run anything else, it needs its patches, and if it stops, the app
+stops. There is no second one. That is the honest cost of not having a VPC
+connector between Workers and Google Cloud.
+
+**Certificate verification on the last hop is disabled.** Hyperdrive requires
+TLS to the origin, and Cloud SQL's certificate is issued for the instance name
+rather than for the address the tunnel presents, so verification cannot
+succeed as configured. The traffic is encrypted; it is not authenticated
+against a name. It runs inside a tunnel that only that one VM can enter, which
+is why this is tolerable, but it is a real gap and it should be closed by
+uploading the instance CA once Hyperdrive supports attaching one to a VPC
+service.
+
+## Resource sizing, and the number that matters
 
 **Cloud SQL `db-f1-micro`, 10 GB SSD.** Shared vCPU, 0.6 GB RAM. Right for the
 current load and for a long time after: the whole dataset today is 8 MB.
 
-**`max_connections` is 25 on this tier.** Postgres counts connections per
-server, so that ceiling is shared by every running instance of the service.
-node-postgres defaults to a pool of 10 per process, which means a third Cloud
-Run instance would be refused a connection rather than made to wait. The pool
-is therefore capped at 5, configurable with `DATABASE_POOL_MAX`. Keep this
-true:
+**`max_connections` is 25 on this tier**, and Postgres counts them per server.
+Hyperdrive is what makes that survivable: the Worker opens isolates freely and
+Hyperdrive holds the actual connections, capped by `origin_connection_limit`.
+Keep this true:
 
 ```
-instances x DATABASE_POOL_MAX  <=  max_connections - 5
+origin_connection_limit  <=  max_connections - 5
 ```
 
-At the defaults that allows four instances. Raising either side of it means
-raising the tier.
+It is set to 20. It was created at the default of 60, which is above the
+ceiling the server can actually honour, and would have surfaced as a burst of
+`too many connections` under load rather than as anything gradual. Raising the
+tier is the way to raise the limit.
 
-**The service will not scale to zero.** Every linked machine that allowed
-browser-started sessions polls every two seconds, which is roughly 43,000
-requests per machine per day and means there is never an idle minute once one
-machine is linked. Set `--min-instances=1` deliberately rather than paying for
-the same thing accidentally through cold starts, and size the CPU for polling
-rather than for page loads.
+The pool inside the process is capped at 5 as well, `DATABASE_POOL_MAX`. That
+one matters for `npm run db:migrate` and the Node build, not for the Worker.
 
-Long polling would remove almost all of that traffic and is the obvious next
-change if the machine count grows. It is not a correctness problem, only a
-bill.
+**Polling is the load.** Every linked machine that allowed browser-started
+sessions polls every two seconds, roughly 43,000 requests per machine per day.
+On Workers that is a bill rather than a capacity problem, and it is the reason
+to move to long polling before the machine count grows. It is not a
+correctness problem.
 
 ### What it costs, roughly
 
 | | Monthly |
 |---|---|
+| Workers paid plan, including Hyperdrive | $5 |
 | Cloud SQL `db-f1-micro` | about $9 |
 | 10 GB SSD plus 7 daily backups | about $3 |
-| Cloud Run, 1 instance always warm, 512 MB | about $12 |
-| Artifact Registry, Secret Manager, egress | under $2 |
-| **Total** | **about $25** |
+| Connector VM `e2-micro` plus its static address | about $10 |
+| **Total** | **about $27** |
 
 The database is the part that grows. Audit events are the only table with an
 unbounded write rate, one row per committed input.
 
 ## Secrets
 
-In Secret Manager, never in the image or the service definition:
+`MAIL_API_KEY` is the only secret the Worker holds. Set it once:
 
-| Secret | Holds |
-|---|---|
-| `shell-online-database-url` | The full connection string, including the password |
-| `shell-online-sendgrid-key` | The SendGrid API key |
+```sh
+npx wrangler secret put MAIL_API_KEY --config wrangler.jsonc
+```
 
-The Cloud Run service account needs `roles/secretmanager.secretAccessor` on
-both, and `roles/cloudsql.client` on the project.
+The database credentials are **not** the Worker's. They belong to the
+Hyperdrive configuration, which was given the connection string at creation
+and hands the Worker back only `env.HYPERDRIVE.connectionString`, local to the
+isolate. Nothing in the repository has ever held them.
+
+For CI, the same values live in GitHub Actions secrets, and `DATABASE_URL`
+there is used only by the migration step over the Cloud SQL Auth Proxy.
 
 ## The deploy
 
+Two things happen in order, and the order is the whole point:
+
 ```sh
-gcloud run deploy shell-online-app \
-  --project=vulture-vision-cloud --region=us-central1 \
-  --image=us-central1-docker.pkg.dev/vulture-vision-cloud/cloud-run-source-deploy/shell-online-app:v1 \
-  --add-cloudsql-instances=vulture-vision-cloud:us-central1:shell-online-db \
-  --set-secrets=DATABASE_URL=shell-online-database-url:latest,MAIL_API_KEY=shell-online-sendgrid-key:latest \
-  --set-env-vars=NODE_ENV=production,FIREBASE_PROJECT_ID=...,WEB_ORIGIN=https://app.shell.online,RELAY_URL=https://shell.online,TRUST_PROXY=1,MAIL_PROVIDER=sendgrid,MAIL_FROM='shell.online <no-reply@pilotprotocol.network>' \
-  --min-instances=1 --max-instances=4 --memory=512Mi --cpu=1 \
-  --allow-unauthenticated
+npm run build                                   # the client, into ./dist
+DATABASE_URL=... npm run db:migrate              # schema first
+npx wrangler deploy --config wrangler.jsonc      # then the Worker
 ```
 
-The database is reached over the Cloud SQL connector on a unix socket, not the
-network. The instance has no authorized networks, so nothing can reach it from
-the internet whatever happens to the password.
+Migrations only ever add, so a Worker from before a migration still runs
+against the newer schema. That is what makes this order safe and a rollback
+safe with it.
 
-`TRUST_PROXY=1` is correct here and only here: Cloud Run does rewrite
-`X-Forwarded-For`. Setting it anywhere without a proxy in front would let a
-caller pick a new address per request and walk past the rate limiter.
+`.github/workflows/deploy-app.yml` does exactly these three steps on a push to
+`main` that touches `app/`, authenticating to Google by Workload Identity
+Federation so there is no service account key anywhere, and finishing with a
+health and readiness check against `app.shell.online`.
 
-## Custom domain
+`TRUST_PROXY` is not set and must not be. It is correct only behind a proxy
+that rewrites `X-Forwarded-For`; the Worker reads the client address from
+Cloudflare directly. Setting it would let a caller pick a new address per
+request and walk past the rate limiter.
 
-The web app has to answer on the host that invitation links point at, or the
-mail goes to spam. See the checklist.
+## The public surface
 
-Cloud Run needs a domain mapping for a custom host. The mapping issues and
-serves its own certificate, so the DNS record has to resolve to Google while
-that happens: **add it DNS-only in Cloudflare**, not proxied. It can be moved
-behind the proxy afterwards on Full (Strict).
+`workers_dev` and `preview_urls` are both `false`. A second public hostname is
+a second way in to an app holding a database, and preview URLs are worse: they
+would put every deployed version on its own permanent public address, each one
+carrying the same Hyperdrive binding. `app.shell.online` is the only address.
 
-Domain mapping also requires the domain to be verified to this account in
-Search Console. If that turns into a fight, the `*.run.app` URL works
-immediately and is a perfectly good `WEB_ORIGIN` for a first deployment.
+This is also why the CLI has a single production host compiled into it.
+`shell login` and the links it prints both resolve to `https://app.shell.online`.
+
+## Rollback
+
+```sh
+npx wrangler rollback --config wrangler.jsonc
+```
+
+Migrations only ever add, and each is checksummed, so the previous version
+meets a schema it still understands. There is no down migration and there
+should not be one.
 
 ## Still to do before real users
 
-- **Firebase.** The client authenticates against a project borrowed from
-  elsewhere in the organization, which means a shared user pool and
-  password-reset mail signed by another team. A deployment needs its own
-  project with Identity Platform enabled. It is a build argument and a
-  `FIREBASE_PROJECT_ID`; nothing in the code changes.
+- **Close the certificate-verification gap** on the Hyperdrive to Cloud SQL
+  hop.
+- **A dedicated Firebase project.** The client authenticates against one
+  borrowed from elsewhere in the organization, which means a shared user pool
+  and password-reset mail signed by another team. It is a build argument and a
+  `FIREBASE_PROJECT_ID`; no code changes.
 - **The audit log stores input in plaintext**, readable and exportable by the
   whole organization. Deliberate, stated in the terms, and worth deciding on
   explicitly rather than discovering.
-- **Rotate the SendGrid key** once testing is done. It has been through a
-  terminal and a transcript.
-- **The relay** is yours to deploy with your own Wrangler config.
+- **Rotate the SendGrid key.** It has been through a terminal and a transcript.
+- **The connector VM is a single point of failure.** Acceptable now, worth a
+  second one behind the same tunnel before this carries anything that matters.
