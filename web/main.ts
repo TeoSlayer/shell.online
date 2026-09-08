@@ -295,7 +295,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
 <span>PS&gt;</span> irm https://shell.online/install.ps1 | iex</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
 <span>$</span> shell [options] -- &lt;command&gt; [arguments...]</code></pre>` : ""}
           <div class="knowledge-sections">
-            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>0${index + 1}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
+            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>${String(index + 1).padStart(2, "0")}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
           </div>
           ${kind === "platforms" ? "" : `<aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The browser password and derived key exist only at endpoints. Cloudflare receives neither and cannot read terminal payloads." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as a browser password, host credential, and decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>`}
           <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${nextLabel} →</a></nav>
@@ -304,7 +304,7 @@ async function renderAssurancePage(kind: DocumentationKind, version: string): Pr
       </main>
       <footer class="marketing-footer">
         <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
-        <p>A live browser link for any terminal process.</p>
+        <p>Live browser terminals for the work your machine is already doing.</p>
         <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("cli")}">CLI</a><a href="${docsLink("platforms")}">Platforms</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
       </footer>
     </section>`;
@@ -409,8 +409,8 @@ function renderLanding(): void {
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Main navigation">
           <a href="/docs/">Docs</a>
+          <a href="#platform">Platform</a>
           <a href="#use-cases">Use cases</a>
-          <a href="#how">How it works</a>
           <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
@@ -421,9 +421,8 @@ function renderLanding(): void {
       <main>
         <section class="marketing-hero">
           <div class="hero-copy">
-            <p class="hero-kicker"><i aria-hidden="true"></i> Live browser terminals <span>· Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a></span></p>
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Prefix any terminal command with <code>shell</code>. It stays on your computer and opens as an end-to-end encrypted browser terminal. You get a link and password; add <code>--read-only</code> when people should only watch.</p>
+            <p class="hero-dek">Prefix any command with <code>shell</code>. The process stays on your machine and opens as an end-to-end encrypted browser terminal.</p>
             <div class="hero-actions">
               <button class="install-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
@@ -432,11 +431,6 @@ function renderLanding(): void {
               </button>
               <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
             </div>
-            <ul class="trust-list" aria-label="Product highlights">
-              <li>No account</li>
-              <li>No SSH setup</li>
-              <li>E2EE by default</li>
-            </ul>
           </div>
 
           <div class="product-demo phone-product-demo" aria-label="A live shell.online Codex session viewed on a phone">
@@ -464,83 +458,133 @@ function renderLanding(): void {
           </div>
         </section>
 
-        <section class="install-paths" id="install">
-          <div class="install-paths-heading">
-            <p>Install your way</p>
-            <h2>Use Brew.<br />Or do it yourself.</h2>
-            <span>Homebrew fetches the tagged source, installs the Go build dependency, and compiles shell.online on your machine. No Brew? Use the verified binary installer—or build the same source manually.</span>
+        <section class="how-section" id="how">
+          <div class="section-heading">
+            <p>How a share works</p>
+            <h2>A share link,<br />not a remote machine.</h2>
+            <span>The command and PTY stay where you started them. shell.online relays encrypted terminal frames to people holding the link and browser password.</span>
           </div>
-          <div class="install-path-grid">
-            <article class="install-path-card install-path-primary">
-              <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
-              <h3>Let Brew build and manage it.</h3>
-              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
-                <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
-                <span data-copy-label aria-live="polite">Copy setup</span>
-              </button>
-              <ul>
-                <li>Fetches the checksum-pinned tagged source.</li>
-                <li>Installs Go as a build-only dependency and compiles locally.</li>
-                <li>Homebrew 6 asks you to trust this vendor tap once.</li>
-                <li>Upgrades are simply <code>brew upgrade shell-online</code>.</li>
-              </ul>
+          <div class="steps-grid">
+            <article class="step-card">
+              <span class="step-index">01</span>
+              <div class="step-visual step-command" aria-hidden="true"><code><i>$</i> shell python train.py</code><b></b></div>
+              <h3>Prefix the command</h3>
+              <p>Start any CLI, agent, server, job, TUI, or fresh shell exactly where it already lives.</p>
             </article>
-            <article class="install-path-card">
-              <div class="install-path-meta"><span>No Brew</span><strong>Verified download</strong></div>
-              <h3>Use the standalone installer.</h3>
-              <button class="method-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online installer command">
-                <code>${installCommand}</code>
-                <span data-copy-label aria-live="polite">Copy</span>
-              </button>
-              <ul>
-                <li>Detects Windows, macOS, Linux, BSD, Solaris, and 15 architectures.</li>
-                <li>Verifies SHA-256 before installing.</li>
-                <li>Never invokes sudo or edits your shell files.</li>
-              </ul>
+            <article class="step-card">
+              <span class="step-index">02</span>
+              <div class="step-visual step-share" aria-hidden="true">
+                <div><i>↗</i><code>shell.online/s/k9f…</code></div>
+                <span>Password · Ab3dE7-_</span>
+              </div>
+              <h3>Send the link and password</h3>
+              <p>No SSH keys to exchange. Choose interactive or server-enforced view-only access, then send both values to the people you trust.</p>
             </article>
-            <article class="install-path-card install-path-source">
-              <div class="install-path-meta"><span>Source</span><strong>Go 1.26.8</strong></div>
-              <h3>Build it yourself. Run it anywhere.</h3>
-              <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
-                <code><span>git clone … shell.online.git</span><span>go build -o ./shell ./cmd/shell</span></code>
-                <span data-copy-label aria-live="polite">Copy build</span>
-              </button>
-              <ul>
-                <li>Checks out the exact tagged release source.</li>
-                <li>Produces <code>./shell</code> inside your clone.</li>
-                <li>Run it there or move it to any directory on your PATH.</li>
-              </ul>
+            <article class="step-card">
+              <span class="step-index">03</span>
+              <div class="step-visual step-collab" aria-hidden="true">
+                <div><span>Y</span><span>M</span><span>R</span></div>
+                <p><i></i> Maya is typing</p>
+              </div>
+              <h3>Watch, or type together</h3>
+              <p>Use read-only to follow progress safely, or keep the default interactive mode to take control and pair in the same terminal.</p>
             </article>
           </div>
         </section>
 
-        <section class="demo-proof">
-          <div class="demo-proof-heading">
-            <p>Captured live—not a mockup</p>
-            <h2>Follow the work.<br />See the result.</h2>
-            <span>The same real Codex session, captured on a phone while it diagnosed and fixed a heartbeat timeout, then passed the package tests and Go’s race detector.</span>
+        <section class="platform-section" id="platform">
+          <div class="platform-heading">
+            <div class="section-heading">
+              <p>The web app</p>
+              <h2>Sign in once.<br />Every machine reports in.</h2>
+              <span>Run <code>shell login</code> on a machine and it opens a browser to approve, then lands you back in the web app. From then on, that machine's sessions arrive there with the rest.</span>
+            </div>
+            <button class="method-command platform-command" type="button" data-copy-target="run" data-copy-value="shell login" aria-label="Copy the shell login command">
+              <code><span>$ shell login</span></code>
+              <span data-copy-label aria-live="polite">Copy</span>
+            </button>
           </div>
-          <div class="demo-proof-grid">
-            <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing heartbeat test through shell.online on a phone" loading="lazy" />
-              </div>
-              <figcaption><b>Working</b><span>Follow the diagnosis and live test output.</span></figcaption>
-            </figure>
-            <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-complete-mobile.png" width="780" height="1688" alt="The completed Codex fix with passing tests viewed through shell.online on a phone" loading="lazy" />
-              </div>
-              <figcaption><b>Complete</b><span>Review the fix and the passing test suite.</span></figcaption>
-            </figure>
+          <div class="platform-grid">
+            <article class="platform-cell platform-cell-lead">
+              <h3>One list, every linked machine</h3>
+              <p>The laptop, the desktop, the box in the corner. Whatever is running on any of them shows up in the same place, live, without you going looking for it.</p>
+            </article>
+            <article class="platform-cell platform-cell-dark">
+              <h3>Tabs you can type into</h3>
+              <p>A session opens inside the app, not as a link out. Take it, type into it, and leave it open beside the others.</p>
+            </article>
+            <article class="platform-cell">
+              <h3>Create and kill from the browser</h3>
+              <p>Start a session or end one without walking back to the machine that owns it.</p>
+            </article>
+            <article class="platform-cell">
+              <h3>A page per session</h3>
+              <p>Comments and @mentions live on the session itself, next to the terminal they are about.</p>
+            </article>
+            <article class="platform-cell">
+              <h3>An inbox for your name</h3>
+              <p>Mentions and assignments collect in one place, so nothing waits on you unseen.</p>
+            </article>
           </div>
         </section>
 
-        <section class="numbers" aria-label="shell.online at a glance">
-          <article><strong>1</strong><span>command prefix</span></article>
-          <article><strong>0</strong><span>accounts required</span></article>
-          <article><strong>0</strong><span>retained terminal logs</span></article>
-          <article><strong>Any</strong><span>modern browser</span></article>
+        <section class="launch-section" id="launch">
+          <div class="launch-copy">
+            <div class="section-heading">
+              <p>Remote starts</p>
+              <h2>Pick a machine.<br />Pick what to run.</h2>
+              <span>Agree once at <code>shell login</code> and the machine keeps a small background daemon running. After that it can be given work from the browser, and the session starts there.</span>
+            </div>
+            <ul class="launch-kinds" aria-label="What a machine can be asked to start">
+              <li>Claude Code</li>
+              <li>GPT Codex</li>
+              <li>Hermes Agent</li>
+              <li>OpenClaw</li>
+              <li>A terminal process</li>
+            </ul>
+          </div>
+          <div class="seal-flow" aria-label="How a browser-started session keeps its password private">
+            <article class="seal-node">
+              <i aria-hidden="true">◫</i>
+              <span><b>The browser</b><small>Picks the session password and seals it to one machine with an ephemeral key.</small></span>
+            </article>
+            <p class="seal-link"><span>sealed envelope</span><i aria-hidden="true"></i></p>
+            <article class="seal-node">
+              <i aria-hidden="true">↝</i>
+              <span><b>The service</b><small>Carries the envelope to the machine and cannot open it.</small></span>
+            </article>
+            <p class="seal-link"><span>opened on arrival</span><i aria-hidden="true"></i></p>
+            <article class="seal-node seal-node-end">
+              <i aria-hidden="true">⌘</i>
+              <span><b>Your machine</b><small>Unseals the password and starts the session locally.</small></span>
+            </article>
+          </div>
+        </section>
+
+        <section class="org-section" id="teams">
+          <div class="section-heading org-heading">
+            <p>Organizations</p>
+            <h2>Shared sessions.<br />A record of every input.</h2>
+            <span>Signing up creates an organization, and invite links add people to it. Everyone inside sees every member's sessions.</span>
+          </div>
+          <div class="org-columns">
+            <section class="org-column">
+              <h3>Working together</h3>
+              <dl>
+                <div><dt>Invite links</dt><dd>Send one and the person lands inside your organization.</dd></div>
+                <div><dt>Owner and assignee</dt><dd>Every session carries both, so it is clear whose work it is and who is on it.</dd></div>
+                <div><dt>Hand it off</dt><dd>The owner can pass a running session to someone else without restarting it.</dd></div>
+              </dl>
+            </section>
+            <section class="org-column">
+              <h3>The audit log</h3>
+              <dl>
+                <div><dt>Every input, one row</dt><dd>Prompts committed to agents, commands committed to terminals, per session.</dd></div>
+                <div><dt>Charts and filters</dt><dd>Aggregation charts over the log, and filters to narrow it down.</dd></div>
+                <div><dt>CSV export</dt><dd>Take the log out whole when it has to live somewhere else.</dd></div>
+              </dl>
+            </section>
+          </div>
         </section>
 
         <section class="use-cases-section" id="use-cases">
@@ -595,42 +639,87 @@ function renderLanding(): void {
             <article class="use-case-card">
               <header><span>08</span><i>Pairing</i></header>
               <h3>Debug and hand off together</h3>
-              <p>Give a teammate the link and password to watch, type, and help in the exact terminal session—without creating an account or exchanging SSH keys.</p>
+              <p>Give a teammate the link and password to watch, type, and help in the same session. Inside an organization, hand the session over outright.</p>
               <code><b>$</b> shell bash</code>
             </article>
           </div>
         </section>
 
-        <section class="how-section" id="how">
-          <div class="section-heading">
-            <p>How it works</p>
-            <h2>A share link,<br />not a remote machine.</h2>
-            <span>The command and PTY stay where you started them. shell.online relays encrypted terminal frames to people holding the link and browser password.</span>
+        <section class="demo-proof">
+          <div class="demo-proof-heading">
+            <p>Captured live, not a mockup</p>
+            <h2>Follow the work.<br />See the result.</h2>
+            <span>The same real Codex session, captured on a phone while it diagnosed and fixed a heartbeat timeout, then passed the package tests and Go’s race detector.</span>
           </div>
-          <div class="steps-grid">
-            <article class="step-card">
-              <span class="step-index">01</span>
-              <div class="step-visual step-command" aria-hidden="true"><code><i>$</i> shell python train.py</code><b></b></div>
-              <h3>Prefix the command</h3>
-              <p>Start any CLI, agent, server, job, TUI, or fresh shell exactly where it already lives.</p>
-            </article>
-            <article class="step-card">
-              <span class="step-index">02</span>
-              <div class="step-visual step-share" aria-hidden="true">
-                <div><i>↗</i><code>shell.online/s/k9f…</code></div>
-                <span>Password · Ab3dE7-_</span>
+          <div class="demo-proof-grid">
+            <figure class="phone-proof">
+              <div class="phone-proof-screen">
+                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing heartbeat test through shell.online on a phone" loading="lazy" />
               </div>
-              <h3>Send the link and password</h3>
-              <p>No signup or SSH keys. Choose interactive or server-enforced view-only access, then send both values to the people you trust.</p>
-            </article>
-            <article class="step-card">
-              <span class="step-index">03</span>
-              <div class="step-visual step-collab" aria-hidden="true">
-                <div><span>Y</span><span>M</span><span>R</span></div>
-                <p><i></i> Maya is typing</p>
+              <figcaption><b>Working</b><span>Follow the diagnosis and live test output.</span></figcaption>
+            </figure>
+            <figure class="phone-proof">
+              <div class="phone-proof-screen">
+                <img src="/screenshots/codex-complete-mobile.png" width="780" height="1688" alt="The completed Codex fix with passing tests viewed through shell.online on a phone" loading="lazy" />
               </div>
-              <h3>Watch—or type together</h3>
-              <p>Use read-only to follow progress safely, or keep the default interactive mode to take control and pair in the same terminal.</p>
+              <figcaption><b>Complete</b><span>Review the fix and the passing test suite.</span></figcaption>
+            </figure>
+          </div>
+        </section>
+
+        <section class="numbers" aria-label="shell.online at a glance">
+          <article><strong>1</strong><span>command prefix</span></article>
+          <article><strong>5</strong><span>kinds of session a browser can start</span></article>
+          <article><strong>0</strong><span>retained terminal logs</span></article>
+          <article><strong>Any</strong><span>modern browser</span></article>
+        </section>
+
+        <section class="install-paths" id="install">
+          <div class="install-paths-heading">
+            <p>Install your way</p>
+            <h2>Use Brew.<br />Or do it yourself.</h2>
+            <span>Homebrew fetches the tagged source, installs the Go build dependency, and compiles shell.online on your machine. No Brew? Use the verified binary installer, or build the same source manually.</span>
+          </div>
+          <div class="install-path-grid">
+            <article class="install-path-card install-path-primary">
+              <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
+              <h3>Let Brew build and manage it.</h3>
+              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
+                <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
+                <span data-copy-label aria-live="polite">Copy setup</span>
+              </button>
+              <ul>
+                <li>Fetches the checksum-pinned tagged source.</li>
+                <li>Installs Go as a build-only dependency and compiles locally.</li>
+                <li>Homebrew 6 asks you to trust this vendor tap once.</li>
+                <li>Upgrades are simply <code>brew upgrade shell-online</code>.</li>
+              </ul>
+            </article>
+            <article class="install-path-card">
+              <div class="install-path-meta"><span>No Brew</span><strong>Verified download</strong></div>
+              <h3>Use the standalone installer.</h3>
+              <button class="method-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online installer command">
+                <code>${installCommand}</code>
+                <span data-copy-label aria-live="polite">Copy</span>
+              </button>
+              <ul>
+                <li>Detects Windows, macOS, Linux, BSD, Solaris, and 15 architectures.</li>
+                <li>Verifies SHA-256 before installing.</li>
+                <li>Never invokes sudo or edits your shell files.</li>
+              </ul>
+            </article>
+            <article class="install-path-card install-path-source">
+              <div class="install-path-meta"><span>Source</span><strong>Go 1.26.8</strong></div>
+              <h3>Build it yourself. Run it anywhere.</h3>
+              <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
+                <code><span>git clone … shell.online.git</span><span>go build -o ./shell ./cmd/shell</span></code>
+                <span data-copy-label aria-live="polite">Copy build</span>
+              </button>
+              <ul>
+                <li>Checks out the exact tagged release source.</li>
+                <li>Produces <code>./shell</code> inside your clone.</li>
+                <li>Run it there or move it to any directory on your PATH.</li>
+              </ul>
             </article>
           </div>
         </section>
@@ -639,7 +728,7 @@ function renderLanding(): void {
           <div class="security-copy">
             <p>Built to disappear</p>
             <h2>Your process<br />stays put.</h2>
-            <span>The browser gets a window into the terminal—not a copy of your machine.</span>
+            <span>The browser gets a window into the terminal, not a copy of your machine.</span>
           </div>
           <div class="relay-diagram" aria-label="Data flows from your local terminal through a relay to a browser">
             <div class="relay-node local-node"><i aria-hidden="true">⌘</i><span><b>Your machine</b><small>Process + PTY</small></span></div>
@@ -650,7 +739,7 @@ function renderLanding(): void {
           </div>
           <div class="security-points">
             <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
-            <article><i>02</i><h3>Encrypted without setup</h3><p>E2EE is the default and prints a browser password. Add <code>--read-only</code> when people should watch without typing.</p></article>
+            <article><i>02</i><h3>Encrypted without setup</h3><p>E2EE is the default and prints a browser password. The key lives in the URL fragment, which browsers never send to a server.</p></article>
             <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
           </div>
         </section>
@@ -684,16 +773,18 @@ function renderLanding(): void {
           <div class="github-star-request">
             <span aria-hidden="true">★</span>
             <p><strong>Like what we’re building?</strong>A GitHub star helps more developers find shell.online.</p>
-            <a class="github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star the repo <span id="github-star-count" aria-live="polite">—</span> <i aria-hidden="true">↗</i></a>
+            <a class="github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star the repo <span id="github-star-count" aria-live="polite">-</span> <i aria-hidden="true">↗</i></a>
           </div>
         </section>
       </main>
 
       <footer class="marketing-footer">
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
-        <p>A live browser link for any terminal process.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
+        <p>Live browser terminals for the work your machine is already doing.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
         <nav aria-label="Footer navigation">
           <a href="/docs/">Docs</a>
+          <a href="#platform">Platform</a>
+          <a href="#teams">Organizations</a>
           <a href="#use-cases">Use cases</a>
           <a href="/mobile/">Mobile</a>
           <a href="/reliability/">Reliability</a>

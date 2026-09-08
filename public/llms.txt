@@ -84,10 +84,60 @@ Native shares run in the background by default. Re-run `shell --persistent <stat
 
 The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated eight-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
 
+## Accounts, machines, and organizations
+
+Accounts are optional. Every command above works without one, and an
+unlinked machine behaves exactly as described.
+
+`shell login` links a machine to an account. It opens a browser to approve the
+request, then returns to the sessions page. `shell whoami` shows which account
+a machine is linked to; `shell logout` unlinks it and revokes its token. Once
+linked, sessions started with `shell` appear in the account automatically. What
+is published is the share URL, the command line, the host name, the session
+name, the timings, and the read-only/encrypted/persistent flags. Terminal
+output is never published, and neither is the encryption key.
+
+Signing up creates an organization; an invite link joins an existing one.
+Everyone in an organization can see every member's sessions. A session has an
+owner and an assignee, and the owner can hand it off.
+
+## Sessions started from the browser
+
+`shell login` asks once whether the signed-in browser may start sessions on
+that machine. Only an explicit yes is recorded; declining is asked again next
+time, and a non-interactive login defaults to no. After a yes, a background
+daemon polls for work and can start and stop sessions on that machine.
+
+The browser chooses the session password and seals it to an ephemeral key the
+daemon publishes, so the accounts service relays an envelope it cannot open.
+
+    shell daemon status              is this machine reachable from a browser
+    shell daemon stop                stop until the next shell command
+    shell login --no-remote-start    withdraw it on this machine
+    shell service install            keep the daemon running across restarts
+
+An agent should not enable this on a machine it does not own, and should tell
+the operator plainly if it does: while it is allowed, anyone signed in to that
+account can start processes on that machine.
+
+## The audit log
+
+For a session belonging to an organization, every input committed to it is
+recorded in plaintext on the server and is readable and exportable by every
+member of that organization. Prompts sent to a coding agent and commands typed
+at a terminal are both inputs.
+
+Agents must treat anything typed into such a session as something the whole
+organization will read. Do not paste API keys, passwords, tokens, or customer
+data into a prompt or a command line in a shared session.
+
 ## Release integrity
 
 Run `shell --version` to print the installed CLI version. The installer validates the platform binary against the canonical SHA-256 manifest and prints the verified digest. The website and corresponding GitHub release expose the same version, binaries, and SHA256SUMS file.
 
 ## Security model
 
-The share URL and browser password together are a bearer capability. Interactive shares grant terminal input; --read-only shares grant viewing only and reject browser input server-side. Only send access to an intended operator. There are no accounts. Every current-CLI share encrypts terminal payloads end to end. Cloudflare relays ciphertext while active and deletes ordinary session state when the task closes; an old link reports that the session no longer exists.
+The share URL and browser password together are a bearer capability. Interactive shares grant terminal input; --read-only shares grant viewing only and reject browser input server-side. Only send access to an intended operator. An account is optional and changes
+none of this: the link and password remain the capability, and the relay still
+sees only ciphertext. Every current-CLI share encrypts terminal payloads end to
+end. Cloudflare relays ciphertext while active and deletes ordinary session state when the task closes; an old link reports that the session no longer exists.

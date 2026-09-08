@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#e9eef9" />
-    <meta name="description" content="Share an end-to-end encrypted live terminal through an interactive or read-only browser link. Watch agents and long-running commands from any device." />
+    <meta name="description" content="Share an end-to-end encrypted live terminal through a browser link. Sign in and every linked machine's sessions gather in one web app you can type into." />
     <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://shell.online/" />
 
@@ -14,7 +14,7 @@
     <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://shell.online/" />
     <meta property="og:title" content="Share a live terminal in any browser" />
-    <meta property="og:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands from any device. The process stays on your machine." />
+    <meta property="og:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands from any device. Sign in and every linked machine's sessions gather in one web app." />
     <meta property="og:image" content="https://shell.online/social-card.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -23,7 +23,7 @@
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Share a live terminal in any browser" />
-    <meta name="twitter:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands from any device." />
+    <meta name="twitter:description" content="Watch or control coding agents, builds, servers, and long-running terminal commands. Sign in and every machine you link reports its sessions to one web app." />
     <meta name="twitter:image" content="https://shell.online/social-card.png" />
     <meta name="twitter:image:alt" content="shell.online sharing a live terminal process through a browser link" />
 
@@ -50,7 +50,7 @@
           "url": "https://shell.online/",
           "name": "shell.online",
           "alternateName": "shell online",
-          "description": "Share a live terminal process through an interactive or read-only browser link.",
+          "description": "Share a live terminal process through an interactive or read-only browser link, and manage every linked machine's sessions from one web app.",
           "publisher": {
             "@id": "https://pilotprotocol.network/#organization"
           }
@@ -64,7 +64,7 @@
           "image": "https://shell.online/social-card.png",
           "screenshot": "https://shell.online/screenshots/codex-working-mobile.png",
           "sameAs": "https://github.com/TeoSlayer/shell.online",
-          "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive or read-only browser link.",
+          "description": "Share coding agents, builds, servers, remote shells, and other live terminal processes through an interactive or read-only browser link, then link the machine to an account and run its sessions from a web app.",
           "creator": {
             "@id": "https://pilotprotocol.network/#organization"
           },
@@ -83,7 +83,13 @@
             "Interactive ANSI and TUI support",
             "Collaborative input and live presence",
             "Automatic cleanup when the process exits",
-            "End-to-end encrypted terminal payloads by default"
+            "End-to-end encrypted terminal payloads by default",
+            "Link machines to an account with shell login",
+            "See sessions from every linked machine in one web app",
+            "Open sessions as in-app tabs you can type into",
+            "Start coding agents and terminal processes on a machine from the browser",
+            "Organizations with invite links, session owners, and assignees",
+            "A per-session audit log with charts, filters, and CSV export"
           ],
           "offers": {
             "@type": "Offer",
@@ -109,8 +115,10 @@
         <section class="no-script">
           <div>
             <h1>Share a live terminal in any browser.</h1>
-            <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer. Add <code>--read-only</code> to block browser input.</p>
+            <p>Prefix a terminal command with <code>shell</code>. The process stays on your machine while trusted link holders watch or type from a phone, tablet, or computer. Terminal traffic is end-to-end encrypted by default, and <code>--read-only</code> blocks browser input.</p>
             <p>Use shell.online for coding agents, builds and test suites, development servers, training jobs, deployments, SSH sessions, terminal dashboards, and pair debugging.</p>
+            <p>Run <code>shell login</code> to link a machine to an account. Sessions from every linked machine then appear together in a web app, open as tabs you can type into, and can be created or killed from the browser. Agree once and a machine can also be given work from there: pick a machine, pick what to run, and it starts on that machine with a password the browser seals so the service cannot read it.</p>
+            <p>Signing up creates an organization. Invite links add people, everyone inside sees every member’s sessions, and each session has an owner who can hand it off. Every input committed to a session is recorded in a per-session audit log with charts, filters, and CSV export.</p>
             <p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>.</p>
             <p><code>curl -fsSL https://shell.online/install | sh</code></p>
             <p><a href="https://github.com/TeoSlayer/shell.online">Read the source and installation guide on GitHub</a>.</p>
