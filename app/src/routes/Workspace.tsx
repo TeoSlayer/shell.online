@@ -319,15 +319,29 @@ export function Workspace() {
       */}
       {state.tabs.length > 0 && (
         <div className="panes" hidden={showingList}>
-          {state.tabs.map((tab) => (
-            <TerminalPane
-              key={tab.id}
-              shareUrl={tab.shareUrl}
-              active={state.activeId === tab.id}
-              keyShare={tab.keyShare}
-              canType={tab.canType}
-            />
-          ))}
+          {state.tabs.map((tab) => {
+            /*
+             * Permission is read from the session list on every render, not
+             * from the tab. Whether someone may type is a fact about the
+             * session and the person, and it changes underneath an open tab:
+             * a colleague who opened one to watch, and is then handed the
+             * session, kept the answer taken when the tab was created and
+             * stayed read-only until they closed and reopened it.
+             *
+             * The tab's own copy is the fallback for a session that has left
+             * the list, where the last known answer is the best there is.
+             */
+            const current = sessions?.find((session) => session.id === tab.id);
+            return (
+              <TerminalPane
+                key={tab.id}
+                shareUrl={tab.shareUrl}
+                active={state.activeId === tab.id}
+                keyShare={current?.keyShare ?? tab.keyShare}
+                canType={current ? canEdit(current, you) : tab.canType}
+              />
+            );
+          })}
         </div>
       )}
 

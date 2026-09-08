@@ -36,8 +36,29 @@ export function reduce(state: TabState, action: TabAction): TabState {
   switch (action.type) {
     case "open": {
       const { session } = action;
+      /*
+       * Reopening refreshes the tab rather than only selecting it. What it
+       * holds is a copy of the session taken when it was opened, and the
+       * parts that matter change underneath it: a session handed to someone
+       * while they had it open kept the old answer to whether they may type,
+       * and the sealed password they were later given never arrived.
+       */
       const existing = state.tabs.find((tab) => tab.id === session.id);
-      if (existing) return { ...state, activeId: existing.id };
+      if (existing) {
+        const refreshed: Tab = {
+          ...existing,
+          label: session.name?.trim() || session.command,
+          command: session.command,
+          shareUrl: session.shareUrl,
+          readOnly: session.readOnly,
+          keyShare: session.keyShare ?? existing.keyShare,
+          canType: action.canType ?? existing.canType,
+        };
+        return {
+          tabs: state.tabs.map((tab) => (tab.id === existing.id ? refreshed : tab)),
+          activeId: existing.id,
+        };
+      }
 
       const tab: Tab = {
         id: session.id,

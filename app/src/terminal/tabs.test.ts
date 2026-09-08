@@ -149,3 +149,42 @@ describe("select", () => {
     expect(reduce(state, { type: "select", id: "ghost" })).toBe(state);
   });
 });
+
+describe("reopening", () => {
+/*
+ * A session can be handed to someone who already has it open. The tab was a
+ * snapshot taken when it was opened, so they stayed read-only until they
+ * closed and reopened it, which nobody would think to do.
+ */
+it("takes the new answer on whether you may type when a session is reopened", () => {
+  const record = session("s1");
+  const watching = reduce(EMPTY, { type: "open", session: record, canType: false });
+  expect(watching.tabs[0].canType).toBe(false);
+
+  const assigned = reduce(watching, { type: "open", session: record, canType: true });
+  expect(assigned.tabs).toHaveLength(1);
+  expect(assigned.tabs[0].canType).toBe(true);
+  expect(assigned.activeId).toBe("s1");
+});
+
+/* The password a colleague seals to you arrives after the tab is already open. */
+it("picks up a key share that was not there when the tab was opened", () => {
+  const before = reduce(EMPTY, { type: "open", session: session("s1") });
+  expect(before.tabs[0].keyShare).toBeUndefined();
+
+  const share = { senderPublicKey: "pk", sealed: "sealed" };
+  const after = reduce(before, {
+    type: "open",
+    session: { ...session("s1"), keyShare: share },
+  });
+  expect(after.tabs[0].keyShare).toEqual(share);
+});
+
+/* Losing it would silently downgrade a tab that is working. */
+it("keeps a key share when the refreshed session has none", () => {
+  const share = { senderPublicKey: "pk", sealed: "sealed" };
+  const open = reduce(EMPTY, { type: "open", session: { ...session("s1"), keyShare: share } });
+  const again = reduce(open, { type: "open", session: session("s1") });
+  expect(again.tabs[0].keyShare).toEqual(share);
+});
+});
