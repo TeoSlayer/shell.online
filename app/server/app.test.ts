@@ -8,7 +8,7 @@ import type { Store } from "./lib/store";
 import { createVerifier, localKeySet } from "./lib/firebase-token";
 import { base64url, deriveChallenge } from "./lib/pkce";
 
-const PROJECT = "vv-cloud-firebase";
+const PROJECT = "test-firebase-project";
 const REDIRECT = "http://127.0.0.1:51234/callback";
 const ORIGIN = "http://localhost:5173";
 
@@ -567,6 +567,35 @@ describe("driving a machine from the browser", () => {
     expect(result.status).toBe(404);
   });
 
+  it("will not let an organization member stop its owner's process", async () => {
+    const { tokens } = await withDevice();
+    const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: sessionId,
+        share_url: `https://shell.online/s/${sessionId}`,
+        command: "top",
+      },
+    });
+
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: {},
+    });
+    const colleagueAuth = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleagueAuth });
+
+    const colleagueTokens = await login({}, "uid-2");
+    const [colleagueDevice] = await devices("uid-2");
+    await call("GET", "/api/agent/commands", { auth: colleagueTokens.access_token });
+    const result = await call("POST", "/api/commands", {
+      auth: colleagueAuth,
+      body: { device_id: colleagueDevice.id, kind: "kill", session_id: sessionId },
+    });
+    expect(result.status).toBe(403);
+  });
+
   it("rejects an unknown command kind", async () => {
     const { deviceId } = await withDevice();
     const result = await call("POST", "/api/commands", {
@@ -921,7 +950,7 @@ describe("session ownership and handoff", () => {
     });
     const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
     await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
-    return { colleague };
+    return { colleague, tokens };
   }
 
   it("assigns a new session to whoever started it", async () => {
@@ -942,6 +971,40 @@ describe("session ownership and handoff", () => {
     expect(handed.body.session.assigneeUid).toBe("uid-2");
     /* The owner does not change; responsibility does. */
     expect(handed.body.session.ownerUid).toBe("uid-1");
+  });
+
+  it("lets only the owner share a session key, and only with current members", async () => {
+    const { colleague } = await orgWithColleague();
+    const path = `/api/sessions/${session.id}/keys`;
+    const shares = [{
+      uid: "uid-2",
+      sender_public_key: "BASE64_PUBLIC_KEY",
+      sealed: "BASE64_SEALED_PASSWORD",
+    }];
+
+    const shared = await call("PUT", path, { auth: await idToken(), body: { shares } });
+    expect(shared).toMatchObject({ status: 200, body: { shared: 1 } });
+
+    const listed = await call("GET", "/api/sessions", { auth: colleague });
+    expect(listed.body.sessions[0].keyShare).toMatchObject({
+      senderPublicKey: "BASE64_PUBLIC_KEY",
+      sealed: "BASE64_SEALED_PASSWORD",
+    });
+
+    const overwritten = await call("PUT", path, { auth: colleague, body: { shares } });
+    expect(overwritten.status).toBe(403);
+
+    const outsider = await call("PUT", path, {
+      auth: await idToken(),
+      body: {
+        shares: [{
+          uid: "uid-outside",
+          sender_public_key: "BASE64_PUBLIC_KEY",
+          sealed: "BASE64_SEALED_PASSWORD",
+        }],
+      },
+    });
+    expect(outsider.status).toBe(400);
   });
 
   it("records the handoff in the audit log", async () => {
@@ -1007,9 +1070,9 @@ describe("audit log", () => {
     return tokens;
   }
 
-  it("records what was entered, attributed to who entered it", async () => {
+  it("does not accept plaintext terminal input", async () => {
     await withSession();
-    await call("POST", "/api/audit", {
+    const result = await call("POST", "/api/audit", {
       auth: await idToken(),
       body: {
         entries: [
@@ -1018,23 +1081,9 @@ describe("audit log", () => {
         ],
       },
     });
-
+    expect(result.status).toBe(404);
     const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
-    expect(log.body.events).toHaveLength(2);
-    expect(log.body.events[0]).toMatchObject({
-      kind: "input",
-      text: "refactor the parser",
-      actorEmail: "ana@example.com",
-    });
-  });
-
-  it("will not write into another organization's session", async () => {
-    await withSession();
-    const written = await call("POST", "/api/audit", {
-      auth: await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" }),
-      body: { entries: [{ session_id: session.id, kind: "input", text: "sneaky" }] },
-    });
-    expect(written.body.written).toBe(0);
+    expect(log.body.events).toEqual([]);
   });
 
   it("will not read another organization's log", async () => {
@@ -1045,28 +1094,6 @@ describe("audit log", () => {
     expect(read.status).toBe(404);
   });
 
-  it("lets a colleague read the log, which is the point of an organization", async () => {
-    await withSession();
-    await call("POST", "/api/audit", {
-      auth: await idToken(),
-      body: { entries: [{ session_id: session.id, kind: "input", text: "npm test" }] },
-    });
-    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: {} });
-    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
-    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
-
-    const read = await call("GET", `/api/audit/${session.id}`, { auth: colleague });
-    expect(read.body.events[0].text).toBe("npm test");
-  });
-
-  it("rejects an unknown kind rather than storing it", async () => {
-    await withSession();
-    const written = await call("POST", "/api/audit", {
-      auth: await idToken(),
-      body: { entries: [{ session_id: session.id, kind: "nonsense", text: "x" }] },
-    });
-    expect(written.body.written).toBe(0);
-  });
 });
 
 describe("accepting an invite when you already have an organization", () => {

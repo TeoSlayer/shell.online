@@ -28,3 +28,4 @@ dist-ssr
 .gstack/
 .data
 dist-server
+wrangler.deploy.jsonc

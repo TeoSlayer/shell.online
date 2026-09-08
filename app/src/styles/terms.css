@@ -296,10 +296,7 @@
   line-height: 1.66;
 }
 
-/* ---------------------------------------------------------------
-   Callout: reserved for the audit log, which is the one thing on
-   this page a reader must not skim past.
-   --------------------------------------------------------------- */
+/* Privacy callout for the terminal-input boundary. */
 
 .terms-callout {
   max-width: 68ch;

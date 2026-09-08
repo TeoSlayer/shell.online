@@ -43,16 +43,6 @@ export interface OrgView {
   inviteError?: string;
 }
 
-export interface AuditEvent {
-  id: string;
-  sessionId: string;
-  at: number;
-  actorUid: string;
-  actorEmail: string;
-  kind: "input" | "interrupt" | "opened" | "handoff";
-  text: string;
-}
-
 export function fetchOrg(inviteId?: string, publicKey?: string) {
   const params = new URLSearchParams();
   if (inviteId) params.set("invite", inviteId);
@@ -137,7 +127,6 @@ export interface SessionDetail {
   members: Member[];
   you: Member;
   comments: Comment[];
-  audit: AuditEvent[];
 }
 
 export function fetchSession(sessionId: string) {
@@ -167,30 +156,6 @@ export function markNotifications(id?: string) {
     method: "POST",
     body: JSON.stringify(id ? { id } : {}),
   });
-}
-
-export function fetchAudit(sessionId: string) {
-  return request<{ events: AuditEvent[] }>(`/api/audit/${encodeURIComponent(sessionId)}`);
-}
-
-export function postAudit(entries: { session_id: string; kind: string; text: string; at: number }[]) {
-  return request<{ written: number }>("/api/audit", {
-    method: "POST",
-    body: JSON.stringify({ entries }),
-  });
-}
-
-/** The audit export needs the same bearer token, so it is fetched not linked. */
-export async function downloadAuditCsv(sessionId?: string): Promise<Blob> {
-  const user = auth.currentUser;
-  if (!user) throw new Error("You are signed out.");
-  const token = await user.getIdToken();
-  const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
-  const response = await fetch(`${BASE}/api/audit.csv${query}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error("Could not export the audit log.");
-  return response.blob();
 }
 
 export interface SessionRecord {

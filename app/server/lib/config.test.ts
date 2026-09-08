@@ -6,7 +6,7 @@ import { ConfigError, allowedOriginsFor, readConfig, withoutCredentials } from "
  * line naming the variable. These are the mistakes that would otherwise be
  * found by a user, at the moment they needed the thing that was misconfigured.
  */
-const MINIMAL = { FIREBASE_PROJECT_ID: "vv-cloud-firebase" };
+const MINIMAL = { FIREBASE_PROJECT_ID: "test-firebase-project" };
 
 describe("readConfig", () => {
   it("needs a project whose tokens it can verify", () => {

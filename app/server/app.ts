@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
-import type { Invite } from "./lib/orgs";
+import type { Invite, Membership } from "./lib/orgs";
 import type { VerifyResult } from "./lib/firebase-token";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
@@ -23,7 +23,7 @@ import {
   notifyInvited,
   revokeInvite,
 } from "./routes/organizations";
-import { assignSession, auditCsv, recordAudit } from "./routes/audit";
+import { assignSession, auditCsv } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
@@ -124,6 +124,16 @@ export const AGENT_ONLINE_MS = 15_000;
  * is added to all three.
  */
 const KNOWN_HARNESSES = new Set(["claude-code", "codex", "hermes", "openclaw"]);
+
+/**
+ * Only the person whose machine owns a session may mutate its encryption
+ * shares or stop its process. Assignment grants terminal input, not control
+ * over the owner's machine, and an organization role must never silently
+ * broaden into remote-process administration.
+ */
+function ownsSession(membership: Membership, session: { ownerUid?: string; uid: string }): boolean {
+  return (session.ownerUid ?? session.uid) === membership.uid;
+}
 
 /**
  * The harnesses a polling agent claims, keeping only the recognised ones.
@@ -439,25 +449,6 @@ export function createApp(options: AppOptions) {
 
       /* ---- Audit ---- */
 
-      if (route === "POST /api/audit") {
-        const membership = await requireMember(request);
-        if (!membership) return send(response, 401, { error: "sign in first" });
-        const body = (await readBody(request)) as Record<string, unknown>;
-        const entries = Array.isArray(body.entries) ? body.entries : [];
-        const written = [];
-        for (const entry of entries.slice(0, 100)) {
-          const candidate = entry as Record<string, unknown>;
-          const result = await recordAudit(store, membership, {
-            sessionId: String(candidate.session_id ?? ""),
-            kind: String(candidate.kind ?? "input"),
-            text: String(candidate.text ?? ""),
-            at: typeof candidate.at === "number" ? candidate.at : undefined,
-          });
-          if (result.ok) written.push(result.event);
-        }
-        return send(response, 200, { written: written.length });
-      }
-
       const auditRoute = url.pathname.match(/^\/api\/audit\/([A-Za-z0-9_-]{6,64})$/);
       if (request.method === "GET" && auditRoute) {
         const membership = await requireMember(request);
@@ -575,20 +566,42 @@ export function createApp(options: AppOptions) {
       if (request.method === "PUT" && shareRoute) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
+        const session = await store.sessionInOrg(membership.orgId, shareRoute[1]);
+        if (!session) return send(response, 404, { error: "no such session" });
+        if (!ownsSession(membership, session)) {
+          return send(response, 403, { error: "only the session owner can share its key" });
+        }
+
         const body = (await readBody(request)) as Record<string, unknown>;
         const incoming = Array.isArray(body.shares) ? body.shares : [];
         const shares = incoming
           .map((entry) => entry as Record<string, unknown>)
-          .filter((entry) => typeof entry.uid === "string" && typeof entry.sealed === "string")
+          .filter(
+            (entry) =>
+              typeof entry.uid === "string" &&
+              typeof entry.sender_public_key === "string" &&
+              typeof entry.sealed === "string",
+          )
           .slice(0, 100)
           .map((entry) => ({
             uid: String(entry.uid),
             senderPublicKey: String(entry.sender_public_key ?? ""),
             sealed: String(entry.sealed),
           }));
-        if (!await store.putKeyShares(membership.orgId, shareRoute[1], shares)) {
-          return send(response, 404, { error: "no such session" });
+
+        if (shares.length !== incoming.length || shares.some(
+          (share) => !share.uid || !share.senderPublicKey || !share.sealed ||
+            share.senderPublicKey.length > 512 || share.sealed.length > 4096,
+        )) {
+          return send(response, 400, { error: "invalid key share" });
         }
+
+        const memberIds = new Set((await store.members(membership.orgId)).map((member) => member.uid));
+        if (shares.some((share) => !memberIds.has(share.uid))) {
+          return send(response, 400, { error: "key shares may only be sent to organization members" });
+        }
+
+        await store.putKeyShares(membership.orgId, shareRoute[1], shares);
         return send(response, 200, { shared: shares.length });
       }
 
@@ -667,12 +680,14 @@ export function createApp(options: AppOptions) {
 
         if (kind === "kill") {
           const sessionId = String(body.session_id ?? "");
-          /* Scoped by uid, so one account cannot stop another's session. */
           const scope = await store.membershipOf(identity.uid);
-          const owned = scope
-            ? Boolean(await store.sessionInOrg(scope.orgId, sessionId))
-            : (await listSessions(store, identity.uid)).some((s) => s.id === sessionId);
-          if (!owned) return send(response, 404, { error: "no such session" });
+          const session = scope
+            ? await store.sessionInOrg(scope.orgId, sessionId)
+            : (await listSessions(store, identity.uid)).find((entry) => entry.id === sessionId) ?? null;
+          if (!session) return send(response, 404, { error: "no such session" });
+          if ((session.ownerUid ?? session.uid) !== identity.uid) {
+            return send(response, 403, { error: "only the session owner can stop its process" });
+          }
           const queued = {
             id: mintSecret("cmd"),
             uid: identity.uid,
@@ -732,7 +747,6 @@ export function createApp(options: AppOptions) {
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),
-          audit: await store.auditFor(membership.orgId, oneSession[1]),
         });
       }
 

@@ -4,7 +4,6 @@ import { buildRedirect, isValidRedirectUri } from "./redirect";
 describe("isValidRedirectUri", () => {
   it("accepts loopback callbacks on an unprivileged port", async () => {
     expect(isValidRedirectUri("http://127.0.0.1:51234/callback")).toBe(true);
-    expect(isValidRedirectUri("http://localhost:8080/callback")).toBe(true);
     expect(isValidRedirectUri("http://[::1]:51234/callback")).toBe(true);
   });
 
@@ -13,6 +12,8 @@ describe("isValidRedirectUri", () => {
     expect(isValidRedirectUri("http://evil.example.com:8080/callback")).toBe(false);
     expect(isValidRedirectUri("http://169.254.169.254:80/callback")).toBe(false);
     expect(isValidRedirectUri("http://127.0.0.1.evil.com:8080/callback")).toBe(false);
+    /* A hosts-file entry can point localhost somewhere other than loopback. */
+    expect(isValidRedirectUri("http://localhost:8080/callback")).toBe(false);
   });
 
   it("rejects non-http schemes", async () => {

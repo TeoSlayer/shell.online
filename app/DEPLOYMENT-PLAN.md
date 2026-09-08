@@ -14,12 +14,12 @@ because a managed Postgres is the one piece Cloudflare does not provide.
 
 | | |
 |---|---|
-| Worker | `shell-online-app`, account `ef9da13de5572ea8482b2921770fa0e3` |
+| Worker | `shell-online-app` |
 | Public host | `app.shell.online`, a custom domain on the `shell.online` zone |
 | Client | Served from the Worker's `ASSETS` binding out of `app/dist` |
 | Relay | A separate Worker on `shell.online`, deployed from its own config |
 | Database | Cloud SQL for PostgreSQL 16, instance `shell-online-db` |
-| Google project | `vulture-vision-cloud`, region `us-central1` |
+| Database provider | Cloud SQL, in the same production region as its connector |
 | Application database | `shell_online`, owned by role `shell_app` |
 
 **Why not `shell-online-auth`.** That project exists and would be the natural
@@ -39,15 +39,14 @@ Worker  ->  Hyperdrive  ->  Workers VPC service  ->  Cloudflare Tunnel  ->  Clou
 
 | Hop | Identifier | What it is for |
 |---|---|---|
-| Hyperdrive | `c51f052c29fb43b58a0aa57b66cb62f6` | Pools connections at the edge. Every isolate would otherwise open its own, and there are 25 in total to go round. |
-| VPC service | `shell-online-db`, `01a08046-84e0-78c0-a8e9-558710df755a` | Gives the Worker a TCP target it is allowed to dial. `TCP:5432` to `34.135.154.179`. |
-| Tunnel | `SHELL_ONLINE_DB`, `7ba18051-41a7-4a43-85c8-d4da61e7d025` | Carries that TCP to a machine inside Google Cloud. Outbound only, so nothing is opened to the internet to make it work. |
-| Connector | VM `shell-online-db-connector`, `e2-micro`, `us-central1-a` | Runs `cloudflared`. Its address `34.41.2.41` is the **only** authorized network on the instance. |
+| Hyperdrive | Configured out of band | Pools connections at the edge. Every isolate would otherwise open its own. |
+| VPC service | Configured out of band | Gives the Worker a TCP target it is allowed to dial. |
+| Tunnel | Configured out of band | Carries that TCP to a machine inside the database network. Outbound only. |
+| Connector | Dedicated VM | Runs `cloudflared` and is the only source allowed by the database network policy. |
 
-The last row is the security property worth keeping: `authorizedNetworks` on
-`shell-online-db` is exactly `34.41.2.41/32`. Whatever happens to the database
-password, the only host on the internet that may open a socket to it is one
-`e2-micro` whose sole job is to terminate a tunnel.
+The last row is the security property worth keeping: whatever happens to the
+database password, the only allowed source is the dedicated connector whose
+sole job is to terminate the tunnel.
 
 **The connector VM should be treated as part of the database.** It is not a
 place to run anything else, it needs its patches, and if it stops, the app
@@ -101,15 +100,15 @@ correctness problem.
 | Connector VM `e2-micro` plus its static address | about $10 |
 | **Total** | **about $27** |
 
-The database is the part that grows. Audit events are the only table with an
-unbounded write rate, one row per committed input.
+The database grows with linked machines, sessions, comments, and explicit
+collaboration events. Terminal input does not create database rows.
 
 ## Secrets
 
 `MAIL_API_KEY` is the only secret the Worker holds. Set it once:
 
 ```sh
-npx wrangler secret put MAIL_API_KEY --config wrangler.jsonc
+npx wrangler secret put MAIL_API_KEY --config wrangler.deploy.jsonc
 ```
 
 The database credentials are **not** the Worker's. They belong to the
@@ -125,9 +124,10 @@ there is used only by the migration step over the Cloud SQL Auth Proxy.
 Two things happen in order, and the order is the whole point:
 
 ```sh
-npm run build                                   # the client, into ./dist
-DATABASE_URL=... npm run db:migrate              # schema first
-npx wrangler deploy --config wrangler.jsonc      # then the Worker
+npm run build                                      # client, into ./dist
+DATABASE_URL=... npm run db:migrate                 # schema first
+npm run render:deploy-config                        # local, ignored config
+npx wrangler deploy --config wrangler.deploy.jsonc  # then the Worker
 ```
 
 Migrations only ever add, so a Worker from before a migration still runs
@@ -157,7 +157,7 @@ This is also why the CLI has a single production host compiled into it.
 ## Rollback
 
 ```sh
-npx wrangler rollback --config wrangler.jsonc
+npx wrangler rollback --config wrangler.deploy.jsonc
 ```
 
 Migrations only ever add, and each is checksummed, so the previous version
@@ -172,9 +172,9 @@ should not be one.
   borrowed from elsewhere in the organization, which means a shared user pool
   and password-reset mail signed by another team. It is a build argument and a
   `FIREBASE_PROJECT_ID`; no code changes.
-- **The audit log stores input in plaintext**, readable and exportable by the
-  whole organization. Deliberate, stated in the terms, and worth deciding on
-  explicitly rather than discovering.
+- **Verify the input-privacy migration.** Terminal input is no longer sent to
+  the accounts service, and its housekeeping sweep removes rows created by
+  prerelease builds.
 - **Rotate the SendGrid key.** It has been through a terminal and a transcript.
 - **The connector VM is a single point of failure.** Acceptable now, worth a
   second one behind the same tunnel before this carries anything that matters.

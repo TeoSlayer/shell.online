@@ -248,7 +248,7 @@ The Go CLI owns the local PTY. A Cloudflare Worker creates sessions and serves t
 
 ### The platform app
 
-[`app/`](app/) is the accounts and collaboration platform: `shell login`, organizations, an in-app session manager, and a per-session audit log. It is a separate package with its own dependencies, so it is installed and tested on its own:
+[`app/`](app/) is the optional accounts and collaboration platform: `shell login`, organizations, and an in-app session manager. It does not gate the CLI or copy terminal input into the accounts service. It is a separate package with its own dependencies, so it is installed and tested on its own:
 
 ```sh
 npm run test:app

@@ -8,7 +8,6 @@ import "./styles/shell.css";
 import "./styles/terminal.css";
 import "./styles/people.css";
 import "./styles/collab.css";
-import "./styles/audit.css";
 import "./styles/terms.css";
 
 createRoot(document.getElementById("root")!).render(

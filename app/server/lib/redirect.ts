@@ -3,7 +3,7 @@
  * would let a crafted authorize link forward a live code to a remote host, so
  * the check is an allowlist rather than a blocklist.
  */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]"]);
 
 export function isValidRedirectUri(value: string): boolean {
   let url: URL;
@@ -13,7 +13,7 @@ export function isValidRedirectUri(value: string): boolean {
     return false;
   }
   if (url.protocol !== "http:") return false;
-  if (!LOOPBACK_HOSTS.has(url.hostname) && url.hostname !== "::1") return false;
+  if (!LOOPBACK_HOSTS.has(url.hostname)) return false;
   if (!url.port) return false;
   const port = Number(url.port);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) return false;

@@ -437,6 +437,11 @@ function canHandOff(session: SessionRecord, you: Member | null): boolean {
   return session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
 }
 
+/** Stopping controls the owner's local process, so assignment is not enough. */
+export function canStop(session: SessionRecord, you: Member | null): boolean {
+  return Boolean(you && session.ownerUid === you.uid);
+}
+
 function SessionGroup({
   heading,
   sessions,
@@ -531,14 +536,16 @@ function SessionGroup({
                           {canEdit(session, you) ? "Open" : "Watch"}
                         </button>
                         <CopyLink url={session.shareUrl} />
-                        <button
-                          type="button"
-                          className="session-action"
-                          onClick={() => void onKill(session)}
-                          disabled={killing === session.id}
-                        >
-                          {killing === session.id ? "Stopping" : "Stop"}
-                        </button>
+                        {canStop(session, you) && (
+                          <button
+                            type="button"
+                            className="session-action"
+                            onClick={() => void onKill(session)}
+                            disabled={killing === session.id}
+                          >
+                            {killing === session.id ? "Stopping" : "Stop"}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <CopyLink url={session.shareUrl} />

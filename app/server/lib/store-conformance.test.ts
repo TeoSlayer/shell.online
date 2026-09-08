@@ -499,6 +499,13 @@ for (const implementation of implementations) {
     });
 
     describe("audit", () => {
+      it("purges legacy plaintext input while preserving collaboration metadata", async () => {
+        await store.putAudit(auditEvent({ id: "plain", kind: "input", text: "secret command" }));
+        await store.putAudit(auditEvent({ id: "handoff", kind: "handoff", text: "assigned" }));
+        await store.purgeExpired();
+        expect((await store.auditFor("org_1", "s1")).map((entry) => entry.id)).toEqual(["handoff"]);
+      });
+
       it("reads one session's trail in the order it happened", async () => {
         await store.putAudit(auditEvent({ id: "a2", at: 2000, text: "second" }));
         await store.putAudit(auditEvent({ id: "a1", at: 1000, text: "first" }));

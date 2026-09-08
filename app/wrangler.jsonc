@@ -2,14 +2,15 @@
   // The accounts service on Cloudflare Workers. worker/index.ts is the entry;
   // server/app.ts is the router it shares with the Node build.
   //
-  //   npm run build            # the client, into ./dist
-  //   npx wrangler deploy --config wrangler.jsonc
+  //   npm run build                  # the client, into ./dist
+  //   npm run render:deploy-config   # inject untracked production identifiers
+  //   npx wrangler deploy --config wrangler.deploy.jsonc
   //
   // The relay is a different Worker with its own config, deployed separately.
   // Nothing here touches it.
   //
   // Secrets are never in this file. Set them once per environment with
-  // `npx wrangler secret put <name>`:
+  // `npx wrangler secret put <name> --config wrangler.deploy.jsonc`:
   //
   //   MAIL_API_KEY   the SendGrid key, or the key for whatever MAIL_API_URL is
   //
@@ -60,7 +61,7 @@
       // The Cloud SQL instance, reached over a Workers VPC service on a
       // Cloudflare Tunnel. An identifier, not a credential: the database
       // username and password belong to the Hyperdrive configuration.
-      "id": "c51f052c29fb43b58a0aa57b66cb62f6",
+      "id": "__HYPERDRIVE_ID__",
       // Used only by `wrangler dev`, which connects directly rather than
       // through Hyperdrive. A local Postgres, never the deployed database.
       "localConnectionString": "postgres://postgres:dev@localhost:5433/shell_online"
@@ -75,7 +76,7 @@
 
   "vars": {
     // The Firebase project whose ID tokens are accepted.
-    "FIREBASE_PROJECT_ID": "vv-cloud-firebase",
+    "FIREBASE_PROJECT_ID": "__FIREBASE_PROJECT_ID__",
     // Where browsers reach this deployment. CORS is checked against it and
     // invitation links are built from it, so it is the public host rather than
     // whatever a request happened to arrive on.
@@ -85,7 +86,7 @@
     "MAIL_PROVIDER": "sendgrid",
     // The display name is free-form; the address has to be one the provider
     // will send as.
-    "MAIL_FROM": "shell.online <no-reply@pilotprotocol.network>"
+    "MAIL_FROM": "__MAIL_FROM__"
     // "MAIL_API_URL": "https://api.resend.com/emails"  // MAIL_PROVIDER=json only
   }
 }

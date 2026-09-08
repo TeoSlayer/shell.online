@@ -8,8 +8,8 @@ resource, not assumed.
 - [x] **Cloud SQL instance** `shell-online-db`, PostgreSQL 16, `db-f1-micro`,
       10 GB SSD, `us-central1`, daily backups retained 7 days, encrypted
       connections only (`sslMode: ENCRYPTED_ONLY`).
-- [x] **The database is not on the internet.** `authorizedNetworks` is exactly
-      `34.41.2.41/32`, the connector VM. Nothing else can open a socket to it.
+- [x] **The database is not on the public internet.** Its network allowlist is
+      limited to the dedicated connector, with no general ingress rule.
 - [x] **Database and role** `shell_online` owned by `shell_app`, password
       generated and never written to a tracked file.
 - [x] **Migrations applied**: `001_initial`, `002_machine_id`, `003_harnesses`,
@@ -18,11 +18,10 @@ resource, not assumed.
       Cloud SQL itself rather than a local Postgres. All pass.
 - [x] **Data migrated**: 79 records from the file store, both organizations
       intact, verified by reading the row counts back.
-- [x] **Connector VM** `shell-online-db-connector` (`e2-micro`,
-      `us-central1-a`) running `cloudflared`, tunnel `SHELL_ONLINE_DB` healthy.
+- [x] **Dedicated connector** running `cloudflared`, with its tunnel healthy.
 - [x] **Workers VPC service** `shell-online-db`, `TCP:5432` over that tunnel.
-- [x] **Hyperdrive** `c51f052c29fb43b58a0aa57b66cb62f6`, pooling for the
-      Worker, `origin_connection_limit` 20 against a server ceiling of 25.
+- [x] **Hyperdrive** pooling for the Worker, with its origin connection limit
+      below the database server ceiling.
 - [x] **Worker deployed** on `app.shell.online` as a custom domain. Health,
       readiness, the client and the guarded API all answer correctly, and
       `/api/ready` runs a real query the whole length of the chain.
@@ -81,11 +80,11 @@ decisions.
       password-reset mail signed by another team.
 - [ ] **Rotate the SendGrid key.** It has been through a terminal and a
       transcript.
-- [ ] **Decide on the audit log.** Every prompt and command is stored in
-      plaintext and is readable and exportable by the whole organization. It is
-      in the terms; it should be a decision, not a discovery.
-- [ ] **Decide on the certificate-verification gap** between Hyperdrive and
-      Cloud SQL. See `DEPLOYMENT-PLAN.md`.
+- [ ] **Verify input privacy.** Confirm the browser does not call
+      `POST /api/audit`, and confirm the first scheduled housekeeping sweep
+      after upgrading removes legacy plaintext input rows.
+- [ ] **Close the certificate-verification gap** between Hyperdrive and Cloud
+      SQL. See `DEPLOYMENT-PLAN.md`.
 
 ## DNS
 
@@ -100,7 +99,7 @@ The relay keeps `shell.online` itself. This is only the app subdomain.
 ## Rollback
 
 ```sh
-npx wrangler rollback --config wrangler.jsonc
+npx wrangler rollback --config wrangler.deploy.jsonc
 ```
 
 Migrations only ever add, and each is checksummed, so the previous version

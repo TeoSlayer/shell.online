@@ -39,8 +39,8 @@
           "shell login asks once whether your signed-in browser may start sessions on this machine. Agree and a small daemon runs in the background for as long as you stay signed in, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. A machine that sits idle and still has to be reachable can run shell service install instead."
         ],
         [
-          "Organizations and the audit log",
-          "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and an assignee, and the owner can hand a running session to someone else. Every input committed to a session is recorded per session: prompts for agents, commands for terminals. The log carries aggregation charts, filters, and CSV export."
+          "Organizations and collaboration",
+          "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and an assignee, and the owner can hand a running session to someone else. Comments, mentions, notifications, and handoffs provide context without copying terminal input into the accounts service."
         ]
       ]
     },

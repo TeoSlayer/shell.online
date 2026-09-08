@@ -18,12 +18,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Add organizations. Signing up creates one; an invite link joins one. Everyone in an organization sees every member's sessions, each of which has an owner and an assignee.
 - Add a web app that lists sessions from every linked machine and opens them as tabs you can type into, rather than as links out.
 - Let a signed-in browser start and stop sessions on a linked machine, after that machine agrees to it once at `shell login`. The browser chooses the session password and seals it to a key the machine publishes, so the service relays an envelope it cannot open.
-- Add a per-session audit log of every committed input, with aggregation, filters and export.
+- Add session ownership, handoff history, comments, mentions, and notifications without copying terminal input into the accounts service.
 - Detect which coding-agent harnesses a machine can run, so the web app offers the ones that are actually there.
 - Add terms of service, accepted at sign-up.
 
 ### Fixed
 
+- Restrict CLI OAuth callbacks to literal IPv4 or IPv6 loopback addresses, so
+  a local name-resolution override cannot receive an authorization code.
+- Keep production infrastructure identifiers out of tracked Wrangler config,
+  verify the pinned Cloud SQL proxy before execution, and compile the web app
+  against the public relay rather than a development address.
 - Point `shell login` at the deployment that serves it. The accounts address had never resolved, and the approval screen resolved to the marketing site, so either would have failed on the first release carrying the command.
 - Update `golang.org/x/crypto` to a patched release. The Windows binaries linked its SSH package, reached through the PTY library, and so carried thirteen advisories including seven rated critical. No shell.online code path called into it, and the other platforms never linked it at all.
 

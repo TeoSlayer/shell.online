@@ -148,8 +148,9 @@ export function SignUp() {
         <>
           Terminal content stays end-to-end encrypted either way. The{" "}
           <a href="https://shell.online/security/">security model</a> covers the
-          cryptography; the terms cover what shell.online records, including the
-          audit log everyone in your organization can read.
+          cryptography; the terms describe the limited account and session
+          metadata visible to your organization. Terminal input is not copied
+          into the accounts service.
         </>
       }
     >

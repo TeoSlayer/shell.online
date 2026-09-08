@@ -102,7 +102,7 @@ describe("callNodeHandler", () => {
 
   it("delivers the request body, and delivers nothing at all when there is none", async () => {
     const withBody = await callNodeHandler(
-      new Request("https://app.example/api/audit", { method: "POST", body: '{"entries":[]}' }),
+      new Request("https://app.example/api/probe", { method: "POST", body: '{"entries":[]}' }),
       echo,
     );
     expect((await seenBy(withBody)).body).toBe('{"entries":[]}');

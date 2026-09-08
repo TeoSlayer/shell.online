@@ -118,7 +118,7 @@ describe("booting the service", () => {
     const root = clientDirectory();
     const started = start({
       PORT,
-      FIREBASE_PROJECT_ID: "vv-cloud-firebase",
+      FIREBASE_PROJECT_ID: "test-firebase-project",
       ACCOUNTS_DATA: join(mkdtempSync(join(tmpdir(), "shell-data-")), "accounts.json"),
       CLIENT_DIR: root,
       RELAY_URL: "http://127.0.0.1:1",
@@ -148,7 +148,7 @@ describe("booting the service", () => {
     const { port: PORT, base: BASE } = claimPort();
     const environment = {
       PORT,
-      FIREBASE_PROJECT_ID: "vv-cloud-firebase",
+      FIREBASE_PROJECT_ID: "test-firebase-project",
       ACCOUNTS_DATA: join(mkdtempSync(join(tmpdir(), "shell-data-")), "accounts.json"),
     };
     const first = start(environment);
@@ -165,7 +165,7 @@ describe("booting the service", () => {
     const { port: PORT, base: BASE } = claimPort();
     const started = start({
       PORT,
-      FIREBASE_PROJECT_ID: "vv-cloud-firebase",
+      FIREBASE_PROJECT_ID: "test-firebase-project",
       ACCOUNTS_DATA: join(mkdtempSync(join(tmpdir(), "shell-data-")), "accounts.json"),
     });
     await listening(started);

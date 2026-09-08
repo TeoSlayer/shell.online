@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  ClockCounterClockwise,
   Copy,
   Check,
   PaperPlaneTilt,
@@ -98,7 +97,7 @@ export function Session() {
   }
   if (!detail) return <Booting label="Loading the session" />;
 
-  const { session, members, you, comments, audit } = detail;
+  const { session, members, you, comments } = detail;
   const owner = findPerson(members, session.ownerUid);
   const assignee = findPerson(members, session.assigneeUid);
   const live = !session.closedAt;
@@ -156,10 +155,6 @@ export function Session() {
                 Open terminal
               </Link>
             )}
-            <Link className="session-action" to={`/audit?session=${session.id}`}>
-              <ClockCounterClockwise size={15} />
-              Audit log
-            </Link>
             <button
               type="button"
               className="session-action"
@@ -283,10 +278,6 @@ export function Session() {
                 {session.readOnly ? "View only" : "Interactive"}
                 {session.encrypted ? " · encrypted" : ""}
               </dd>
-            </div>
-            <div className="detail-row">
-              <dt>Entries logged</dt>
-              <dd>{audit.filter((event) => event.kind === "input").length}</dd>
             </div>
           </dl>
         </aside>

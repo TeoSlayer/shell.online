@@ -131,16 +131,12 @@ An agent should not enable this on a machine it does not own, and should tell
 the operator plainly if it does: while it is allowed, anyone signed in to that
 account can start processes on that machine.
 
-## The audit log
+## Collaboration records
 
-For a session belonging to an organization, every input committed to it is
-recorded in plaintext on the server and is readable and exportable by every
-member of that organization. Prompts sent to a coding agent and commands typed
-at a terminal are both inputs.
-
-Agents must treat anything typed into such a session as something the whole
-organization will read. Do not paste API keys, passwords, tokens, or customer
-data into a prompt or a command line in a shared session.
+The accounts service records explicit collaboration metadata such as session
+ownership, handoffs, comments, mentions, and notifications. It does not receive
+a plaintext copy of terminal input. Prompts, commands, passwords, and other
+keystrokes remain inside the end-to-end encrypted terminal stream.
 
 ## Release integrity
 

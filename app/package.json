@@ -15,6 +15,7 @@
     "dev:all": "npm-run-all --parallel dev dev:accounts",
     "lint": "oxlint",
     "preview": "vite preview",
+    "render:deploy-config": "node scripts/render-deploy-config.mjs",
     "start": "node dist-server/index.js",
     "test": "vitest run && node scripts/check-protocol.mjs",
     "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:dev@localhost:5433/shell_online} vitest run",

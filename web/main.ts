@@ -576,7 +576,7 @@ function renderLanding(): void {
         <section class="org-section" id="teams">
           <div class="section-heading org-heading">
             <p>Organizations</p>
-            <h2>Shared sessions.<br />A record of every input.</h2>
+            <h2>Shared sessions.<br />Clear ownership, private content.</h2>
             <span>Signing up creates an organization, and invite links add people to it. Everyone inside sees every member's sessions.</span>
           </div>
           <div class="org-columns">
@@ -589,11 +589,11 @@ function renderLanding(): void {
               </dl>
             </section>
             <section class="org-column">
-              <h3>The audit log</h3>
+              <h3>Context without surveillance</h3>
               <dl>
-                <div><dt>Every input, one row</dt><dd>Prompts committed to agents, commands committed to terminals, per session.</dd></div>
-                <div><dt>Charts and filters</dt><dd>Aggregation charts over the log, and filters to narrow it down.</dd></div>
-                <div><dt>CSV export</dt><dd>Take the log out whole when it has to live somewhere else.</dd></div>
+                <div><dt>Terminal input stays private</dt><dd>The accounts service never receives a plaintext copy of what you type.</dd></div>
+                <div><dt>Comments and mentions</dt><dd>Discuss the work beside the session without mixing notes into the terminal.</dd></div>
+                <div><dt>Explicit handoff</dt><dd>Ownership and assignment show who can control a process and who is working on it.</dd></div>
               </dl>
             </section>
           </div>

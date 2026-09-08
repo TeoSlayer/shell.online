@@ -117,7 +117,7 @@ constraints a live write does. Running it twice is safe.
   password-reset mail signed by another team. A deployment needs its own
   project with Identity Platform enabled and billing on. Which project is used
   is a `.env.local` change, nothing in the code.
-- **The audit log stores plaintext input.** Prompts and commands are recorded so
-  a colleague can read them back, which means they are readable by this service
-  in a way terminal output deliberately is not. That is a policy decision to
-  make explicitly, not an oversight.
+- **Terminal input is never copied to the accounts service.** The activity data
+  is limited to collaboration metadata such as explicit handoffs. The normal
+  housekeeping sweep also deletes plaintext input rows written by prerelease
+  builds.

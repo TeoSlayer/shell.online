@@ -2,7 +2,7 @@ import type { AuditEvent, SessionRecord, Store } from "../lib/store";
 import { newId, type Membership } from "../lib/orgs";
 
 export const MAX_TEXT = 4100;
-const KINDS = new Set(["input", "interrupt", "opened", "handoff"]);
+const KINDS = new Set(["opened", "handoff"]);
 
 export interface RecordInput {
   sessionId: string;
@@ -12,11 +12,12 @@ export interface RecordInput {
 }
 
 /**
- * Records what someone entered in a session.
+ * Records collaboration metadata for a session.
  *
  * The organization is taken from the actor's membership and the session is
  * checked to belong to it, so an event cannot be written into somebody else's
- * organization by asking nicely.
+ * organization by asking nicely. Terminal input is deliberately excluded:
+ * the accounts service must not receive a plaintext copy of an E2EE stream.
  */
 export async function recordAudit(
   store: Store,
@@ -82,7 +83,7 @@ export async function assignSession(
   return { ok: true, session: updated };
 }
 
-/** The audit log as a CSV file, for taking somewhere else. */
+/** Collaboration metadata as CSV, retained for prerelease API compatibility. */
 export function auditCsv(events: AuditEvent[], sessions: SessionRecord[]): string {
   const byId = new Map(sessions.map((session) => [session.id, session]));
   const header = ["timestamp", "session", "command", "actor", "kind", "text"];

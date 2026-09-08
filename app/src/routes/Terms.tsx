@@ -16,7 +16,7 @@ const SECTIONS = [
   { id: "browser-sessions", title: "Browser-Started Sessions" },
   { id: "harness-discovery", title: "Harness Discovery" },
   { id: "what-we-receive", title: "What Is Sent to the Service" },
-  { id: "audit-log", title: "The Audit Log" },
+  { id: "activity-records", title: "Activity Records" },
   { id: "never-received", title: "What Never Reaches Us" },
   { id: "sharing", title: "Share Links and Session Passwords" },
   { id: "ip", title: "Intellectual Property" },
@@ -140,7 +140,7 @@ export function Terms() {
               <dt>The accounts service</dt>
               <dd>
                 The service that holds accounts, organizations, machine
-                records, session metadata and the audit log.
+                records, session metadata and collaboration records.
               </dd>
             </div>
             <div>
@@ -232,8 +232,8 @@ export function Terms() {
           <p>
             An organization is a shared workspace, and it is shared in a strong
             sense. <b>Everyone in your organization can see every member&rsquo;s
-            sessions</b> and can read and export the audit log described in{" "}
-            <Ref id="audit-log" />. A session has an owner and an assignee, and
+            sessions</b> and can read their comments and handoff history. A
+            session has an owner and an assignee, and
             only they can edit it — but visibility is not restricted that way.
           </p>
           <p>
@@ -354,10 +354,10 @@ export function Terms() {
               </dd>
             </div>
             <div>
-              <dt>The audit log</dt>
+              <dt>Collaboration records</dt>
               <dd>
-                Every input you commit to a session. This is important enough to
-                have its own section — see <Ref id="audit-log" />.
+                Explicit handoffs, comments, mentions, and notifications. See{" "}
+                <Ref id="activity-records" />.
               </dd>
             </div>
             <div>
@@ -370,30 +370,24 @@ export function Terms() {
           </dl>
         </Section>
 
-        <Section id="audit-log">
+        <Section id="activity-records">
           <div className="terms-callout">
             <p>
-              <b>
-                Every input you commit to a session is recorded in plaintext on
-                our servers.
-              </b>{" "}
-              Prompts you send to a coding agent and commands you type at a
-              terminal are both inputs. Every member of your organization can
-              read that log, and every member of your organization can export
-              it.
+              <b>Terminal input is not copied into the accounts service.</b>{" "}
+              Prompts, commands, passwords, and other keystrokes stay inside
+              the end-to-end encrypted terminal stream.
             </p>
           </div>
           <p>
-            This is deliberate. The audit log is a feature of the product, not a
-            side effect of running it — a team using shell.online is meant to be
-            able to see what was asked of a machine and what was typed at it.
+            We retain the collaboration information people deliberately create
+            outside the terminal: session ownership and assignment, handoffs,
+            comments, mentions, and notifications. Members of the organization
+            can see those records.
           </p>
           <p>
-            The practical consequence is that anything you type into a
-            shell.online session should be treated as something your whole
-            organization will read. Do not paste API keys, passwords, tokens,
-            customer data or anything else you would not put in a shared
-            document into a prompt or a command line.
+            Prerelease builds briefly offered plaintext input logging. The
+            hosted service no longer accepts those events and its housekeeping
+            sweep deletes any legacy input rows.
           </p>
         </Section>
 
@@ -405,9 +399,8 @@ export function Terms() {
               <dd>
                 Terminal traffic is end-to-end encrypted in the browser and on
                 the machine. The relay and the accounts service handle
-                ciphertext only. Your inputs are logged, as described in{" "}
-                <Ref id="audit-log" />; what your program prints back is not
-                readable by us.
+                ciphertext only. Neither what you type nor what your program
+                prints is readable by the accounts service.
               </dd>
             </div>
             <div>
@@ -529,7 +522,7 @@ export function Terms() {
             </li>
             <li>
               Who you invite into your organization, given that every member can
-              read and export the audit log.
+              see its shared sessions and collaboration records.
             </li>
             <li>
               Complying with all applicable laws in your jurisdiction when using
@@ -655,9 +648,8 @@ export function Terms() {
             can give notice, we will.
           </p>
           <p>
-            Ending an account does not by itself undo what other members of your
-            organization have already seen or exported, including audit log
-            entries.
+            Ending an account does not by itself undo collaboration records that
+            other members of your organization have already seen.
           </p>
         </Section>
 
