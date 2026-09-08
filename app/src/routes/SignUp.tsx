@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { WarningCircle } from "@phosphor-icons/react";
 import { AuthShell } from "../components/AuthShell";
 import { Field } from "../components/Field";
 import { Button } from "../components/Button";
@@ -17,9 +18,11 @@ export function SignUp() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
   const [pending, setPending] = useState<"none" | "email" | "google">("none");
+  const termsId = useId();
 
   function validate() {
     const next: Record<string, string> = {};
@@ -33,6 +36,9 @@ export function SignUp() {
     }
     if (password.length < 8) {
       next.password = "Use at least 8 characters.";
+    }
+    if (!accepted) {
+      next.terms = "Accept the terms of service to create an account.";
     }
     setFieldErrors(next);
     return Object.keys(next).length === 0;
@@ -56,6 +62,15 @@ export function SignUp() {
 
   async function handleGoogle() {
     setFormError("");
+    /*
+     * Google creates the account too, so it has to pass the same gate. An
+     * acceptance the person can walk around by choosing the other button is
+     * not an acceptance, and this is the button most people press.
+     */
+    if (!accepted) {
+      setFieldErrors({ terms: "Accept the terms of service to create an account." });
+      return;
+    }
     setFieldErrors({});
     setPending("google");
     try {
@@ -87,10 +102,10 @@ export function SignUp() {
       }
       legal={
         <>
-          By creating an account you agree to the{" "}
-          <a href="https://shell.online/security/">security model</a> and the way{" "}
-          shell.online handles session metadata. Terminal content stays
-          end-to-end encrypted either way.
+          Terminal content stays end-to-end encrypted either way. The{" "}
+          <a href="https://shell.online/security/">security model</a> covers the
+          cryptography; the terms cover what shell.online records, including the
+          audit log everyone in your organization can read.
         </>
       }
     >
@@ -131,6 +146,39 @@ export function SignUp() {
           disabled={busy}
           strength
         />
+
+        <div
+          className="terms-accept"
+          data-invalid={fieldErrors.terms ? "true" : "false"}
+        >
+          <label className="terms-accept-row" htmlFor={termsId}>
+            <input
+              id={termsId}
+              type="checkbox"
+              checked={accepted}
+              onChange={(event) => setAccepted(event.target.checked)}
+              disabled={busy}
+              aria-invalid={fieldErrors.terms ? true : undefined}
+              aria-describedby={
+                fieldErrors.terms ? `${termsId}-error` : undefined
+              }
+            />
+            <span>
+              I accept the{" "}
+              <Link to="/terms" target="_blank" rel="noreferrer">
+                terms of service
+              </Link>
+              .
+            </span>
+          </label>
+
+          {fieldErrors.terms && (
+            <p className="field-error" id={`${termsId}-error`}>
+              <WarningCircle size={14} weight="bold" />
+              <span>{fieldErrors.terms}</span>
+            </p>
+          )}
+        </div>
 
         <Button
           type="submit"

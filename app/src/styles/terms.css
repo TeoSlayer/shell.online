@@ -1,0 +1,367 @@
+/* ---------------------------------------------------------------
+   Terms of service: a single measured column of long-form prose.
+   Same paper, same radius rule, same accent as the rest of the app;
+   everything here is token-driven so it follows the theme.
+   --------------------------------------------------------------- */
+
+.terms {
+  width: min(760px, calc(100% - 48px));
+  padding: 34px 0 96px;
+  margin: 0 auto;
+}
+
+.terms-head {
+  display: flex;
+  padding-bottom: 40px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.terms-head-link {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 460;
+}
+
+.terms-head-link:hover {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------
+   Masthead
+   --------------------------------------------------------------- */
+
+.terms-masthead h1 {
+  max-width: 12ch;
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(38px, 5vw, 54px);
+  font-weight: 400;
+  letter-spacing: -0.058em;
+  line-height: 0.96;
+}
+
+.terms-updated {
+  margin: 18px 0 0;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.terms-lede {
+  max-width: 58ch;
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 17px;
+  letter-spacing: -0.012em;
+  line-height: 1.65;
+}
+
+/* ---------------------------------------------------------------
+   Contents
+   --------------------------------------------------------------- */
+
+.terms-toc {
+  padding: 24px 28px 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  margin-top: 40px;
+  background: var(--white);
+}
+
+.terms-toc h2 {
+  margin: 0 0 14px;
+  color: var(--faint);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.terms-toc ol {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  gap: 9px 32px;
+  counter-reset: toc;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .terms-toc ol {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(8, auto);
+  }
+}
+
+.terms-toc li {
+  display: flex;
+  align-items: baseline;
+  counter-increment: toc;
+  gap: 10px;
+}
+
+.terms-toc li::before {
+  flex: none;
+  color: var(--faint);
+  content: counter(toc);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.terms-toc a {
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.4;
+}
+
+.terms-toc a:hover {
+  color: var(--blue);
+}
+
+/* ---------------------------------------------------------------
+   Sections
+   --------------------------------------------------------------- */
+
+.terms-section {
+  padding-top: 34px;
+  border-top: 1px solid var(--line);
+  margin-top: 40px;
+  /* Anchor jumps land with the heading clear of the viewport edge. */
+  scroll-margin-top: 24px;
+}
+
+.terms-section h2 {
+  display: flex;
+  max-width: 26ch;
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-size: clamp(23px, 2.6vw, 27px);
+  font-weight: 440;
+  letter-spacing: -0.038em;
+  line-height: 1.15;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.terms-number {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.terms-section p {
+  max-width: 68ch;
+  margin: 0 0 15px;
+  color: var(--ink-soft);
+  font-size: 16.5px;
+  letter-spacing: -0.008em;
+  line-height: 1.72;
+}
+
+.terms-section p:last-child {
+  margin-bottom: 0;
+}
+
+.terms-section b {
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.terms code {
+  padding: 2px 6px 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.84em;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------
+   Lists inside a section
+   --------------------------------------------------------------- */
+
+.terms-list {
+  max-width: 68ch;
+  padding-left: 0;
+  margin: 0 0 15px;
+  list-style: none;
+}
+
+.terms-list li {
+  position: relative;
+  padding-left: 22px;
+  margin-bottom: 9px;
+  color: var(--ink-soft);
+  font-size: 16.5px;
+  letter-spacing: -0.008em;
+  line-height: 1.66;
+}
+
+.terms-list li::before {
+  position: absolute;
+  top: 0.72em;
+  left: 2px;
+  width: 5px;
+  height: 1px;
+  background: var(--line-strong);
+  content: "";
+}
+
+/* Term / description pairs: the shape most of this document wants. */
+
+.terms-defs {
+  max-width: 70ch;
+  margin: 0 0 15px;
+  border-top: 1px solid var(--line);
+}
+
+.terms-defs > div {
+  display: grid;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 6px 28px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  align-items: baseline;
+}
+
+.terms-defs dt {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 540;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+}
+
+.terms-defs dd {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15.5px;
+  letter-spacing: -0.008em;
+  line-height: 1.66;
+}
+
+/* ---------------------------------------------------------------
+   Callout: reserved for the audit log, which is the one thing on
+   this page a reader must not skim past.
+   --------------------------------------------------------------- */
+
+.terms-callout {
+  max-width: 68ch;
+  padding: 20px 22px;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-control);
+  margin-bottom: 18px;
+  background: var(--danger-wash);
+}
+
+.terms-callout p {
+  max-width: none;
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.terms-callout b {
+  color: var(--danger);
+  font-weight: 580;
+}
+
+/* ---------------------------------------------------------------
+   Foot
+   --------------------------------------------------------------- */
+
+.terms-foot {
+  display: flex;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+  margin-top: 44px;
+  color: var(--faint);
+  font-size: 13.5px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---------------------------------------------------------------
+   Responsive
+   --------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .terms {
+    width: calc(100% - 32px);
+  }
+
+  .terms-toc {
+    padding: 20px 20px 22px;
+  }
+
+  .terms-defs > div {
+    grid-template-columns: 1fr;
+  }
+
+  .terms-section h2 {
+    max-width: 100%;
+  }
+}
+
+/* ---------------------------------------------------------------
+   Terms acceptance on the sign-up form. It lives in this file, not
+   auth.css, because it exists only to gate the document above.
+   --------------------------------------------------------------- */
+
+.terms-accept {
+  display: grid;
+  margin: 4px 0 18px;
+  gap: 7px;
+}
+
+.terms-accept-row {
+  display: flex;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 13.5px;
+  line-height: 1.55;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.terms-accept input {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  /* Nudged onto the first line's baseline rather than its box top. */
+  margin: 1px 0 0;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.terms-accept input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.terms-accept a {
+  color: var(--blue);
+  font-weight: 520;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.terms-accept a:hover {
+  color: var(--blue-deep);
+}
+
+.terms-accept[data-invalid="true"] input {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}

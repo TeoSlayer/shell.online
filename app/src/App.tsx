@@ -9,6 +9,7 @@ import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
 import { Organization } from "./routes/Organization";
 import { Join } from "./routes/Join";
+import { Terms } from "./routes/Terms";
 import { Session } from "./routes/Session";
 import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
@@ -77,6 +78,8 @@ export default function App() {
           />
           {/* Its own guard, so signing in returns to the invite. */}
           <Route path="/join/:inviteId" element={<Join />} />
+          {/* Public: it has to be readable before anyone has an account. */}
+          <Route path="/terms" element={<Terms />} />
           <Route
             path="/machines"
             element={
