@@ -58,7 +58,7 @@ function start(env: Record<string, string>): Started {
 async function listening(started: Started, timeoutMs = 20_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (started.output().includes("accounts: http://")) return;
+    if (started.output().includes("accounts: listening on ")) return;
     if (started.child.exitCode !== null) {
       throw new Error(`exited ${started.child.exitCode}: ${started.output()}`);
     }
