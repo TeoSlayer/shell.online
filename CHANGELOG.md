@@ -4,12 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.11.0] — 2026-09-08
+
 ### Added
 
+- Ask on every interactive `shell login` whether the browser may start sessions here, with the previous answer as the default. `--allow-remote-start` remains a shortcut rather than the only way to reach the decision.
+- Show the audit log again: the page, its route and the sidebar entry.
 - Publish Go module discovery metadata so `go install shell.online/cmd/shell@latest` resolves from the canonical domain.
 
 ### Fixed
 
+- Rescue a machine whose daemon can no longer renew its token. Signing in again replaces the running daemon instead of leaving it holding credentials it will never reload, a refused renewal re-reads the credentials file, and repeated refusals back off rather than repeating every two seconds.
+- Read who may type from the session rather than from the tab it was opened in, so a colleague handed a session while watching it can type without reopening.
+- Stop one test closing another test's file descriptor, which failed unrelated tests at random.
 - Keep the background startup pipe private to shell.online so wrapped commands can safely use file descriptor 3.
 - Make foreground relay connection attempts interruptible and print share details only after the relay is connected.
 - Honor long `--auto-close` deadlines instead of silently reducing them to the relay's rolling 12-hour lease.
@@ -17,7 +24,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Preserve authenticated E2EE recovery snapshot opcodes during relay backpressure so large output cannot eject viewers to the password screen.
 - Show compact, unclipped encryption badges in narrow mobile headers.
 - Explain when all 16 viewer slots are occupied and keep retrying until a slot opens.
-
 ## [0.10.1] — 2026-09-08
 
 ### Fixed
