@@ -36,7 +36,9 @@ const TYPES: Record<string, string> = {
 const DOCUMENT_HEADERS: Record<string, string> = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
 export interface StaticFiles {

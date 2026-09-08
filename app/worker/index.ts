@@ -55,12 +55,16 @@ const RELAY_PREFIX = "/relay";
  * never resolves, so the header has to be on the document. The assets binding
  * does content types, caching and the SPA fallback but has no opinion about
  * this, so it is added on the way out; server/lib/static-files.ts sends the
- * same three headers, and vite.config.ts sends them in development.
+ * same headers, and vite.config.ts sends the popup header in development.
+ * wrangler.jsonc sets run_worker_first so Cloudflare Assets cannot bypass
+ * this function for a file that already exists.
  */
 const CLIENT_HEADERS: Record<string, string> = {
   "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
   "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
   "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
 };
 
 /*
