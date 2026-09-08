@@ -33,7 +33,7 @@ describe("invitationMessage", () => {
      * A button and a plain link, because a mail client that strips the styled
      * anchor still has to leave something a person can paste.
      */
-    expect(message.html).toContain(`>Join</a>`);
+    expect(message.html).toMatch(/Join Vulture Labs<\/a>/);
     expect(message.html.match(new RegExp(INVITATION.joinUrl, "g"))?.length).toBeGreaterThanOrEqual(2);
     expect(message.text).toContain(INVITATION.joinUrl);
   });
@@ -68,9 +68,40 @@ describe("invitationMessage", () => {
     const message = invitationMessage(INVITATION, NOW);
     expect(message.html).not.toContain("<style");
     expect(message.html).not.toContain("<link");
-    /* The app's own paper and blue, from src/styles/tokens.css. */
+    /* The landing page's paper and ink block, from web/landing.css. */
     expect(message.html).toContain("#f3f1e9");
-    expect(message.html).toContain("#4267f5");
+    expect(message.html).toContain("#1d201b");
+  });
+
+  /*
+   * The em-dash is the house tell. It is banned in everything the project
+   * ships, and an email is read in more places than a page is.
+   */
+  it("contains no em-dashes", () => {
+    const message = invitationMessage(INVITATION, NOW);
+    expect(message.html).not.toMatch(/[\u2013\u2014]/);
+    expect(message.text).not.toMatch(/[\u2013\u2014]/);
+    expect(message.subject).not.toMatch(/[\u2013\u2014]/);
+  });
+
+  /*
+   * The preheader is the preview line a client shows beside the subject. It
+   * must repeat what the message already says: hidden text that differs from
+   * the visible body is what filters look for, so padding it with keywords
+   * would cost deliverability rather than buy it.
+   */
+  it("hides only text the message already shows", () => {
+    const message = invitationMessage(INVITATION, NOW);
+    const hidden = message.html.match(/<div style="display:none[^"]*">([^<]*)<\/div>/)?.[1] ?? "";
+    expect(hidden).toContain("Ana Ruiz");
+    expect(hidden).toContain("Vulture Labs");
+    /* Every word of it appears again where a reader can see it. */
+    const visible = message.html.slice(message.html.indexOf("</div>"));
+    for (const word of ["Ana Ruiz", "Vulture Labs"]) expect(visible).toContain(word);
+  });
+
+  it("declares itself light, so a client does not invert it", () => {
+    expect(invitationMessage(INVITATION, NOW).html).toContain('name="color-scheme" content="light"');
   });
 
   it("offers a plain text alternative", () => {
@@ -193,5 +224,28 @@ describe("parseAddress", () => {
 
   it("strips quotes some clients put round the name", () => {
     expect(parseAddress('"shell.online" <no-reply@shell.online>').name).toBe("shell.online");
+  });
+});
+
+describe("what SendGrid is told not to do", () => {
+  /*
+   * Click tracking rewrites the href to a redirector while the body still
+   * shows the real URL. A reader who checks where a link goes finds it goes
+   * somewhere else, which is what phishing looks like and what filters score.
+   */
+  it("turns off link rewriting and the tracking pixel", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response("", { status: 202 }));
+    const mailer = sendgridMailer({ apiKey: "k", from: "a@b.c" }, fetcher as unknown as typeof fetch);
+    await mailer.send(invitationMessage(INVITATION, NOW));
+
+    const body = JSON.parse(fetcher.mock.calls[0][1].body);
+    expect(body.tracking_settings.click_tracking.enable).toBe(false);
+    expect(body.tracking_settings.open_tracking.enable).toBe(false);
+  });
+
+  it("keeps the href and the visible URL identical", () => {
+    const message = invitationMessage(INVITATION, NOW);
+    const hrefs = [...message.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+    expect(new Set(hrefs)).toEqual(new Set([INVITATION.joinUrl]));
   });
 });

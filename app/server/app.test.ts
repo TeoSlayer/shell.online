@@ -1414,6 +1414,6 @@ describe("inviting someone by email", () => {
       body: { role: "member", email: "bruno@example.com" },
     });
     expect(sent[0].subject).toContain("Ana Ferreira");
-    expect(sent[0].html).toContain(">Join</a>");
+    expect(sent[0].html).toMatch(/Join [^<]*<\/a>/);
   });
 });

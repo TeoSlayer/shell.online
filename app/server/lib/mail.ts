@@ -98,6 +98,21 @@ export function sendgridMailer(
             { type: "text/plain", value: message.text },
             { type: "text/html", value: message.html },
           ],
+          /*
+           * Both trackers off, per message, whatever the account defaults are.
+           *
+           * Click tracking rewrites every href to a redirector, so the URL a
+           * reader sees in the body stops matching the URL the link actually
+           * goes to. That mismatch is one of the oldest phishing signatures
+           * there is, and filters weigh it accordingly. An invitation is a
+           * link somebody is being asked to trust; it should go where it says
+           * it goes. Open tracking adds a hidden pixel, for a metric nobody
+           * here reads.
+           */
+          tracking_settings: {
+            click_tracking: { enable: false, enable_text: false },
+            open_tracking: { enable: false },
+          },
         }),
       });
       if (!response.ok) {
@@ -189,20 +204,29 @@ function expiryPhrase(expiresAt: number, now: number): string {
 }
 
 /*
- * The app's own palette, from src/styles/tokens.css. Repeated rather than
- * imported: this string is rendered by a mail client, which never loads the
+ * The landing page's palette, from web/landing.css. Repeated rather than
+ * imported: this string is rendered by a mail client, which never loads a
  * stylesheet and in many cases strips <style> entirely, so every rule has to
  * travel inline on the element it applies to.
+ *
+ * The site's primary control is a dark ink block with a lime prompt, not a
+ * coloured button, so the call to action here is that block. An invitation
+ * that looks like the site it leads to is doing part of the work of proving
+ * it is genuine.
  */
 const PAPER = "#f3f1e9";
-const WHITE = "#fcfbf7";
 const INK = "#191b18";
+const INK_BLOCK = "#1d201b";
+const INK_BORDER = "#22241f";
+const ON_INK = "#f4f5ed";
+const ACID = "#c8ff4d";
+const LINE = "#d5d3ca";
 const MUTED = "#686c63";
-const LINE = "#d7d5cc";
-const BLUE = "#4267f5";
+const QUIET = "#343831";
 
 const FONT =
   "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+const MONO = "ui-monospace, SFMono-Regular, Consolas, monospace";
 
 export function invitationMessage(invitation: Invitation, now = Date.now()): Message {
   const organization = escape(invitation.organizationName);
@@ -216,57 +240,69 @@ export function invitationMessage(invitation: Invitation, now = Date.now()): Mes
    * Table layout, because a mail client is not a browser: flexbox and grid are
    * unreliable across Outlook and older clients, and a centred table is the
    * one thing that has always worked.
+   *
+   * The hidden div is preheader text, which every client uses for the preview
+   * line beside the subject. It repeats what the message says rather than
+   * padding it with keywords: text a reader cannot see but a filter can is
+   * exactly what filters score against, so the only safe hidden text is the
+   * kind that is genuinely shown, just somewhere else.
    */
   const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(subject)}</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${escape(subject)}</title></head>
 <body style="margin:0;padding:0;background:${PAPER};color:${INK};font-family:${FONT};-webkit-font-smoothing:antialiased;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Join ${organization} on shell.online. ${escape(expiry)}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PAPER};padding:32px 16px;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${inviter} invited you to ${organization}. ${escape(expiry)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PAPER};padding:40px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;background:${WHITE};border:1px solid ${LINE};border-radius:14px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:540px;">
+
           <tr>
-            <td style="padding:30px 32px 0;">
-              <div style="font-size:15px;font-weight:600;letter-spacing:-0.03em;color:${INK};">shell<span style="color:${MUTED};">.online</span></div>
+            <td style="padding:0 4px 26px;">
+              <span style="font-size:15px;font-weight:600;letter-spacing:-0.03em;color:${INK};">shell<span style="color:${MUTED};">.online</span></span>
             </td>
           </tr>
+
           <tr>
-            <td style="padding:22px 32px 0;">
-              <h1 style="margin:0;font-size:23px;line-height:1.25;font-weight:500;letter-spacing:-0.035em;color:${INK};">You have been invited to ${organization}.</h1>
-              <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:${MUTED};">
-                ${inviter} invited you to join <strong style="color:${INK};font-weight:500;">${organization}</strong> on shell.online, where the team shares live terminal sessions and the agents running in them.
+            <td style="padding:34px 34px 0;background:#ffffff;border:1px solid ${LINE};border-top-left-radius:12px;border-top-right-radius:12px;">
+              <h1 style="margin:0;font-size:27px;line-height:1.15;font-weight:500;letter-spacing:-0.04em;color:${INK};">Join ${organization}.</h1>
+              <p style="margin:16px 0 0;font-size:15px;line-height:1.62;color:${QUIET};">
+                ${inviter} invited you to their team on shell.online, where terminal sessions and the agents running in them are shared as browser links.
               </p>
             </td>
           </tr>
+
           <tr>
-            <td style="padding:26px 32px 0;">
+            <td style="padding:28px 34px 0;background:#ffffff;border-left:1px solid ${LINE};border-right:1px solid ${LINE};">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="border-radius:10px;background:${BLUE};">
-                    <a href="${url}" style="display:inline-block;padding:13px 30px;font-size:15px;font-weight:500;color:#ffffff;text-decoration:none;border-radius:10px;">Join</a>
+                  <td style="border-radius:10px;background:${INK_BLOCK};border:1px solid ${INK_BORDER};">
+                    <a href="${url}" style="display:inline-block;padding:15px 26px;font-size:14px;font-weight:540;color:${ON_INK};text-decoration:none;border-radius:10px;"><span style="color:${ACID};font-family:${MONO};">&rsaquo;</span>&nbsp;&nbsp;Join ${organization}</a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
+
           <tr>
-            <td style="padding:22px 32px 0;">
-              <p style="margin:0;font-size:13px;line-height:1.6;color:${MUTED};">
-                If the button does not work, paste this into your browser:
+            <td style="padding:24px 34px 30px;background:#ffffff;border-left:1px solid ${LINE};border-right:1px solid ${LINE};border-bottom:1px solid ${LINE};border-bottom-left-radius:12px;border-bottom-right-radius:12px;">
+              <p style="margin:0;padding-top:22px;border-top:1px solid ${LINE};font-size:12.5px;line-height:1.6;color:${MUTED};">
+                Or paste this into your browser:
               </p>
-              <p style="margin:6px 0 0;font-size:13px;line-height:1.5;word-break:break-all;">
-                <a href="${url}" style="color:${BLUE};text-decoration:underline;">${url}</a>
+              <p style="margin:7px 0 0;font-size:12.5px;line-height:1.5;word-break:break-all;font-family:${MONO};">
+                <a href="${url}" style="color:${QUIET};text-decoration:underline;">${url}</a>
               </p>
             </td>
           </tr>
+
           <tr>
-            <td style="padding:22px 32px 30px;">
-              <p style="margin:0;padding-top:18px;border-top:1px solid ${LINE};font-size:12px;line-height:1.6;color:${MUTED};">
-                ${escape(expiry)} If you were not expecting this, you can ignore it — nothing happens until you open the link.
+            <td style="padding:22px 4px 0;">
+              <p style="margin:0;font-size:12px;line-height:1.65;color:${MUTED};">
+                ${escape(expiry)} If you were not expecting this, ignore it. Nothing happens until you open the link.
               </p>
             </td>
           </tr>
+
         </table>
       </td>
     </tr>
@@ -275,12 +311,13 @@ export function invitationMessage(invitation: Invitation, now = Date.now()): Mes
 </html>`;
 
   const text = [
-    `${invitation.inviterName} invited you to join ${invitation.organizationName} on shell.online.`,
+    `${invitation.inviterName} invited you to join ${invitation.organizationName} on shell.online,`,
+    "where terminal sessions and the agents running in them are shared as browser links.",
     "",
     "Join:",
     invitation.joinUrl,
     "",
-    `${expiry} If you were not expecting this, you can ignore it - nothing happens until you open the link.`,
+    `${expiry} If you were not expecting this, ignore it. Nothing happens until you open the link.`,
   ].join("\n");
 
   return { to: invitation.to, subject, html, text };
