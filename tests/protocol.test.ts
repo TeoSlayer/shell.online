@@ -5,6 +5,7 @@ import {
   encodeFrame,
   encodeLatencyProbe,
   encodeResize,
+  isSnapshotOpcode,
   Opcode,
 } from "../shared/protocol";
 
@@ -25,6 +26,13 @@ describe("terminal wire protocol", () => {
   it("reserves a recovery snapshot opcode distinct from targeted snapshots", () => {
     expect(Opcode.BroadcastSnapshot).toBe(0x08);
     expect(Opcode.BroadcastSnapshot).not.toBe(Opcode.Snapshot);
+  });
+
+  it("treats targeted, final, and recovery frames as full snapshots", () => {
+    expect(isSnapshotOpcode(Opcode.Snapshot)).toBe(true);
+    expect(isSnapshotOpcode(Opcode.FinalSnapshot)).toBe(true);
+    expect(isSnapshotOpcode(Opcode.BroadcastSnapshot)).toBe(true);
+    expect(isSnapshotOpcode(Opcode.Output)).toBe(false);
   });
 
   it("rejects malformed resize messages", () => {

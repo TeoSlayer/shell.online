@@ -17,11 +17,29 @@ func listenLocalControl(id string) (net.Listener, error) {
 		return nil, err
 	}
 	path := localSessionSocketPath(directory, id)
-	_ = os.Remove(path)
 	listener, err := net.Listen("unix", path)
+	if err == nil {
+		return secureLocalControlSocket(path, listener)
+	}
+
+	// A socket left by an interrupted process is safe to replace, but never
+	// unlink a live process's control channel. A concurrent second launch will
+	// either connect here or lose the retrying bind below without clobbering it.
+	if connection, dialError := net.DialTimeout("unix", path, 150*time.Millisecond); dialError == nil {
+		_ = connection.Close()
+		return nil, fmt.Errorf("local control channel is already active")
+	}
+	if removeError := os.Remove(path); removeError != nil && !os.IsNotExist(removeError) {
+		return nil, removeError
+	}
+	listener, err = net.Listen("unix", path)
 	if err != nil {
 		return nil, err
 	}
+	return secureLocalControlSocket(path, listener)
+}
+
+func secureLocalControlSocket(path string, listener net.Listener) (net.Listener, error) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		_ = listener.Close()
 		_ = os.Remove(path)

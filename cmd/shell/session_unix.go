@@ -49,13 +49,35 @@ func runSharedProcess(
 	commandEnvironment []string,
 	stdout io.Writer,
 	stderr io.Writer,
+	onConnected func(),
 	onStarted func(),
 	control localSessionControl,
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
 	relayContext, cancelRelay := context.WithCancel(context.Background())
-	connection, err := relay.Dial(relayContext, session.WebSocketURL, session.HostToken)
+	type dialResult struct {
+		connection *relay.Connection
+		err        error
+	}
+	dialed := make(chan dialResult, 1)
+	go func() {
+		connection, err := relay.Dial(relayContext, session.WebSocketURL, session.HostToken)
+		dialed <- dialResult{connection: connection, err: err}
+	}()
+	var connection *relay.Connection
+	var err error
+	select {
+	case result := <-dialed:
+		connection, err = result.connection, result.err
+	case <-ctx.Done():
+		cancelRelay()
+		result := <-dialed
+		if result.connection != nil {
+			result.connection.Close()
+		}
+		return 1, fmt.Errorf("connect relay: %w", ctx.Err())
+	}
 	if err != nil {
 		cancelRelay()
 		return 1, fmt.Errorf("connect relay: %w", err)
@@ -64,6 +86,9 @@ func runSharedProcess(
 		cancelRelay()
 		connection.Close()
 	}()
+	if onConnected != nil {
+		onConnected()
+	}
 
 	outputRing := ringbuffer.New(snapshotBytes)
 

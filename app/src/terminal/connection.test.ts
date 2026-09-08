@@ -126,6 +126,16 @@ describe("plaintext session", () => {
     ]);
   });
 
+  it("treats a recovery broadcast as a full-screen snapshot", async () => {
+    const { connection, recorded } = connect();
+    await connection.start();
+    FakeSocket.last!.opened();
+    FakeSocket.last!.binary(encodeFrame(Opcode.BroadcastSnapshot, new TextEncoder().encode("recovered")));
+    await waitFor(() => recorded.writes.length === 1, "the recovery snapshot");
+
+    expect(recorded.writes).toEqual([{ text: "recovered", reset: true }]);
+  });
+
   it("sends typed input as an Input frame", async () => {
     const { connection } = connect();
     await connection.start();
@@ -211,6 +221,19 @@ describe("session lifecycle", () => {
 
     expect(recorded.statuses.at(-1)?.status).toBe("missing");
     expect(FakeSocket.created).toBe(1);
+  });
+
+  it("reports a full session and retries until a viewer slot opens", async () => {
+    const { connection, recorded } = connect();
+    await connection.start();
+    FakeSocket.last!.closedWith(4005);
+
+    expect(recorded.statuses.at(-1)?.status).toBe("full");
+    expect(recorded.statuses.at(-1)?.detail).toContain("16 viewers");
+
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(FakeSocket.created).toBe(2);
+    expect(recorded.statuses.at(-1)?.status).toBe("full");
   });
 
   it("reports exit from a control message", async () => {

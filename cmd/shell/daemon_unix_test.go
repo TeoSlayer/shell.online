@@ -16,6 +16,9 @@ import (
 // lock, and whether the socket it leaves behind blocks the next one.
 func buildShell(t *testing.T) string {
 	t.Helper()
+	if os.Getenv("SHELL_ONLINE_QEMU") == "1" {
+		t.Skip("a cross-compiled child cannot be executed outside the user-mode emulator")
+	}
 	binary := filepath.Join(t.TempDir(), "shell")
 	build := exec.Command("go", "build", "-o", binary, "shell.online/cmd/shell")
 	build.Stderr = os.Stderr

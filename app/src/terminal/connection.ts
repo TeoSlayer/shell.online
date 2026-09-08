@@ -1,10 +1,11 @@
-import { Opcode, encodeFrame, encodeResize } from "./protocol";
+import { Opcode, encodeFrame, encodeResize, isSnapshotOpcode } from "./protocol";
 import { BrowserFrameCipher, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
 
 export type ConnectionStatus =
   | "connecting"
   | "needs-password"
   | "connected"
+  | "full"
   | "disconnected"
   | "ended"
   | "missing"
@@ -39,6 +40,7 @@ const MIN_ROWS = 4;
 const CLOSE_ENDED = 4000;
 const CLOSE_MISSING = 4004;
 const CLOSE_DECRYPT_FAILED = 4003;
+const CLOSE_SESSION_FULL = 4005;
 
 /**
  * One viewer connection to one session.
@@ -57,6 +59,7 @@ export class TerminalConnection {
   private stopped = false;
   private readOnly = false;
   private awaitingPassword = false;
+  private waitingForCapacity = false;
   private lastSize: { cols: number; rows: number } | null = null;
 
   constructor(private readonly options: ConnectionOptions) {
@@ -150,7 +153,7 @@ export class TerminalConnection {
 
   private open(): void {
     if (this.stopped) return;
-    this.options.events.onStatus("connecting");
+    this.options.events.onStatus(this.waitingForCapacity ? "full" : "connecting");
 
     const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
     const socket = create(this.options.url);
@@ -158,6 +161,7 @@ export class TerminalConnection {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
+      this.waitingForCapacity = false;
       this.retryAttempt = 0;
       this.options.events.onStatus("connected");
       /* The PTY size follows this viewer, so re-assert it on every connect. */
@@ -189,6 +193,15 @@ export class TerminalConnection {
       }
       if (event.code === CLOSE_ENDED) {
         this.options.events.onStatus("ended");
+        return;
+      }
+      if (event.code === CLOSE_SESSION_FULL) {
+        this.waitingForCapacity = true;
+        this.options.events.onStatus(
+          "full",
+          "16 viewers are connected. You will join automatically when a slot opens.",
+        );
+        this.scheduleRetry();
         return;
       }
       if (this.awaitingPassword) return;
@@ -226,7 +239,7 @@ export class TerminalConnection {
     if (frame.byteLength === 0) return;
 
     const opcode = frame[0];
-    if (opcode === Opcode.Snapshot || opcode === Opcode.FinalSnapshot) {
+    if (isSnapshotOpcode(opcode)) {
       this.options.events.onData(frame.subarray(1), true);
     } else if (opcode === Opcode.Output) {
       this.options.events.onData(frame.subarray(1), false);

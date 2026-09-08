@@ -34,6 +34,10 @@ func openBackgroundReadyFile() (backgroundReadyWriter, error) {
 		_ = file.Close()
 		return nil, fmt.Errorf("invalid background readiness channel")
 	}
+	// ExtraFiles intentionally clears close-on-exec so this background child can
+	// inherit the launcher's pipe. Restore it immediately: the wrapped process
+	// must never inherit shell.online's private readiness descriptor as fd 3.
+	syscall.CloseOnExec(fileDescriptor)
 	return file, nil
 }
 

@@ -131,16 +131,6 @@ func processCloseDeadline(value string, parsedDeadline, processStart time.Time) 
 	return parsedDeadline
 }
 
-// boundedCloseDeadline prevents the local process from outliving a deadline
-// the relay has already declared. A zero requested deadline still means the
-// task itself controls its lifetime.
-func boundedCloseDeadline(requested, sessionExpiry time.Time) time.Time {
-	if requested.IsZero() || sessionExpiry.IsZero() || !sessionExpiry.Before(requested) {
-		return requested
-	}
-	return sessionExpiry
-}
-
 func parseRelativeDeadline(value string, now time.Time) (time.Time, bool) {
 	remainder := strings.ReplaceAll(strings.TrimSpace(value), " ", "")
 	if remainder == "" {

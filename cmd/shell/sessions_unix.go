@@ -43,6 +43,13 @@ func startLocalSession(record localSessionRecord) (localSessionControl, error) {
 	if err != nil {
 		return nil, err
 	}
+	if response, pingError := sendLocalControl(record.ID, "ping"); pingError == nil && response.OK {
+		return nil, fmt.Errorf(
+			"session is already running locally (pid %d); stop it with shell kill %s",
+			response.PID,
+			shortSessionID(record.ID),
+		)
+	}
 	listener, err := listenLocalControl(record.ID)
 	if err != nil {
 		return nil, fmt.Errorf("listen on local control channel: %w", err)

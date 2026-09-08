@@ -4,17 +4,68 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"shell.online/internal/api"
 	"shell.online/internal/protocol"
 	"shell.online/internal/ringbuffer"
 )
+
+func TestSharedProcessCancelsHangingRelayDialBeforeAnnouncing(t *testing.T) {
+	requestStarted := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(requestStarted)
+		<-request.Context().Done()
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan error, 1)
+	announced := make(chan struct{}, 1)
+	go func() {
+		_, err := runSharedProcess(
+			ctx,
+			api.Session{WebSocketURL: "ws" + strings.TrimPrefix(server.URL, "http"), HostToken: "test-token"},
+			[]string{"/bin/sh", "-c", "sleep 1"},
+			nil,
+			io.Discard,
+			io.Discard,
+			func() { announced <- struct{}{} },
+			nil,
+			nil,
+		)
+		result <- err
+	}()
+
+	select {
+	case <-requestStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("relay dial never started")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		if err == nil || !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("cancelled relay dial returned %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("relay dial ignored cancellation")
+	}
+	select {
+	case <-announced:
+		t.Fatal("share was announced before the relay connected")
+	default:
+	}
+}
 
 func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 	environment := terminalEnvironment([]string{
@@ -225,9 +276,10 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 		// The compatibility request is acknowledged without deforming the PTY.
 	}
-	if err := connection.Close(); err != nil {
-		t.Fatal(err)
-	}
+	// The observable contract is the server-side detach below. Some emulated
+	// Unix kernels report EBADF when both ends finish the socket concurrently,
+	// even though the descriptor is already closed as requested.
+	_ = connection.Close()
 	select {
 	case attached := <-attachChanges:
 		if attached {

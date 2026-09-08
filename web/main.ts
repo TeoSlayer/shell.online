@@ -14,9 +14,14 @@ import {
   decodeLatencyProbe,
   encodeFrame,
   encodeLatencyProbe,
+  isSnapshotOpcode,
   Opcode,
 } from "../shared/protocol";
 import { readOnlyFromControlMessage } from "../shared/session-access";
+import {
+  isSessionFullClose,
+  MAX_SESSION_VIEWERS,
+} from "../shared/session-capacity";
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import {
   formatGitHubStarCount,
@@ -1028,7 +1033,7 @@ function renderTerminal(sessionId: string): void {
           <span id="session-label">terminal</span>
           <span id="session-access" class="session-access" hidden>View only</span>
           <span id="session-encryption" class="session-access encryption" hidden>End-to-end encrypted</span>
-          <span id="session-status" class="status offline"><i></i><b>Offline</b></span>
+          <span id="session-status" class="status offline" role="status" aria-live="polite"><i></i><b>Offline</b></span>
           <span id="typing-status" class="typing-status" hidden></span>
         </div>
         <div class="session-actions">
@@ -1265,6 +1270,7 @@ function renderTerminal(sessionId: string): void {
   let encryptedSession = false;
   let persistentSession = false;
   let waitingForEncryptionKey = false;
+  let waitingForCapacity = false;
   let outgoingFrames = Promise.resolve();
   let incomingFrames = Promise.resolve();
 
@@ -1316,9 +1322,12 @@ function renderTerminal(sessionId: string): void {
     encryptedSession = encrypted;
     encryptionBadge.hidden = false;
     encryptionBadge.classList.toggle("unencrypted", !encrypted);
-    encryptionBadge.textContent = encrypted
+    const fullLabel = encrypted
       ? persistentSession ? "Persistent E2EE" : "End-to-end encrypted"
       : "Transport only";
+    encryptionBadge.textContent = fullLabel;
+    encryptionBadge.setAttribute("aria-label", fullLabel);
+    encryptionBadge.dataset.compactLabel = encrypted ? persistentSession ? "Persistent" : "E2EE" : "Transport";
     renderAccessDescription();
     if (encrypted && !frameCipher && !encryptionDescriptor) {
       showEncryptionGate("This E2EE link is missing its decryption fragment. Ask the sender for the complete URL, including everything after #.", false);
@@ -1505,12 +1514,17 @@ function renderTerminal(sessionId: string): void {
 
   const renderConnectionStatus = (): void => {
     const online = lastStatus === "connected" && latencyMilliseconds !== null;
+    const waitingForSlot = lastStatus === "full";
     statusElement.className = `status ${online ? "connected" : "offline"} state-${lastStatus}`;
     statusElement.setAttribute(
       "aria-label",
-      online ? `${latencyMilliseconds} millisecond round-trip latency to the shared machine` : "Offline",
+      online
+        ? `${latencyMilliseconds} millisecond round-trip latency to the shared machine`
+        : waitingForSlot
+          ? `Session full; waiting for one of ${MAX_SESSION_VIEWERS} viewer slots`
+          : "Offline",
     );
-    if (statusText) statusText.textContent = online ? `${latencyMilliseconds} ms` : "Offline";
+    if (statusText) statusText.textContent = online ? `${latencyMilliseconds} ms` : waitingForSlot ? "Full · waiting" : "Offline";
     renderLatencyGraph();
   };
 
@@ -1679,7 +1693,22 @@ function renderTerminal(sessionId: string): void {
     setStatus("exited");
   };
 
-  const retryOrShowMissing = async (): Promise<void> => {
+  const showSessionFull = (): void => {
+    if (!waitingForCapacity) {
+      waitingForCapacity = true;
+      sessionPage.classList.add("session-full");
+      terminal.options.disableStdin = true;
+      terminal.blur();
+      helperTextarea?.blur();
+      terminalWrites.enqueue(textEncoder.encode(
+        "\x1b[2J\x1b[H\r\n  \x1b[1;37mSession is full.\x1b[0m" +
+        `\r\n  \x1b[90m${MAX_SESSION_VIEWERS} viewers are connected. You will join automatically when a slot opens.\x1b[0m\r\n`,
+      ), true);
+    }
+    setStatus("full");
+  };
+
+  const retryOrShowMissing = async (retryStatus = "disconnected"): Promise<void> => {
     try {
       const response = await fetch(`/api/sessions/${sessionId}`, {
         cache: "no-store",
@@ -1694,7 +1723,7 @@ function renderTerminal(sessionId: string): void {
     }
 
     if (stopped) return;
-    setStatus("disconnected");
+    setStatus(retryStatus);
     const delay = Math.min(10_000, 500 * 2 ** retryAttempt) + Math.random() * 250;
     retryAttempt += 1;
     retryTimer = window.setTimeout(connect, delay);
@@ -1702,16 +1731,15 @@ function renderTerminal(sessionId: string): void {
 
   const connect = (): void => {
     if (stopped) return;
-    setStatus("connecting");
+    setStatus(waitingForCapacity ? "full" : "connecting");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     socket = new WebSocket(`${protocol}//${window.location.host}/api/sessions/${sessionId}/ws`);
     socket.binaryType = "arraybuffer";
 
     socket.addEventListener("open", () => {
-      retryAttempt = 0;
       terminalInput.flush();
       scheduleFit();
-      if (!compactSessionQuery.matches && !readOnly) terminal.focus();
+      if (!waitingForCapacity && !compactSessionQuery.matches && !readOnly) terminal.focus();
     });
 
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
@@ -1736,7 +1764,7 @@ function renderTerminal(sessionId: string): void {
         }
         if (frame.byteLength === 0) return;
         if (receiveLatencyResponse(frame)) return;
-        if (frame[0] === Opcode.Snapshot || frame[0] === Opcode.FinalSnapshot) {
+        if (isSnapshotOpcode(frame[0])) {
           terminalWrites.enqueue(frame.subarray(1), true);
           snapshotRequestPending = false;
         } else if (frame[0] === Opcode.Output) {
@@ -1764,6 +1792,11 @@ function renderTerminal(sessionId: string): void {
       }
       if (event.code === 4000) {
         showEndedSession();
+        return;
+      }
+      if (isSessionFullClose(event.code)) {
+        showSessionFull();
+        void retryOrShowMissing("full");
         return;
       }
       if (waitingForEncryptionKey || stopped || lastStatus === "exited") return;
@@ -1798,12 +1831,18 @@ function renderTerminal(sessionId: string): void {
       return;
     }
 
+    // Any server message means this retry was admitted. The next snapshot
+    // replaces the capacity notice with the live terminal.
+    retryAttempt = 0;
+    waitingForCapacity = false;
+    sessionPage.classList.remove("session-full");
+
     const messageReadOnly = readOnlyFromControlMessage(message);
     if (messageReadOnly !== null) applyReadOnly(messageReadOnly);
     if (typeof message.encrypted === "boolean") applyEncryptionMode(message.encrypted);
     if (typeof message.persistent === "boolean") {
       persistentSession = message.persistent;
-      if (encryptedSession) encryptionBadge.textContent = persistentSession ? "Persistent E2EE" : "End-to-end encrypted";
+      if (encryptedSession) applyEncryptionMode(true);
     }
 
     if (message.type === "access_denied" && message.reason === "read_only") {

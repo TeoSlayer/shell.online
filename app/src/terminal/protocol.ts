@@ -20,6 +20,12 @@ export const enum Opcode {
 
 export const MAX_INPUT_CHUNK = 16 * 1024;
 
+export function isSnapshotOpcode(opcode: number): boolean {
+  return opcode === Opcode.Snapshot ||
+    opcode === Opcode.FinalSnapshot ||
+    opcode === Opcode.BroadcastSnapshot;
+}
+
 export function encodeFrame(opcode: Opcode, payload: Uint8Array): Uint8Array<ArrayBuffer> {
   const frame = new Uint8Array(payload.byteLength + 1);
   frame[0] = opcode;

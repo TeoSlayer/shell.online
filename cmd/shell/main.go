@@ -176,7 +176,6 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 
 	processStartedAt := time.Now()
 	closeDeadline := processCloseDeadline(autoClose.value, parsedCloseDeadline, processStartedAt)
-	closeDeadline = boundedCloseDeadline(closeDeadline, session.ExpiresAt)
 	if !closeDeadline.IsZero() && !closeDeadline.After(processStartedAt) {
 		err = fmt.Errorf("auto-close deadline elapsed before the process could start")
 		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
@@ -230,48 +229,17 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	// Publish to the linked account, if this machine has one. Nothing below is
 	// fatal: sharing a terminal must not depend on the accounts service.
 	link := openSessionLink(signalContext, stderr)
-	link.Register(signalContext, account.SessionInput{
-		ID:         session.ID,
-		ShareURL:   session.ShareURL,
-		Command:    displayCommand(launch.DisplayArguments),
-		ReadOnly:   session.ReadOnly,
-		Encrypted:  session.Encrypted,
-		Persistent: session.Persistent,
-		StartedAt:  processStartedAt.UnixMilli(),
-	})
-
-	if !isBackgroundChild() && *jsonOutput {
-		event := map[string]any{
-			"type":       "session",
-			"session_id": session.ID,
-			"share_url":  session.ShareURL,
-			"read_only":  session.ReadOnly,
-			"encrypted":  session.Encrypted,
-			"persistent": session.Persistent,
-			"auto_close": "task",
-			"expires_at": session.ExpiresAt.Format(time.RFC3339),
-			"background": false,
-		}
-		if password != "" {
-			event["e2ee_password"] = password
-		}
-		if closesAt != nil {
-			event["auto_close"] = "deadline"
-			event["closes_at"] = closesAt.Format(time.RFC3339)
-		}
-		encoded, _ := json.Marshal(event)
-		fmt.Fprintf(stderr, "%s\n", encoded)
-	} else if !isBackgroundChild() {
-		printSessionCard(stderr, backgroundLaunchResult{
-			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
-			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
-			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,
-		}, false)
-	}
-
-	var onStarted func()
-	if isBackgroundChild() {
-		onStarted = func() {
+	announceSession := func() {
+		link.Register(signalContext, account.SessionInput{
+			ID:         session.ID,
+			ShareURL:   session.ShareURL,
+			Command:    displayCommand(launch.DisplayArguments),
+			ReadOnly:   session.ReadOnly,
+			Encrypted:  session.Encrypted,
+			Persistent: session.Persistent,
+			StartedAt:  processStartedAt.UnixMilli(),
+		})
+		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
 				OK:         true,
 				ID:         session.ID,
@@ -284,7 +252,42 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				ClosesAt:   closesAt,
 				Handoff:    launch.Handoff,
 			})
+			return
 		}
+		if *jsonOutput {
+			event := map[string]any{
+				"type":       "session",
+				"session_id": session.ID,
+				"share_url":  session.ShareURL,
+				"read_only":  session.ReadOnly,
+				"encrypted":  session.Encrypted,
+				"persistent": session.Persistent,
+				"auto_close": "task",
+				"expires_at": session.ExpiresAt.Format(time.RFC3339),
+				"background": false,
+			}
+			if password != "" {
+				event["e2ee_password"] = password
+			}
+			if closesAt != nil {
+				event["auto_close"] = "deadline"
+				event["closes_at"] = closesAt.Format(time.RFC3339)
+			}
+			encoded, _ := json.Marshal(event)
+			fmt.Fprintf(stderr, "%s\n", encoded)
+			return
+		}
+		printSessionCard(stderr, backgroundLaunchResult{
+			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
+			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
+			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,
+		}, false)
+	}
+	var onConnected, onStarted func()
+	if isBackgroundChild() {
+		onStarted = announceSession
+	} else {
+		onConnected = announceSession
 	}
 	exitCode, err := runSharedProcess(
 		processContext,
@@ -293,6 +296,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		launch.Environment,
 		stdout,
 		stderr,
+		onConnected,
 		onStarted,
 		control,
 	)

@@ -254,6 +254,13 @@ export function TerminalPane({
           Reconnecting
         </div>
       )}
+
+      {status === "full" && (
+        <div className="pane-banner">
+          <ArrowClockwise size={14} />
+          {detail || "Session full. Waiting for a viewer slot."}
+        </div>
+      )}
     </div>
   );
 }

@@ -134,6 +134,11 @@ for (const page of ["docs", "cli", "mobile", "reliability", "security", "e2ee", 
 }
 check(landingSource.includes('import documentationContent from "../docs/content.json"'), "Website must render from the repository documentation source");
 check(workerSource.includes('url.pathname === "/api/docs/releases"'), "Dynamic documentation release endpoint is missing");
+check(
+  workerSource.includes('url.searchParams.get("go-get") === "1"') &&
+    workerSource.includes('name="go-import" content="shell.online git https://github.com/TeoSlayer/shell.online"'),
+  "The canonical domain must publish Go module discovery metadata",
+);
 check(workerSource.includes("raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json"), "Tagged documentation source endpoint is missing");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");

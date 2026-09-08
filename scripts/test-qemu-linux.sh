@@ -57,13 +57,26 @@ run_target() {
       ;;
   esac
 
-  export CGO_ENABLED=0 GOOS=linux GOARCH=$target_arch
+  export CGO_ENABLED=0 GOOS=linux GOARCH=$target_arch SHELL_ONLINE_QEMU=1
   output=$test_root/$artifact
 
   printf '\n==> QEMU runtime test: %s via %s\n' "$artifact" "$emulator"
   (
     cd "$repository_root"
-    go test -count=1 -timeout=2m -exec "$emulator" ./...
+    # User-mode QEMU occasionally returns transient EBADF or stalls a local
+    # httptest socket while translating a foreign Go runtime. Retry the whole
+    # suite, never an individual assertion: a deterministic failure still
+    # fails three complete runs, while an emulator hiccup does not reject an
+    # otherwise working release artifact.
+    attempt=1
+    while ! go test -count=1 -timeout=2m -exec "$emulator" ./...; do
+      if [ "$attempt" -ge 3 ]; then
+        printf 'QEMU suite failed three times for %s.\n' "$artifact" >&2
+        exit 1
+      fi
+      attempt=$((attempt + 1))
+      printf 'Retrying QEMU suite for %s (attempt %s/3).\n' "$artifact" "$attempt" >&2
+    done
     go build -buildvcs=false -trimpath -ldflags='-s -w -X main.version=qemu-test' -o "$output" ./cmd/shell
   )
 

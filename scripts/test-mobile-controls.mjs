@@ -14,4 +14,11 @@ if (!mobileRule.includes('font: 600 12px/1 "Uncut Sans", sans-serif')) {
   throw new Error("Mobile terminal key labels must retain their legible size");
 }
 
-console.log("Mobile terminal navigation touch targets passed.");
+if (stylesheet.includes(".session-access.encryption { max-width: 30vw")) {
+  throw new Error("Mobile encryption labels must not be clipped to 30vw");
+}
+if (!stylesheet.includes("content: attr(data-compact-label)")) {
+  throw new Error("Mobile encryption labels must expose a deliberate compact label");
+}
+
+console.log("Mobile terminal navigation and compact badges passed.");

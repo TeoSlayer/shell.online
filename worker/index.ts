@@ -13,6 +13,10 @@ import { isStatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
 import { viewerFrameAction } from "../shared/session-access";
+import {
+  MAX_SESSION_VIEWERS,
+  viewerAdmission,
+} from "../shared/session-capacity";
 import { terminalGridForDevices } from "../shared/terminal-grid";
 import { persistentSessionID } from "../shared/persistent-session";
 import {
@@ -44,7 +48,6 @@ import {
 
 export { StatsStore };
 
-const MAX_VIEWERS = 16;
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
@@ -151,6 +154,15 @@ interface InitializeSessionBody {
 export default {
   async fetch(request, env, executionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // Let the Go tool resolve `go install shell.online/cmd/shell@latest`
+    // without redirecting people away from the canonical shell.online URL.
+    if (url.searchParams.get("go-get") === "1") {
+      return new Response(
+        '<!doctype html><meta name="go-import" content="shell.online git https://github.com/TeoSlayer/shell.online">\n',
+        { headers: { "Content-Type": "text/html; charset=utf-8" } },
+      );
+    }
 
     if (url.pathname === "/api/health" && request.method === "GET") {
       return json({ ok: true, service: "shell.online", version: RELEASE_VERSION });
@@ -857,11 +869,20 @@ export class TerminalSession extends DurableObject<Env> {
       role = "host";
     }
 
-    if (
-      role === "viewer" &&
-      this.state.getWebSockets("viewer").filter((socket) => socket.readyState === 1).length >= MAX_VIEWERS
-    ) {
-      return json({ error: "session is full" }, 429);
+    const activeViewerCount = role === "viewer"
+      ? this.state.getWebSockets("viewer").filter((socket) => socket.readyState === 1).length
+      : 0;
+    const admission = viewerAdmission(activeViewerCount);
+    if (role === "viewer" && !admission.accepted) {
+      // Browser WebSockets hide an upgrade rejection's status and body. Finish
+      // the upgrade, then close with a code the viewer can explain and retry.
+      const pair = new WebSocketPair();
+      const client = pair[0];
+      const server = pair[1];
+      server.serializeAttachment({ role: "viewer", id: 0, ended: true } satisfies SocketAttachment);
+      this.state.acceptWebSocket(server, ["rejected"]);
+      safeClose(server, admission.closeCode, admission.reason);
+      return new Response(null, { status: 101, webSocket: client });
     }
 
     if (role === "host") {
@@ -1101,12 +1122,9 @@ export class TerminalSession extends DurableObject<Env> {
           safeClose(socket, 4009, "broadcast snapshot too large");
           return;
         }
-        {
-          const snapshot = new Uint8Array(frame.byteLength);
-          snapshot[0] = Opcode.Snapshot;
-          snapshot.set(frame.subarray(1), 1);
-          this.broadcastBinary(snapshot, "viewer");
-        }
+        // Preserve the opcode: encrypted frames authenticate it as associated
+        // data, and rewriting it makes a valid recovery snapshot undecryptable.
+        this.broadcastBinary(frame, "viewer");
         return;
 
       case Opcode.Pong:
@@ -1431,10 +1449,10 @@ export class TerminalSession extends DurableObject<Env> {
         .map((socket) => readAttachment(socket)?.guestNumber)
         .filter((value): value is number => typeof value === "number"),
     );
-    for (let number = 1; number <= MAX_VIEWERS; number += 1) {
+    for (let number = 1; number <= MAX_SESSION_VIEWERS; number += 1) {
       if (!used.has(number)) return number;
     }
-    return MAX_VIEWERS;
+    return MAX_SESSION_VIEWERS;
   }
 
   private claimInputLease(

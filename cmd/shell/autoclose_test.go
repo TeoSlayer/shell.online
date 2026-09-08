@@ -78,22 +78,6 @@ func TestProcessCloseDeadlinePreservesAbsoluteTime(t *testing.T) {
 	}
 }
 
-func TestBoundedCloseDeadlineUsesRelayExpiry(t *testing.T) {
-	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
-	sessionExpiry := now.Add(12 * time.Hour)
-	requested := now.Add(30 * 24 * time.Hour)
-
-	if got := boundedCloseDeadline(requested, sessionExpiry); !got.Equal(sessionExpiry) {
-		t.Fatalf("boundedCloseDeadline() = %v, want %v", got, sessionExpiry)
-	}
-	if got := boundedCloseDeadline(now.Add(time.Hour), sessionExpiry); !got.Equal(now.Add(time.Hour)) {
-		t.Fatalf("boundedCloseDeadline() shortened a valid deadline to %v", got)
-	}
-	if got := boundedCloseDeadline(time.Time{}, sessionExpiry); !got.IsZero() {
-		t.Fatalf("boundedCloseDeadline() changed task-bound lifetime to %v", got)
-	}
-}
-
 func TestNormalizeAutoCloseArguments(t *testing.T) {
 	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
 	tests := []struct {

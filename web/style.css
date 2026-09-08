@@ -945,7 +945,15 @@ a {
   .encryption-gate { padding: 14px; }
   .encryption-panel { padding: 25px 21px; border-radius: 15px; }
   .encryption-panel h2 { font-size: 23px; }
-  .session-access.encryption { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; }
+  .session-access.encryption {
+    max-width: none;
+    overflow: visible;
+    font-size: 0;
+  }
+  .session-access.encryption::after {
+    content: attr(data-compact-label);
+    font-size: 9px;
+  }
 }
 
 #session-label {
@@ -994,6 +1002,15 @@ a {
 
 .status.offline {
   color: #7e899d;
+}
+
+.status.state-full {
+  color: #d8b879;
+}
+
+.status.state-full i {
+  background: #d7a84d;
+  box-shadow: 0 0 0 3px rgb(215 168 77 / 14%);
 }
 
 .typing-status {
@@ -1615,6 +1632,15 @@ a {
 
 .session-page.theme-light .status.offline {
   color: #6d778a;
+}
+
+.session-page.theme-light .status.state-full {
+  color: #8a641b;
+}
+
+.session-page.theme-light .status.state-full i {
+  background: #b9811c;
+  box-shadow: 0 0 0 3px rgb(185 129 28 / 12%);
 }
 
 .session-page.theme-light .status i {

@@ -4,6 +4,20 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Publish Go module discovery metadata so `go install shell.online/cmd/shell@latest` resolves from the canonical domain.
+
+### Fixed
+
+- Keep the background startup pipe private to shell.online so wrapped commands can safely use file descriptor 3.
+- Make foreground relay connection attempts interruptible and print share details only after the relay is connected.
+- Honor long `--auto-close` deadlines instead of silently reducing them to the relay's rolling 12-hour lease.
+- Refuse a second local owner for an already-running persistent session without replacing its control socket or record.
+- Preserve authenticated E2EE recovery snapshot opcodes during relay backpressure so large output cannot eject viewers to the password screen.
+- Show compact, unclipped encryption badges in narrow mobile headers.
+- Explain when all 16 viewer slots are occupied and keep retrying until a slot opens.
+
 ## [0.10.1] — 2026-09-08
 
 ### Fixed
