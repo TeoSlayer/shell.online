@@ -82,6 +82,8 @@ jobs:
         run: |
           curl -fsSL -o cloud-sql-proxy \
             "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64"
+          echo "e48115261929445f468ae7ae86be199781bafda56837c9f33644892df8d46997  cloud-sql-proxy" \
+            | sha256sum --check --strict
           chmod +x cloud-sql-proxy
           ./cloud-sql-proxy --port 5432 "${{ vars.CLOUD_SQL_INSTANCE }}" &
           for _ in $(seq 1 30); do
@@ -98,6 +100,14 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+      - name: Render deployment configuration
+        run: npm run render:deploy-config
+        working-directory: app
+        env:
+          HYPERDRIVE_ID: ${{ vars.HYPERDRIVE_ID }}
+          FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+
       # Deployed after the schema it expects is in place.
       - name: Deploy the Worker
         uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
@@ -105,7 +115,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: app
-          command: deploy --config wrangler.jsonc
+          command: deploy --config wrangler.deploy.jsonc
 
       - name: Check the deployment answers
         run: |
