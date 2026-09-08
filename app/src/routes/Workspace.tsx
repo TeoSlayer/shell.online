@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PersonChip } from "../components/Avatar";
 import { PersonPicker } from "../components/PersonPicker";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
 import { NewSessionModal } from "../components/NewSessionModal";
+import { SignedInModal } from "../components/SignedInModal";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
@@ -25,6 +26,7 @@ import { publicKey, sealForMembers } from "../lib/keypair";
 import { fetchOrg, shareSessionKeys } from "../lib/api";
 import { adoptOrigin, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
 import { elapsed } from "../lib/time";
+import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 
 const POLL_MS = 4000;
 /* Well inside the service's 15s agent-online window, so the state stays true. */
@@ -67,11 +69,26 @@ export function Workspace() {
   const [killing, setKilling] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
+  /*
+   * `shell login` redirects here with ?linked=1 once the CLI has its code, so
+   * the confirmation lands on the page the terminal's sessions appear on.
+   */
+  const [search, setSearch] = useSearchParams();
+  const [justLinked, setJustLinked] = useState(() => wasJustLinked(search));
   const loadedOnce = useRef(false);
   /* Passwords waiting for their session to appear so they can be shared. */
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
   const sharedWith = useRef(new Map<string, Set<string>>());
+
+  /*
+   * The parameter is dropped as soon as it is read, so a reload or a shared
+   * link does not announce a sign-in that did not just happen.
+   */
+  useEffect(() => {
+    if (!wasJustLinked(search)) return;
+    setSearch(withoutLinkedFlag(search), { replace: true });
+  }, [search, setSearch]);
 
   const load = useCallback(async () => {
     try {
@@ -393,6 +410,8 @@ export function Workspace() {
           onStart={handleStart}
         />
       )}
+
+      {justLinked && <SignedInModal onClose={() => setJustLinked(false)} />}
     </AppShell>
   );
 }

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -44,11 +45,41 @@ func writePage(writer http.ResponseWriter, status int, title, heading, body stri
 	fmt.Fprintf(writer, callbackPage, title, heading, body)
 }
 
+// signedInPath is where a linked browser is sent once the CLI has its code.
+//
+// The sessions page, because that is the thing the person came for: they ran
+// shell login to get their terminals into the app, and the tab they approved
+// in is already there.
+const signedInPath = "/sessions?linked=1"
+
+// successRedirect is where to send the browser after a successful callback, or
+// empty when there is nowhere better than the plain page.
+//
+// A relative or otherwise unparseable web URL yields nothing rather than a
+// broken Location header, and anything but http(s) is refused: this value
+// reaches a browser as somewhere to go, and the CLI should not be a way to
+// open arbitrary schemes.
+func successRedirect(webURL string) string {
+	if webURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(webURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	return strings.TrimRight(parsed.Scheme+"://"+parsed.Host, "/") + signedInPath
+}
+
 // newCallbackHandler serves the single loopback callback for one login.
 //
 // It reports exactly one result on results and ignores anything after, so a
 // refresh or a stray probe cannot resolve the login twice.
-func newCallbackHandler(state string, results chan<- callbackResult) http.Handler {
+//
+// webURL, when usable, is where the browser is sent once the code is in hand.
+// The redirect happens after the result is delivered, so a browser that never
+// follows it still leaves the terminal signed in.
+func newCallbackHandler(state, webURL string, results chan<- callbackResult) http.Handler {
+	onwards := successRedirect(webURL)
 	delivered := false
 	deliver := func(result callbackResult) {
 		if delivered {
@@ -92,9 +123,16 @@ func newCallbackHandler(state string, results chan<- callbackResult) http.Handle
 			return
 		}
 
+		deliver(callbackResult{code: code})
+		if onwards != "" {
+			// 303, because the browser should follow this with a GET and not
+			// re-send anything from the request that got it here.
+			writer.Header().Set("Cache-Control", "no-store")
+			http.Redirect(writer, request, onwards, http.StatusSeeOther)
+			return
+		}
 		writePage(writer, http.StatusOK, "Signed in", "You are signed in.",
 			"Your terminal is linked. You can close this tab and go back to it.")
-		deliver(callbackResult{code: code})
 	})
 }
 
@@ -143,7 +181,7 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 
 	results := make(chan callbackResult, 1)
 	server := &http.Server{
-		Handler:           newCallbackHandler(state, results),
+		Handler:           newCallbackHandler(state, options.WebURL, results),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() { _ = server.Serve(listener) }()

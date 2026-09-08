@@ -493,6 +493,62 @@ button.tab {
   animation: sheet-in 220ms var(--ease);
 }
 
+/*
+ * A confirmation is a sentence and a button, so it takes the width of one
+ * rather than the width the session builder needs.
+ */
+.sheet-slim {
+  width: min(420px, 100%);
+  margin-top: 8vh;
+}
+
+.signed-in {
+  display: flex;
+  padding: 34px 30px 30px;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+
+.signed-in-mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  color: var(--blue);
+  place-items: center;
+}
+
+.signed-in h2 {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+}
+
+.signed-in p {
+  margin: 0;
+  max-width: 32ch;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.signed-in code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.signed-in .btn {
+  margin-top: 4px;
+  min-width: 120px;
+}
+
 .sheet-head {
   display: flex;
   padding: 20px 22px;

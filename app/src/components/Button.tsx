@@ -1,10 +1,12 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "ghost";
   busy?: boolean;
   busyLabel?: string;
   children: ReactNode;
+  /* A plain prop, not forwardRef: React 19 passes it straight through. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Button({

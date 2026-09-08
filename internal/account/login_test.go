@@ -17,7 +17,7 @@ func callbackRequest(query string) *http.Request {
 
 func TestCallbackHandlerAcceptsAMatchingState(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, callbackRequest("code=shc_abc&state=state-123"))
@@ -39,7 +39,7 @@ func TestCallbackHandlerAcceptsAMatchingState(t *testing.T) {
 
 func TestCallbackHandlerRejectsAMismatchedState(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	recorder := httptest.NewRecorder()
 	// This is the check that stops another page's callback completing our login.
@@ -59,7 +59,7 @@ func TestCallbackHandlerRejectsAMismatchedState(t *testing.T) {
 
 func TestCallbackHandlerRejectsAMissingState(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	handler.ServeHTTP(httptest.NewRecorder(), callbackRequest("code=shc_abc"))
 
@@ -70,7 +70,7 @@ func TestCallbackHandlerRejectsAMissingState(t *testing.T) {
 
 func TestCallbackHandlerReportsAnAuthorizationError(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, callbackRequest(
@@ -90,7 +90,7 @@ func TestCallbackHandlerReportsAnAuthorizationError(t *testing.T) {
 
 func TestCallbackHandlerRejectsAMissingCode(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, callbackRequest("state=state-123"))
@@ -106,7 +106,7 @@ func TestCallbackHandlerRejectsAMissingCode(t *testing.T) {
 func TestCallbackHandlerResolvesOnlyOnce(t *testing.T) {
 	// A browser refresh must not push a second result and wedge the flow.
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	handler.ServeHTTP(httptest.NewRecorder(), callbackRequest("code=shc_abc&state=state-123"))
 	handler.ServeHTTP(httptest.NewRecorder(), callbackRequest("code=shc_def&state=state-123"))
@@ -123,7 +123,7 @@ func TestCallbackHandlerResolvesOnlyOnce(t *testing.T) {
 
 func TestCallbackHandlerIgnoresOtherPaths(t *testing.T) {
 	results := make(chan callbackResult, 1)
-	handler := newCallbackHandler("state-123", results)
+	handler := newCallbackHandler("state-123", "", results)
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/favicon.ico", nil))
@@ -355,5 +355,68 @@ func TestNoBrowserPrintsTheURLWithoutOpeningAnything(t *testing.T) {
 	}
 	if strings.Contains(output.String(), "Opening your browser") {
 		t.Fatalf("output should not claim to open a browser, got %q", output.String())
+	}
+}
+
+// A person who has just linked a terminal wants the app, not a dead-end page
+// telling them to go back to the terminal they are about to leave.
+func TestCallbackSendsTheBrowserToTheSessionsPage(t *testing.T) {
+	results := make(chan callbackResult, 1)
+	handler := newCallbackHandler("state-123", "http://localhost:5173", results)
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(
+		http.MethodGet, "/callback?code=abc&state=state-123", nil))
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Fatalf("expected a redirect, got %d", recorder.Code)
+	}
+	if location := recorder.Header().Get("Location"); location != "http://localhost:5173/sessions?linked=1" {
+		t.Fatalf("unexpected redirect target %q", location)
+	}
+	// The code still has to reach the CLI, redirect or no redirect.
+	if result := <-results; result.code != "abc" {
+		t.Fatalf("expected the code to be delivered, got %+v", result)
+	}
+}
+
+// Without somewhere sensible to send them, the plain page is still served
+// rather than a broken Location header.
+func TestCallbackFallsBackToThePlainPage(t *testing.T) {
+	for _, webURL := range []string{"", "not a url", "/sessions", "file:///etc/passwd", "javascript:alert(1)"} {
+		results := make(chan callbackResult, 1)
+		handler := newCallbackHandler("state-123", webURL, results)
+
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(
+			http.MethodGet, "/callback?code=abc&state=state-123", nil))
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("web URL %q: expected the plain page, got %d", webURL, recorder.Code)
+		}
+		if location := recorder.Header().Get("Location"); location != "" {
+			t.Fatalf("web URL %q: should not redirect, got %q", webURL, location)
+		}
+		if result := <-results; result.code != "abc" {
+			t.Fatalf("web URL %q: expected the code to be delivered", webURL)
+		}
+	}
+}
+
+// A failed sign-in keeps the page that says what went wrong, because the
+// sessions page has nowhere to show it.
+func TestCallbackKeepsThePageOnFailure(t *testing.T) {
+	results := make(chan callbackResult, 1)
+	handler := newCallbackHandler("state-123", "http://localhost:5173", results)
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(
+		http.MethodGet, "/callback?error=access_denied&error_description=You+declined.", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected the failure page, got %d", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "You declined.") {
+		t.Fatalf("the reason should be on the page, got: %s", recorder.Body.String())
 	}
 }
