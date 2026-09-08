@@ -10,7 +10,13 @@ import {
   revokeByRefreshToken,
 } from "./lib/tokens";
 import { isValidRedirectUri } from "./lib/redirect";
-import { closeSession, listSessions, registerSession } from "./lib/sessions";
+import {
+  closeSession,
+  listSessions,
+  registerSession,
+  sessionForApi,
+  sessionSource,
+} from "./lib/sessions";
 import { mintSecret } from "./lib/tokens";
 import {
   changeRole,
@@ -496,6 +502,7 @@ export function createApp(options: AppOptions) {
           /* Colleagues see this session because it belongs to the org. */
           orgId: membership?.orgId,
           ownerUid: token.uid,
+          deviceId: token.id,
         });
         if (!result.ok) return send(response, 400, { error: result.reason });
         /* Only on first sight, so a persistent session restarting is silent. */
@@ -508,7 +515,7 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
-        return send(response, 201, { session: result.session });
+        return send(response, 201, { session: sessionForApi(result.session) });
       }
 
       const closeMatch = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})$/);
@@ -553,7 +560,7 @@ export function createApp(options: AppOptions) {
          */
         const sessions = (await store.listOrgSessions(membership.orgId)).map((session) => {
           const mine = session.keyShares?.find((share) => share.uid === membership.uid);
-          return { ...session, keyShares: undefined, keyShare: mine };
+          return { ...sessionForApi(session), keyShares: undefined, keyShare: mine };
         });
         return send(response, 200, {
           sessions,
@@ -688,6 +695,15 @@ export function createApp(options: AppOptions) {
           if ((session.ownerUid ?? session.uid) !== identity.uid) {
             return send(response, 403, { error: "only the session owner can stop its process" });
           }
+          const ownerDeviceId = sessionSource(session).deviceId;
+          if (!ownerDeviceId) {
+            return send(response, 409, {
+              error: "this older session has no machine identity; stop it from that machine",
+            });
+          }
+          if (ownerDeviceId !== deviceId) {
+            return send(response, 409, { error: "that session is running on a different machine" });
+          }
           const queued = {
             id: mintSecret("cmd"),
             uid: identity.uid,
@@ -743,7 +759,7 @@ export function createApp(options: AppOptions) {
         if (!session) return send(response, 404, { error: "no such session" });
         const mine = session.keyShares?.find((share) => share.uid === membership.uid);
         return send(response, 200, {
-          session: { ...session, keyShares: undefined, keyShare: mine },
+          session: { ...sessionForApi(session), keyShares: undefined, keyShare: mine },
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

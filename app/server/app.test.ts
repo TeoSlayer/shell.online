@@ -596,6 +596,37 @@ describe("driving a machine from the browser", () => {
     expect(result.status).toBe(403);
   });
 
+  it("stops a session only through the machine that registered it", async () => {
+    const { tokens, deviceId: ownerDevice } = await withDevice();
+    const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: sessionId,
+        share_url: `https://shell.online/s/${sessionId}`,
+        command: "top",
+      },
+    });
+
+    const otherTokens = await login({ machine_id: "second-machine", label: "desktop" });
+    const [otherDevice] = await devices();
+    await call("GET", "/api/agent/commands", { auth: otherTokens.access_token });
+
+    const wrong = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: otherDevice.id, kind: "kill", session_id: sessionId },
+    });
+    expect(wrong).toMatchObject({ status: 409, body: { error: expect.stringContaining("different machine") } });
+
+    const right = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: ownerDevice, kind: "kill", session_id: sessionId },
+    });
+    expect(right.status).toBe(202);
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    expect(claimed.body.commands[0]).toMatchObject({ kind: "kill", sessionId });
+  });
+
   it("rejects an unknown command kind", async () => {
     const { deviceId } = await withDevice();
     const result = await call("POST", "/api/commands", {
@@ -883,6 +914,24 @@ describe("organizations", () => {
     expect(first.body.joined).toBe(true);
     expect(second.body.joined).toBe(false);
     expect(second.body.inviteError).toContain("already been used");
+  });
+
+  it("lets exactly one concurrent request consume a single-use invite", async () => {
+    await call("GET", "/api/org", { auth: await idToken() });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: {},
+    });
+    const link = `/api/org?invite=${invite.body.invite.id}`;
+    const [first, second] = await Promise.all([
+      call("GET", link, {
+        auth: await idToken({ sub: "uid-racer-1", email: "one@example.com" }),
+      }),
+      call("GET", link, {
+        auth: await idToken({ sub: "uid-racer-2", email: "two@example.com" }),
+      }),
+    ]);
+    expect([first.body.joined, second.body.joined].filter(Boolean)).toHaveLength(1);
   });
 
   it("describes an invite before anyone signs in", async () => {

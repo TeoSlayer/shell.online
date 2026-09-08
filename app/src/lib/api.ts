@@ -167,6 +167,8 @@ export interface SessionRecord {
   orgId?: string;
   ownerUid?: string;
   assigneeUid?: string;
+  /** Linked machine that owns the local process. */
+  deviceId?: string;
   /** The password sealed to the caller, when one has been shared with them. */
   keyShare?: { senderPublicKey: string; sealed: string };
   readOnly: boolean;

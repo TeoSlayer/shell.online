@@ -229,8 +229,13 @@ func runDaemon(arguments []string, stdout, stderr io.Writer) int {
 			if errors.Is(loadErr, account.ErrNotLinked) {
 				return errors.New("signed out")
 			}
-			if loadErr == nil && !current.RemoteStart {
-				return errors.New("remote start withdrawn")
+			if loadErr == nil {
+				if !sameAccount(credentials, current) {
+					return errors.New("linked account changed")
+				}
+				if !current.RemoteStart {
+					return errors.New("remote start withdrawn")
+				}
 			}
 			return nil
 		},

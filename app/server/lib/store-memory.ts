@@ -455,6 +455,15 @@ export class MemoryStore implements Store {
       .sort(byTime((entry) => entry.createdAt, (entry) => entry.id, true));
   }
 
+  async claimInvite(id: string, acceptedBy: string, now = Date.now()): Promise<Invite | undefined> {
+    const invite = this.data.invites.find((entry) => entry.id === id);
+    if (!invite || invite.acceptedAt || invite.revokedAt || invite.expiresAt <= now) return undefined;
+    invite.acceptedAt = now;
+    invite.acceptedBy = acceptedBy;
+    this.flush();
+    return invite;
+  }
+
   async updateInvite(id: string, patch: Partial<Invite>): Promise<void> {
     const invite = this.data.invites.find((entry) => entry.id === id);
     if (!invite) return;

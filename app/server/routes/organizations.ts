@@ -51,16 +51,23 @@ export async function ensureMembership(
        */
       return { membership: await createOwnOrg(store, identity), joined: false, error: check.reason };
     }
+    const claimed = await store.claimInvite(check.invite.id, identity.uid);
+    if (!claimed) {
+      return {
+        membership: await createOwnOrg(store, identity),
+        joined: false,
+        error: "That invite has already been used or is no longer available.",
+      };
+    }
     const membership: Membership = {
-      orgId: check.invite.orgId,
+      orgId: claimed.orgId,
       uid: identity.uid,
       email: identity.email,
       name: identity.name,
-      role: check.invite.role,
+      role: claimed.role,
       joinedAt: Date.now(),
     };
     await store.putMembership(membership);
-    await store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
     return { membership, joined: true };
   }
 
@@ -101,17 +108,25 @@ async function acceptAsExistingMember(
     };
   }
 
+  const claimed = await store.claimInvite(check.invite.id, identity.uid);
+  if (!claimed) {
+    return {
+      membership: existing,
+      joined: false,
+      error: "That invite has already been used or is no longer available.",
+    };
+  }
+
   await store.removeMember(existing.orgId, identity.uid);
   const membership: Membership = {
-    orgId: check.invite.orgId,
+    orgId: claimed.orgId,
     uid: identity.uid,
     email: identity.email,
     name: identity.name,
-    role: check.invite.role,
+    role: claimed.role,
     joinedAt: Date.now(),
   };
   await store.putMembership(membership);
-  await store.updateInvite(check.invite.id, { acceptedAt: Date.now(), acceptedBy: identity.uid });
   return { membership, joined: true };
 }
 

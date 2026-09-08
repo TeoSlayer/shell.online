@@ -194,6 +194,24 @@ func TestLoginRejectsAnUnknownFlag(t *testing.T) {
 	}
 }
 
+func TestRemoteStartConsentIsScopedToOneAccountAndServer(t *testing.T) {
+	granted := account.Credentials{
+		UID: "uid-1", Server: "https://app.shell.online", RemoteStart: true,
+	}
+	if !sameAccount(granted, account.Credentials{UID: "uid-1", Server: granted.Server}) {
+		t.Fatal("the same provider account should keep its consent")
+	}
+	if sameAccount(granted, account.Credentials{UID: "uid-2", Server: granted.Server}) {
+		t.Fatal("consent must not cross an account switch")
+	}
+	if sameAccount(granted, account.Credentials{UID: "uid-1", Server: "http://127.0.0.1:8787"}) {
+		t.Fatal("consent must not cross an authority switch")
+	}
+	if sameAccount(account.Credentials{Server: granted.Server}, account.Credentials{Server: granted.Server}) {
+		t.Fatal("legacy credentials without an identity must ask again")
+	}
+}
+
 /*
  * Both halves of the account live on one host. Pointing either at a hostname
  * that does not exist, or at the marketing site which answers every path with

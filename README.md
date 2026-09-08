@@ -170,6 +170,10 @@ shell service install
 `shell agent` does the same work in the foreground, printing each session as
 it starts, for anyone who would rather watch it than have it run unattended.
 
+Commands entered in the web app use the platform's normal command language:
+`sh -c` on Unix and Windows PowerShell on Windows. Quoted and escaped arguments
+therefore behave the same way they do in a local terminal.
+
 The daemon generates an ephemeral key pair each run and publishes the public
 half. A browser starting a session picks the browser password itself and seals
 it to that key, so the accounts service relays an envelope it cannot open, and

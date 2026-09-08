@@ -175,8 +175,9 @@ func TestDaemonRunsAQueuedStartWithNobodyAtTheTerminal(t *testing.T) {
 		t.Fatalf("nothing was launched: %v", err)
 	}
 	text := string(launched)
-	if !strings.Contains(text, "argv: htop") {
-		t.Fatalf("expected htop to be launched, got:\n%s", text)
+	wantArguments := "argv: " + strings.Join(browserCommandArguments("htop"), " ")
+	if !strings.Contains(text, wantArguments) {
+		t.Fatalf("expected %q to be launched, got:\n%s", wantArguments, text)
 	}
 	// The name chosen in the browser has to survive to the session list.
 	if !strings.Contains(text, "name: watching the box") {

@@ -136,10 +136,9 @@ CREATE INDEX IF NOT EXISTS agent_commands_queue
   ON agent_commands (device_id) WHERE claimed_at IS NULL;
 CREATE INDEX IF NOT EXISTS agent_commands_uid ON agent_commands (uid, created_at DESC);
 
--- Collaboration metadata. The legacy input/interrupt values remain accepted
--- by this first migration so databases created by prerelease builds can be
--- upgraded in place; current code never writes them and housekeeping deletes
--- any such rows.
+-- Every keystroke a person committed to a session: prompts for an agent,
+-- commands for a terminal. Plaintext by necessity, since the whole point is
+-- that a colleague can read it back.
 CREATE TABLE IF NOT EXISTS audit_events (
   id           TEXT PRIMARY KEY,
   org_id       TEXT   NOT NULL,

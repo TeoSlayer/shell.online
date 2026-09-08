@@ -97,6 +97,8 @@ export interface Store {
   putInvite(invite: Invite): Promise<void>;
   invite(id: string): Promise<Invite | undefined>;
   invites(orgId: string): Promise<Invite[]>;
+  /** Atomically consumes a live, unused invite. Exactly one caller can win. */
+  claimInvite(id: string, acceptedBy: string, now?: number): Promise<Invite | undefined>;
   updateInvite(id: string, patch: Partial<Invite>): Promise<void>;
 
   /* ---- Audit ---- */

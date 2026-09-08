@@ -125,11 +125,9 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "\n  Approving at %s\n  Tokens from  %s\n", *webURL, *accountsURL)
 	}
 
-	// Whether this machine already accepts remote starts is asked before the
-	// browser opens, so a person who is about to be asked is not answering a
-	// question about an account they have not finished signing in to yet.
+	// Loaded before the browser opens so a grant can be carried forward only
+	// after the new login proves it is for the same account and service.
 	previous, previousErr := account.Load(path)
-	alreadyGranted := previousErr == nil && previous.RemoteStart
 
 	// A machine that cannot record an identifier still signs in; it just
 	// appears as a new entry in the device list each time, which is what
@@ -150,6 +148,14 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: login failed: %v\n", err)
 		return 1
+	}
+	samePrincipal := previousErr == nil && sameAccount(previous, credentials)
+	alreadyGranted := samePrincipal && previous.RemoteStart
+	if !samePrincipal {
+		// A daemon keeps the credentials it started with in memory. Stop it
+		// before replacing the file so an account switch cannot leave the old
+		// account polling while the new account appears to own the consent.
+		stopDaemon()
 	}
 	grant, ask := decideRemoteStart(
 		alreadyGranted,
@@ -177,6 +183,14 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	printAccountCard(stdout, credentials, resolvedLabel(*label))
 	printRemoteStartNote(stdout, grant, ask)
 	return 0
+}
+
+// sameAccount is deliberately stricter than matching an email address. The
+// provider UID is the identity, and the server is part of its authority: a
+// development account and a production account with the same UID are not the
+// same principal for remote-start consent.
+func sameAccount(previous, next account.Credentials) bool {
+	return previous.UID != "" && previous.UID == next.UID && previous.Server == next.Server
 }
 
 // printRemoteStartNote says what this machine will and will not do.

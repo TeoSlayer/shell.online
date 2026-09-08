@@ -24,6 +24,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Scope remote-start consent to one account and accounts service, stop a stale
+  daemon when that identity changes, and make single-use invite claims atomic.
+- Remember which linked machine owns each session so Stop always targets that
+  machine, and preserve quoting in browser-started commands through the native
+  platform shell.
 - Restrict CLI OAuth callbacks to literal IPv4 or IPv6 loopback addresses, so
   a local name-resolution override cannot receive an authorization code.
 - Keep production infrastructure identifiers out of tracked Wrangler config,

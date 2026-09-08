@@ -487,8 +487,18 @@ for (const implementation of implementations) {
 
       it("records acceptance", async () => {
         await store.putInvite(invite());
-        await store.updateInvite("inv_1", { acceptedAt: 4000, acceptedBy: "uid-2" });
+        await store.claimInvite("inv_1", "uid-2", 4000);
         expect((await store.invite("inv_1"))?.acceptedBy).toBe("uid-2");
+      });
+
+      it("lets exactly one concurrent caller consume an invite", async () => {
+        await store.putInvite(invite());
+        const claims = await Promise.all([
+          store.claimInvite("inv_1", "uid-2", 4000),
+          store.claimInvite("inv_1", "uid-3", 4000),
+        ]);
+        expect(claims.filter(Boolean)).toHaveLength(1);
+        expect(["uid-2", "uid-3"]).toContain((await store.invite("inv_1"))?.acceptedBy);
       });
 
       it("lists an organization's invites newest first", async () => {

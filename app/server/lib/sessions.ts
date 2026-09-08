@@ -13,9 +13,43 @@ export interface SessionInput {
   startedAt?: number;
   orgId?: string;
   ownerUid?: string;
+  deviceId?: string;
 }
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{6,64}$/;
+const SOURCE_PREFIX = "shell-online-source:";
+
+interface SessionSource {
+  origin?: string;
+  deviceId?: string;
+}
+
+function packSource(origin: string | undefined, deviceId: string | undefined): string | undefined {
+  const cleanOrigin = typeof origin === "string" && origin ? origin.slice(0, 200) : undefined;
+  if (!deviceId) return cleanOrigin;
+  return `${SOURCE_PREFIX}${JSON.stringify({ version: 1, deviceId, origin: cleanOrigin })}`;
+}
+
+/** Reads the owning machine and browser command from new and legacy rows. */
+export function sessionSource(session: Pick<SessionRecord, "origin">): SessionSource {
+  if (!session.origin?.startsWith(SOURCE_PREFIX)) return { origin: session.origin };
+  try {
+    const source = JSON.parse(session.origin.slice(SOURCE_PREFIX.length)) as Record<string, unknown>;
+    if (source.version !== 1 || typeof source.deviceId !== "string") return {};
+    return {
+      deviceId: source.deviceId,
+      origin: typeof source.origin === "string" ? source.origin : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+/** Removes the storage envelope before a session is sent to the browser. */
+export function sessionForApi(session: SessionRecord) {
+  const source = sessionSource(session);
+  return { ...session, origin: source.origin, deviceId: source.deviceId };
+}
 
 export type RegisterResult =
   | { ok: true; session: SessionRecord; isNew: boolean }
@@ -53,9 +87,8 @@ export async function registerSession(
     name: typeof input.name === "string" && input.name.trim()
       ? input.name.trim().slice(0, 120)
       : undefined,
-    origin: typeof input.origin === "string" && input.origin
-      ? input.origin.slice(0, 200)
-      : undefined,
+    /* Reuse the existing source column so this upgrade needs no schema race. */
+    origin: packSource(input.origin, input.deviceId),
     readOnly: Boolean(input.readOnly),
     encrypted: Boolean(input.encrypted),
     persistent: Boolean(input.persistent),

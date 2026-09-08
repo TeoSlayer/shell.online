@@ -1028,6 +1028,20 @@ export class PostgresStore implements Store {
     return rows.map(toInvite);
   }
 
+  async claimInvite(id: string, acceptedBy: string, now = Date.now()): Promise<Invite | undefined> {
+    const row = await this.row(
+      `UPDATE invites
+       SET accepted_at = $3, accepted_by = $2
+       WHERE id = $1
+         AND accepted_at IS NULL
+         AND revoked_at IS NULL
+         AND expires_at > $3
+       RETURNING *`,
+      [id, acceptedBy, now],
+    );
+    return row ? toInvite(row) : undefined;
+  }
+
   async updateInvite(id: string, patch: Partial<Invite>): Promise<void> {
     const set = setClause(INVITE_COLUMNS, patch, 2);
     if (!set) return;

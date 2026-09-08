@@ -105,14 +105,14 @@ func performAgentCommand(
 ) error {
 	switch command.Kind {
 	case "start":
-		fields := strings.Fields(command.Command)
-		if len(fields) == 0 {
+		if strings.TrimSpace(command.Command) == "" {
 			return errors.New("empty command")
 		}
 		fmt.Fprintf(report, "  start  %s\n", command.Command)
-		// Launched exactly as a person would launch it, so it backgrounds
-		// itself and publishes through the usual path.
-		launch := exec.CommandContext(ctx, self, fields...)
+		// The browser supplies a command line rather than an argv. Give that
+		// complete line to the platform shell so quoting and escapes keep their
+		// normal meaning, then wrap that shell through the usual CLI path.
+		launch := exec.CommandContext(ctx, self, browserCommandArguments(command.Command)...)
 		launch.Env = os.Environ()
 		if command.Name != "" {
 			// The launched shell reads this when it publishes the session, so

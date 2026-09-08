@@ -64,7 +64,6 @@ export function Workspace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [now, setNow] = useState(() => Date.now());
-  const [machine, setMachine] = useState("");
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
@@ -137,7 +136,6 @@ export function Workspace() {
       void fetchDevices()
         .then((result) => {
           setDevices(result.devices);
-          setMachine((current) => current || result.devices[0]?.id || "");
         })
         .catch(() => setDevices([]));
 
@@ -182,7 +180,7 @@ export function Workspace() {
   }
 
   async function handleKill(session: SessionRecord) {
-    const target = machine || devices[0]?.id;
+    const target = session.deviceId;
     if (!target) return;
     setKilling(session.id);
     setError("");
@@ -439,7 +437,7 @@ function canHandOff(session: SessionRecord, you: Member | null): boolean {
 
 /** Stopping controls the owner's local process, so assignment is not enough. */
 export function canStop(session: SessionRecord, you: Member | null): boolean {
-  return Boolean(you && session.ownerUid === you.uid);
+  return Boolean(you && session.ownerUid === you.uid && session.deviceId);
 }
 
 function SessionGroup({

@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import type { Store } from "./store";
-import { closeSession, listSessions, registerSession } from "./sessions";
+import { closeSession, listSessions, registerSession, sessionForApi, sessionSource } from "./sessions";
 
 const valid = {
   id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
   shareUrl: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
   command: "claude",
+  deviceId: "dev_1",
 };
 
 let store: Store;
@@ -22,7 +23,15 @@ describe("registerSession", () => {
     if (result.ok) {
       expect(result.session.uid).toBe("uid-1");
       expect(result.session.id).toBe(valid.id);
+      expect(sessionSource(result.session).deviceId).toBe("dev_1");
     }
+  });
+
+  it("retains the owning device without exposing its storage envelope", async () => {
+    const result = await registerSession(store, "uid-1", { ...valid, origin: "cmd_1" });
+    if (!result.ok) throw new Error("expected ok");
+    expect(result.session.origin).toContain("shell-online-source:");
+    expect(sessionForApi(result.session)).toMatchObject({ origin: "cmd_1", deviceId: "dev_1" });
   });
 
   it("is idempotent, so a re-register updates rather than duplicates", async () => {
