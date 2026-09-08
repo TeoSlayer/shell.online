@@ -72,8 +72,16 @@ jobs:
               files: boundedFiles,
             }, null, 2));
 
+      # The model being unavailable is not a fact about the pull request, and
+      # a red check that means "the Copilot quota ran out this month" teaches
+      # everyone to ignore red checks. It is recorded and skipped instead.
+      #
+      # The failure is quiet by default: the action prints only "exited with
+      # code 1" and puts the reason behind ACTIONS_STEP_DEBUG, so the summary
+      # below exists to say it out loud.
       - name: Review relevance, implementation, and changelog
         id: assessment
+        continue-on-error: true
         uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3.0.0
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
@@ -85,6 +93,8 @@ jobs:
 
       - name: Independently verify no-merit closure
         id: verifier
+        if: steps.assessment.outcome == 'success'
+        continue-on-error: true
         uses: actions/ai-inference@2c43c91ae16266ca159d311430343c67a5ffa222 # v3.0.0
         env:
           COPILOT_GITHUB_TOKEN: ${{ github.token }}
@@ -95,7 +105,10 @@ jobs:
             pull_request: ./pr-context.json
             assessment: ${{ steps.assessment.outputs.response-file }}
 
+      # Both, not either. This step can close a pull request, and a closure
+      # decided on half an opinion is worse than no opinion at all.
       - name: Publish review or close irrelevant PR
+        if: steps.assessment.outcome == 'success' && steps.verifier.outcome == 'success'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           ASSESSMENT_FILE: ${{ steps.assessment.outputs.response-file }}
@@ -162,3 +175,15 @@ jobs:
             } else {
               await github.rest.issues.createComment({owner, repo, issue_number: number, body});
             }
+
+      - name: Say so when the review could not run
+        if: steps.assessment.outcome != 'success' || steps.verifier.outcome != 'success'
+        run: |
+          {
+            echo "### AI review did not run"
+            echo
+            echo "The review is advisory and the pull request is unaffected."
+            echo "The usual cause is the Copilot monthly quota; re-run this"
+            echo "workflow with ACTIONS_STEP_DEBUG=true to read the reason the"
+            echo "CLI gave."
+          } >> "$GITHUB_STEP_SUMMARY"

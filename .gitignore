@@ -13,6 +13,10 @@ bin/
 .env
 .env.*
 !.env.example
+# Build-time values that Vite compiles into a public bundle: an origin and an
+# empty string, no credentials. Ignoring it is what let development values
+# reach production twice, since there was then nothing to override .env.local.
+!app/.env.production
 *.pem
 *.key
 

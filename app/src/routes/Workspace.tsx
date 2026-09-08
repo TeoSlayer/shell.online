@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Copy, Check, X, Terminal as TerminalIcon, List, Plus } from "@phosphor-icons/react";
+import { Copy, Check, X, Terminal as TerminalIcon, List, Plus, CaretRight } from "@phosphor-icons/react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PersonChip } from "../components/Avatar";
 import { PersonPicker } from "../components/PersonPicker";
@@ -463,6 +463,19 @@ function SessionGroup({
   onKill: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uid: string) => void;
 }) {
+  /*
+   * Which commands are shown in full. Collapsed by default: an agent command
+   * runs to a few hundred characters, and one of them widens the whole table
+   * and puts every other row behind a horizontal scrollbar.
+   */
+  const [shown, setShown] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleCommand = (id: string) =>
+    setShown((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
   return (
     <section className="sessions-group">
       <h2>{heading}</h2>
@@ -494,13 +507,36 @@ function SessionGroup({
                       data-live={live}
                     />
                     <span className="table-name">{session.name || session.command}</span>
-                    {session.name && session.name !== session.command && (
-                      <code className="table-command">{session.command}</code>
-                    )}
                   </Link>
+                  {/*
+                    * Outside the link, because it is a button and a button
+                    * inside an anchor is neither valid nor operable by
+                    * keyboard.
+                    */}
+                  {session.name && session.name !== session.command && (
+                    <>
+                      <button
+                        type="button"
+                        className="table-command-toggle"
+                        aria-expanded={shown.has(session.id)}
+                        aria-controls={`command-${session.id}`}
+                        onClick={() => toggleCommand(session.id)}
+                      >
+                        <CaretRight size={11} weight="bold" data-open={shown.has(session.id)} />
+                        command
+                      </button>
+                      {shown.has(session.id) && (
+                        /* Wraps rather than scrolls: a row should never be the
+                           thing that makes the page scroll sideways. */
+                        <code className="table-command" id={`command-${session.id}`}>
+                          {session.command}
+                        </code>
+                      )}
+                    </>
+                  )}
                 </td>
-                <td><PersonChip person={owner} /></td>
-                <td>
+                <td className="table-person"><PersonChip person={owner} /></td>
+                <td className="table-person">
                   {live && canHandOff(session, you) ? (
                     <PersonPicker
                       people={members}

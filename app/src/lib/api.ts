@@ -2,7 +2,20 @@ import { auth } from "./firebase";
 
 export { machineOnline } from "./agent";
 
-const BASE = (import.meta.env.VITE_ACCOUNTS_URL ?? "http://127.0.0.1:8787").replace(/\/+$/, "");
+/*
+ * Empty means same origin, which is what a deployment is: the Worker serves
+ * this client and answers /api/* itself.
+ *
+ * The fallback is a development one and must never survive a build. It did
+ * once: an unset VITE_ACCOUNTS_URL left a production bundle asking every
+ * browser for 127.0.0.1:8787, so the app loaded and then failed on its first
+ * request with a message about a service on the user's own machine. Keying
+ * the fallback to DEV means forgetting the variable now costs nothing,
+ * because same origin is already right for every deployment.
+ */
+const BASE = (
+  import.meta.env.VITE_ACCOUNTS_URL ?? (import.meta.env.DEV ? "http://127.0.0.1:8787" : "")
+).replace(/\/+$/, "");
 
 export type Role = "owner" | "admin" | "member";
 

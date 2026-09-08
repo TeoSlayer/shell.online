@@ -33,6 +33,17 @@ const manifest = JSON.parse(manifestSource);
 const docsContent = JSON.parse(docsSource);
 const packageMetadata = JSON.parse(packageSource);
 
+/*
+ * The structured data names a version, and nothing else on the page does, so
+ * a release that forgets it leaves search engines advertising the previous
+ * one indefinitely. 0.9.0 shipped with 0.8.1 still sitting here.
+ */
+const advertisedVersion = indexHtml.match(/"softwareVersion":\s*"([^"]+)"/u)?.[1];
+check(
+  advertisedVersion === packageMetadata.version,
+  `Structured data advertises ${advertisedVersion} but package.json says ${packageMetadata.version}`,
+);
+
 check(indexHtml.includes('<html lang="en">'), "Document language is missing");
 check(indexHtml.includes('<meta charset="UTF-8"'), "UTF-8 declaration is missing");
 check(indexHtml.includes('<meta name="viewport"'), "Responsive viewport is missing");

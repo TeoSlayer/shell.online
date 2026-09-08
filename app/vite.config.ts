@@ -16,8 +16,19 @@ const authHeaders = {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const relay = env.VITE_RELAY_URL ?? "http://127.0.0.1:8788";
-  const relayOrigin = new URL(relay).origin;
+  /*
+   * Blank is absent, not a value. `??` only catches undefined, and a
+   * workflow that passes an unset repository variable through supplies the
+   * empty string, so this config took `new URL("")` and the whole build died
+   * on `TypeError: Invalid URL` with no clue which variable was at fault.
+   */
+  const relay = env.VITE_RELAY_URL?.trim() || "http://127.0.0.1:8788";
+  let relayOrigin: string;
+  try {
+    relayOrigin = new URL(relay).origin;
+  } catch {
+    throw new Error(`VITE_RELAY_URL is not a URL: ${JSON.stringify(env.VITE_RELAY_URL)}`);
+  }
 
   return {
     plugins: [react()],

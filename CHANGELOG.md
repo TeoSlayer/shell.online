@@ -10,6 +10,10 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Automatically delete unmistakably unrelated or spam issues and close equivalent pull requests only when two independent reviews agree at 98% confidence; preserve technical criticism and relevant but flawed contributions.
 - Use GitHub's current Copilot inference path rather than the retired GitHub Models endpoint.
 
+### Fixed
+
+- Draw a terminal opened in the web app at the size the process is actually running at. The pane sized the emulator to its own pixels instead, so a 120-column session was drawn at around 110 columns and 24 of its 36 rows: every long line wrapped a second time and the bottom third of anything full-screen was missing. It now scales the type to fit the session's grid, the way the standalone viewer already did, and follows that grid when a phone joins or leaves the session.
+
 ## [0.9.0] — 2026-09-08
 
 ### Added

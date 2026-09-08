@@ -165,7 +165,7 @@ export function NewSessionModal({ devices, onClose, onStart }: NewSessionModalPr
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />
                 <span>
-                  These flags come from the published interface for {kind.title}
+                  These flags come from the published interface for {kind.title}{" "}
                   rather than from its own help output, so check the command
                   below before starting.
                 </span>
