@@ -60,6 +60,11 @@
   line-height: 1.65;
 }
 
+.terms-lede b {
+  color: var(--ink);
+  font-weight: 560;
+}
+
 /* ---------------------------------------------------------------
    Contents
    --------------------------------------------------------------- */
@@ -93,7 +98,7 @@
 @media (min-width: 640px) {
   .terms-toc ol {
     grid-auto-flow: column;
-    grid-template-rows: repeat(8, auto);
+    grid-template-rows: repeat(10, auto);
   }
 }
 
@@ -187,6 +192,46 @@
   white-space: nowrap;
 }
 
+/* Lettered sub-tiers (A / B / C), echoing the numbered section rule. */
+
+.terms-tier {
+  max-width: 68ch;
+  margin: 0 0 22px;
+}
+
+.terms-tier:last-child {
+  margin-bottom: 0;
+}
+
+.terms-tier h3 {
+  display: flex;
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 16.5px;
+  font-weight: 540;
+  letter-spacing: -0.016em;
+  line-height: 1.4;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.terms-letter {
+  flex: none;
+  width: 14px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* The all-caps headline sentences the disclaimer and liability clauses open
+   with. Caps need the tracking opened up to stay readable at prose size. */
+
+.terms-caps {
+  letter-spacing: 0.005em;
+}
+
 /* ---------------------------------------------------------------
    Lists inside a section
    --------------------------------------------------------------- */
@@ -278,14 +323,28 @@
 }
 
 /* ---------------------------------------------------------------
+   Closing note: sits outside the numbered sections, quieter than them.
+   --------------------------------------------------------------- */
+
+.terms-note {
+  max-width: 68ch;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+  margin: 40px 0 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  letter-spacing: -0.006em;
+  line-height: 1.66;
+}
+
+/* ---------------------------------------------------------------
    Foot
    --------------------------------------------------------------- */
 
 .terms-foot {
   display: flex;
-  padding-top: 30px;
-  border-top: 1px solid var(--line);
-  margin-top: 44px;
+  padding-top: 0;
+  margin-top: 30px;
   color: var(--faint);
   font-size: 13.5px;
   align-items: center;
