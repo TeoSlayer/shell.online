@@ -7,7 +7,8 @@ import {
   isFiltered,
   sessionLabel,
   summarise,
-  } from "./audit-view";
+  topCommands,
+} from "./audit-view";
 import type { AuditEvent, SessionRecord } from "./api";
 
 const BASE = Date.UTC(2026, 8, 6, 12, 0, 0);
@@ -113,17 +114,27 @@ describe("tallies", () => {
     ]);
   });
 
+  it("groups commands by the tool, not the whole line", () => {
+    /* Counting whole lines would list near-duplicates and say nothing. */
+    expect(topCommands(events)).toEqual([
+      { key: "git", count: 2 },
+      { key: "npm", count: 1 },
+    ]);
+  });
 
+  it("leaves interrupts out of the command ranking", () => {
+    expect(topCommands([...events, event({ kind: "interrupt", text: "" })])).toHaveLength(2);
+  });
 });
 
 describe("summarise", () => {
   it("counts the things a reader asks first", () => {
     const summary = summarise([
-      event({ actorUid: "u1", sessionId: "s1", at: BASE, kind: "opened" }),
-      event({ actorUid: "u2", sessionId: "s2", at: BASE + 1000, kind: "handoff" }),
+      event({ actorUid: "u1", sessionId: "s1", at: BASE }),
+      event({ actorUid: "u2", sessionId: "s2", at: BASE + 1000, kind: "interrupt" }),
     ]);
     expect(summary).toMatchObject({
-      total: 2, opened: 1, handoffs: 1, people: 2, sessions: 2,
+      total: 2, inputs: 1, interrupts: 1, people: 2, sessions: 2,
       firstAt: BASE, lastAt: BASE + 1000,
     });
   });

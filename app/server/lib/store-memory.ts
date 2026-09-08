@@ -545,20 +545,12 @@ export class MemoryStore implements Store {
   async purgeExpired(now = Date.now()): Promise<void> {
     const before = this.data.codes.length;
     this.data.codes = this.data.codes.filter((entry) => entry.expiresAt > now);
-    const auditBefore = this.data.audit.length;
-    this.data.audit = this.data.audit.filter(
-      (entry) => entry.kind !== "input" && entry.kind !== "interrupt",
-    );
     /* Finished commands are only kept long enough to be reported back. */
     const commandsBefore = this.data.commands.length;
     this.data.commands = this.data.commands.filter(
       (entry) => !entry.doneAt || now - entry.doneAt < 10 * 60_000,
     );
-    if (
-      this.data.codes.length !== before ||
-      this.data.commands.length !== commandsBefore ||
-      this.data.audit.length !== auditBefore
-    ) {
+    if (this.data.codes.length !== before || this.data.commands.length !== commandsBefore) {
       this.flush();
     }
   }
