@@ -59,8 +59,19 @@ decisions.
 - [ ] **Create the Workload Identity Federation pool.** Blocked on
       `roles/iam.workloadIdentityPoolAdmin` for `alex@vulturelabs.io`. Until
       it exists the workflow can deploy but cannot migrate.
-- [ ] **Tag `v0.9.0`** and put the real tarball sha256 into
-      `Formula/shell-online.rb`, which currently holds a placeholder.
+- [ ] **Tag `v0.9.0`**, then fill in the Homebrew checksum, which cannot be
+      known until the tag exists:
+
+      ```sh
+      git tag v0.9.0 && git push origin v0.9.0
+      curl -fsSL https://github.com/TeoSlayer/shell.online/archive/refs/tags/v0.9.0.tar.gz \
+        | shasum -a 256
+      ```
+
+      Put that digest in `Formula/shell-online.rb` in place of the
+      placeholder. `npm test` refuses a placeholder on a tag build and
+      refuses a formula whose version has drifted from `package.json`, so
+      forgetting this fails CI rather than failing `brew install`.
 - [ ] **SendGrid domain authentication for `shell.online`**, then
       `MAIL_FROM=shell.online <no-reply@shell.online>`. Until then the From
       address must stay on `@pilotprotocol.network`, the only authenticated
