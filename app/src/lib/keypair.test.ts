@@ -40,6 +40,33 @@ async function freshBrowser() {
   return import("./keypair");
 }
 
+/*
+ * The envelope is a nonce followed by ciphertext, base64url with no padding.
+ * A test that tampers has to reach the bytes, so it decodes rather than
+ * editing the text; see the tampering test for what goes wrong otherwise.
+ */
+const NONCE_BYTES = 12;
+
+function decode(value: string): Uint8Array {
+  const padded = value
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+function encode(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function flipBit(bytes: Uint8Array, index: number): Uint8Array {
+  const copy = new Uint8Array(bytes);
+  copy[index] ^= 0x01;
+  return copy;
+}
+
 describe("sealing a session password", () => {
   beforeEach(() => {
     current = browser();
@@ -173,8 +200,16 @@ describe("opening a sealed password", () => {
     const owner = await import("./keypair");
     const [share] = await owner.sealForMembers([{ uid: "u1", publicKey: recipientKey }], "letmein");
 
-    /* Flip one character of the envelope. AES-GCM must notice. */
-    const tampered = share.sealed.slice(0, -1) + (share.sealed.endsWith("A") ? "B" : "A");
+    /*
+     * Flip a bit of the ciphertext. AES-GCM must notice.
+     *
+     * The flip is made in the bytes and not in the base64url text: the last
+     * character of an envelope whose length is not a multiple of three carries
+     * bits that decoding discards, so changing it can leave the ciphertext
+     * exactly as it was. That made this test pass on most envelopes and fail
+     * on the few that ended in one of those characters.
+     */
+    const tampered = encode(flipBit(decode(share.sealed), NONCE_BYTES));
 
     current = recipientStore;
     vi.resetModules();
