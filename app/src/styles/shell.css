@@ -467,6 +467,13 @@
   .rail {
     position: fixed;
     z-index: 40;
+    /*
+     * top must be released, not just left unset. The desktop rule pins the
+     * rail with `top: 0` so it can stick, and a fixed element given both a top
+     * and a bottom stretches between them however `height: auto` reads. The
+     * bar then covered the whole screen and the page appeared blank behind it.
+     */
+    top: auto;
     right: 0;
     bottom: 0;
     left: 0;
