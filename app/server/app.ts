@@ -214,8 +214,18 @@ async function noteSessionEvent(
       text: session.name?.trim() || session.command,
     });
   } catch (error) {
+    /*
+     * Specifiers rather than interpolation. console.error treats its first
+     * argument as a format string, so a value carrying a "%s" would consume
+     * the error argument and print itself instead. Neither value can do that
+     * today -- kind is one of two literals, and a session id has matched
+     * /^[A-Za-z0-9_-]{6,64}$/ to exist at all -- but that is an argument from
+     * validation two files away, and this form does not need it.
+     */
     console.error(
-      `accounts: could not record "${kind}" for session ${sessionId}`,
+      "accounts: could not record %s for session %s",
+      kind,
+      sessionId,
       error instanceof Error ? error.message : error,
     );
   }
