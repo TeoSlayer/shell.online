@@ -22,16 +22,18 @@ describe("the catalogue", () => {
     }
   });
 
-  it("marks which flag sets came from a published interface rather than --help", () => {
+  it("offers only options each tool's own --help accepts", () => {
     /*
-     * A property of how each builder was written, not of any machine. What a
-     * given machine can actually run is reported by its agent; see
-     * harnessMissing.
+     * Every flag below was read from the installed tool rather than from its
+     * documentation, and rejected flags were removed: codex 0.153.4 answers
+     * `--full-auto` with "unexpected argument", so the launcher no longer
+     * builds it. What a given machine can run is a separate question, reported
+     * by its agent; see harnessMissing.
      */
-    expect(claude.flagsFromPublishedInterface).toBeFalsy();
-    expect(openclaw.flagsFromPublishedInterface).toBeFalsy();
-    expect(codex.flagsFromPublishedInterface).toBe(true);
-    expect(hermes.flagsFromPublishedInterface).toBe(true);
+    const built = SESSION_KINDS.flatMap((kind) =>
+      kind.fields.map((field) => kind.build({ [field.name]: field.kind === "toggle" ? true : "v" })),
+    );
+    expect(built.join(" ")).not.toContain("--full-auto");
   });
 });
 
@@ -72,13 +74,38 @@ describe("Claude Code", () => {
 });
 
 describe("GPT Codex", () => {
-  it("starts fresh, resumes, and goes full auto", () => {
+  it("starts fresh with no options", () => {
     expect(codex.build({})).toBe("codex");
+  });
+
+  it("resumes by id, and by --last only when no id was given", () => {
     expect(codex.build({ sessionId: "s1" })).toBe("codex resume s1");
-    expect(codex.build({ fullAuto: true })).toBe("codex --full-auto");
-    expect(codex.build({ sessionId: "s1", fullAuto: true })).toBe(
-      "codex resume s1 --full-auto",
+    expect(codex.build({ resumeLast: true })).toBe("codex resume --last");
+    /* An id is the more specific request, so it wins over "the last one". */
+    expect(codex.build({ sessionId: "s1", resumeLast: true })).toBe("codex resume s1");
+  });
+
+  it("passes the sandbox and approval choices through", () => {
+    expect(codex.build({ sandbox: "workspace-write" })).toBe(
+      "codex --sandbox workspace-write",
     );
+    expect(codex.build({ approval: "never" })).toBe("codex --ask-for-approval never");
+    expect(codex.build({ search: true })).toBe("codex --search");
+  });
+
+  it("leaves both choices out when neither was made", () => {
+    /* An empty select means "whatever codex defaults to", not a flag. */
+    expect(codex.build({ sandbox: "", approval: "" })).toBe("codex");
+  });
+
+  it("puts options after the resume subcommand, where the CLI takes them", () => {
+    expect(
+      codex.build({ sessionId: "s1", sandbox: "read-only", approval: "never", search: true }),
+    ).toBe("codex resume s1 --sandbox read-only --ask-for-approval never --search");
+  });
+
+  it("quotes a session id that would otherwise split", () => {
+    expect(codex.build({ sessionId: "two words" })).toBe("codex resume 'two words'");
   });
 });
 
@@ -99,9 +126,42 @@ describe("OpenClaw", () => {
 });
 
 describe("Hermes", () => {
-  it("passes arguments through unchanged", () => {
+  it("defaults to the bare command", () => {
     expect(hermes.build({})).toBe("hermes");
-    expect(hermes.build({ args: "run --task build" })).toBe("hermes run --task build");
+  });
+
+  it("puts every option before the subcommand, as the parser requires", () => {
+    /* `hermes sessions --yolo` is an error; only this order parses. */
+    expect(hermes.build({ subcommand: "sessions", yolo: true })).toBe(
+      "hermes --yolo sessions",
+    );
+    expect(hermes.build({ subcommand: "gateway", model: "gpt-5", worktree: true })).toBe(
+      "hermes --model gpt-5 --worktree gateway",
+    );
+  });
+
+  it("resumes a named session", () => {
+    expect(hermes.build({ sessionId: "s1" })).toBe("hermes --resume s1");
+    expect(hermes.build({ sessionId: "two words" })).toBe("hermes --resume 'two words'");
+  });
+
+  it("continues the last session only when nothing could be eaten by it", () => {
+    /*
+     * --continue takes an optional value, so a bare one swallows whatever
+     * follows: `hermes --continue sessions` resumes a session called
+     * "sessions" instead of running the subcommand. It is emitted last, and
+     * only when there is no subcommand and no explicit session to resume.
+     */
+    expect(hermes.build({ continueLast: true })).toBe("hermes --continue");
+    expect(hermes.build({ continueLast: true, subcommand: "sessions" })).toBe(
+      "hermes sessions",
+    );
+    expect(hermes.build({ continueLast: true, sessionId: "s1" })).toBe("hermes --resume s1");
+    expect(hermes.build({ continueLast: true, yolo: true })).toBe("hermes --yolo --continue");
+  });
+
+  it("does not let the session name reach the command line", () => {
+    expect(hermes.build({ name: "my run" })).toBe("hermes");
   });
 });
 

@@ -7,11 +7,14 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 ### Added
 
 - Keep the open session tabs across a reload. Refreshing the page put you back at the list with every terminal closed; the tabs that were open come back, on the one that was in front. Only the session ids are remembered, so a restored tab is rebuilt from the session list rather than from a stale copy, and a session that has since ended does not return.
+- Offer GPT Codex's sandbox, approval, resume and web-search options in the new-session form, and Hermes Agent's command, session, model, worktree and approval options, each read from the installed tool rather than from its documentation.
 
 ### Fixed
 
 - Draw a shared terminal at the size of the pane holding it. The font was scaled until the whole grid fitted in one direction, which on a wide pane left about a third of it empty and the text a third smaller than there was room for. The font now comes from the width, where the columns are, and the rows are spread down the full height with the leading that is left over; neither axis may overflow. On a 1440x900 window a 120x36 session goes from 11.5px filling 77% of the pane to 14.75px filling 98%.
 - Remove the box drawn around each column of the session board. It repeated the border and the wash that every card inside it already carries, so three short columns read as three mostly empty containers.
+- Stop building `codex --full-auto`, which current Codex releases reject as an unexpected argument. Starting a full-auto Codex session from the browser failed on the machine it was sent to.
+- Drop the warning that a kind's flags came from a published interface. Every kind now offers only options its own `--help` accepts, so there is nothing left for it to warn about.
 
 ## [0.11.1] — 2026-09-08
 

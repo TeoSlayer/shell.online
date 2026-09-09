@@ -28,15 +28,6 @@ export interface SessionKind {
   /** Shown under the form so the command is never a surprise. */
   build(values: FieldValues): string;
   fields: Field[];
-  /**
-   * True when this flag set was taken from the tool's published interface
-   * rather than read from its own --help.
-   *
-   * A fact about how the builder above was written, fixed when it was written.
-   * It says nothing about any machine: whether a machine can run the tool is
-   * reported by the agent on it, and read through harnessMissing.
-   */
-  flagsFromPublishedInterface?: boolean;
 }
 
 function text(values: FieldValues, name: string): string {
@@ -96,28 +87,66 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "GPT Codex",
     blurb: "OpenAI's coding agent.",
     icon: "/icons/codex.webp",
-    flagsFromPublishedInterface: true,
     fields: [
       {
         name: "sessionId",
         label: "Resume session ID",
         kind: "text",
         placeholder: "leave empty to start fresh",
-        help: "Runs codex resume <id>.",
+        help: "Runs codex resume <id>. Accepts a session UUID or a session name.",
       },
       {
-        name: "fullAuto",
-        label: "Full auto",
+        name: "resumeLast",
+        label: "Resume the most recent session",
         kind: "toggle",
-        help: "Adds --full-auto, so it works without stopping to ask.",
+        help: "Runs codex resume --last. Ignored when a session ID is given.",
+      },
+      {
+        name: "sandbox",
+        label: "Sandbox",
+        kind: "select",
+        help: "Passed to --sandbox, bounding what generated commands may touch.",
+        options: [
+          { value: "", label: "codex default" },
+          { value: "read-only", label: "read-only" },
+          { value: "workspace-write", label: "workspace-write" },
+          { value: "danger-full-access", label: "danger-full-access" },
+        ],
+      },
+      {
+        name: "approval",
+        label: "Approvals",
+        kind: "select",
+        help: "Passed to --ask-for-approval. never runs without stopping to ask.",
+        options: [
+          { value: "", label: "codex default" },
+          { value: "on-request", label: "on-request" },
+          { value: "never", label: "never" },
+        ],
+      },
+      {
+        name: "search",
+        label: "Web search",
+        kind: "toggle",
+        help: "Adds --search, giving the model the native web_search tool.",
       },
       { name: "name", label: "Session name", kind: "text", placeholder: "optional" },
     ],
+    /*
+     * Options follow `resume <id>`, which is where the CLI accepts them: the
+     * subcommand takes the same --sandbox, --ask-for-approval and --search as
+     * the root command, so one order works for both a fresh and a resumed run.
+     */
     build(values) {
       const parts = ["codex"];
       const id = text(values, "sessionId");
       if (id) parts.push("resume", quote(id));
-      if (on(values, "fullAuto")) parts.push("--full-auto");
+      else if (on(values, "resumeLast")) parts.push("resume", "--last");
+      const sandbox = text(values, "sandbox");
+      if (sandbox) parts.push("--sandbox", sandbox);
+      const approval = text(values, "approval");
+      if (approval) parts.push("--ask-for-approval", approval);
+      if (on(values, "search")) parts.push("--search");
       return parts.join(" ");
     },
   },
@@ -126,22 +155,77 @@ export const SESSION_KINDS: SessionKind[] = [
     title: "Hermes Agent",
     blurb: "Your Hermes agent, wrapped in a shareable terminal.",
     icon: "/icons/hermes.png",
-    // The builder stays a pass-through rather than inventing a flag set that
-    // was never read from the tool.
-    flagsFromPublishedInterface: true,
     fields: [
       {
-        name: "args",
-        label: "Arguments",
+        name: "subcommand",
+        label: "Command",
+        kind: "select",
+        options: [
+          { value: "", label: "hermes (interactive chat)" },
+          { value: "chat", label: "chat" },
+          { value: "gateway", label: "gateway" },
+          { value: "sessions", label: "sessions" },
+          { value: "dashboard", label: "dashboard" },
+          { value: "status", label: "status" },
+          { value: "doctor", label: "doctor" },
+          { value: "acp", label: "acp" },
+        ],
+      },
+      {
+        name: "sessionId",
+        label: "Resume session",
         kind: "text",
-        placeholder: "run --task build",
-        help: "Appended to hermes as written.",
+        placeholder: "leave empty to start fresh",
+        help: "Passed to --resume. Accepts a session ID or title.",
+      },
+      {
+        name: "continueLast",
+        label: "Continue the most recent session",
+        kind: "toggle",
+        help: "Adds --continue. Ignored when a command or a session is chosen.",
+      },
+      {
+        name: "model",
+        label: "Model",
+        kind: "text",
+        placeholder: "anthropic/claude-sonnet-4.6",
+        help: "Passed to --model for this run only.",
+      },
+      {
+        name: "worktree",
+        label: "Isolated git worktree",
+        kind: "toggle",
+        help: "Adds --worktree, so parallel agents do not share a checkout.",
+      },
+      {
+        name: "yolo",
+        label: "Skip approval prompts",
+        kind: "toggle",
+        help: "Adds --yolo. The agent will not ask before running a command.",
       },
       { name: "name", label: "Session name", kind: "text", placeholder: "optional" },
     ],
+    /*
+     * Every option here belongs to the top-level parser, so all of them go
+     * before the subcommand; `hermes sessions --yolo` is an error where
+     * `hermes --yolo sessions` is not.
+     *
+     * --continue takes an optional value, which makes a bare one greedy: in
+     * `hermes --continue sessions` the subcommand is read as the session name
+     * to resume. So it is emitted last and only when nothing follows it.
+     */
     build(values) {
-      const args = text(values, "args");
-      return args ? `hermes ${args}` : "hermes";
+      const parts = ["hermes"];
+      const model = text(values, "model");
+      if (model) parts.push("--model", quote(model));
+      if (on(values, "worktree")) parts.push("--worktree");
+      if (on(values, "yolo")) parts.push("--yolo");
+      const id = text(values, "sessionId");
+      if (id) parts.push("--resume", quote(id));
+      const subcommand = text(values, "subcommand");
+      if (subcommand) parts.push(subcommand);
+      else if (!id && on(values, "continueLast")) parts.push("--continue");
+      return parts.join(" ");
     },
   },
   {
