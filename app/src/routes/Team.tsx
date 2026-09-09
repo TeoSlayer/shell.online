@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Copy, Check, Trash, UserPlus, PencilSimple } from "@phosphor-icons/react";
+import { Copy, Check, Trash, UserPlus, PencilSimple, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
@@ -18,6 +18,7 @@ import { Avatar } from "../components/Avatar";
 import { displayName } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
 import { publicKey } from "../lib/keypair";
+import { COPY_FAILED, useCopy } from "../lib/clipboard";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
@@ -37,24 +38,37 @@ function inviteState(invite: Invite): { label: string; live: boolean } {
 }
 
 function CopyInvite({ invite }: { invite: Invite }) {
-  const [copied, setCopied] = useState(false);
+  const { state, copy } = useCopy();
+  const copied = state === "copied";
+  const failed = state === "failed";
   return (
-    <button
-      type="button"
-      className="session-action"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(inviteLink(invite));
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1600);
-        } catch {
-          /* clipboard is unavailable outside a secure context */
-        }
-      }}
-    >
-      {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
-      {copied ? "Copied" : "Copy link"}
-    </button>
+    <>
+      <button
+        type="button"
+        className="session-action"
+        onClick={() => void copy(inviteLink(invite))}
+      >
+        {failed ? (
+          <Warning size={14} weight="fill" />
+        ) : copied ? (
+          <Check size={14} weight="bold" />
+        ) : (
+          <Copy size={14} />
+        )}
+        {copied ? "Copied" : "Copy link"}
+      </button>
+      {/*
+        The link is the invite. If the clipboard refused it, saying nothing
+        sends somebody away believing they have it, so the address is put on
+        screen to be copied by hand.
+      */}
+      {failed && (
+        <span className="copy-fallback" role="status">
+          {COPY_FAILED}
+          <code>{inviteLink(invite)}</code>
+        </span>
+      )}
+    </>
   );
 }
 
@@ -178,7 +192,7 @@ export function Team() {
                   <th scope="col">Person</th>
                   <th scope="col">Email</th>
                   <th scope="col">Role</th>
-                  <th scope="col">Joined</th>
+                  <th scope="col" className="table-optional">Joined</th>
                   <th scope="col" className="table-end">Actions</th>
                 </tr>
               </thead>
@@ -224,7 +238,7 @@ export function Team() {
                           </span>
                         )}
                       </td>
-                      <td className="table-quiet">{ago(member.joinedAt, Date.now())}</td>
+                      <td className="table-quiet table-optional">{ago(member.joinedAt, Date.now())}</td>
                       <td className="table-end">
                         {canAct && (
                           <button

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal } from "@phosphor-icons/react";
+import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
 import type { Member, SessionRecord } from "../lib/api";
 import { passwordFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
+import { COPY_FAILED, useCopy } from "../lib/clipboard";
 
 /**
  * The one place a session can be copied from.
@@ -40,8 +41,15 @@ export function SessionClipboard({
   you: Member | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState<Item | "">("");
-  const [hasPassword, setHasPassword] = useState(false);
+  /*
+   * The password is unsealed ahead of the click, not inside it. Unsealing is
+   * asynchronous, and on WebKit anything awaited between the tap and
+   * navigator.clipboard.writeText spends the user gesture the write needs, so
+   * copying the password failed on a phone every time while the link beside
+   * it worked. Holding the decrypted value means the handler is synchronous.
+   */
+  const [password, setPassword] = useState<string | null>(null);
+  const { copiedKey, failedKey, copy } = useCopy<Item>();
   const wrapper = useRef<HTMLDivElement>(null);
 
   /* The attach command runs on the machine that owns the process. */
@@ -61,8 +69,8 @@ export function SessionClipboard({
     : "";
   useEffect(() => {
     let live = true;
-    void readPassword(session).then((password) => {
-      if (live) setHasPassword(Boolean(password));
+    void readPassword(session).then((value) => {
+      if (live) setPassword(value);
     });
     return () => {
       live = false;
@@ -86,16 +94,7 @@ export function SessionClipboard({
     };
   }, [open]);
 
-  async function copy(item: Item, value: string | null) {
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(item);
-      window.setTimeout(() => setCopied(""), 1600);
-    } catch {
-      /* clipboard is unavailable outside a secure context */
-    }
-  }
+  const anyCopied = copiedKey !== null;
 
   return (
     <div className="clip" ref={wrapper}>
@@ -108,56 +107,77 @@ export function SessionClipboard({
         aria-label="Copy from this session"
         title="Copy from this session"
       >
-        {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
+        {anyCopied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
         {/* Says it opens something, rather than leaving it to be discovered. */}
         <CaretDown size={10} weight="bold" className="clip-caret" data-open={open} />
       </button>
 
       {open && (
-        <div className="clip-pop" role="menu">
-          <button
-            type="button"
-            role="menuitem"
-            className="clip-item"
-            onClick={() => void copy("link", session.shareUrl)}
-          >
-            <LinkIcon size={16} />
-            <span className="clip-text">
-              <b>{copied === "link" ? "Link copied" : "Copy link"}</b>
-              <em>Anyone holding this link and the password can open the session, inside the team or not.</em>
-            </span>
-          </button>
-
-          {hasPassword && (
+        <>
+          {/*
+           * The sheet's backdrop on a phone, and nothing at all on a pointer.
+           * It has to be a real element rather than a painted scrim: a tap
+           * meant to dismiss the sheet would otherwise land on whatever
+           * button happened to be underneath it.
+           */}
+          <div className="clip-scrim" onClick={() => setOpen(false)} />
+          <div className="clip-pop" role="menu">
             <button
               type="button"
               role="menuitem"
               className="clip-item"
-              onClick={async () => void copy("password", await readPassword(session))}
+              onClick={() => void copy(session.shareUrl, "link")}
             >
-              <Lock size={16} />
+              <LinkIcon size={16} />
               <span className="clip-text">
-                <b>{copied === "password" ? "Password copied" : "Copy password"}</b>
-                <em>Share it as carefully as the link. Outside the team it is the whole session.</em>
+                <b>{copiedKey === "link" ? "Link copied" : "Copy link"}</b>
+                <em>Anyone holding this link and the password can open the session, inside the team or not.</em>
               </span>
             </button>
-          )}
 
-          {isOwner && (
-            <button
-              type="button"
-              role="menuitem"
-              className="clip-item"
-              onClick={() => void copy("attach", attachCommand)}
-            >
-              <Terminal size={16} />
-              <span className="clip-text">
-                <b>{copied === "attach" ? "Command copied" : "Copy attach command"}</b>
-                <em>Runs on the machine that started it, so this one is visible only to you.</em>
-              </span>
-            </button>
-          )}
-        </div>
+            {password && (
+              <button
+                type="button"
+                role="menuitem"
+                className="clip-item"
+                onClick={() => void copy(password, "password")}
+              >
+                <Lock size={16} />
+                <span className="clip-text">
+                  <b>{copiedKey === "password" ? "Password copied" : "Copy password"}</b>
+                  <em>Share it as carefully as the link. Outside the team it is the whole session.</em>
+                </span>
+              </button>
+            )}
+
+            {isOwner && (
+              <button
+                type="button"
+                role="menuitem"
+                className="clip-item"
+                onClick={() => void copy(attachCommand, "attach")}
+              >
+                <Terminal size={16} />
+                <span className="clip-text">
+                  <b>{copiedKey === "attach" ? "Command copied" : "Copy attach command"}</b>
+                  <em>Runs on the machine that started it, so this one is visible only to you.</em>
+                </span>
+              </button>
+            )}
+
+            {/*
+              A refused clipboard is said out loud rather than swallowed. It used
+              to leave the menu looking exactly as it had a moment earlier, which
+              reads as a copy that worked.
+            */}
+            {failedKey && (
+              <p className="clip-failed" role="status">
+                <Warning size={14} weight="fill" />
+                {COPY_FAILED}
+              </p>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

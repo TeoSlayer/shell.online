@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
-  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check,
+  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check, Warning,
 } from "@phosphor-icons/react";
 import { Inbox } from "./Inbox";
 import { Avatar } from "./Avatar";
 import { Wordmark } from "./Wordmark";
 import { useAuth } from "../auth/AuthProvider";
+import { COPY_FAILED, useCopy } from "../lib/clipboard";
 
 const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
@@ -19,23 +20,16 @@ const NAV = [
 /* The command a new machine needs. Shown once, in the sidebar, not per page. */
 const LINK_COMMAND = "shell login";
 
-function LinkHint() {
-  const [copied, setCopied] = useState(false);
+export function LinkHint({ className = "rail-hint" }: { className?: string }) {
+  const { state, copy } = useCopy();
+  const copied = state === "copied";
   return (
-    <div className="rail-hint">
+    <div className={className}>
       <p>Link a machine</p>
       <button
         type="button"
         className="rail-command"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(LINK_COMMAND);
-            setCopied(true);
-            window.setTimeout(() => setCopied(false), 1600);
-          } catch {
-            /* clipboard is unavailable outside a secure context */
-          }
-        }}
+        onClick={() => void copy(LINK_COMMAND)}
         aria-label={copied ? "Command copied" : `Copy ${LINK_COMMAND}`}
       >
         <code>
@@ -43,6 +37,12 @@ function LinkHint() {
         </code>
         {copied ? <Check size={14} weight="bold" /> : <Copy size={14} />}
       </button>
+      {state === "failed" && (
+        <p className="rail-command-failed" role="status">
+          <Warning size={13} weight="fill" />
+          {COPY_FAILED}
+        </p>
+      )}
     </div>
   );
 }
@@ -136,8 +136,16 @@ export function AppShell({ title, aside, children }: AppShellProps) {
               to={to}
               className={({ isActive }) => (isActive ? "rail-link is-active" : "rail-link")}
             >
-              <Icon size={19} />
-              {label}
+              {/*
+               * The icon is wrapped so the bottom bar can mark the current
+               * page with a shape the same size on every item. Left to the
+               * link itself the mark took the width of the word inside it,
+               * and "Sessions" and "Team" were highlighted differently.
+               */}
+              <span className="rail-icon">
+                <Icon size={19} />
+              </span>
+              <span className="rail-label">{label}</span>
             </NavLink>
           ))}
         </nav>

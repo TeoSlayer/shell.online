@@ -776,7 +776,7 @@ function SessionGroup({
             <th scope="col">Session</th>
             <th scope="col">Owner</th>
             <th scope="col">Assignee</th>
-            <th scope="col">Machine</th>
+            <th scope="col" className="table-optional">Machine</th>
             <th scope="col">{live ? "Uptime" : "Ran for"}</th>
             <th scope="col" className="table-end">Actions</th>
           </tr>
@@ -786,7 +786,13 @@ function SessionGroup({
             const owner = findPerson(members, session.ownerUid);
             const assignee = findPerson(members, session.assigneeUid);
             return (
-              <tr key={session.id} data-live={live}>
+              /*
+               * The row is the link. `.table-subject` is stretched over the
+               * whole row in CSS, so a tap anywhere that is not a control
+               * opens the session, while the buttons, the assignee picker and
+               * the copy menu stay above it and keep their own targets.
+               */
+              <tr key={session.id} data-live={live} className="table-row-linked">
                 <td>
                   <Link className="table-subject" to={`/sessions/${session.id}`}>
                     {/* The kind of thing running, in colour while it runs. */}
@@ -844,7 +850,9 @@ function SessionGroup({
                     <PersonChip person={assignee} />
                   )}
                 </td>
-                <td className="table-quiet" data-label="Machine">{session.host || "unknown"}</td>
+                <td className="table-quiet table-optional" data-label="Machine">
+                  {session.host || "unknown"}
+                </td>
                 <td className="table-quiet" data-label={live ? "Uptime" : "Ran for"}>
                   {live
                     ? elapsed(session.startedAt, now)

@@ -287,6 +287,47 @@
   text-decoration: underline;
 }
 
+/* ---------------------------------------------------------------
+   The whole row opens the session
+   ---------------------------------------------------------------
+   The name was the only target, which on a phone is a few characters of
+   text in a row that is otherwise a hundred pixels of nothing. Rather than
+   put a click handler on the row, the existing link is stretched across it:
+   the row keeps one link, the keyboard keeps one stop, and everything that
+   was already interactive is lifted above the overlay so it still gets the
+   tap it used to.
+   --------------------------------------------------------------- */
+
+.table-row-linked {
+  position: relative;
+  cursor: pointer;
+}
+
+.table-row-linked .table-subject::after {
+  position: absolute;
+  content: "";
+  inset: 0;
+}
+
+.table-row-linked:hover .table-name {
+  text-decoration: underline;
+}
+
+/*
+ * Everything with its own behaviour keeps its own target: `position: relative`
+ * and nothing else. Positioned siblings paint in tree order and all of these
+ * come after the overlay, so they are above it without a z-index. Giving them
+ * one would trap the copy menu inside their stacking context, and that menu
+ * has to rise over the rest of the page.
+ */
+.table-row-linked td > .session-actions,
+.table-row-linked .picker,
+.table-row-linked .table-command-toggle,
+.table-row-linked .table-command {
+  position: relative;
+  cursor: auto;
+}
+
 /*
  * The icon says what is running at a glance. A finished session keeps the same
  * icon, desaturated, so the row still reads as the same kind of thing without
@@ -377,9 +418,18 @@
   font-size: 12px;
 }
 
+/*
+ * Columns that a narrow window may drop.
+ *
+ * This used to be `nth-child(4)`, which counted positions rather than meaning.
+ * The fourth column is the machine in the sessions table and the date joined
+ * in the members table, both of which can go. In the invites table it is
+ * Actions, so under 1080px every invite lost its copy and revoke buttons and
+ * an invite link could not be copied on a phone at all.
+ */
 @media (max-width: 1080px) {
-  .table thead th:nth-child(4),
-  .table tbody td:nth-child(4) {
+  .table thead th.table-optional,
+  .table tbody td.table-optional {
     display: none;
   }
 }
@@ -422,6 +472,15 @@
 
   .table td[data-label] {
     padding: 7px 0;
+  }
+
+  /*
+   * A column dropped from the table comes back once the cells stack. It was
+   * dropped because the table had no width for it, and a stacked row is a
+   * list with room for one more line, which the label above it now names.
+   */
+  .table tbody td.table-optional {
+    display: block;
   }
 
   .table-end,

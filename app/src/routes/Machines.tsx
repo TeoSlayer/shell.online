@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Desktop } from "@phosphor-icons/react";
-import { AppShell } from "../components/AppShell";
+import { AppShell, LinkHint } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { fetchDevices, revokeDevice, type Device } from "../lib/api";
@@ -76,6 +76,14 @@ export function Machines() {
         Every machine that can publish sessions to this account. Unlinking
         revokes its token immediately.
       </p>
+
+      {/*
+       * The command that links a machine lives in the sidebar, and the
+       * sidebar is a bar of five destinations on a phone. This is the
+       * destination it would have been next to, so the phone gets it here
+       * rather than not at all.
+       */}
+      <LinkHint className="machines-hint" />
 
       {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
 

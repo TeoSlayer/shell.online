@@ -59,6 +59,15 @@
   color: var(--blue);
 }
 
+/* On the rail the wrapper is only a box around the glyph. The bottom bar
+   turns it into the current-page mark. */
+.rail-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ---- Sidebar footer: the one command a new machine needs ---- */
 
 .rail-hint {
@@ -105,6 +114,23 @@
 
 .rail-command code span {
   color: var(--acid);
+}
+
+/*
+ * The same hint on the machines page, for the layouts that have no rail to
+ * put it in. Hidden wherever the rail is showing it already.
+ */
+.machines-hint {
+  display: none;
+  padding: 0 0 4px;
+  margin: 0 0 18px;
+  max-width: 380px;
+}
+
+@media (max-width: 760px) {
+  .machines-hint {
+    display: block;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -486,6 +512,19 @@
    sits under the status bar and the last nav item under the gesture bar.
    --------------------------------------------------------------- */
 @media (max-width: 760px) {
+  /*
+   * Everything a size up.
+   *
+   * The layout is written in pixels tuned for a pointer and a wide window,
+   * and on a phone that reads as a desktop page shrunk to fit rather than an
+   * application. Zooming the root scales the whole thing, layout included, so
+   * text, controls and spacing grow together and nothing has to be re-tuned
+   * rule by rule. It is what the browser's own zoom does, applied once.
+   */
+  :root {
+    zoom: 1.15;
+  }
+
   .shell {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -504,8 +543,10 @@
     bottom: 0;
     left: 0;
     height: auto;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    backdrop-filter: blur(12px);
     flex-direction: row;
   }
 
@@ -525,21 +566,67 @@
   }
 
   .rail-link {
-    padding: 7px 4px;
+    padding: 0;
+    /* A whole finger, not a line of text: the bar is the primary navigation. */
+    min-width: 58px;
+    height: auto;
+    border-radius: var(--radius-chip);
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 500;
     flex-direction: column;
-    font-size: 10.5px;
-    gap: 3px;
+    gap: 4px;
     text-align: center;
   }
 
-  .rail-link.is-active {
+  /*
+   * The current page is marked on the icon, which is the same width on every
+   * item, rather than on the link, which is as wide as its word. The bar used
+   * to show a bordered box around "Sessions" and a much smaller one around
+   * "Team", so the mark read as a different thing on each page.
+   */
+  .rail-icon {
+    width: 60px;
+    height: 32px;
+    border-radius: 999px;
+    transition: background 160ms var(--ease), color 160ms var(--ease);
+  }
+
+  .rail-link svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .rail-link:hover {
     background: none;
+    color: var(--muted);
+  }
+
+  .rail-link.is-active,
+  .rail-link.is-active:hover {
+    /* The desktop mark is a bordered panel; on the bar it is the pill below. */
+    background: none;
+    box-shadow: none;
     color: var(--ink);
+    font-weight: 560;
+  }
+
+  .rail-link.is-active .rail-icon {
+    background: var(--blue-wash);
+  }
+
+  .rail-label {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    padding-bottom: 2px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Clear of the bar, so the last row of a table is not under it. */
   .shell-content {
-    padding-bottom: calc(74px + env(safe-area-inset-bottom));
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   /*

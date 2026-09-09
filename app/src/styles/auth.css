@@ -917,6 +917,8 @@
   display: flex;
   flex: none;
   align-items: center;
+  /* So a copy that failed can say so on its own line below the buttons. */
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -1084,6 +1086,11 @@
   gap: 3px;
 }
 
+/* Only the phone sheet has a backdrop; on a pointer the menu is a popover. */
+.clip-scrim {
+  display: none;
+}
+
 .clip-caret {
   color: var(--muted);
   transition: transform 140ms var(--ease, ease);
@@ -1094,7 +1101,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .clip-caret {
+  /* Only the phone sheet has a backdrop; on a pointer the menu is a popover. */
+.clip-scrim {
+  display: none;
+}
+
+.clip-caret {
     transition: none;
   }
 }
@@ -1156,12 +1168,124 @@
   line-height: 1.35;
 }
 
-/* On a phone the row is narrow, so the menu takes the width it needs. */
-@media (max-width: 560px) {
+/* A refused clipboard, said out loud inside the menu that refused it. */
+.clip-failed {
+  display: flex;
+  padding: 8px 10px 6px;
+  margin: 2px 0 0;
+  color: var(--danger);
+  font-size: 11.5px;
+  line-height: 1.35;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.clip-failed svg {
+  margin-top: 1px;
+  flex: none;
+}
+
+/*
+ * The same thing anywhere else that copies: the value, spelled out, so it can
+ * be selected by hand when the browser will not hand it over.
+ */
+.copy-fallback {
+  display: flex;
+  max-width: 62ch;
+  /* Inside a row of buttons it takes its own line rather than a share of theirs. */
+  flex-basis: 100%;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.4;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.copy-fallback svg {
+  margin-top: 2px;
+  flex: none;
+}
+
+.copy-fallback code {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.rail-command-failed {
+  display: flex;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.rail-command-failed svg {
+  margin-top: 1px;
+  flex: none;
+}
+
+/* ---------------------------------------------------------------
+   The copy menu on a phone
+   ---------------------------------------------------------------
+   Anchored to the button, this menu ran off the right edge of the screen and
+   took the warning text with it: the sentence explaining that the link opens
+   the session to anyone holding it was the part cut off. There is no reliable
+   way to keep a 296px popover beside a button that can sit anywhere in a
+   390px row, so on a phone it stops trying and becomes a sheet across the
+   bottom, which is both always on screen and an easier thing to hit.
+   --------------------------------------------------------------- */
+@media (max-width: 760px) {
   .clip-pop {
-    right: auto;
+    position: fixed;
+    /* Over the bottom bar, which is 40. */
+    z-index: 50;
+    top: auto;
+    right: 0;
+    bottom: 0;
     left: 0;
-    width: min(296px, calc(100vw - 40px));
+    width: auto;
+    padding: 8px 10px calc(14px + env(safe-area-inset-bottom));
+    border-width: 1px 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    background: var(--white);
+    box-shadow: 0 -18px 50px color-mix(in srgb, var(--ink) 20%, transparent);
+    gap: 4px;
+  }
+
+  .clip-scrim {
+    position: fixed;
+    z-index: 49;
+    display: block;
+    background: color-mix(in srgb, var(--ink) 32%, transparent);
+    inset: 0;
+  }
+
+  .clip-item {
+    padding: 12px;
+  }
+
+  .clip-text b {
+    font-size: 15px;
+  }
+
+  .clip-text em {
+    font-size: 13px;
+  }
+
+  .clip-failed {
+    font-size: 13px;
   }
 }
 
@@ -1307,13 +1431,49 @@
   list-style: none;
 }
 
+/*
+ * The card is the target. The name carries the link and CSS stretches it over
+ * the card, the same arrangement the table row uses, so both views answer a
+ * tap in the same place: the session, not nothing.
+ */
 .board-card {
+  position: relative;
   display: grid;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
   background: var(--paper);
+  cursor: pointer;
   gap: 7px;
+  transition: border-color 140ms var(--ease), background 140ms var(--ease);
+}
+
+.board-card:hover {
+  border-color: var(--line-strong);
+  background: var(--white);
+}
+
+.board-card:has(.board-card-name:focus-visible) {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.board-card-name::after {
+  position: absolute;
+  content: "";
+  inset: 0;
+  border-radius: inherit;
+}
+
+/*
+ * The controls keep their own targets. They come after the overlay in the
+ * card, and positioned siblings paint in tree order, so relative is enough
+ * and no z-index is needed to trap the copy menu inside.
+ */
+.board-card .clip,
+.board-card .board-card-foot {
+  position: relative;
+  cursor: auto;
 }
 
 .board-card-head {
@@ -1332,10 +1492,21 @@
 .board-card-name {
   overflow: hidden;
   flex: 1;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 540;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.board-card:hover .board-card-name {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The stretched link owns the outline, so it must not draw its own. */
+.board-card-name:focus-visible {
+  outline: none;
 }
 
 .board-card-meta {

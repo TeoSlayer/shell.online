@@ -1,4 +1,5 @@
 import { Terminal as TerminalIcon, Trash, Eye } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
 import { PersonChip } from "./Avatar";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
@@ -44,7 +45,17 @@ function Card({
     <li className="board-card">
       <div className="board-card-head">
         <img className="board-card-icon" src={kind.icon} alt="" title={kind.title} />
-        <span className="board-card-name">{session.name || session.command}</span>
+        {/*
+         * The name is the card's link, and CSS stretches it over the whole
+         * card so anywhere that is not a control opens the session. One
+         * anchor, not a click handler on the li: a card you can only reach
+         * with a mouse is a card a keyboard cannot reach at all, and nesting
+         * the copy menu and the Open button inside an anchor would be
+         * invalid markup as well as unusable.
+         */}
+        <Link className="board-card-name" to={`/sessions/${session.id}`}>
+          {session.name || session.command}
+        </Link>
         <SessionClipboard session={session} you={you} />
       </div>
 
