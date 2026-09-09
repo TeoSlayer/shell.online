@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.11.1] — 2026-09-08
+
 ### Added
 
 - Read the session list as a board as well as a table. A toggle above the list switches between them and the choice is remembered; the board's three columns carry the action each one affords, and a search box matches a session's name or its command.
