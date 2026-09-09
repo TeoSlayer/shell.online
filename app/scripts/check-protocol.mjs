@@ -21,6 +21,7 @@ const FILES = [
   { vendored: "src/terminal/e2ee.ts", source: "web/e2ee.ts" },
   { vendored: "src/terminal/terminal-grid.ts", source: "shared/terminal-grid.ts" },
   { vendored: "src/terminal/terminal-fit.ts", source: "web/terminal-fit.ts" },
+  { vendored: "src/terminal/terminal-metrics.ts", source: "web/terminal-metrics.ts" },
 ];
 
 /* Copies kept in step within this repository rather than with shell.online. */

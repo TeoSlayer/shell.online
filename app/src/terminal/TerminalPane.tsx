@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, useMemo } from "react";
 import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
-import { fittedTerminalFontSize } from "./terminal-fit";
+import { fittedTerminal, type TerminalCell } from "./terminal-fit";
+import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
 import { forget, passwordFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
@@ -35,11 +35,17 @@ const THEME = {
   selectionBackground: "#3a3f33",
 };
 
-/*
- * The size the pane would like to draw at when the grid happens to fit. Every
- * fit scales down from here; nothing scales the grid.
- */
+const FONT_FAMILY = 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace';
+
+/* Only until the first fit, which is one frame later. Nothing else reads it. */
 const BASE_FONT_SIZE = 13;
+
+/*
+ * The loosest the rows are ever drawn. A pane with height to spare uses it; a
+ * pane that is short for the grid tightens towards the font's own line box,
+ * which is what buys the columns a larger font.
+ */
+const BASE_LINE_HEIGHT = 1.35;
 
 export function TerminalPane({
   shareUrl,
@@ -49,7 +55,7 @@ export function TerminalPane({
 }: TerminalPaneProps) {
   const mount = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
-  const fit = useRef<FitAddon | null>(null);
+  const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
   const connection = useRef<TerminalConnection | null>(null);
 
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
@@ -74,7 +80,7 @@ export function TerminalPane({
   const grid = useRef<TerminalGrid>(DESKTOP_TERMINAL_GRID);
 
   /**
-   * Scales the font so the whole session grid fits this pane, then pins the
+   * Draws the whole session grid as large as this pane allows, then pins the
    * terminal to that grid.
    *
    * The obvious thing — FitAddon.fit() — is wrong here. It picks the grid that
@@ -82,26 +88,26 @@ export function TerminalPane({
    * renders a 120-column process at, say, 94: every long line wraps a second
    * time and full-screen output loses its bottom rows. Nothing downstream can
    * repair that, because the PTY is not the size the emulator thinks it is.
+   * What the pane may choose is the font and the leading, which is what the
+   * fit returns.
    */
   const refit = useCallback(() => {
     const term = terminal.current;
-    const fitAddon = fit.current;
-    if (!activeRef.current || !fitAddon || !term) return;
+    const node = mount.current;
+    const measureCell = measure.current;
+    if (!activeRef.current || !term || !node || !measureCell) return;
     try {
-      term.options.fontSize = BASE_FONT_SIZE;
-      /* How much fits at the base size; the scale below is derived from it. */
-      const available = fitAddon.proposeDimensions();
-      if (!available) return;
+      const box = terminalBox(node);
+      if (box.width === 0 || box.height === 0) return;
       const { cols, rows } = grid.current;
-      const fontSize = fittedTerminalFontSize(
-        BASE_FONT_SIZE,
-        available.cols,
-        available.rows,
-        100,
-        cols,
-        rows,
-      );
-      if (term.options.fontSize !== fontSize) term.options.fontSize = fontSize;
+      const fitted = fittedTerminal(box, { cols, rows }, measureCell, {
+        pixelRatio: window.devicePixelRatio,
+        maxLineHeight: BASE_LINE_HEIGHT,
+      });
+      if (term.options.fontSize !== fitted.fontSize) term.options.fontSize = fitted.fontSize;
+      if (term.options.lineHeight !== fitted.lineHeight) {
+        term.options.lineHeight = fitted.lineHeight;
+      }
       if (term.cols !== cols || term.rows !== rows) {
         term.resize(cols, rows);
       } else {
@@ -149,23 +155,21 @@ export function TerminalPane({
     const target = resolved.target;
 
     const term = new Terminal({
-      fontFamily: 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace',
+      fontFamily: FONT_FAMILY,
       fontSize: BASE_FONT_SIZE,
       /* Opened at the session grid so the first frames land in the right shape. */
       cols: grid.current.cols,
       rows: grid.current.rows,
-      lineHeight: 1.35,
+      lineHeight: BASE_LINE_HEIGHT,
       cursorBlink: true,
       convertEol: false,
       allowProposedApi: true,
       scrollback: 5000,
       theme: THEME,
     });
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
     term.open(node);
     terminal.current = term;
-    fit.current = fitAddon;
+    measure.current = cellMeasurer(FONT_FAMILY);
 
     const connected = new TerminalConnection({
       url: target.url,
@@ -247,7 +251,7 @@ export function TerminalPane({
       connected.close();
       term.dispose();
       terminal.current = null;
-      fit.current = null;
+      measure.current = null;
       connection.current = null;
     };
   }, [shareUrl, refit, canType, stableShare]);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY, MAX_TABS, reduce, type TabState } from "./tabs";
+import { EMPTY, MAX_TABS, reduce, tabFor, type TabState } from "./tabs";
 import type { SessionRecord } from "../lib/api";
 
 function session(id: string, command = "top"): SessionRecord {
@@ -187,4 +187,39 @@ it("keeps a key share when the refreshed session has none", () => {
   const again = reduce(open, { type: "open", session: session("s1") });
   expect(again.tabs[0].keyShare).toEqual(share);
 });
+});
+
+describe("restore", () => {
+  const restored = (state: TabState, ids: string[], activeId: string | null) =>
+    reduce(state, {
+      type: "restore",
+      tabs: ids.map((id) => tabFor(session(id), true)),
+      activeId,
+    });
+
+  it("puts back the tabs a reload found, on the one that was in front", () => {
+    const state = restored(EMPTY, ["a", "b"], "b");
+    expect(state.tabs.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(state.activeId).toBe("b");
+  });
+
+  /* The list arrives after the page, and a click in between is deliberate. */
+  it("leaves a tab opened before the list arrived alone", () => {
+    const opened = open(EMPTY, "live");
+    expect(restored(opened, ["a", "b"], "b")).toBe(opened);
+  });
+
+  it("shows the list when the session that was in front has gone", () => {
+    /* Its id is not among the tabs the list could rebuild. */
+    const state = restored(EMPTY, ["a"], "b");
+    expect(state.tabs.map((t) => t.id)).toEqual(["a"]);
+    expect(state.activeId).toBeNull();
+  });
+
+  it("keeps no more tabs than may be open at once", () => {
+    const ids = Array.from({ length: MAX_TABS + 3 }, (_, index) => `s${index}`);
+    const state = restored(EMPTY, ids, null);
+    expect(state.tabs).toHaveLength(MAX_TABS);
+    expect(state.tabs.map((t) => t.id)).toEqual(ids.slice(-MAX_TABS));
+  });
 });

@@ -139,9 +139,21 @@ button.tab {
   pointer-events: none;
 }
 
+/*
+ * The grid is drawn as large as it fits, and what the fit could not use is
+ * split between the two sides rather than left as a gap down one of them.
+ */
 .pane-screen {
+  display: flex;
   width: 100%;
   height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The emulator sizes itself; it must not be shrunk to the flex line. */
+.pane-screen > .xterm {
+  flex: none;
 }
 
 .pane-screen .xterm .xterm-viewport {

@@ -24,7 +24,21 @@ export const MAX_TABS = 8;
 export type TabAction =
   | { type: "open"; session: SessionRecord; canType?: boolean }
   | { type: "close"; id: string }
-  | { type: "select"; id: string | null };
+  | { type: "select"; id: string | null }
+  | { type: "restore"; tabs: Tab[]; activeId: string | null };
+
+/** What a tab holds about the session it was opened from. */
+export function tabFor(session: SessionRecord, canType: boolean): Tab {
+  return {
+    id: session.id,
+    label: session.name?.trim() || session.command,
+    command: session.command,
+    shareUrl: session.shareUrl,
+    readOnly: session.readOnly,
+    keyShare: session.keyShare,
+    canType,
+  };
+}
 
 /**
  * Tab bookkeeping, kept apart from React so the rules are testable.
@@ -60,15 +74,7 @@ export function reduce(state: TabState, action: TabAction): TabState {
         };
       }
 
-      const tab: Tab = {
-        id: session.id,
-        label: session.name?.trim() || session.command,
-        command: session.command,
-        shareUrl: session.shareUrl,
-        readOnly: session.readOnly,
-        keyShare: session.keyShare,
-        canType: action.canType ?? true,
-      };
+      const tab = tabFor(session, action.canType ?? true);
       /* Oldest goes when the cap is reached, and never the one being opened. */
       const tabs = [...state.tabs, tab].slice(-MAX_TABS);
       return { tabs, activeId: tab.id };
@@ -84,6 +90,18 @@ export function reduce(state: TabState, action: TabAction): TabState {
       /* Closing the active tab lands on its neighbour, not back at the list. */
       const neighbour = tabs[index] ?? tabs[index - 1] ?? null;
       return { tabs, activeId: neighbour?.id ?? null };
+    }
+
+    /*
+     * The tabs a reload found, rebuilt from the session list. It loses to
+     * anything already open: the list arrives a moment after the page does, and
+     * a session opened in that moment is a deliberate act, not a leftover.
+     */
+    case "restore": {
+      if (state.tabs.length > 0) return state;
+      const tabs = action.tabs.slice(-MAX_TABS);
+      const active = tabs.some((tab) => tab.id === action.activeId) ? action.activeId : null;
+      return { tabs, activeId: active };
     }
 
     case "select":

@@ -11,9 +11,11 @@ import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SignedInModal } from "../components/SignedInModal";
 import { AppShell } from "../components/AppShell";
+import { useAuth } from "../auth/AuthProvider";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
-import { EMPTY, reduce } from "../terminal/tabs";
+import { EMPTY, reduce, tabFor } from "../terminal/tabs";
+import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
 import {
   assignSession,
   deleteSession,
@@ -113,6 +115,7 @@ function writeViewMode(mode: ViewMode): void {
 
 export function Workspace() {
   usePageTitle("Sessions");
+  const { user } = useAuth();
   const [state, dispatch] = useReducer(reduce, EMPTY);
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -133,6 +136,8 @@ export function Workspace() {
   const [search, setSearch] = useSearchParams();
   const [justLinked, setJustLinked] = useState(() => wasJustLinked(search));
   const loadedOnce = useRef(false);
+  /* Tabs are put back once, from the first session list a reload receives. */
+  const restoredTabs = useRef(false);
   /* Passwords waiting for their session to appear so they can be shared. */
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
@@ -174,6 +179,34 @@ export function Workspace() {
       window.clearInterval(tick);
     };
   }, [load]);
+
+  /*
+   * The tabs that were open before the last reload, rebuilt from the session
+   * list rather than from what was stored: only the ids were kept. A session
+   * that has since ended or been removed does not come back, because a pane on
+   * a dead session is a card saying so, which is not worth a tab.
+   */
+  useEffect(() => {
+    if (restoredTabs.current || sessions === null) return;
+    restoredTabs.current = true;
+    const remembered = readOpenTabs(user?.uid ?? "");
+    if (remembered.ids.length === 0) return;
+    const byId = new Map(sessions.map((session) => [session.id, session]));
+    const tabs = remembered.ids
+      .map((id) => byId.get(id))
+      .filter((session): session is SessionRecord => session !== undefined && !session.closedAt)
+      .map((session) => tabFor(session, canEdit(session, you)));
+    dispatch({ type: "restore", tabs, activeId: remembered.activeId });
+  }, [sessions, you, user]);
+
+  /* Written only after the restore, so an empty first render cannot erase it. */
+  useEffect(() => {
+    if (!restoredTabs.current) return;
+    writeOpenTabs(user?.uid ?? "", {
+      ids: state.tabs.map((tab) => tab.id),
+      activeId: state.activeId,
+    });
+  }, [state, user]);
 
   /*
    * Publishing this browser's key makes it a possible recipient of a session

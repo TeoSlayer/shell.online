@@ -1255,12 +1255,14 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/*
+ * A column is a heading and the cards under it, with nothing drawn around it.
+ * The box it used to sit in repeated the border and the wash each card already
+ * carries, which read as a panel inside a panel and made three short columns
+ * look like three empty containers.
+ */
 .board-column {
   display: flex;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--ink) 2%, transparent);
   flex-direction: column;
   gap: 2px;
 }

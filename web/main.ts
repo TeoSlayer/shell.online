@@ -1,4 +1,3 @@
-import { FitAddon } from "@xterm/addon-fit";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import {
   CLAUDE_CODE_PATH,
@@ -42,9 +41,8 @@ import {
   type LatencySample,
 } from "./latency-history";
 import { MobileViewportTracker, terminalTypography } from "./mobile-viewport";
-import {
-  fittedTerminalFontSize,
-} from "./terminal-fit";
+import { fittedTerminal } from "./terminal-fit";
+import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { DESKTOP_TERMINAL_GRID } from "../shared/terminal-grid";
 import { renderStatsDashboard } from "./stats";
 import {
@@ -1216,8 +1214,7 @@ function renderTerminal(sessionId: string): void {
     allowTransparency: false,
     theme: terminalThemes[colorMode],
   });
-  const fit = new FitAddon();
-  terminal.loadAddon(fit);
+  const measureCell = cellMeasurer(terminal.options.fontFamily ?? "monospace");
   terminal.open(terminalElement);
   const helperTextarea = terminalElement.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
   if (helperTextarea) {
@@ -1577,8 +1574,9 @@ function renderTerminal(sessionId: string): void {
   };
 
   const fitTerminal = (): void => {
-    if (terminalWrap.clientWidth === 0 || terminalWrap.clientHeight === 0) return;
     try {
+      const box = terminalBox(terminalElement);
+      if (box.width === 0 || box.height === 0) return;
       const current = readViewport();
       const typography = terminalTypography(
         compactSessionQuery.matches,
@@ -1586,20 +1584,25 @@ function renderTerminal(sessionId: string): void {
         current.width,
         current.height,
       );
-      terminal.options.fontSize = typography.fontSize;
-      terminal.options.lineHeight = typography.lineHeight;
-      const available = fit.proposeDimensions();
-      if (!available) return;
-      const scaledFontSize = fittedTerminalFontSize(
-        typography.fontSize,
-        available.cols,
-        available.rows,
-        terminalZoomPercent,
-        terminalColumns,
-        terminalRows,
+      /*
+       * The typography for this device is the loosest the rows are drawn at;
+       * the fit tightens the leading from there when that buys a larger font.
+       */
+      const fitted = fittedTerminal(
+        box,
+        { cols: terminalColumns, rows: terminalRows },
+        measureCell,
+        {
+          zoomPercent: terminalZoomPercent,
+          pixelRatio: window.devicePixelRatio,
+          maxLineHeight: typography.lineHeight,
+        },
       );
-      if (terminal.options.fontSize !== scaledFontSize) {
-        terminal.options.fontSize = scaledFontSize;
+      if (terminal.options.fontSize !== fitted.fontSize) {
+        terminal.options.fontSize = fitted.fontSize;
+      }
+      if (terminal.options.lineHeight !== fitted.lineHeight) {
+        terminal.options.lineHeight = fitted.lineHeight;
       }
       if (terminal.cols !== terminalColumns || terminal.rows !== terminalRows) {
         terminal.resize(terminalColumns, terminalRows);
