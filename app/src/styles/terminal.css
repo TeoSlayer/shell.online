@@ -66,6 +66,15 @@
   white-space: nowrap;
 }
 
+/* Matches the glyph it replaced, so the tab strip keeps its rhythm. */
+.tab-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  object-fit: contain;
+}
+
+
 /* The "All sessions" tab is a single button, so it owns its own padding. */
 button.tab {
   padding: 0 15px;

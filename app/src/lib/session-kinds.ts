@@ -219,6 +219,10 @@ export function kindById(id: string): SessionKind | undefined {
  * line and reading the first gives every one of them a terminal icon. The
  * quotes are stripped with it, since the wrapped command is a single argument.
  *
+ * This is for sessions recorded before the CLI carried the requested command
+ * through to registration. A machine running a current release publishes what
+ * was asked for, so nothing new needs unwrapping; rows already stored do.
+ *
  * Only the leading wrapper is unwrapped, and only once: `sh -c "sh -c ..."` is
  * not a thing anything here produces, and following it would be guessing.
  */

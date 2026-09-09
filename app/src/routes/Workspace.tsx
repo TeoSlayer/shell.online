@@ -386,7 +386,17 @@ export function Workspace() {
                 onClick={() => dispatch({ type: "select", id: tab.id })}
                 title={tab.command}
               >
-                <TerminalIcon size={15} />
+                {/*
+                  The kind of thing running, as the row shows it. This was a
+                  fixed terminal glyph, so opening a Claude Code session and
+                  looking at its tab showed a terminal whatever was running.
+                */}
+                <img
+                  className="tab-icon"
+                  src={kindForCommand(tab.command).icon}
+                  alt=""
+                  title={kindForCommand(tab.command).title}
+                />
                 {tab.label}
               </button>
               <button

@@ -24,6 +24,23 @@ const sessionNameEnvironment = "SHELL_ONLINE_SESSION_NAME"
 // the browser that made it can recognise its own session when it appears.
 const sessionOriginEnvironment = "SHELL_ONLINE_SESSION_ORIGIN"
 
+// sessionCommandEnvironment carries the command a browser asked for.
+//
+// A browser-started session is run as `shell sh -c "<command>"`, so the argv
+// this process sees is the shell, not the thing anybody asked for. Publishing
+// that argv recorded `sh -c "claude ..."` as the command, which is not what
+// was requested and not what the session is: every one of them showed up as a
+// terminal process, because the program being run is the second word.
+//
+// The shell is how it is run. This is what was asked for, and it is what the
+// session should say it is.
+const sessionCommandEnvironment = "SHELL_ONLINE_SESSION_COMMAND"
+
+// sessionCommandFromEnvironment returns the requested command, if any.
+func sessionCommandFromEnvironment() string {
+	return strings.TrimSpace(os.Getenv(sessionCommandEnvironment))
+}
+
 // sessionNameFromEnvironment returns the label for this session, if any.
 func sessionNameFromEnvironment() string {
 	return strings.TrimSpace(os.Getenv(sessionNameEnvironment))
@@ -95,6 +112,15 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 	}
 	if input.Origin == "" {
 		input.Origin = strings.TrimSpace(os.Getenv(sessionOriginEnvironment))
+	}
+	/*
+	 * Authoritative when set, unlike the two above, which only fill a gap.
+	 * input.Command is never empty: it is this process's own argv, and for a
+	 * browser-started session that argv is the shell wrapper rather than the
+	 * command. The wrapper is an implementation detail of running it.
+	 */
+	if requested := sessionCommandFromEnvironment(); requested != "" {
+		input.Command = requested
 	}
 
 	registerContext, cancel := context.WithTimeout(ctx, linkTimeout)

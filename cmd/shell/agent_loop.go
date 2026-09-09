@@ -158,6 +158,10 @@ func performAgentCommand(
 			launch.Env = append(launch.Env, "SHELL_ONLINE_E2EE_PASSWORD="+password)
 		}
 		launch.Env = append(launch.Env, sessionOriginEnvironment+"="+command.ID)
+		// What was asked for, so the session records that rather than the
+		// shell wrapper above. Without it every browser-started session is
+		// published as `sh -c "..."` and reads as a plain terminal process.
+		launch.Env = append(launch.Env, sessionCommandEnvironment+"="+command.Command)
 		launch.Stdout = io.Discard
 		launch.Stderr = io.Discard
 		if err := launch.Run(); err != nil {

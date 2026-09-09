@@ -352,3 +352,30 @@ func TestPublishedLinkKeepsTheSaltSoItCanBeOpened(t *testing.T) {
 		t.Fatalf("a link without its salt cannot be opened from the web app: %q", shareURL)
 	}
 }
+
+// A browser-started session runs as `shell sh -c "<command>"`, so this
+// process's argv is the shell rather than the thing anybody asked for.
+// Publishing the argv recorded `sh -c "claude ..."`, which made every
+// browser-started session read as a plain terminal process: the program being
+// run is the second word.
+func TestRequestedCommandReplacesTheShellWrapper(t *testing.T) {
+	t.Setenv(sessionCommandEnvironment, "claude --dangerously-skip-permissions")
+	if got := sessionCommandFromEnvironment(); got != "claude --dangerously-skip-permissions" {
+		t.Fatalf("requested command = %q", got)
+	}
+}
+
+func TestRequestedCommandIsAbsentByDefault(t *testing.T) {
+	t.Setenv(sessionCommandEnvironment, "")
+	if got := sessionCommandFromEnvironment(); got != "" {
+		t.Fatalf("requested command = %q, want empty so the argv stands", got)
+	}
+}
+
+// Surrounding whitespace comes from the environment, not from the person.
+func TestRequestedCommandIsTrimmed(t *testing.T) {
+	t.Setenv(sessionCommandEnvironment, "  claude  ")
+	if got := sessionCommandFromEnvironment(); got != "claude" {
+		t.Fatalf("requested command = %q", got)
+	}
+}
