@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { Copy, Check, X, Lock, Trash, Terminal as TerminalIcon, List, Plus, CaretRight } from "@phosphor-icons/react";
+import { X, Trash, Terminal as TerminalIcon, List, Plus, CaretRight, MagnifyingGlass, Rows, Columns } from "@phosphor-icons/react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PersonChip } from "../components/Avatar";
 import { PersonPicker } from "../components/PersonPicker";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
+import { canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
 import { NewSessionModal } from "../components/NewSessionModal";
+import { SessionBoard } from "../components/SessionBoard";
+import { SessionClipboard } from "../components/SessionClipboard";
 import { SignedInModal } from "../components/SignedInModal";
 import { AppShell } from "../components/AppShell";
 import { Alert } from "../components/Alert";
@@ -23,7 +26,7 @@ import {
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { openSealed, publicKey, sealForMembers } from "../lib/keypair";
+import { publicKey, sealForMembers } from "../lib/keypair";
 import { fetchOrg, shareSessionKeys } from "../lib/api";
 import { adoptOrigin, forget, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
 import { elapsed } from "../lib/time";
@@ -35,93 +38,6 @@ const POLL_MS = 4000;
 const DEVICE_POLL_MS = 5000;
 /* Long enough for the agent to poll, launch, and for the session to publish. */
 const AFTER_COMMAND_MS = 1500;
-
-function CopyLink({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className="session-copy"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(url);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1600);
-        } catch {
-          /* clipboard is unavailable outside a secure context */
-        }
-      }}
-      aria-label={copied ? "Link copied" : "Copy share link"}
-      title="Copy the share link"
-    >
-      {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
-    </button>
-  );
-}
-
-/*
- * Copies the session password, for people entitled to have it.
- *
- * The service never sees a password, so there is nothing to fetch: this is
- * either the copy this browser kept from starting the session, or one a
- * colleague sealed to this browser's key. Anyone else has neither, and the
- * button does not appear for them rather than appearing and failing.
- */
-function CopyPassword({ session }: { session: SessionRecord }) {
-  const [state, setState] = useState<"idle" | "copied" | "gone">("idle");
-  const [available, setAvailable] = useState(() => passwordFor(session.id) !== null);
-
-  useEffect(() => {
-    let live = true;
-    if (passwordFor(session.id)) {
-      setAvailable(true);
-      return;
-    }
-    /* A sealed copy has to be opened before we know we have one. */
-    const share = session.keyShare;
-    if (!share) {
-      setAvailable(false);
-      return;
-    }
-    void openSealed(share.senderPublicKey, share.sealed).then((password) => {
-      if (live) setAvailable(Boolean(password));
-    });
-    return () => {
-      live = false;
-    };
-  }, [session.id, session.keyShare]);
-
-  if (!available) return null;
-
-  return (
-    <button
-      type="button"
-      className="session-copy"
-      onClick={async () => {
-        const own = passwordFor(session.id);
-        const share = session.keyShare;
-        const password =
-          own ?? (share ? await openSealed(share.senderPublicKey, share.sealed) : null);
-        if (!password) {
-          setState("gone");
-          window.setTimeout(() => setState("idle"), 2400);
-          return;
-        }
-        try {
-          await navigator.clipboard.writeText(password);
-          setState("copied");
-          window.setTimeout(() => setState("idle"), 1600);
-        } catch {
-          /* clipboard is unavailable outside a secure context */
-        }
-      }}
-      aria-label={state === "copied" ? "Password copied" : "Copy the session password"}
-      title={state === "gone" ? "That password is no longer here" : "Copy the session password"}
-    >
-      {state === "copied" ? <Check size={15} weight="bold" /> : <Lock size={15} />}
-    </button>
-  );
-}
 
 /*
  * Removes a session from the lists. Asks first, because it cannot be undone
@@ -174,6 +90,27 @@ function RemoveSession({
   );
 }
 
+type ViewMode = "list" | "board";
+
+const VIEW_KEY = "shell.online:sessions:view";
+
+/* Remembered per browser. Which shape suits you is not worth re-choosing. */
+function readViewMode(): ViewMode {
+  try {
+    return window.localStorage.getItem(VIEW_KEY) === "board" ? "board" : "list";
+  } catch {
+    return "list";
+  }
+}
+
+function writeViewMode(mode: ViewMode): void {
+  try {
+    window.localStorage.setItem(VIEW_KEY, mode);
+  } catch {
+    /* a private window simply forgets the choice */
+  }
+}
+
 export function Workspace() {
   usePageTitle("Sessions");
   const [state, dispatch] = useReducer(reduce, EMPTY);
@@ -184,6 +121,8 @@ export function Workspace() {
   const [now, setNow] = useState(() => Date.now());
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<ViewMode>(readViewMode);
   const [removing, setRemoving] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
@@ -400,8 +339,18 @@ export function Workspace() {
     }
   }
 
-  const live = sessions?.filter((session) => !session.closedAt) ?? [];
-  const finished = sessions?.filter((session) => session.closedAt) ?? [];
+  /*
+   * Three groups, not two. Whether a session can be typed into is what
+   * somebody scanning this list is deciding between, and it was buried in the
+   * row: "Running" mixed sessions you can drive with sessions you can only
+   * watch, and the difference showed only once a tab was open.
+   */
+  const matching = (sessions ?? []).filter((session) => matches(session, query));
+  const liveWrite = matching.filter((session) => !session.closedAt && canEdit(session, you));
+  const liveRead = matching.filter((session) => !session.closedAt && !canEdit(session, you));
+  const finished = matching.filter((session) => session.closedAt);
+  const openSession = (session: SessionRecord) =>
+    dispatch({ type: "open", session, canType: canEdit(session, you) });
   const showingList = state.activeId === null;
 
   return (
@@ -526,41 +475,116 @@ export function Workspace() {
           </div>
         ) : (
           <>
-            {live.length > 0 && (
-              <SessionGroup
-                heading="Running"
-                sessions={live}
+            <div className="sessions-toolbar">
+              <label className="sessions-search">
+                <MagnifyingGlass size={15} />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search name or command"
+                  aria-label="Search sessions by name or command"
+                />
+              </label>
+
+              <div className="view-toggle" role="group" aria-label="How to show sessions">
+                <button
+                  type="button"
+                  className={view === "list" ? "view-option is-active" : "view-option"}
+                  aria-pressed={view === "list"}
+                  onClick={() => {
+                    setView("list");
+                    writeViewMode("list");
+                  }}
+                  title="List"
+                >
+                  <Rows size={15} />
+                </button>
+                <button
+                  type="button"
+                  className={view === "board" ? "view-option is-active" : "view-option"}
+                  aria-pressed={view === "board"}
+                  onClick={() => {
+                    setView("board");
+                    writeViewMode("board");
+                  }}
+                  title="Columns"
+                >
+                  <Columns size={15} />
+                </button>
+              </div>
+            </div>
+
+            {matching.length === 0 ? (
+              <div className="sessions-empty">
+                <p>Nothing matches that search.</p>
+                <button type="button" className="session-action" onClick={() => setQuery("")}>
+                  Clear it
+                </button>
+              </div>
+            ) : view === "board" ? (
+              <SessionBoard
+                liveWrite={liveWrite}
+                liveRead={liveRead}
+                finished={finished}
                 now={now}
-                live
-                killing={killing}
-                removing={removing}
                 members={members}
                 you={you}
-                onOpen={(session) =>
-                  dispatch({ type: "open", session, canType: canEdit(session, you) })
-                }
-                onKill={handleKill}
-                onRemove={handleRemove}
-                onAssign={handleAssign}
-              />
-            )}
-            {finished.length > 0 && (
-              <SessionGroup
-                heading="Finished"
-                sessions={finished}
-                now={now}
-                live={false}
-                killing={killing}
                 removing={removing}
-                members={members}
-                you={you}
-                onOpen={(session) =>
-                  dispatch({ type: "open", session, canType: canEdit(session, you) })
-                }
-                onKill={handleKill}
+                onOpen={openSession}
                 onRemove={handleRemove}
-                onAssign={handleAssign}
               />
+            ) : (
+              <>
+                {liveWrite.length > 0 && (
+                  <SessionGroup
+                    heading="Live write"
+                    sessions={liveWrite}
+                    now={now}
+                    live
+                    killing={killing}
+                    removing={removing}
+                    members={members}
+                    you={you}
+                    onOpen={openSession}
+                    onKill={handleKill}
+                    onRemove={handleRemove}
+                    onAssign={handleAssign}
+                  />
+                )}
+                {liveRead.length > 0 && (
+                  <SessionGroup
+                    heading="Live read"
+                    sessions={liveRead}
+                    now={now}
+                    live
+                    killing={killing}
+                    removing={removing}
+                    members={members}
+                    you={you}
+                    onOpen={openSession}
+                    onKill={handleKill}
+                    onRemove={handleRemove}
+                    onAssign={handleAssign}
+                  />
+                )}
+                {finished.length > 0 && (
+                  <SessionGroup
+                    heading="Finished"
+                    sessions={finished}
+                    now={now}
+                    live={false}
+                    killing={killing}
+                    removing={removing}
+                    members={members}
+                    you={you}
+                    onOpen={openSession}
+                    onKill={handleKill}
+                    onRemove={handleRemove}
+                    onAssign={handleAssign}
+                  />
+                )}
+              </>
             )}
           </>
         )}
@@ -577,38 +601,6 @@ export function Workspace() {
       {justLinked && <SignedInModal onClose={() => setJustLinked(false)} />}
     </AppShell>
   );
-}
-
-/**
- * Everyone in the team can watch a session. Typing into it belongs to
- * the person who started it and the person it is assigned to.
- */
-export function canEdit(session: SessionRecord, you: Member | null): boolean {
-  if (!you) return false;
-  if (session.readOnly) return false;
-  return session.ownerUid === you.uid || session.assigneeUid === you.uid;
-}
-
-function canHandOff(session: SessionRecord, you: Member | null): boolean {
-  if (!you) return false;
-  return session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
-}
-
-/*
- * Removing the row is not stopping the process, so it is not tied to owning
- * the machine. The person whose session it is can tidy their own list, and
- * whoever runs the team can tidy anybody's.
- */
-export function canRemove(session: SessionRecord, you: Member | null): boolean {
-  if (!you) return false;
-  return (
-    session.ownerUid === you.uid || you.role === "owner" || you.role === "admin"
-  );
-}
-
-/** Stopping controls the owner's local process, so assignment is not enough. */
-export function canStop(session: SessionRecord, you: Member | null): boolean {
-  return Boolean(you && session.ownerUid === you.uid && session.deviceId);
 }
 
 function SessionGroup({
@@ -744,8 +736,7 @@ function SessionGroup({
                           <TerminalIcon size={15} weight="bold" />
                           {canEdit(session, you) ? "Open" : "Watch"}
                         </button>
-                        <CopyLink url={session.shareUrl} />
-                        {canEdit(session, you) && <CopyPassword session={session} />}
+                        <SessionClipboard session={session} you={you} />
                         {canStop(session, you) && (
                           <button
                             type="button"
@@ -762,8 +753,7 @@ function SessionGroup({
                       </>
                     ) : (
                       <>
-                        <CopyLink url={session.shareUrl} />
-                        {canEdit(session, you) && <CopyPassword session={session} />}
+                        <SessionClipboard session={session} you={you} />
                         {canRemove(session, you) && (
                           <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
                         )}

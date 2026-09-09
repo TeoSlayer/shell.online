@@ -1065,3 +1065,296 @@
     gap: 12px;
   }
 }
+
+/* ---------------------------------------------------------------
+   Copy menu on a session row
+   ---------------------------------------------------------------
+   One button, three things that leave the page in somebody's clipboard.
+   Each carries a line saying what it hands over, because a share link and a
+   session password both give a terminal to whoever holds them and neither
+   says so on its own.
+   --------------------------------------------------------------- */
+.clip {
+  position: relative;
+  display: inline-flex;
+}
+
+.clip-pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  width: 296px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  box-shadow: 0 14px 40px color-mix(in srgb, var(--ink) 14%, transparent);
+  gap: 2px;
+}
+
+.clip-item {
+  display: flex;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  gap: 10px;
+  text-align: left;
+}
+
+.clip-item:hover,
+.clip-item:focus-visible {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+
+.clip-item svg {
+  margin-top: 1px;
+  color: var(--muted);
+  flex: none;
+}
+
+.clip-text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.clip-text b {
+  font-size: 13px;
+  font-weight: 560;
+}
+
+/* The warning. Muted, but it wraps rather than truncating: it is the point. */
+.clip-text em {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+/* On a phone the row is narrow, so the menu takes the width it needs. */
+@media (max-width: 560px) {
+  .clip-pop {
+    right: auto;
+    left: 0;
+    width: min(296px, calc(100vw - 40px));
+  }
+}
+
+/* ---------------------------------------------------------------
+   Sessions toolbar: search, and the two shapes the list can take
+   --------------------------------------------------------------- */
+.sessions-toolbar {
+  display: flex;
+  margin: 14px 0 4px;
+  align-items: center;
+  gap: 10px;
+}
+
+.sessions-search {
+  display: flex;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+.sessions-search svg {
+  color: var(--muted);
+  flex: none;
+}
+
+.sessions-search input {
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  outline: none;
+}
+
+.sessions-search input::placeholder {
+  color: var(--muted);
+}
+
+.sessions-search:focus-within {
+  border-color: color-mix(in srgb, var(--ink) 34%, var(--line));
+}
+
+/* Two icons, top right of the canvas, sharing one outline. */
+.view-toggle {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  flex: none;
+  gap: 2px;
+}
+
+.view-option {
+  display: inline-flex;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: calc(var(--radius-control) - 3px);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.view-option:hover {
+  color: var(--ink);
+}
+
+.view-option.is-active {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------------
+   Board
+   ---------------------------------------------------------------
+   Three columns on a desktop. On a phone they stack, rather than scrolling
+   sideways: a column you have to discover by swiping is a column nobody reads,
+   and the whole point of this shape is seeing all three at once.
+   --------------------------------------------------------------- */
+.board {
+  display: grid;
+  margin-top: 16px;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.board-column {
+  display: flex;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+  flex-direction: column;
+  gap: 2px;
+}
+
+.board-column-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.board-column-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0.02em;
+}
+
+.board-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-column-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.board-empty {
+  margin: 0;
+  padding: 14px 2px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.board-cards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.board-card {
+  display: grid;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  background: var(--paper);
+  gap: 7px;
+}
+
+.board-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.board-card-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  object-fit: contain;
+}
+
+.board-card-name {
+  overflow: hidden;
+  flex: 1;
+  font-size: 13px;
+  font-weight: 540;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card-meta {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.board-card-unassigned {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .sessions-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .sessions-search {
+    flex: 1 1 100%;
+    order: 2;
+  }
+
+  .view-toggle {
+    margin-left: auto;
+    order: 1;
+  }
+}
