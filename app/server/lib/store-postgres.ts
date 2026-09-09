@@ -555,6 +555,15 @@ export class PostgresStore implements Store {
     return row ? toToken(row) : null;
   }
 
+  async machineForDevice(uid: string, deviceId: string): Promise<string | null> {
+    /* No revoked_at filter: the point is to find where a dead device lived. */
+    const row = await this.row("SELECT machine_id FROM cli_tokens WHERE uid = $1 AND id = $2", [
+      uid,
+      deviceId,
+    ]);
+    return (row?.machine_id as string | null) ?? null;
+  }
+
   async setMemberKey(uid: string, publicKey: string): Promise<void> {
     await this.pool.query("UPDATE memberships SET public_key = $2 WHERE uid = $1", [uid, publicKey]);
   }

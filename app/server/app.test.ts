@@ -596,8 +596,13 @@ describe("driving a machine from the browser", () => {
     expect(result.status).toBe(403);
   });
 
-  it("stops a session only through the machine that registered it", async () => {
-    const { tokens, deviceId: ownerDevice } = await withDevice();
+  /*
+   * The caller names a session, not a machine. Which machine that reaches is
+   * the session's business, so a browser holding the wrong device id cannot
+   * send a stop anywhere except to the machine actually running it.
+   */
+  it("stops a session on its own machine whatever device the caller names", async () => {
+    const { tokens } = await withDevice();
     const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
     await call("POST", "/api/sessions", {
       auth: tokens.access_token,
@@ -612,18 +617,125 @@ describe("driving a machine from the browser", () => {
     const [otherDevice] = await devices();
     await call("GET", "/api/agent/commands", { auth: otherTokens.access_token });
 
-    const wrong = await call("POST", "/api/commands", {
+    /* Naming the wrong machine does not misdirect it, and does not fail. */
+    const queued = await call("POST", "/api/commands", {
       auth: await idToken(),
       body: { device_id: otherDevice.id, kind: "kill", session_id: sessionId },
     });
-    expect(wrong).toMatchObject({ status: 409, body: { error: expect.stringContaining("different machine") } });
+    expect(queued.status).toBe(202);
 
-    const right = await call("POST", "/api/commands", {
-      auth: await idToken(),
-      body: { device_id: ownerDevice, kind: "kill", session_id: sessionId },
-    });
-    expect(right.status).toBe(202);
+    /* The other machine is handed nothing. */
+    const wrongAgent = await call("GET", "/api/agent/commands", { auth: otherTokens.access_token });
+    expect(wrongAgent.body.commands).toEqual([]);
+
+    /* The machine that registered it gets the kill. */
     const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    expect(claimed.body.commands[0]).toMatchObject({ kind: "kill", sessionId });
+  });
+
+  /*
+   * A session reports its own exit using the credentials it started with.
+   * Unlinking revokes those, so a session started before that can never
+   * report anything again: the process dies on the machine and the row stays
+   * open here, which reads as a stop button that did nothing. The machine
+   * confirming the kill is the same fact on credentials that still work.
+   */
+  it("closes the session when the machine confirms it carried out the stop", async () => {
+    const tokens = await login({ machine_id: "machine-1" });
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: sessionId,
+        share_url: `https://shell.online/s/${sessionId}`,
+        command: "top",
+      },
+    });
+
+    await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: "ignored", kind: "kill", session_id: sessionId },
+    });
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const command = claimed.body.commands[0];
+
+    /* Still running until the machine says otherwise. */
+    let listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].closedAt).toBeUndefined();
+
+    await call("POST", `/api/agent/commands/${command.id}`, {
+      auth: tokens.access_token,
+      body: {},
+    });
+
+    listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].closedAt).toEqual(expect.any(Number));
+  });
+
+  it("leaves the session running when the machine reports the stop failed", async () => {
+    const tokens = await login({ machine_id: "machine-1" });
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: sessionId,
+        share_url: `https://shell.online/s/${sessionId}`,
+        command: "top",
+      },
+    });
+    await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: "ignored", kind: "kill", session_id: sessionId },
+    });
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+
+    await call("POST", `/api/agent/commands/${claimed.body.commands[0].id}`, {
+      auth: tokens.access_token,
+      body: { error: "no such session" },
+    });
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].closedAt).toBeUndefined();
+  });
+
+  /*
+   * The bug this replaced: unlinking a machine revokes its device row, and
+   * signing in again deliberately makes a new one, so every session started
+   * before that names a row the account no longer lists. Stopping answered
+   * "no such machine" about a machine sitting there polling under a new id.
+   */
+  it("follows a relinked machine, so stopping still reaches it", async () => {
+    /* A machine that can name itself, which is what lets it be followed. */
+    const tokens = await login({ machine_id: "machine-1" });
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const [first] = await devices();
+    const original = first.id as string;
+    const sessionId = "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t";
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        id: sessionId,
+        share_url: `https://shell.online/s/${sessionId}`,
+        command: "top",
+      },
+    });
+
+    /* Unlink, then sign the same machine in again: a new device row. */
+    expect((await call("DELETE", `/api/devices/${original}`, { auth: await idToken() })).status).toBe(200);
+    const relinked = await login({ machine_id: "machine-1" });
+    const [current] = await devices();
+    expect(current.id).not.toBe(original);
+    await call("GET", "/api/agent/commands", { auth: relinked.access_token });
+
+    const queued = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: original, kind: "kill", session_id: sessionId },
+    });
+    expect(queued.status).toBe(202);
+
+    const claimed = await call("GET", "/api/agent/commands", { auth: relinked.access_token });
     expect(claimed.body.commands[0]).toMatchObject({ kind: "kill", sessionId });
   });
 

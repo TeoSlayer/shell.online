@@ -741,23 +741,32 @@ export function createApp(options: AppOptions) {
         const deviceId = String(body.device_id ?? "");
         const kind = String(body.kind ?? "");
 
-        const device = (await store.listDevices(identity.uid)).find((entry) => entry.id === deviceId);
-        if (!device) return send(response, 404, { error: "no such machine" });
-
-        /*
-         * Only a machine that is polling can carry work out. Queuing for one
-         * that is not would sit there silently forever, which is a worse
-         * answer than saying so now.
-         */
-        if (!device.agentSeenAt || Date.now() - device.agentSeenAt > AGENT_ONLINE_MS) {
-          return send(response, 409, {
-            error:
-              `${device.label} is not reachable. Sign in there with 'shell login' ` +
-              `and allow browser-started sessions, then try again.`,
-          });
-        }
-
         if (kind === "start") {
+          /*
+           * Starting names a machine, so the caller's choice is the subject
+           * and checking it here is right. Stopping does not: it names a
+           * session, and which machine that reaches is the session's business,
+           * resolved in that branch. Checking the caller's copy for both is
+           * what made stopping fail with "no such machine".
+           */
+          const device = (await store.listDevices(identity.uid)).find(
+            (entry) => entry.id === deviceId,
+          );
+          if (!device) return send(response, 404, { error: "no such machine" });
+
+          /*
+           * Only a machine that is polling can carry work out. Queuing for one
+           * that is not would sit there silently forever, which is a worse
+           * answer than saying so now.
+           */
+          if (!device.agentSeenAt || Date.now() - device.agentSeenAt > AGENT_ONLINE_MS) {
+            return send(response, 409, {
+              error:
+                `${device.label} is not reachable. Sign in there with 'shell login' ` +
+                `and allow browser-started sessions, then try again.`,
+            });
+          }
+
           const command = String(body.command ?? "").trim();
           if (!command) return send(response, 400, { error: "give a command to run" });
           if (command.length > 500) return send(response, 400, { error: "that command is too long" });
@@ -800,19 +809,55 @@ export function createApp(options: AppOptions) {
            * this wants the person who pressed it either way.
            */
           if (scope) await noteSessionEvent(store, scope, sessionId, "stopped", session);
-          const ownerDeviceId = sessionSource(session).deviceId;
-          if (!ownerDeviceId) {
+
+          /*
+           * The target comes from the session, not from the caller.
+           *
+           * The browser echoes back the device id the session was started on,
+           * and that id goes stale in a way nobody would connect to the button
+           * they pressed: unlinking a machine revokes its device row, signing
+           * in again deliberately makes a new one, and every session started
+           * before that still names the old row. Validating the caller's copy
+           * answered "no such machine" about a machine that was sitting there
+           * polling under a new id.
+           *
+           * So the recorded device is preferred while it is live, and
+           * otherwise the machine it belonged to is followed to whichever
+           * device is carrying it now.
+           */
+          const recorded = sessionSource(session).deviceId;
+          if (!recorded) {
             return send(response, 409, {
               error: "this older session has no machine identity; stop it from that machine",
             });
           }
-          if (ownerDeviceId !== deviceId) {
-            return send(response, 409, { error: "that session is running on a different machine" });
+
+          const live = await store.listDevices(identity.uid);
+          let target = live.find((entry) => entry.id === recorded);
+          if (!target) {
+            const machine = await store.machineForDevice(identity.uid, recorded);
+            const current = machine ? await store.deviceForMachine(identity.uid, machine) : null;
+            target = current ? live.find((entry) => entry.id === current.id) : undefined;
           }
+          if (!target) {
+            return send(response, 409, {
+              error:
+                "the machine that started this session is no longer linked. " +
+                "Stop it there with 'shell kill', or sign that machine in again.",
+            });
+          }
+          if (!target.agentSeenAt || Date.now() - target.agentSeenAt > AGENT_ONLINE_MS) {
+            return send(response, 409, {
+              error:
+                `${target.label} is not reachable, so the stop cannot be delivered. ` +
+                `Sign in there with 'shell login' and allow browser-started sessions.`,
+            });
+          }
+
           const queued = {
             id: mintSecret("cmd"),
             uid: identity.uid,
-            deviceId,
+            deviceId: target.id,
             kind: "kill" as const,
             sessionId,
             createdAt: Date.now(),
@@ -845,6 +890,27 @@ export function createApp(options: AppOptions) {
         const error = typeof body.error === "string" && body.error ? body.error : undefined;
         const finished = await store.finishCommand(token.id, doneMatch[1], error);
         if (!finished) return send(response, 404, { error: "no such command" });
+
+        /*
+         * A stop that the machine carried out closes the session here too.
+         *
+         * A session normally reports its own exit, using the credentials it
+         * started with. Those are revoked when the machine is unlinked, so a
+         * session started before that can never report anything again: the
+         * process died on the machine and the row stayed open here, which
+         * reads as a stop button that did nothing.
+         *
+         * The machine confirming it carried out the kill is the same fact,
+         * arriving on credentials that are still valid.
+         */
+        if (!error) {
+          const command = (await store.listCommands(token.uid)).find(
+            (entry) => entry.id === doneMatch[1],
+          );
+          if (command?.kind === "kill" && command.sessionId) {
+            await closeSession(store, token.uid, command.sessionId, undefined);
+          }
+        }
         return send(response, 200, { ok: true });
       }
 

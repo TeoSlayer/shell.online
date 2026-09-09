@@ -193,6 +193,12 @@ export class MemoryStore implements Store {
     return matches[0] ?? null;
   }
 
+  async machineForDevice(uid: string, deviceId: string): Promise<string | null> {
+    /* Revoked rows count: the point is to find where a dead device lived. */
+    const token = this.data.tokens.find((entry) => entry.uid === uid && entry.id === deviceId);
+    return token?.machineId ?? null;
+  }
+
   async setMemberKey(uid: string, publicKey: string): Promise<void> {
     const membership = this.data.memberships.find((entry) => entry.uid === uid);
     if (!membership || membership.publicKey === publicKey) return;

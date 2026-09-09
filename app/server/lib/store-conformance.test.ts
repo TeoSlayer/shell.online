@@ -322,6 +322,28 @@ for (const implementation of implementations) {
         expect(await store.deviceForMachine("uid-1", "")).toBeNull();
       });
 
+      /*
+       * Unlinking revokes the row rather than deleting it, and a session
+       * started before that still names it. Following the machine back is the
+       * only route from a dead device to the one carrying its work now, so
+       * this lookup deliberately ignores revoked_at.
+       */
+      it("still names the machine a revoked device belonged to", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        await store.revokeDevice("uid-1", "dev_1", 4000);
+        expect(await store.machineForDevice("uid-1", "dev_1")).toBe("machine-a");
+      });
+
+      it("has no machine for a device that never named one", async () => {
+        await store.putToken(token({ machineId: undefined }));
+        expect(await store.machineForDevice("uid-1", "dev_1")).toBeNull();
+      });
+
+      it("never reads another account's device", async () => {
+        await store.putToken(token({ machineId: "machine-a" }));
+        expect(await store.machineForDevice("uid-2", "dev_1")).toBeNull();
+      });
+
       it("never crosses accounts, however the machine id was learned", async () => {
         await store.putToken(token({ machineId: "machine-a" }));
         expect(await store.deviceForMachine("uid-2", "machine-a")).toBeNull();
