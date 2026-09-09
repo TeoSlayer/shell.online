@@ -1434,6 +1434,29 @@ describe("being told a colleague started a session", () => {
     });
     expect(stranger.body.notifications).toEqual([]);
   });
+
+  /*
+   * The client draws each notification as a person doing something, so a reply
+   * without the roster is a reply it cannot render. Marking everything read
+   * returned one without it, and the page went blank.
+   */
+  it("carries the roster on every reply, not only on the read", async () => {
+    const { tokens, colleague } = await orgWithColleague();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+
+    const listed = await call("GET", "/api/notifications", { auth: colleague });
+    expect(listed.body.members.length).toBeGreaterThan(0);
+
+    const one = await call("POST", "/api/notifications/read", {
+      auth: colleague,
+      body: { id: listed.body.notifications[0].id },
+    });
+    expect(one.body.members).toEqual(listed.body.members);
+
+    const all = await call("POST", "/api/notifications/read", { auth: colleague, body: {} });
+    expect(all.body.members).toEqual(listed.body.members);
+    expect(all.body.unread).toBe(0);
+  });
 });
 
 describe("guarding the service itself", () => {

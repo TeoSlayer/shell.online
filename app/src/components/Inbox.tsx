@@ -101,7 +101,8 @@ export function Inbox() {
           ) : (
             <ul className="inbox-list">
               {view.notifications.map((notification) => {
-                const actor = findPerson(view.members, notification.actorUid);
+                /* A reply without a roster costs a name, not the page. */
+                const actor = findPerson(view.members ?? [], notification.actorUid);
                 const assigned = notification.kind === "assigned";
                 const shared = notification.kind === "shared";
                 return (

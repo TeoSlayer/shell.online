@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  adoptOrigin, forget, forgetAll, passwordFor, rememberForOrigin, setPasswordOwner,
+  addToAudience, adoptOrigin, audienceFor, forget, forgetAll, passwordFor,
+  rememberFor, rememberForOrigin, setPasswordOwner,
 } from "./session-passwords";
 
 function fakeStorage() {
@@ -127,5 +128,65 @@ describe("passwords belong to one account", () => {
     forget("sess_1");
     expect(passwordFor("sess_1")).toBeNull();
     expect(passwordFor("sess_2")).toBe("b");
+  });
+
+  /*
+   * The audience is who this browser has sealed the password to. It travels
+   * with the password because it is the same secret, and because the service
+   * is not the record of who can read a session it cannot read itself.
+   */
+  it("carries the chosen audience from the request to the session", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "Kw9eHbru", ["uid-2", "uid-3"]);
+    adoptOrigin("cmd_1", "sess_1");
+    expect(passwordFor("sess_1")).toBe("Kw9eHbru");
+    expect(audienceFor("sess_1").sort()).toEqual(["uid-2", "uid-3"]);
+  });
+
+  it("shares with nobody when nobody was chosen", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "Kw9eHbru");
+    adoptOrigin("cmd_1", "sess_1");
+    expect(audienceFor("sess_1")).toEqual([]);
+  });
+
+  it("adds people afterwards without repeating anyone", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "Kw9eHbru", ["uid-2"]);
+    adoptOrigin("cmd_1", "sess_1");
+    addToAudience("sess_1", ["uid-3", "uid-2"]);
+    expect(audienceFor("sess_1").sort()).toEqual(["uid-2", "uid-3"]);
+  });
+
+  it("has no audience to add to for a session whose password it does not hold", () => {
+    setPasswordOwner("uid-1");
+    expect(addToAudience("sess_unknown", ["uid-2"])).toEqual([]);
+    expect(audienceFor("sess_unknown")).toEqual([]);
+  });
+
+  /* A password typed at the gate is kept, or the next reload asks again. */
+  it("keeps a password recorded against a session directly", () => {
+    setPasswordOwner("uid-1");
+    rememberFor("sess_1", "typed-in");
+    expect(passwordFor("sess_1")).toBe("typed-in");
+  });
+
+  it("does not lose the audience when the password is recorded again", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "first", ["uid-2"]);
+    adoptOrigin("cmd_1", "sess_1");
+    rememberFor("sess_1", "second");
+    expect(passwordFor("sess_1")).toBe("second");
+    expect(audienceFor("sess_1")).toEqual(["uid-2"]);
+  });
+
+  it("keeps one account's audience away from another's", () => {
+    setPasswordOwner("uid-1");
+    rememberForOrigin("cmd_1", "mine", ["uid-2"]);
+    adoptOrigin("cmd_1", "sess_1");
+
+    setPasswordOwner("uid-9");
+    expect(passwordFor("sess_1")).toBeNull();
+    expect(audienceFor("sess_1")).toEqual([]);
   });
 });

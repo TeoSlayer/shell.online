@@ -8,6 +8,7 @@ import {
   sessionLabel,
   summarise,
   topCommands,
+  traceGroups,
 } from "./audit-view";
 import type { AuditEvent, SessionRecord } from "./api";
 
@@ -154,5 +155,57 @@ describe("sessionLabel", () => {
     expect(sessionLabel(sessions, "s1")).toBe("nightly build");
     expect(sessionLabel(sessions, "s2")).toBe("htop");
     expect(sessionLabel(sessions, "gone")).toBe("a removed session");
+  });
+});
+
+describe("traceGroups", () => {
+  const minute = 60 * 1000;
+
+  it("shows the most recent run first", () => {
+    const groups = traceGroups([
+      event({ id: "a", at: BASE, text: "first" }),
+      event({ id: "b", at: BASE + 60 * minute, text: "second" }),
+      event({ id: "c", at: BASE + 120 * minute, text: "third" }),
+    ]);
+    expect(groups.map((group) => group.events[0].text)).toEqual(["third", "second", "first"]);
+  });
+
+  it("keeps each run reading forwards inside itself", () => {
+    const groups = traceGroups([
+      event({ id: "b", at: BASE + 2 * minute, text: "then" }),
+      event({ id: "a", at: BASE, text: "first" }),
+      event({ id: "c", at: BASE + 4 * minute, text: "last" }),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].events.map((entry) => entry.text)).toEqual(["first", "then", "last"]);
+  });
+
+  it("starts a new run for a different person", () => {
+    const groups = traceGroups([
+      event({ id: "a", at: BASE, actorUid: "u1" }),
+      event({ id: "b", at: BASE + minute, actorUid: "u2" }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].actorUid).toBe("u2");
+  });
+
+  it("starts a new run for a different session", () => {
+    const groups = traceGroups([
+      event({ id: "a", at: BASE, sessionId: "s1" }),
+      event({ id: "b", at: BASE + minute, sessionId: "s2" }),
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("starts a new run after a long quiet gap", () => {
+    const groups = traceGroups([
+      event({ id: "a", at: BASE }),
+      event({ id: "b", at: BASE + 11 * minute }),
+    ]);
+    expect(groups).toHaveLength(2);
+  });
+
+  it("has nothing to group in an empty trail", () => {
+    expect(traceGroups([])).toEqual([]);
   });
 });

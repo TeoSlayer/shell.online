@@ -278,6 +278,28 @@ describe("the kind of a session started from the browser", () => {
    * An older CLI recorded the argv it was given by joining it with spaces, so
    * the quotes that made the wrapped line one argument are gone from the row.
    */
+  it("passes a chosen model through, and says nothing when none is chosen", () => {
+    const claude = SESSION_KINDS.find((kind) => kind.id === "claude-code")!;
+    expect(claude.build({ model: "opus" })).toBe("claude --model opus");
+    expect(claude.build({})).toBe("claude");
+    expect(claude.build({ model: "opus", skipPermissions: true })).toBe(
+      "claude --model opus --dangerously-skip-permissions",
+    );
+
+    const codex = SESSION_KINDS.find((kind) => kind.id === "codex")!;
+    expect(codex.build({ model: "gpt-5-codex" })).toBe("codex --model gpt-5-codex");
+    expect(codex.build({})).toBe("codex");
+    /* The model goes with the other options, after any resume subcommand. */
+    expect(codex.build({ resumeLast: true, model: "gpt-5-codex", search: true })).toBe(
+      "codex resume --last --model gpt-5-codex --search",
+    );
+  });
+
+  it("quotes a model name that would otherwise split", () => {
+    const codex = SESSION_KINDS.find((kind) => kind.id === "codex")!;
+    expect(codex.build({ model: "some model" })).toBe("codex --model 'some model'");
+  });
+
   it("unwraps a shell whose quotes were lost on the way to the record", () => {
     expect(unwrapShell("sh -c claude")).toBe("claude");
     expect(unwrapShell("sh -c claude --dangerously-skip-permissions")).toBe(

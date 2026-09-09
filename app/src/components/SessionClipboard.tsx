@@ -48,6 +48,17 @@ export function SessionClipboard({
   const isOwner = Boolean(you && session.ownerUid === you.uid);
   const attachCommand = `shell attach ${session.id.slice(0, 10)}`;
 
+  /*
+   * Depends on the sealed material, not on the session object.
+   *
+   * The list is re-fetched every few seconds and hands every row a new object
+   * each time, so this ran an ECDH derivation per session per poll to answer a
+   * question whose inputs had not changed. On a phone with several sessions
+   * open that is most of what the page was doing.
+   */
+  const sealed = session.keyShare
+    ? `${session.keyShare.senderPublicKey}:${session.keyShare.sealed}`
+    : "";
   useEffect(() => {
     let live = true;
     void readPassword(session).then((password) => {
@@ -56,7 +67,8 @@ export function SessionClipboard({
     return () => {
       live = false;
     };
-  }, [session]);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps -- see above */
+  }, [session.id, sealed]);
 
   useEffect(() => {
     if (!open) return;

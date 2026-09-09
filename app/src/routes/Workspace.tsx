@@ -7,6 +7,7 @@ import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
 import { canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
 import { NewSessionModal } from "../components/NewSessionModal";
+import { LaunchPrompt } from "../components/LaunchPrompt";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SignedInModal } from "../components/SignedInModal";
@@ -29,8 +30,17 @@ import {
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
 import { publicKey, sealForMembers } from "../lib/keypair";
+import { sealTargets } from "../lib/session-share";
 import { fetchOrg, shareSessionKeys } from "../lib/api";
-import { adoptOrigin, forget, passwordFor, rememberFor, rememberForOrigin } from "../lib/session-passwords";
+import {
+  adoptOrigin,
+  audienceFor,
+  forget,
+  passwordFor,
+  rememberFor,
+  rememberForOrigin,
+} from "../lib/session-passwords";
+import { useKeyboardInset } from "../terminal/keyboard-inset";
 import { elapsed } from "../lib/time";
 import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
@@ -40,6 +50,8 @@ const POLL_MS = 4000;
 const DEVICE_POLL_MS = 5000;
 /* Long enough for the agent to poll, launch, and for the session to publish. */
 const AFTER_COMMAND_MS = 1500;
+/* How long to wait for a started session before saying so. */
+const LAUNCH_PATIENCE_MS = 45_000;
 
 /*
  * Removes a session from the lists. Asks first, because it cannot be undone
@@ -121,6 +133,10 @@ export function Workspace() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  /* The session being started, from the request until its row turns up. */
+  const [launching, setLaunching] = useState("");
+  /* The one that just turned up, waiting to be opened or dismissed. */
+  const [launched, setLaunched] = useState<SessionRecord | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
@@ -138,6 +154,10 @@ export function Workspace() {
   const loadedOnce = useRef(false);
   /* Tabs are put back once, from the first session list a reload receives. */
   const restoredTabs = useRef(false);
+  /* Sized to the space a phone keyboard leaves; see useKeyboardInset. */
+  const panes = useRef<HTMLDivElement>(null);
+  /* Requests whose session should be offered as soon as it exists: origin -> name. */
+  const awaitingOpen = useRef(new Map<string, string>());
   /* Passwords waiting for their session to appear so they can be shared. */
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
@@ -157,6 +177,22 @@ export function Workspace() {
       const result = await fetchSessions();
       /* A session that came from this browser inherits the password it chose. */
       for (const session of result.sessions) adoptOrigin(session.origin, session.id);
+      /*
+       * A machine has to poll, launch and publish before a session exists, so
+       * the row arrives some seconds after the request. Saying "it will turn
+       * up" and leaving somebody to watch the list for it is the wrong end of
+       * that: the request is remembered here and its session offered the
+       * moment it appears.
+       */
+      const arrived = result.sessions.find(
+        (session) => session.origin && awaitingOpen.current.has(session.origin),
+      );
+      if (arrived?.origin) {
+        awaitingOpen.current.delete(arrived.origin);
+        setLaunching("");
+        setNotice("");
+        setLaunched(arrived);
+      }
       setSessions(result.sessions);
       setMembers(result.members ?? []);
       setYou(result.you ?? null);
@@ -235,7 +271,13 @@ export function Workspace() {
     return () => window.clearInterval(poll);
   }, []);
 
-  async function handleStart(input: { deviceId: string; command: string; name: string }) {
+  async function handleStart(input: {
+    deviceId: string;
+    command: string;
+    name: string;
+    /* Team members to seal the password to. Empty means only this browser. */
+    share: string[];
+  }) {
     setError("");
     setNotice("");
 
@@ -255,10 +297,10 @@ export function Workspace() {
 
     const queued = await startSession({ ...input, ...sealed });
     if (password) {
-      rememberForOrigin(queued.command.id, password);
+      rememberForOrigin(queued.command.id, password, input.share);
       /*
-       * Colleagues can read this session, so the password is sealed to each of
-       * them too. Held here until the session exists to attach it to.
+       * Held here until the session exists to attach the password to. The
+       * colleagues chosen above are sealed to on the poll that finds it.
        */
       pendingShares.current.set(queued.command.id, password);
     }
@@ -266,8 +308,21 @@ export function Workspace() {
      * The machine has to poll, launch, and publish, so the row shows up a
      * moment later rather than on this response.
      */
-    setNotice(`Starting ${input.name}. It appears here once the machine picks it up.`);
+    awaitingOpen.current.set(queued.command.id, input.name);
+    setLaunching(input.name);
     window.setTimeout(() => void load(), AFTER_COMMAND_MS);
+    /*
+     * A machine that is asleep, or that cannot run the command, never
+     * publishes anything. Waiting for it forever leaves a spinner that is
+     * telling the truth about nothing, so it gives up and says what happened.
+     */
+    window.setTimeout(() => {
+      if (!awaitingOpen.current.delete(queued.command.id)) return;
+      setLaunching("");
+      setNotice(
+        `${input.name} has not appeared yet. The machine may be busy or asleep; it will show up here when it starts.`,
+      );
+    }, LAUNCH_PATIENCE_MS);
   }
 
   async function handleKill(session: SessionRecord) {
@@ -310,16 +365,18 @@ export function Workspace() {
   }
 
   /*
-   * Sessions started here have a password only this browser knows. Seal it to
-   * every colleague so they can read the session too.
+   * Seals a session's password to the colleagues it was shared with.
    *
-   * Runs on each poll rather than once, because someone can join the
-   * team after a session started, and should still be able to open it.
+   * The audience is the list ticked when the session was started, plus anyone
+   * added since. It used to be everyone in the team, which meant every
+   * colleague could open every session and the choice was never offered: what
+   * looked like assigning a session to somebody was really discovering that
+   * they had held the password all along.
+   *
+   * Runs on each poll rather than once, because a browser that was closed
+   * between starting a session and it appearing still has sealing to do.
    */
   async function shareAnyPending(all: SessionRecord[], roster: Member[], me: Member | null) {
-    const targets = roster.filter((member) => member.publicKey);
-    if (targets.length === 0) return;
-
     for (const session of all) {
       if (session.closedAt) continue;
 
@@ -335,9 +392,12 @@ export function Workspace() {
       const password = passwordFor(session.id);
       if (!password) continue;
 
-      const missing = targets.filter(
-        (member) => member.uid !== me?.uid && !sharedWith.current.get(session.id)?.has(member.uid),
-      );
+      const missing = sealTargets({
+        members: roster,
+        you: me,
+        chosen: audienceFor(session.id),
+        done: sharedWith.current.get(session.id),
+      });
       if (missing.length === 0) continue;
 
       try {
@@ -385,6 +445,7 @@ export function Workspace() {
   const openSession = (session: SessionRecord) =>
     dispatch({ type: "open", session, canType: canEdit(session, you) });
   const showingList = state.activeId === null;
+  useKeyboardInset(panes, !showingList);
 
   return (
     <AppShell
@@ -451,7 +512,7 @@ export function Workspace() {
         alive while another tab is in front.
       */}
       {state.tabs.length > 0 && (
-        <div className="panes" hidden={showingList}>
+        <div className="panes" ref={panes} hidden={showingList}>
           {state.tabs.map((tab) => {
             /*
              * Permission is read from the session list on every render, not
@@ -479,6 +540,13 @@ export function Workspace() {
       )}
 
       <div className="workspace-list" hidden={!showingList}>
+        {launching && (
+          /* Something to watch while the machine picks the request up. */
+          <p className="sessions-launching" role="status">
+            <span className="sessions-spinner" aria-hidden="true" />
+            Starting {launching} on the machine
+          </p>
+        )}
         {notice && (
           <div className="sessions-alert">
             <Alert tone="success">{notice}</Alert>
@@ -633,9 +701,22 @@ export function Workspace() {
         )}
       </div>
 
+      {launched && (
+        <LaunchPrompt
+          session={launched}
+          onOpen={() => {
+            openSession(launched);
+            setLaunched(null);
+          }}
+          onClose={() => setLaunched(null)}
+        />
+      )}
+
       {composing && (
         <NewSessionModal
           devices={devices}
+          members={members}
+          you={you}
           onClose={() => setComposing(false)}
           onStart={handleStart}
         />
@@ -745,8 +826,13 @@ function SessionGroup({
                     </>
                   )}
                 </td>
-                <td className="table-person"><PersonChip person={owner} /></td>
-                <td className="table-person">
+                {/*
+                  * The label is carried on the cell, not only in the header:
+                  * on a phone the table stacks and the header is gone, and two
+                  * unlabelled faces in a row do not say which is which.
+                  */}
+                <td className="table-person" data-label="Owner"><PersonChip person={owner} /></td>
+                <td className="table-person" data-label="Assignee">
                   {live && canHandOff(session, you) ? (
                     <PersonPicker
                       people={members}
@@ -758,8 +844,8 @@ function SessionGroup({
                     <PersonChip person={assignee} />
                   )}
                 </td>
-                <td className="table-quiet">{session.host || "unknown"}</td>
-                <td className="table-quiet">
+                <td className="table-quiet" data-label="Machine">{session.host || "unknown"}</td>
+                <td className="table-quiet" data-label={live ? "Uptime" : "Ran for"}>
                   {live
                     ? elapsed(session.startedAt, now)
                     : elapsed(session.startedAt, session.closedAt ?? now)}

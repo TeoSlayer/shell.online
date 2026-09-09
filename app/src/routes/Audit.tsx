@@ -29,6 +29,7 @@ import {
   sessionLabel,
   summarise,
   topCommands,
+  traceGroups,
   type Filters,
 } from "../lib/audit-view";
 import { usePageTitle } from "../lib/page-title";
@@ -306,7 +307,7 @@ export function Audit() {
             <div className="chart-row">
               <ActivityChart events={shown} />
               <RankChart
-                caption="Who"
+                caption="By user"
                 rows={byActor(shown).slice(0, 6)}
                 onPick={(uid) => set({ actor: uid === filters.actor ? "" : uid })}
                 render={(uid) => {
@@ -374,27 +375,7 @@ function Trace({
   members: Member[];
   sessions: SessionRecord[];
 }) {
-  /* Oldest first inside the page, so a trace reads forwards. */
-  const ordered = [...events].sort((a, b) => a.at - b.at);
-  const groups: { key: string; actorUid: string; sessionId: string; events: AuditEvent[] }[] = [];
-
-  for (const event of ordered) {
-    const last = groups[groups.length - 1];
-    const sameRun =
-      last &&
-      last.actorUid === event.actorUid &&
-      last.sessionId === event.sessionId &&
-      event.at - last.events[last.events.length - 1].at < 10 * 60 * 1000;
-    if (sameRun) last.events.push(event);
-    else {
-      groups.push({
-        key: `${event.id}`,
-        actorUid: event.actorUid,
-        sessionId: event.sessionId,
-        events: [event],
-      });
-    }
-  }
+  const groups = traceGroups(events);
 
   let lastDay = "";
   return (

@@ -964,8 +964,7 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/notifications") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const view = await inbox(store, membership);
-        return send(response, 200, { ...view, members: await store.members(membership.orgId) });
+        return send(response, 200, await inbox(store, membership));
       }
 
       if (route === "POST /api/notifications/read") {

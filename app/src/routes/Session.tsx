@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Copy,
-  Check,
   PaperPlaneTilt,
   Terminal as TerminalIcon,
 } from "@phosphor-icons/react";
@@ -13,6 +11,8 @@ import { PersonPicker } from "../components/PersonPicker";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { Booting } from "../components/Booting";
+import { SessionClipboard } from "../components/SessionClipboard";
+import { SessionAudience } from "../components/SessionAudience";
 import {
   assignSession,
   fetchSession,
@@ -67,7 +67,6 @@ export function Session() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
-  const [copied, setCopied] = useState(false);
   const composer = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
@@ -157,23 +156,15 @@ export function Session() {
                 Open terminal
               </Link>
             )}
-            <button
-              type="button"
-              className="session-action"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(session.shareUrl);
-                  setCopied(true);
-                  window.setTimeout(() => setCopied(false), 1600);
-                } catch {
-                  /* clipboard is unavailable outside a secure context */
-                }
-              }}
-            >
-              {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
-              {copied ? "Copied" : "Copy link"}
-            </button>
+            {/*
+              * The same menu the list has. A bare "Copy link" here meant the
+              * password was reachable from one screen and not the other, which
+              * on a phone is the screen you are actually on.
+              */}
+            <SessionClipboard session={session} you={you} />
           </div>
+
+          <SessionAudience session={session} members={members} you={you} />
 
           <h2 className="detail-heading">Comments</h2>
 

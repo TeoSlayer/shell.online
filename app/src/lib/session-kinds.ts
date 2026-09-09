@@ -67,6 +67,18 @@ export const SESSION_KINDS: SessionKind[] = [
         help: "Passed to --resume.",
       },
       {
+        name: "model",
+        label: "Model",
+        kind: "select",
+        options: [
+          { value: "", label: "Whatever the machine is set to" },
+          { value: "opus", label: "Opus" },
+          { value: "sonnet", label: "Sonnet" },
+          { value: "haiku", label: "Haiku" },
+        ],
+        help: "Passed to --model. Left alone, the machine's own default is used.",
+      },
+      {
         name: "skipPermissions",
         label: "Skip permission checks",
         kind: "toggle",
@@ -78,6 +90,8 @@ export const SESSION_KINDS: SessionKind[] = [
       const parts = ["claude"];
       const id = text(values, "sessionId");
       if (id) parts.push("--resume", quote(id));
+      const model = text(values, "model");
+      if (model) parts.push("--model", quote(model));
       if (on(values, "skipPermissions")) parts.push("--dangerously-skip-permissions");
       return parts.join(" ");
     },
@@ -94,6 +108,13 @@ export const SESSION_KINDS: SessionKind[] = [
         kind: "text",
         placeholder: "leave empty to start fresh",
         help: "Runs codex resume <id>. Accepts a session UUID or a session name.",
+      },
+      {
+        name: "model",
+        label: "Model",
+        kind: "text",
+        placeholder: "leave empty for the codex default",
+        help: "Passed to --model as written.",
       },
       {
         name: "resumeLast",
@@ -142,6 +163,8 @@ export const SESSION_KINDS: SessionKind[] = [
       const id = text(values, "sessionId");
       if (id) parts.push("resume", quote(id));
       else if (on(values, "resumeLast")) parts.push("resume", "--last");
+      const model = text(values, "model");
+      if (model) parts.push("--model", quote(model));
       const sandbox = text(values, "sandbox");
       if (sandbox) parts.push("--sandbox", sandbox);
       const approval = text(values, "approval");

@@ -7,7 +7,7 @@ import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
-import { forget, passwordFor } from "../lib/session-passwords";
+import { forget, passwordFor, rememberFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
 import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
@@ -271,6 +271,16 @@ export function TerminalPane({
     if (!password || !connection.current) return;
     setUnlocking(true);
     setDetail("");
+    /*
+     * Kept, so this is the last time it is typed for this session.
+     *
+     * A password only proves itself when a frame opens, which happens after
+     * this returns, so it is written now and removed by the failure path
+     * above if it turns out to be wrong. Storing it early costs a dead entry;
+     * not storing it at all is what made every reload ask again.
+     */
+    const sessionId = sessionIdFromShareUrl(shareUrl);
+    if (sessionId) rememberFor(sessionId, password);
     await connection.current.submitPassword(password);
     setPassword("");
   }

@@ -150,3 +150,45 @@ export function sessionLabel(
 export function memberOf(members: Member[], uid: string): Member | undefined {
   return members.find((member) => member.uid === uid);
 }
+
+export interface TraceGroup {
+  key: string;
+  actorUid: string;
+  sessionId: string;
+  events: AuditEvent[];
+}
+
+/** How long a gap ends a run, rather than continuing one. */
+const RUN_GAP_MS = 10 * 60 * 1000;
+
+/**
+ * Groups the trail into runs: one person, in one session, without a long gap.
+ *
+ * Each run reads forwards, because that is the order the person did things in.
+ * The runs themselves read backwards, newest first: what somebody ran a few
+ * minutes ago is the reason to open this page, and it was at the bottom.
+ */
+export function traceGroups(events: AuditEvent[]): TraceGroup[] {
+  const ordered = [...events].sort((a, b) => a.at - b.at);
+  const groups: TraceGroup[] = [];
+
+  for (const event of ordered) {
+    const last = groups[groups.length - 1];
+    const sameRun =
+      last &&
+      last.actorUid === event.actorUid &&
+      last.sessionId === event.sessionId &&
+      event.at - last.events[last.events.length - 1].at < RUN_GAP_MS;
+    if (sameRun) last.events.push(event);
+    else {
+      groups.push({
+        key: event.id,
+        actorUid: event.actorUid,
+        sessionId: event.sessionId,
+        events: [event],
+      });
+    }
+  }
+
+  return groups.reverse();
+}

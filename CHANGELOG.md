@@ -6,6 +6,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Choose who can open a session when you start it. The password is generated and sealed to each person ticked, so nothing is typed and nobody is told a secret; people can be added afterwards from the session page.
+- Offer the session you just started as soon as the machine publishes it, instead of leaving you to find its row.
+- Pick a model for Claude Code and Codex sessions.
+- Copy a session's link, password or attach command from the session page, not only from the list.
+
+### Fixed
+
+- Stop "Mark all read" blanking the inbox. The reply left out the roster the list is drawn from.
+- Keep a session password that was typed once, so opening the same session again does not ask for it.
+- Seal a session's password only to the people chosen for it. It went to the whole team, so every colleague could open every session and the choice was never offered.
+- Say which person is the owner and which is the assignee on a phone, where the table stacks and its header is gone.
+- Keep the terminal above the on-screen keyboard rather than behind it.
+- Fix the top bar on a home-screen install, where the status bar inset was eaten out of the bar instead of added to it, and carry the wordmark and the account menu there.
+- Read the audit log newest first, and call its chart "By user".
+- Stop re-deriving every session's password on every poll, which is most of what the session list was doing on a phone.
+
+### Added
+
 - Keep the open session tabs across a reload. Refreshing the page put you back at the list with every terminal closed; the tabs that were open come back, on the one that was in front. Only the session ids are remembered, so a restored tab is rebuilt from the session list rather than from a stale copy, and a session that has since ended does not return.
 - Offer GPT Codex's sandbox, approval, resume and web-search options in the new-session form, and Hermes Agent's command, session, model, worktree and approval options, each read from the installed tool rather than from its documentation.
 

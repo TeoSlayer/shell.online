@@ -152,10 +152,24 @@ export function AppShell({ title, aside, children }: AppShellProps) {
       <div className="shell-main">
         <header className="topbar">
           <div className="topbar-inner">
-            <h1 className="topbar-title">{title}</h1>
+            <div className="topbar-heading">
+              {/* Shown only where the rail is not: see .topbar-mark. */}
+              <Link to="/sessions" className="topbar-mark" aria-label="shell.online">
+                <Wordmark />
+              </Link>
+              <h1 className="topbar-title">{title}</h1>
+            </div>
             <div className="topbar-right">
               {aside}
               <Inbox />
+              {/*
+                * On a phone the rail is a strip of destinations along the
+                * bottom and its foot is gone, taking the account menu with it.
+                * Signing out was then only reachable from the Account page.
+                */}
+              <span className="topbar-account">
+                <AccountMenu />
+              </span>
             </div>
           </div>
         </header>

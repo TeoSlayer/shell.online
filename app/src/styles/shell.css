@@ -140,8 +140,29 @@
   gap: 18px;
 }
 
+/*
+ * The wordmark lives in the rail on a desktop and in the bar on a phone, where
+ * the rail has become a strip of destinations along the bottom. Hidden by
+ * default rather than added on a phone, so there is only one of it on screen.
+ */
+.topbar-mark {
+  display: none;
+  align-items: center;
+  padding-right: 4px;
+}
+
+.topbar-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
 .topbar-title {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   font-size: 22px;
   font-weight: 500;
@@ -152,6 +173,11 @@
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+/* Shown only where the rail's foot is not; see the phone block below. */
+.topbar-account {
+  display: none;
 }
 
 .new-session {
@@ -516,8 +542,35 @@
     padding-bottom: calc(74px + env(safe-area-inset-bottom));
   }
 
+  /*
+   * Saved to the home screen there is no browser chrome above this, so the bar
+   * begins under the status bar and has to push itself clear. The inset is
+   * added to the bar rather than taken out of it: `height` with a padding on
+   * top left the title squeezed into whatever the notch did not claim, which
+   * is what a home-screen install looked like.
+   */
   .topbar {
+    height: auto;
+    min-height: calc(56px + env(safe-area-inset-top));
     padding-top: env(safe-area-inset-top);
+  }
+
+  /* The rail is a bottom bar here, so the wordmark and the account menu have
+     nowhere else to be. */
+  .topbar-mark {
+    display: flex;
+  }
+
+  .topbar-account {
+    display: block;
+  }
+
+  .topbar-right {
+    gap: 10px;
+  }
+
+  .topbar-title {
+    font-size: 19px;
   }
 
   .topbar-inner {

@@ -314,8 +314,15 @@ button.tab {
 }
 
 @media (max-width: 900px) {
+  /*
+   * A phone's keyboard covers the bottom of the page rather than making the
+   * page shorter, and the prompt is at the bottom of a terminal, so the line
+   * being typed was the first thing to disappear behind it. --pane-height is
+   * what the visual viewport has left below this element; see keyboard-inset.
+   */
   .panes {
-    min-height: 60dvh;
+    height: var(--pane-height, 60dvh);
+    min-height: 0;
   }
 
   .pane {
@@ -1041,4 +1048,161 @@ button.tab {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------
+   Who a session's password is sealed to
+   ---------------------------------------------------------------
+   A list of people rather than a password field: the password is generated
+   and sealed per person, so the only decision left is who.
+   --------------------------------------------------------------- */
+
+.share-list {
+  margin: 0;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+
+.share-list legend {
+  padding: 0 6px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.share-person {
+  display: flex;
+  padding: 5px 0;
+  align-items: center;
+  cursor: pointer;
+  gap: 9px;
+}
+
+.share-person input {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  accent-color: var(--ink);
+}
+
+.share-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-list .sheet-help {
+  margin-top: 8px;
+}
+
+/* The same list, on a session that already exists. */
+.audience {
+  margin-top: 26px;
+}
+
+.audience-list {
+  display: flex;
+  margin: 0 0 12px;
+  padding: 0;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  list-style: none;
+}
+
+.audience-list li {
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  font-size: 13.5px;
+  gap: 8px;
+}
+
+.audience-add {
+  display: flex;
+  align-items: center;
+  color: var(--faint);
+  gap: 8px;
+}
+
+.audience-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------
+   Starting a session
+   --------------------------------------------------------------- */
+
+.sessions-launching {
+  display: flex;
+  margin: 0 0 16px;
+  align-items: center;
+  color: var(--faint);
+  font-size: 13.5px;
+  gap: 10px;
+}
+
+.sessions-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  border-top-color: var(--ink);
+  animation: spin 720ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sessions-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.sheet.is-compact {
+  max-width: 420px;
+}
+
+.launch-subject {
+  display: flex;
+  margin-bottom: 20px;
+  align-items: center;
+  gap: 12px;
+}
+
+.launch-icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  object-fit: contain;
+}
+
+.launch-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.launch-text b {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launch-text em {
+  color: var(--faint);
+  font-size: 12.5px;
+  font-style: normal;
 }

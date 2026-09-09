@@ -1,17 +1,28 @@
 /**
- * Passwords for sessions this browser started.
+ * Passwords for sessions this browser knows, and who they were shared with.
  *
  * A session started from here has a password this browser chose, so there is
- * nothing to prompt for. It is kept in localStorage, per origin, and never
- * sent anywhere: the accounts service only ever saw it sealed to the machine.
+ * nothing to prompt for. A password typed into the gate is kept too, so a
+ * session started from a terminal asks once rather than on every reload. It
+ * lives in localStorage, per origin, and is never sent anywhere: the accounts
+ * service only ever saw it sealed to a machine or to a colleague.
  *
- * Sessions started from a terminal are not in here, and still prompt.
+ * The audience is stored with it because it is the same secret: it is the list
+ * of colleagues this browser has sealed the password to. The service is not
+ * asked who that is, because the service is not trusted with the password and
+ * should not be the record of who can read it either.
  */
 
-const KEY = "shell.online:session-passwords:v2";
+const KEY = "shell.online:session-passwords:v3";
 const MAX_ENTRIES = 50;
 
-type Store = Record<string, string>;
+interface Entry {
+  password: string;
+  /** Team members this password has been, or is to be, sealed to. */
+  audience?: string[];
+}
+
+type Store = Record<string, Entry>;
 
 /*
  * Scoped to the signed-in account. Without this, signing out and signing in as
@@ -56,11 +67,11 @@ function write(store: Store): void {
   }
 }
 
-/** Remembers a password against the request that will produce a session. */
-export function rememberForOrigin(origin: string, password: string): void {
+/** Remembers a password, and its audience, against the request that will produce a session. */
+export function rememberForOrigin(origin: string, password: string, audience: string[] = []): void {
   if (!origin || !password) return;
   const store = read();
-  store[scoped(`origin:${origin}`)] = password;
+  store[scoped(`origin:${origin}`)] = { password, audience: [...audience] };
   write(trim(store));
 }
 
@@ -68,23 +79,49 @@ export function rememberForOrigin(origin: string, password: string): void {
 export function adoptOrigin(origin: string | undefined, sessionId: string): void {
   if (!origin || !sessionId) return;
   const store = read();
-  const password = store[scoped(`origin:${origin}`)];
-  if (!password) return;
+  const entry = store[scoped(`origin:${origin}`)];
+  if (!entry) return;
   delete store[scoped(`origin:${origin}`)];
-  store[scoped(`session:${sessionId}`)] = password;
+  store[scoped(`session:${sessionId}`)] = entry;
   write(trim(store));
 }
 
-/** Records a password against a session directly. */
+/** Records a password against a session directly, keeping any audience it has. */
 export function rememberFor(sessionId: string, password: string): void {
   if (!sessionId || !password) return;
   const store = read();
-  store[scoped(`session:${sessionId}`)] = password;
+  const key = scoped(`session:${sessionId}`);
+  store[key] = { password, audience: store[key]?.audience ?? [] };
   write(trim(store));
 }
 
 export function passwordFor(sessionId: string): string | null {
-  return read()[scoped(`session:${sessionId}`)] ?? null;
+  return read()[scoped(`session:${sessionId}`)]?.password ?? null;
+}
+
+/** Who this browser has sealed the password to, besides the person holding it. */
+export function audienceFor(sessionId: string): string[] {
+  return read()[scoped(`session:${sessionId}`)]?.audience ?? [];
+}
+
+/**
+ * Adds people to a session's audience.
+ *
+ * Only ever adds. Taking someone off the list would not take the copy they
+ * already hold out of their browser, so a control that appeared to revoke
+ * would be lying about what it did.
+ */
+export function addToAudience(sessionId: string, uids: string[]): string[] {
+  const store = read();
+  const key = scoped(`session:${sessionId}`);
+  const entry = store[key];
+  if (!entry) return [];
+  const audience = new Set(entry.audience ?? []);
+  for (const uid of uids) if (uid) audience.add(uid);
+  entry.audience = [...audience];
+  store[key] = entry;
+  write(trim(store));
+  return entry.audience;
 }
 
 export function forget(sessionId: string): void {

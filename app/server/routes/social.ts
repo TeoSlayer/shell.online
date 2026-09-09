@@ -111,12 +111,27 @@ export async function notifySessionStarted(
   }
 }
 
+/*
+ * The whole inbox, roster included.
+ *
+ * The roster is part of the view rather than something each route remembers to
+ * add: a notification is rendered as a person doing something, so a reply
+ * without members is a reply the client cannot draw. One route added them and
+ * the other did not, and marking everything read returned the incomplete one,
+ * which blanked the page.
+ */
 export async function inbox(
   store: Store,
   membership: Membership,
-): Promise<{ notifications: Notification[]; unread: number; unreadAssignments: number }> {
+): Promise<{
+  notifications: Notification[];
+  unread: number;
+  unreadAssignments: number;
+  members: Awaited<ReturnType<Store["members"]>>;
+}> {
   const notifications = await store.notificationsFor(membership.uid);
   return {
+    members: await store.members(membership.orgId),
     notifications,
     unread: notifications.filter((entry) => !entry.readAt).length,
     /* Counted apart, because an assignment deserves more attention than a

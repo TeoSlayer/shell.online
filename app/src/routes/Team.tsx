@@ -275,12 +275,6 @@ export function Team() {
                   Create invite
                 </Button>
               </form>
-              <p className="sessions-note">
-                Give an address and we email them the link. Leaving it blank
-                creates a link anyone can use, so send that one carefully.
-                Either way it works once and expires in seven days.
-              </p>
-
               <h2 className="invites-heading">Invites</h2>
 
               {view.invites.length > 0 && (

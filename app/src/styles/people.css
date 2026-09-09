@@ -405,6 +405,25 @@
     padding: 4px 0;
   }
 
+  /*
+   * The header is gone in this layout, so each cell carries its own. Without
+   * it the owner and the assignee are two faces in a row with nothing saying
+   * which is which.
+   */
+  .table td[data-label]::before {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--faint);
+    content: attr(data-label);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .table td[data-label] {
+    padding: 7px 0;
+  }
+
   .table-end,
   .table-end .session-actions {
     justify-content: flex-start;

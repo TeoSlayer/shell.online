@@ -35,8 +35,6 @@ export function Account() {
 
   return (
     <AppShell title="Account">
-      <p className="page-dek">Who you are signed in as.</p>
-
       {notice && <div className="sessions-alert"><Alert tone="success">{notice}</Alert></div>}
       {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
 
