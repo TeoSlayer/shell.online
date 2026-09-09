@@ -212,6 +212,18 @@ describe("the kind of a session started from the browser", () => {
 
   it("unwraps only the leading shell, and only once", () => {
     expect(unwrapShell('sh -c "claude"')).toBe("claude");
+  });
+
+  /*
+   * An older CLI recorded the argv it was given by joining it with spaces, so
+   * the quotes that made the wrapped line one argument are gone from the row.
+   */
+  it("unwraps a shell whose quotes were lost on the way to the record", () => {
+    expect(unwrapShell("sh -c claude")).toBe("claude");
+    expect(unwrapShell("sh -c claude --dangerously-skip-permissions")).toBe(
+      "claude --dangerously-skip-permissions",
+    );
+    expect(kindForCommand("sh -c claude").id).toBe("claude-code");
     expect(unwrapShell("claude")).toBe("claude");
     /* Not something anything here produces; following it would be guessing. */
     expect(unwrapShell(`sh -c "sh -c 'claude'"`)).toBe("sh -c 'claude'");

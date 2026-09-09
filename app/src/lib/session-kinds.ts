@@ -216,8 +216,9 @@ export function kindById(id: string): SessionKind | undefined {
  *
  * A session started from the browser is handed to the machine as
  * `sh -c "claude ..."`, so the program being run is the second thing on the
- * line and reading the first gives every one of them a terminal icon. The
- * quotes are stripped with it, since the wrapped command is a single argument.
+ * line and reading the first gives every one of them a terminal icon. Quotes
+ * are stripped when present; an argv recorded by joining its parts with spaces
+ * no longer has them, so their absence is not a reason to give up.
  *
  * This is for sessions recorded before the CLI carried the requested command
  * through to registration. A machine running a current release publishes what
@@ -227,10 +228,17 @@ export function kindById(id: string): SessionKind | undefined {
  * not a thing anything here produces, and following it would be guessing.
  */
 export function unwrapShell(command: string): string {
-  const match = command
-    .trim()
-    .match(/^(?:\/\S*\/)?(?:ba|z|da)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1\s*$/);
-  return match ? match[2].trim() : command.trim();
+  const trimmed = command.trim();
+  const wrapper = trimmed.match(/^(?:\/\S*\/)?(?:ba|z|da)?sh\s+-[a-z]*c\s+([\s\S]+)$/);
+  if (!wrapper) return trimmed;
+  /*
+   * The wrapped line is one argument to sh, but an argv joined back together
+   * for display has lost the quotes that made it one. `sh -c claude` and
+   * `sh -c "claude --resume"` are the same shape with and without them.
+   */
+  const rest = wrapper[1].trim();
+  const quoted = rest.match(/^(['"])([\s\S]*)\1$/);
+  return (quoted ? quoted[2] : rest).trim();
 }
 
 export function kindForCommand(command: string): SessionKind {
