@@ -1,4 +1,15 @@
--- Prerelease builds copied committed terminal input into this table. The
--- accounts service no longer accepts those events; remove any legacy content
--- during deployment rather than waiting for scheduled housekeeping.
-DELETE FROM audit_events WHERE kind IN ('input', 'interrupt');
+-- Intentionally does nothing.
+--
+-- This migration was written to delete every recorded keystroke, as part of a
+-- change that stopped the service accepting them. That decision was reversed:
+-- terminal input is recorded again, deliberately, and the terms say so.
+--
+-- It has never run anywhere -- production had 001 to 003 applied when this was
+-- found -- so it is emptied rather than deleted. Removing the file would
+-- renumber what follows and leave any environment that did apply it with
+-- bookkeeping that no longer matches. Emptying it makes applying migrations
+-- safe on a database holding audit rows somebody wants to keep.
+--
+-- Had it run, it would have taken the input rows with it, quietly, as part of
+-- a deployment nobody would connect to the loss.
+SELECT 1;
