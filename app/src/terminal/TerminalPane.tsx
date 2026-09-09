@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, useMemo } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
@@ -112,6 +112,23 @@ export function TerminalPane({
     }
   }, []);
 
+  /*
+   * A stable identity for the sealed password.
+   *
+   * The sessions list is refetched every few seconds and every fetch builds
+   * new objects, so the keyShare prop is a different object each time even
+   * when the bytes are identical. It is in the dependency list of the effect
+   * below, which builds the terminal and opens the socket, so an unstable
+   * identity tears the terminal down and reconnects it on every poll. What
+   * matters is the content, so that is what is compared.
+   */
+  const sealed = keyShare ? `${keyShare.senderPublicKey}:${keyShare.sealed}` : "";
+  const stableShare = useMemo(
+    () => keyShare,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- content, not identity
+    [sealed],
+  );
+
   useEffect(() => {
     const node = mount.current;
     if (!node) return;
@@ -212,8 +229,8 @@ export function TerminalPane({
       const own = sessionId ? passwordFor(sessionId) : null;
       if (own) return connected.submitPassword(own);
       /* Otherwise a copy a colleague sealed to this browser. */
-      if (keyShare) {
-        const shared = await openSealed(keyShare.senderPublicKey, keyShare.sealed);
+      if (stableShare) {
+        const shared = await openSealed(stableShare.senderPublicKey, stableShare.sealed);
         if (shared) return connected.submitPassword(shared);
       }
     });
@@ -233,7 +250,7 @@ export function TerminalPane({
       fit.current = null;
       connection.current = null;
     };
-  }, [shareUrl, refit, canType, keyShare]);
+  }, [shareUrl, refit, canType, stableShare]);
 
   /* A hidden pane measures as zero, so it has to be refitted when it returns. */
   useEffect(() => {

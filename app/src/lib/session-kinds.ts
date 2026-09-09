@@ -211,8 +211,26 @@ export function kindById(id: string): SessionKind | undefined {
  * and `npm run claude-thing` is not. Anything unrecognised is a terminal
  * process, which is what it is.
  */
+/*
+ * Sees through the shell a session was started under.
+ *
+ * A session started from the browser is handed to the machine as
+ * `sh -c "claude ..."`, so the program being run is the second thing on the
+ * line and reading the first gives every one of them a terminal icon. The
+ * quotes are stripped with it, since the wrapped command is a single argument.
+ *
+ * Only the leading wrapper is unwrapped, and only once: `sh -c "sh -c ..."` is
+ * not a thing anything here produces, and following it would be guessing.
+ */
+export function unwrapShell(command: string): string {
+  const match = command
+    .trim()
+    .match(/^(?:\/\S*\/)?(?:ba|z|da)?sh\s+-[a-z]*c\s+(['"])([\s\S]*)\1\s*$/);
+  return match ? match[2].trim() : command.trim();
+}
+
 export function kindForCommand(command: string): SessionKind {
-  const program = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const program = unwrapShell(command).split(/\s+/)[0]?.toLowerCase() ?? "";
   /* Strip any path, so /usr/local/bin/claude still reads as Claude Code. */
   const leaf = program.split(/[\\/]/).pop() ?? "";
   const byProgram: Record<string, string> = {

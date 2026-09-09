@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Copy, Check, Link as LinkIcon, Lock, Terminal } from "@phosphor-icons/react";
+import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal } from "@phosphor-icons/react";
 import type { Member, SessionRecord } from "../lib/api";
 import { passwordFor } from "../lib/session-passwords";
 import { openSealed } from "../lib/keypair";
@@ -97,6 +97,8 @@ export function SessionClipboard({
         title="Copy from this session"
       >
         {copied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
+        {/* Says it opens something, rather than leaving it to be discovered. */}
+        <CaretDown size={10} weight="bold" className="clip-caret" data-open={open} />
       </button>
 
       {open && (

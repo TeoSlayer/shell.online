@@ -2,6 +2,7 @@ import { Terminal as TerminalIcon, Trash, Eye } from "@phosphor-icons/react";
 import { PersonChip } from "./Avatar";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
+import { canRemove } from "../lib/session-view";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
@@ -131,15 +132,22 @@ export function SessionBoard({
                   you={you}
                   action={
                     column.key === "finished" ? (
-                      <button
-                        type="button"
-                        className="session-action"
-                        onClick={() => onRemove(session)}
-                        disabled={removing === session.id}
-                      >
-                        <Trash size={14} />
-                        {removing === session.id ? "Removing" : "Delete"}
-                      </button>
+                      /*
+                       * Gated the same way the table gates it. Offering the
+                       * button to everyone and letting the service answer 403
+                       * is a worse answer than not offering it.
+                       */
+                      canRemove(session, you) ? (
+                        <button
+                          type="button"
+                          className="session-action"
+                          onClick={() => onRemove(session)}
+                          disabled={removing === session.id}
+                        >
+                          <Trash size={14} />
+                          {removing === session.id ? "Removing" : "Delete"}
+                        </button>
+                      ) : null
                     ) : (
                       <button
                         type="button"

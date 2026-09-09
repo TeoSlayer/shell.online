@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SESSION_KINDS, kindById, kindForCommand, quote, sessionName } from "./session-kinds";
+import { SESSION_KINDS, kindById, kindForCommand, quote, sessionName, unwrapShell } from "./session-kinds";
 
 const claude = kindById("claude-code")!;
 const codex = kindById("codex")!;
@@ -182,5 +182,38 @@ describe("kindForCommand", () => {
 
   it("ignores case in the program name", () => {
     expect(kindForCommand("CLAUDE --resume x").id).toBe("claude-code");
+  });
+});
+
+describe("the kind of a session started from the browser", () => {
+  /*
+   * The browser hands the machine `sh -c "claude ..."`, so the program is the
+   * second thing on the line. Reading the first gave every browser-started
+   * session a terminal icon, whatever it was actually running.
+   */
+  it("sees through the shell a browser-started session runs under", () => {
+    expect(kindForCommand('sh -c "claude --dangerously-skip-permissions"').id).toBe("claude-code");
+    expect(kindForCommand("sh -c 'codex exec'").id).toBe("codex");
+    expect(kindForCommand('/bin/sh -c "openclaw"').id).toBe("openclaw");
+    expect(kindForCommand('bash -lc "hermes"').id).toBe("hermes");
+  });
+
+  it("still reads a command that was not wrapped", () => {
+    expect(kindForCommand("claude --resume abc").id).toBe("claude-code");
+    expect(kindForCommand("/usr/local/bin/claude").id).toBe("claude-code");
+  });
+
+  /* Unwrapping must not turn an ordinary command into a harness. */
+  it("leaves a wrapped ordinary command as a terminal process", () => {
+    expect(kindForCommand('sh -c "npm run dev"').id).toBe("terminal");
+    expect(kindForCommand("npm run claude-thing").id).toBe("terminal");
+    expect(kindForCommand("sh").id).toBe("terminal");
+  });
+
+  it("unwraps only the leading shell, and only once", () => {
+    expect(unwrapShell('sh -c "claude"')).toBe("claude");
+    expect(unwrapShell("claude")).toBe("claude");
+    /* Not something anything here produces; following it would be guessing. */
+    expect(unwrapShell(`sh -c "sh -c 'claude'"`)).toBe("sh -c 'claude'");
   });
 });

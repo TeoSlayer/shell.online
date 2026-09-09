@@ -943,12 +943,12 @@
  * rather than only in the word.
  */
 .session-action.is-destructive {
-  border-color: color-mix(in srgb, var(--danger, #b3261e) 45%, var(--line));
-  color: var(--danger, #b3261e);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
 }
 
 .session-action.is-destructive:hover {
-  background: color-mix(in srgb, var(--danger, #b3261e) 10%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 
@@ -1077,6 +1077,26 @@
 .clip {
   position: relative;
   display: inline-flex;
+}
+
+/* Inside the button, so the whole control reads as one thing that opens. */
+.clip .session-copy {
+  gap: 3px;
+}
+
+.clip-caret {
+  color: var(--muted);
+  transition: transform 140ms var(--ease, ease);
+}
+
+.clip-caret[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clip-caret {
+    transition: none;
+  }
 }
 
 .clip-pop {
