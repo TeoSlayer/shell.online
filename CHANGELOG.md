@@ -4,6 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Read the session list as a board as well as a table. A toggle above the list switches between them and the choice is remembered; the board's three columns carry the action each one affords, and a search box matches a session's name or its command.
+- Copy a session's link, its password, and its attach command from one menu, each with the warning that belongs to it.
+- Remove a finished session from the list. The row, not the machine.
+
+### Fixed
+
+- Give a session started from the browser the icon of the program it is running. The command was handed to `sh -c`, so what the machine recorded was the shell; a command that has an argv is now run as one, and sessions already recorded are read correctly.
+- Stop a session whose machine has re-linked since it started, instead of reporting that there is no such machine, and close the session when the stop completes so the list agrees with the machine.
+- Stop rebuilding the terminal on every poll, which made a shared session slow to type into.
+- Fail a build whose configuration is absent rather than only one whose configuration is empty. An absent variable produced a blank page in the browser with nothing in the console.
+
 ## [0.11.0] — 2026-09-08
 
 ### Added
