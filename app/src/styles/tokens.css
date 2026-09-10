@@ -56,6 +56,9 @@
   --radius-control: 10px;
   --radius-panel: 18px;
 
+  /* Overridden at the phone breakpoint, which zooms the root; see shell.css. */
+  --zoom: 1;
+
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --sans: "Uncut Sans", system-ui, sans-serif;
   --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;

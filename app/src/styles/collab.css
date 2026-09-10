@@ -60,7 +60,9 @@
   right: 0;
   z-index: 70;
   overflow: hidden;
-  width: min(400px, calc(100vw - 32px));
+  /* --zoom is 1 unless the root is zoomed, which the phone breakpoint does;
+     see the phone rule at the end of this file for why that matters. */
+  width: min(400px, calc((100vw - 32px) / var(--zoom, 1)));
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--white);
@@ -542,5 +544,32 @@
   .table thead th:nth-child(2),
   .table tbody td:nth-child(2) {
     display: table-cell;
+  }
+}
+
+/* ---------------------------------------------------------------
+   The inbox on a phone
+   ---------------------------------------------------------------
+   Two things put this panel off the screen. `vw` resolves against the
+   undivided viewport while the phone breakpoint zooms the root, so a width of
+   `calc(100vw - 32px)` was drawn 1.15 times wider than it measured; and the
+   panel hangs from the right edge of its trigger, which is no longer the
+   right edge of the screen, because the account menu moved in beside it. It
+   was 412px wide on a 390px screen, 88px of it past the left edge.
+
+   Both go away by giving the panel two insets instead of a width. Insets are
+   resolved against the containing block, so they scale with it however the
+   root is zoomed, and the containing block here spans the screen: `.topbar`
+   has a backdrop-filter, which makes it the containing block for a fixed
+   descendant. Should that blur ever go, the initial containing block takes
+   over and is the same width, so the arithmetic holds either way.
+   --------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .inbox-pop {
+    position: fixed;
+    top: calc(100% + 8px);
+    right: 10px;
+    left: 10px;
+    width: auto;
   }
 }

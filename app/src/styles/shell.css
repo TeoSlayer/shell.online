@@ -537,6 +537,13 @@
    */
   :root {
     zoom: 1.15;
+    /*
+     * The same number as a token, because `vw` does not follow the zoom.
+     * Viewport units resolve against the undivided viewport and are then
+     * drawn in this scaled space, so `100vw` covers 115% of the screen. Any
+     * rule that has to fit a viewport measurement divides by this.
+     */
+    --zoom: 1.15;
   }
 
   .shell {
