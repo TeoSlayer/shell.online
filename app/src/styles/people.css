@@ -262,6 +262,35 @@
   width: 100%;
 }
 
+/*
+ * ...and absorbing the slack must not mean setting the table's width.
+ *
+ * Auto table layout still gives every column its widest unbreakable content,
+ * and an agent command is long: `claude --dangerously-skip-permissions` is a
+ * routine one. Column one then asked for more than the page had, the table
+ * grew past its container, and the actions ran off the right edge. max-width
+ * on a cell that is already width:100% is what lets the browser shrink it, so
+ * the name truncates as .table-name always meant it to.
+ */
+.table td:first-child {
+  max-width: 0;
+  min-width: 180px;
+}
+
+.table-subject {
+  max-width: 100%;
+}
+
+/* The row's actions are the point of the row; they do not get compressed. */
+.table-end {
+  white-space: nowrap;
+}
+
+
+.session-actions .session-action {
+  flex: none;
+}
+
 /* Enough for a first name and surname before the ellipsis earns its place. */
 .table-person {
   min-width: 152px;
@@ -421,20 +450,56 @@
 /*
  * Columns that a narrow window may drop.
  *
- * This used to be `nth-child(4)`, which counted positions rather than meaning.
- * The fourth column is the machine in the sessions table and the date joined
- * in the members table, both of which can go. In the invites table it is
- * Actions, so under 1080px every invite lost its copy and revoke buttons and
- * an invite link could not be copied on a phone at all.
+ * Marked rather than counted. This used to be `nth-child(4)`, which counted
+ * positions rather than meaning: the fourth column is the machine in the
+ * sessions table and the date joined in the members table, both of which can
+ * go, but in the invites table it is Actions, so every invite lost its copy
+ * and revoke buttons and an invite link could not be copied on a phone.
+ *
+ * They go at 1240px rather than 1080px because the sessions row has four
+ * action buttons to keep on screen, and the machine is the column you are
+ * least often reading.
  */
-@media (max-width: 1080px) {
+@media (max-width: 1240px) {
   .table thead th.table-optional,
   .table tbody td.table-optional {
     display: none;
   }
 }
 
-@media (max-width: 900px) {
+/*
+ * Between the machine column going and the stacked layout arriving there is a
+ * band where four action buttons and two person columns do not both fit. The
+ * row gets tighter rather than losing its actions off the right edge.
+ */
+@media (max-width: 1120px) and (min-width: 1001px) {
+  .table td,
+  .table thead th {
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .table-person {
+    min-width: 118px;
+  }
+
+  .table .session-action {
+    height: 34px;
+    padding: 0 11px;
+    font-size: 13px;
+  }
+
+  .table .session-actions {
+    gap: 6px;
+  }
+}
+
+/*
+ * Below this the columns stop fitting whatever is trimmed, so the row becomes
+ * a stack. Raised from 900px, where the last action button was being cut off
+ * the right edge instead.
+ */
+@media (max-width: 1000px) {
   .table,
   .table thead,
   .table tbody,

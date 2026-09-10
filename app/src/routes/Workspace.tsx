@@ -644,6 +644,7 @@ export function Workspace() {
                 removing={removing}
                 onOpen={openSession}
                 onRemove={handleRemove}
+                onAssign={handleAssign}
               />
             ) : (
               <>

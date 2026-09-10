@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { PersonChip } from "./Avatar";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
-import { canRemove } from "../lib/session-view";
+import { canHandOff, canRemove } from "../lib/session-view";
+import { PersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
@@ -31,12 +32,14 @@ function Card({
   members,
   you,
   action,
+  onAssign,
 }: {
   session: SessionRecord;
   now: number;
   members: Member[];
   you: Member | null;
   action: React.ReactNode;
+  onAssign: (session: SessionRecord, uid: string) => void;
 }) {
   const kind = kindForCommand(session.command);
   const assignee = findPerson(members, session.assigneeUid);
@@ -67,7 +70,20 @@ function Card({
       </p>
 
       <div className="board-card-foot">
-        {assignee ? (
+        {/*
+          * Handing a session over is a thing you do to a card, not only to a
+          * row. The board showed who it was assigned to and gave you no way to
+          * change it, so the answer to "who should pick this up" was only
+          * reachable by switching back to the table.
+          */}
+        {!session.closedAt && canHandOff(session, you) ? (
+          <PersonPicker
+            people={members}
+            value={session.assigneeUid}
+            label={`Assignee for ${session.name || session.command}`}
+            onChange={(uid) => onAssign(session, uid)}
+          />
+        ) : assignee ? (
           <PersonChip person={assignee} />
         ) : (
           <span className="board-card-unassigned">Unassigned</span>
@@ -88,6 +104,7 @@ export function SessionBoard({
   removing,
   onOpen,
   onRemove,
+  onAssign,
 }: {
   liveWrite: SessionRecord[];
   liveRead: SessionRecord[];
@@ -98,6 +115,7 @@ export function SessionBoard({
   removing: string;
   onOpen: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
+  onAssign: (session: SessionRecord, uid: string) => void;
 }) {
   const columns: Column[] = [
     {
@@ -141,6 +159,7 @@ export function SessionBoard({
                   now={now}
                   members={members}
                   you={you}
+                  onAssign={onAssign}
                   action={
                     column.key === "finished" ? (
                       /*
