@@ -588,8 +588,14 @@
 
   .rail-link {
     padding: 0;
-    /* A whole finger, not a line of text: the bar is the primary navigation. */
-    min-width: 58px;
+    /*
+     * A whole finger, not a line of text: the bar is the primary navigation.
+     * `min-width` alone put five of these past the edge of a 320px phone, so
+     * the basis is what they would like to be and they are allowed to give it
+     * up together rather than one of them falling off the end.
+     */
+    flex: 1 1 58px;
+    min-width: 0;
     height: auto;
     border-radius: var(--radius-chip);
     color: var(--muted);
@@ -607,7 +613,7 @@
    * "Team", so the mark read as a different thing on each page.
    */
   .rail-icon {
-    width: 60px;
+    width: min(60px, 100%);
     height: 32px;
     border-radius: 999px;
     transition: background 160ms var(--ease), color 160ms var(--ease);

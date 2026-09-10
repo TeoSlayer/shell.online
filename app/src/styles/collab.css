@@ -405,7 +405,14 @@
 
 @media (max-width: 900px) {
   .detail {
-    grid-template-columns: 1fr;
+    /*
+     * `minmax(0, 1fr)`, not `1fr`. A `1fr` track will not go below the
+     * min-content width of what is in it, and a comment can hold a URL or a
+     * pasted command that does not break, so the column grew past the screen
+     * and took the whole page sideways with it: the copy menu and the open
+     * button on this page sat off the right edge.
+     */
+    grid-template-columns: minmax(0, 1fr);
     gap: 26px;
   }
 }
