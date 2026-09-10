@@ -6,6 +6,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Document self-hosting for the relay and optional accounts app, with a
+  credential-free Wrangler example.
 - Assign a session to several teammates from the same dropdown. Each tick saves immediately, every assignee can type, and older clients still see the first assignee.
 - Choose who can open a session when you start it. The password is generated and sealed to each person ticked, so nothing is typed and nobody is told a secret; people can be added afterwards from the session page.
 - Offer the session you just started as soon as the machine publishes it, instead of leaving you to find its row.
@@ -14,6 +16,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Keep the Docker Compose image and embedded CLI version aligned with the
+  repository release.
 - Stop "Mark all read" blanking the inbox. The reply left out the roster the list is drawn from.
 - Keep a session password that was typed once, so opening the same session again does not ask for it.
 - Seal a session's password only to the people chosen for it. It went to the whole team, so every colleague could open every session and the choice was never offered.

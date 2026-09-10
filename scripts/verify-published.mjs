@@ -1,18 +1,4 @@
-/**
- * Checks that the install URL is serving the bundle in ./dist/downloads.
- *
- *   node ./scripts/verify-published.mjs https://shell.online
- *
- * verify-downloads.mjs checks the bundle on this machine. This checks the one
- * the world gets, which is a different question and the one that went wrong:
- * a deploy reported success, the manifest at the install URL kept naming the
- * previous build, and `curl | sh` handed out a binary that was three fixes
- * behind. Nobody could see it from the version number, because the version
- * had not changed.
- *
- * Compares the manifest rather than downloading 78 binaries, then fetches one
- * to confirm the manifest is describing what is actually served.
- */
+// Compare the published download manifest and a sample binary with ./dist.
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 

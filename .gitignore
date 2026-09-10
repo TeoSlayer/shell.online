@@ -1,34 +1,30 @@
 node_modules/
 dist/
-.wrangler/
-wrangler.production.jsonc
-worker-configuration.d.ts
 bin/
-*.log
+coverage/
+.wrangler/
 .DS_Store
+*.log
 
-# Local credentials and deployment overrides. Keep the documented examples.
+# Local configuration and credentials
 .dev.vars
 .dev.vars.*
 .env
 .env.*
 !.env.example
-# Build-time values that Vite compiles into a public bundle: an origin and an
-# empty string, no credentials. Ignoring it is what let development values
-# reach production twice, since there was then nothing to override .env.local.
 !app/.env.production
 *.pem
 *.key
+wrangler.production.jsonc
+wrangler.local.jsonc
+worker-configuration.d.ts
 
-# Local editor and test artifacts.
+# Editors and local tools
 .idea/
 .vscode/
-coverage/
-
-wrangler.local.jsonc
-.wrangler
 .gstack/
-
-# Worktrees made inside the repository, and CLI state that is not ours.
 .claude/worktrees/
 .local/
+
+# Marketing renders are maintained outside the source tree.
+/promo/

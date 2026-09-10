@@ -33,11 +33,7 @@ const manifest = JSON.parse(manifestSource);
 const docsContent = JSON.parse(docsSource);
 const packageMetadata = JSON.parse(packageSource);
 
-/*
- * The structured data names a version, and nothing else on the page does, so
- * a release that forgets it leaves search engines advertising the previous
- * one indefinitely. 0.9.0 shipped with 0.8.1 still sitting here.
- */
+// Keep the structured-data version aligned with the release.
 const advertisedVersion = indexHtml.match(/"softwareVersion":\s*"([^"]+)"/u)?.[1];
 check(
   advertisedVersion === packageMetadata.version,

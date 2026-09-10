@@ -1,110 +1,33 @@
 {
-  // The accounts service on Cloudflare Workers. worker/index.ts is the entry;
-  // server/app.ts is the router it shares with the Node build.
-  //
-  //   npm run build                  # the client, into ./dist
-  //   npm run render:deploy-config   # inject untracked production identifiers
-  //   npx wrangler deploy --config wrangler.deploy.jsonc
-  //
-  // The relay is a different Worker with its own config, deployed separately.
-  // Nothing here touches it.
-  //
-  // Secrets are never in this file. Set them once per environment with
-  // `npx wrangler secret put <name> --config wrangler.deploy.jsonc`:
-  //
-  //   MAIL_API_KEY   the SendGrid key, or the key for whatever MAIL_API_URL is
-  //
-  // That is the whole list. The database credentials belong to the Hyperdrive
-  // configuration rather than to this Worker: `wrangler hyperdrive create`
-  // takes the connection string and hands back the id below, and the Worker
-  // only ever sees env.HYPERDRIVE.connectionString, which is local to it.
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "shell-online-app",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
-  // pg speaks to Hyperdrive over a socket, and the router's tokens and codes
-  // are hashed with node:crypto.
   "compatibility_flags": ["nodejs_compat"],
-
-  // app.shell.online is the only address this Worker answers on.
-  //
-  // workers.dev is off because a second public hostname is a second way in to
-  // an app holding a database, for no benefit once the real domain exists.
-  // Preview URLs are off for the same reason and more sharply: they would put
-  // every deployed version on its own permanent public address, each with the
-  // same Hyperdrive binding.
   "workers_dev": false,
   "preview_urls": false,
-
-  // A custom domain rather than a route pattern: Cloudflare provisions the DNS
-  // record and the certificate for it, and the Worker answers on the host that
-  // invitation links and the landing page point at. The relay keeps
-  // shell.online itself; this is only the app subdomain.
   "routes": [
-    {
-      "pattern": "app.shell.online",
-      "custom_domain": true
-    }
+    { "pattern": "app.shell.online", "custom_domain": true }
   ],
-
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    // Static files must pass through worker/index.ts so the browser receives
-    // the same anti-framing, referrer and popup-auth headers in production as
-    // it does from the Node and Vite servers.
     "run_worker_first": true,
-    // The client is a single page with its own router, so /sessions/abc is a
-    // page rather than a file and a miss has to reach index.html.
     "not_found_handling": "single-page-application"
   },
-
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      // The Cloud SQL instance, reached over a Workers VPC service on a
-      // Cloudflare Tunnel. An identifier, not a credential: the database
-      // username and password belong to the Hyperdrive configuration.
-      //
-      // QUERY CACHING MUST STAY OFF on this configuration. It is a Hyperdrive
-      // setting rather than a field here, so it cannot be enforced from this
-      // file:
-      //
-      //   wrangler hyperdrive update <id> --caching-disabled true
-      //
-      // It is on by default and it is wrong for this workload. Everything
-      // here is read-after-write by a person who just acted: sign up and the
-      // membership that was written a moment ago reads back missing, so the
-      // request tries to create a second one and fails on the unique index;
-      // unlink a machine and it is still listed; a machine that is polling
-      // still shows as offline. Cached reads turn all of that into an
-      // application that intermittently disagrees with itself.
       "id": "__HYPERDRIVE_ID__",
-      // Used only by `wrangler dev`, which connects directly rather than
-      // through Hyperdrive. A local Postgres, never the deployed database.
       "localConnectionString": "postgres://postgres:dev@localhost:5433/shell_online"
     }
   ],
-
-  // Expired codes and finished commands, swept on the same five minutes the
-  // Node build uses for its timer.
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  },
-
+  "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
-    // The Firebase project whose ID tokens are accepted.
     "FIREBASE_PROJECT_ID": "__FIREBASE_PROJECT_ID__",
-    // Where browsers reach this deployment. CORS is checked against it and
-    // invitation links are built from it, so it is the public host rather than
-    // whatever a request happened to arrive on.
     "WEB_ORIGIN": "https://app.shell.online",
-    // The relay /relay/* is forwarded to.
     "RELAY_URL": "https://shell.online",
     "MAIL_PROVIDER": "sendgrid",
-    // The display name is free-form; the address has to be one the provider
-    // will send as.
     "MAIL_FROM": "__MAIL_FROM__"
-    // "MAIL_API_URL": "https://api.resend.com/emails"  // MAIL_PROVIDER=json only
   }
 }

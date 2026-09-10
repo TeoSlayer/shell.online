@@ -1,21 +1,4 @@
-/**
- * Refuses a production bundle that points at a developer's machine.
- *
- *   node scripts/check-bundle.mjs [dist]
- *
- * Vite inlines import.meta.env at build time, and .env.local applies to every
- * build on the machine that has one. So a production build made anywhere but
- * CI quietly inherits development values, and the result is a bundle that
- * loads perfectly and then asks the reader's own computer for the service.
- *
- * This has now shipped twice: VITE_ACCOUNTS_URL left at 127.0.0.1:8787, so
- * every API call failed; and VITE_RELAY_URL left at 127.0.0.1:8788, so no
- * session would open. Both were invisible in review and obvious in
- * production, which is the wrong way round.
- *
- * Grepping the built output is crude and it is the only check that sees what
- * was actually compiled rather than what the source intended.
- */
+// Refuse production bundles that contain loopback service URLs.
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -54,12 +37,7 @@ if (found.length > 0) {
   process.exit(1);
 }
 
-/*
- * Blank is its own failure. An unset repository variable arrives as the empty
- * string and overrides .env.production, so the build succeeds and compiles a
- * client that cannot reach anything: VITE_RELAY_URL:`` shipped exactly that
- * way, and no session would open.
- */
+// Required Vite values must be present and non-empty in the compiled bundle.
 const REQUIRED = [
   "VITE_RELAY_URL",
   "VITE_FIREBASE_API_KEY",
@@ -74,13 +52,7 @@ for await (const path of files(directory)) {
   const body = await readFile(path, "utf8");
   if (!body.includes("VITE_")) continue;
   for (const key of REQUIRED) {
-    /*
-     * Vite inlines these into the env object it compiles in, quoted however
-     * the minifier prefers. Absent is a failure as much as empty, and it used
-     * to be the one that got through: a build with no value at all omits the
-     * key, the pattern never matches, and the check passed while the bundle
-     * threw on load and rendered nothing.
-     */
+    // Vite inlines these values into an object in the compiled JavaScript.
     const match = body.match(new RegExp(`${key}\\s*:\\s*(["'\`])((?:(?!\\1).)*)\\1`, "u"));
     if (!match) blank.push({ path, key, why: "absent" });
     else if (match[2].trim() === "") blank.push({ path, key, why: "empty" });

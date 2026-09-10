@@ -1,17 +1,4 @@
-/**
- * Checks that the deployment is actually serving the build sitting in ./dist.
- *
- *   node scripts/verify-deploy.mjs https://app.shell.online
- *
- * A Workers deploy can report success and keep serving the previous
- * index.html: the hashed assets upload, wrangler says "No updated asset files
- * to upload", and the document that points at them stays behind. The result
- * is a fix that is live, reachable at its own URL, and invisible, which reads
- * to everyone as the fix not working.
- *
- * Comparing the asset references is enough to catch it. The filenames carry a
- * content hash, so identical references mean identical bytes.
- */
+// Verify that a deployment serves the hashed assets referenced by ./dist.
 import { readFile } from "node:fs/promises";
 
 const origin = (process.argv[2] ?? "https://app.shell.online").replace(/\/+$/, "");
