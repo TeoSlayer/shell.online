@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.11.2] — 2026-09-10
+
 ### Added
 
 - Document self-hosting for the relay and optional accounts app, with a

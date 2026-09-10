@@ -104,6 +104,10 @@ npm run test:app
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=TeoSlayer/shell.online&type=Date)](https://www.star-history.com/#TeoSlayer/shell.online&Date)
+
 MIT licensed. See [`LICENSE`](LICENSE).
 
 Developed by [Pilot Protocol](https://pilotprotocol.network/).
