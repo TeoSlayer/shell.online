@@ -44,6 +44,7 @@ import { useKeyboardInset } from "../terminal/keyboard-inset";
 import { elapsed } from "../lib/time";
 import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
+import { shouldOpenSurface } from "../lib/surface-navigation";
 
 const POLL_MS = 4000;
 /* Well inside the service's 15s agent-online window, so the state stays true. */
@@ -829,13 +830,14 @@ function SessionGroup({
             const assigned = new Set(assigneeIds(session));
             const assignees = members.filter((member) => assigned.has(member.uid));
             return (
-              /*
-               * The row is the link. `.table-subject` is stretched over the
-               * whole row in CSS, so a tap anywhere that is not a control
-               * opens the session, while the buttons, the assignee picker and
-               * the copy menu stay above it and keep their own targets.
-               */
-              <tr key={session.id} data-live={live} className="table-row-linked">
+              <tr
+                key={session.id}
+                data-live={live}
+                className="table-row-linked"
+                onClick={(event) => {
+                  if (shouldOpenSurface(event.target, event.defaultPrevented)) onOpen(session);
+                }}
+              >
                 <td>
                   <Link className="table-subject" to={`/sessions/${session.id}`}>
                     {/* The kind of thing running, in colour while it runs. */}

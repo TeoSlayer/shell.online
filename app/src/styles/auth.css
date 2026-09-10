@@ -1458,18 +1458,8 @@
   outline-offset: 2px;
 }
 
-.board-card-name::after {
-  position: absolute;
-  content: "";
-  inset: 0;
-  border-radius: inherit;
-}
-
-/*
- * The controls keep their own targets. They come after the overlay in the
- * card, and positioned siblings paint in tree order, so relative is enough
- * and no z-index is needed to trap the copy menu inside.
- */
+/* Controls remain positioned for their menus. The card click handler ignores
+ * interactive descendants instead of covering them with a stretched link. */
 .board-card .clip,
 .board-card .board-card-foot {
   position: relative;
@@ -1554,10 +1544,6 @@
   .picker,
   .picker-trigger-multi {
     max-width: 100%;
-  }
-
-  .picker-trigger-multi {
-    min-height: 40px;
   }
 
   .table-person .picker-pop,

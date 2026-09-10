@@ -7,6 +7,7 @@ import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
+import { shouldOpenSurface } from "../lib/surface-navigation";
 
 /**
  * The same sessions as three columns, one per thing you can do with them.
@@ -31,6 +32,7 @@ function Card({
   members,
   you,
   action,
+  onOpen,
   onAssign,
 }: {
   session: SessionRecord;
@@ -38,6 +40,7 @@ function Card({
   members: Member[];
   you: Member | null;
   action: React.ReactNode;
+  onOpen: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uids: string[]) => void;
 }) {
   const kind = kindForCommand(session.command);
@@ -45,7 +48,12 @@ function Card({
   const assignees = members.filter((member) => selected.has(member.uid));
 
   return (
-    <li className="board-card">
+    <li
+      className="board-card"
+      onClick={(event) => {
+        if (shouldOpenSurface(event.target, event.defaultPrevented)) onOpen(session);
+      }}
+    >
       <div className="board-card-head">
         <img className="board-card-icon" src={kind.icon} alt="" title={kind.title} />
         {/*
@@ -157,6 +165,7 @@ export function SessionBoard({
                   now={now}
                   members={members}
                   you={you}
+                  onOpen={onOpen}
                   onAssign={onAssign}
                   action={
                     column.key === "finished" ? (

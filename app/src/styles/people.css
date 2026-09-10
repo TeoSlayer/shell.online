@@ -364,39 +364,19 @@
   text-decoration: underline;
 }
 
-/* ---------------------------------------------------------------
-   The whole row opens the session
-   ---------------------------------------------------------------
-   The name was the only target, which on a phone is a few characters of
-   text in a row that is otherwise a hundred pixels of nothing. Rather than
-   put a click handler on the row, the existing link is stretched across it:
-   the row keeps one link, the keyboard keeps one stop, and everything that
-   was already interactive is lifted above the overlay so it still gets the
-   tap it used to.
-   --------------------------------------------------------------- */
+/* The inert part of the row opens the session. Controls keep their native hit
+   targets; navigation is filtered by shouldOpenSurface in Workspace.tsx. */
 
 .table-row-linked {
   position: relative;
   cursor: pointer;
 }
 
-.table-row-linked .table-subject::after {
-  position: absolute;
-  content: "";
-  inset: 0;
-}
-
 .table-row-linked:hover .table-name {
   text-decoration: underline;
 }
 
-/*
- * Everything with its own behaviour keeps its own target: `position: relative`
- * and nothing else. Positioned siblings paint in tree order and all of these
- * come after the overlay, so they are above it without a z-index. Giving them
- * one would trap the copy menu inside their stacking context, and that menu
- * has to rise over the rest of the page.
- */
+/* Keep menus positioned without creating a stacking context that clips them. */
 .table-row-linked td > .session-actions,
 .table-row-linked .picker,
 .table-row-linked .table-command-toggle,
