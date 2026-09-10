@@ -115,6 +115,8 @@
   border-radius: var(--radius-control);
   background: var(--white);
   box-shadow: 0 18px 44px color-mix(in srgb, var(--ink) 16%, transparent);
+  text-align: left;
+  white-space: normal;
 }
 
 .filter-picker-right .filter-picker-pop {

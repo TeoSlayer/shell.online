@@ -510,6 +510,8 @@ button.tab {
 .sheet {
   display: flex;
   overflow: hidden;
+  text-align: left;
+  white-space: normal;
   width: min(880px, 100%);
   max-height: 90dvh;
   border: 1px solid var(--line);

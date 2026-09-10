@@ -323,6 +323,8 @@
   border-radius: var(--radius-control);
   background: var(--white);
   box-shadow: 0 16px 40px rgb(26 31 22 / 12%);
+  text-align: left;
+  white-space: normal;
 }
 
 .account-pop-name {
@@ -338,6 +340,7 @@
   color: var(--faint);
   font-size: 12.5px;
   text-overflow: ellipsis;
+  white-space: nowrap;
   border-bottom: 1px solid var(--line);
   padding-bottom: 9px;
 }

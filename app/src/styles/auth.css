@@ -1124,10 +1124,16 @@
   background: var(--paper);
   box-shadow: 0 14px 40px color-mix(in srgb, var(--ink) 14%, transparent);
   gap: 2px;
+  /* This menu lives inside a right-aligned, no-wrap Actions table cell. Its
+     contents are prose, so neither table-cell rule may leak into the panel. */
+  text-align: left;
+  white-space: normal;
 }
 
 .clip-item {
   display: flex;
+  width: 100%;
+  min-width: 0;
   padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-chip);
@@ -1158,6 +1164,7 @@
 .clip-text b {
   font-size: 13px;
   font-weight: 560;
+  white-space: normal;
 }
 
 /* The warning. Muted, but it wraps rather than truncating: it is the point. */
@@ -1166,6 +1173,8 @@
   font-size: 11.5px;
   font-style: normal;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 /* A refused clipboard, said out loud inside the menu that refused it. */

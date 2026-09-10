@@ -67,6 +67,8 @@
   border-radius: var(--radius-control);
   background: var(--white);
   box-shadow: 0 22px 56px rgb(26 31 22 / 18%);
+  text-align: left;
+  white-space: normal;
 }
 
 .inbox-head {
