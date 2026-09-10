@@ -54,6 +54,6 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: VERSION=${{ steps.metadata.outputs.version }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
           provenance: mode=max
           sbom: true
