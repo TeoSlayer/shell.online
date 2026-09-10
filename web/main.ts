@@ -433,25 +433,49 @@ function renderLanding(): void {
         <section class="marketing-hero">
           <div class="hero-copy">
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Prefix any command with <code>shell</code>. The process stays on your machine and opens as an end-to-end encrypted browser terminal.</p>
+            <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you one encrypted link to the same live terminal—open it from any desktop or phone to watch or type.</p>
             <div class="hero-actions">
-              <button class="install-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
+              <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
                 <code>${installCommand}</code>
                 <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
               </button>
-              <a class="hero-signup" href="${SIGNUP_URL}">Create an account <span aria-hidden="true">→</span></a>
-              <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
+              <div class="hero-secondary-actions">
+                <a class="hero-signup" href="${SIGNUP_URL}">Create an account <span aria-hidden="true">→</span></a>
+                <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
+              </div>
             </div>
           </div>
 
-          <div class="product-demo phone-product-demo" aria-label="A live shell.online Codex session viewed on a phone">
+          <div class="product-demo phone-product-demo" aria-label="A live shell.online agent session viewed on a phone">
             <div class="demo-aura" aria-hidden="true"></div>
             <figure class="real-phone-demo">
               <div class="phone-device">
-                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing Go heartbeat test in a live shell.online session on a phone" fetchpriority="high" />
+                <div class="hero-phone-screen">
+                  <div class="hero-phone-head">
+                    <strong>shell.online</strong>
+                    <span class="hero-phone-latency"><i></i> 22 ms</span>
+                    <span class="hero-phone-viewers" aria-label="One viewer">1</span>
+                    <span class="hero-phone-control" aria-hidden="true">☼</span>
+                    <span class="hero-phone-control hero-phone-settings" aria-hidden="true"></span>
+                  </div>
+                  <div class="hero-phone-terminal">
+                    <div class="hero-agent-title">
+                      <span class="hero-agent-mark" aria-hidden="true">✦</span>
+                      <span><strong>Claude Code</strong><small>Sonnet · ~/project</small></span>
+                    </div>
+                    <div class="hero-agent-prompt"><span>❯</span> Fix the failing heartbeat test</div>
+                    <p>I found the race in the deadline check. I’m adding a regression test now.</p>
+                    <div class="hero-agent-command"><span>›</span> go test ./...</div>
+                    <div class="hero-agent-result"><i>✓</i><span><strong>Fixed</strong><small>42 tests pass · 1.8s</small></span></div>
+                    <div class="hero-agent-input"><span>❯</span><i></i></div>
+                  </div>
+                  <div class="hero-phone-keys" aria-hidden="true">
+                    <span>esc</span><span>tab</span><span>←</span><span>↑</span><span>↓</span><span>→</span><span>enter</span><span>ctrl-c</span>
+                  </div>
+                </div>
               </div>
-              <figcaption><span><i></i> Actual phone capture</span><strong>Codex · live via shell.online</strong></figcaption>
+              <figcaption><span><i></i> Interactive in any browser</span><strong>Claude Code · live via shell.online</strong></figcaption>
             </figure>
           </div>
         </section>

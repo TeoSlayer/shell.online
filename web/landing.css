@@ -420,10 +420,10 @@
 }
 
 .hero-actions {
-  display: flex;
+  display: grid;
+  width: min(100%, 470px);
   margin-top: 34px;
-  align-items: center;
-  gap: 21px;
+  gap: 17px;
 }
 
 .install-command {
@@ -443,6 +443,13 @@
   transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
+.hero-secondary-actions {
+  display: flex;
+  padding-left: 2px;
+  align-items: center;
+  gap: 24px;
+}
+
 .install-command:hover {
   border-color: #4d5148;
   box-shadow: 0 15px 36px rgb(26 31 22 / 19%);
@@ -450,13 +457,16 @@
 }
 
 .install-command code {
-  overflow: hidden;
+  overflow: visible;
   color: #f4f5ed;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
   text-align: left;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.install-command-windows code {
+  font-size: 11px;
 }
 
 .command-prompt {
@@ -612,12 +622,220 @@
   border-radius: 0 3px 3px 0;
 }
 
-.phone-device img {
-  display: block;
+.hero-phone-screen {
+  display: grid;
   width: 100%;
-  height: auto;
+  min-height: 650px;
+  overflow: hidden;
   border-radius: 37px;
   background: #0c0f14;
+  color: #f1f3f6;
+  grid-template-rows: auto 1fr auto;
+}
+
+.hero-phone-head {
+  display: grid;
+  min-width: 0;
+  height: 62px;
+  padding: 0 17px;
+  border-bottom: 1px solid #292d35;
+  background: #11151c;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.hero-phone-head > strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: -.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-phone-latency {
+  display: flex;
+  color: #aeb5bf;
+  font-size: 7px;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.hero-phone-latency i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #64ca80;
+  box-shadow: 0 0 0 3px rgb(100 202 128 / 10%);
+}
+
+.hero-phone-viewers,
+.hero-phone-control {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  border: 1px solid #3a404c;
+  border-radius: 50%;
+  background: #171c24;
+  color: #cbd2dc;
+  font-size: 9px;
+  place-items: center;
+}
+
+.hero-phone-viewers {
+  border-color: #618df1;
+  background: #34558f;
+  color: #fff;
+}
+
+.hero-phone-settings {
+  position: relative;
+}
+
+.hero-phone-settings::before,
+.hero-phone-settings::after {
+  position: absolute;
+  width: 12px;
+  height: 1px;
+  background: #cbd2dc;
+  content: "";
+}
+
+.hero-phone-settings::before { transform: translateY(-3px); }
+.hero-phone-settings::after { transform: translateY(3px); }
+
+.hero-phone-terminal {
+  padding: 31px 19px 26px;
+  background:
+    radial-gradient(circle at 75% 18%, rgb(73 100 151 / 9%), transparent 34%),
+    #0c0f14;
+  color: #b8bec7;
+  font: 9.5px/1.55 ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.hero-agent-title {
+  display: flex;
+  margin-bottom: 39px;
+  color: #f4f5f7;
+  align-items: center;
+  gap: 11px;
+}
+
+.hero-agent-title > span:last-child {
+  display: grid;
+  gap: 3px;
+}
+
+.hero-agent-title strong {
+  font-size: 12px;
+}
+
+.hero-agent-title small {
+  color: #777f8b;
+  font-size: 8px;
+}
+
+.hero-agent-mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #d97757;
+  color: #17191c;
+  font: 18px/1 sans-serif;
+  place-items: center;
+}
+
+.hero-agent-prompt,
+.hero-agent-input {
+  display: flex;
+  min-height: 43px;
+  padding: 0 4px;
+  border-top: 1px solid #3a404a;
+  border-bottom: 1px solid #3a404a;
+  color: #e2e5e9;
+  align-items: center;
+  gap: 7px;
+}
+
+.hero-agent-prompt span,
+.hero-agent-input span,
+.hero-agent-command span {
+  color: #89a7ed;
+  font-size: 12px;
+}
+
+.hero-phone-terminal > p {
+  margin: 24px 5px;
+  color: #aab1bb;
+}
+
+.hero-agent-command {
+  padding: 12px 5px;
+  border-radius: 6px;
+  background: #12161d;
+  color: #d6dae0;
+}
+
+.hero-agent-result {
+  display: flex;
+  margin: 20px 5px 36px;
+  color: #f0f2f5;
+  align-items: center;
+  gap: 9px;
+}
+
+.hero-agent-result > i {
+  display: grid;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgb(97 194 125 / 14%);
+  color: #6ed18a;
+  font-style: normal;
+  place-items: center;
+}
+
+.hero-agent-result > span {
+  display: grid;
+  gap: 1px;
+}
+
+.hero-agent-result strong { font-size: 9px; }
+.hero-agent-result small { color: #747d89; font-size: 7.5px; }
+
+.hero-agent-input i {
+  width: 1px;
+  height: 15px;
+  background: #d6dbe3;
+  animation: hero-cursor-blink 1s steps(1) infinite;
+}
+
+.hero-phone-keys {
+  display: grid;
+  padding: 11px 10px 16px;
+  border-top: 1px solid #292d35;
+  background: #11151c;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.hero-phone-keys span {
+  display: grid;
+  min-width: 0;
+  height: 27px;
+  border: 1px solid #303642;
+  border-radius: 5px;
+  background: #171c24;
+  color: #9ba4b1;
+  font: 6px ui-monospace, monospace;
+  place-items: center;
+}
+
+@keyframes hero-cursor-blink {
+  50% { opacity: 0; }
 }
 
 .real-phone-demo figcaption {
@@ -2532,8 +2750,7 @@
   }
 
   .hero-actions {
-    align-items: stretch;
-    flex-direction: column;
+    width: min(100%, 470px);
   }
 
   .install-command {
@@ -2541,7 +2758,7 @@
   }
 
   .text-link {
-    margin-left: 2px;
+    margin-left: 0;
   }
 
   .product-demo {
@@ -2554,6 +2771,10 @@
 
   .real-phone-demo {
     width: min(310px, 88%);
+  }
+
+  .hero-phone-screen {
+    min-height: 610px;
   }
 
   .browser-window {
@@ -2877,13 +3098,26 @@
   }
 
   .install-command code {
-    font-size: 9px;
+    font-size: 9.5px;
+  }
+
+  .install-command-windows {
+    padding-left: 12px;
+    gap: 7px;
+  }
+
+  .install-command-windows code {
+    font-size: clamp(7.5px, 2.25vw, 9px);
   }
 
   .command-copy-label {
     min-width: 42px;
     padding-right: 7px;
     padding-left: 7px;
+  }
+
+  .hero-secondary-actions {
+    gap: 19px;
   }
 
   .demo-status > span:first-child {
