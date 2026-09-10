@@ -12,12 +12,22 @@ import type { Member, SessionRecord } from "./api";
 
 /**
  * Everyone in the team can watch a session. Typing into it belongs to the
- * person who started it and the person it is assigned to.
+ * person who started it and the people it is assigned to.
  */
 export function canEdit(session: SessionRecord, you: Member | null): boolean {
   if (!you) return false;
   if (session.readOnly) return false;
-  return session.ownerUid === you.uid || session.assigneeUid === you.uid;
+  return session.ownerUid === you.uid || assigneeIds(session).includes(you.uid);
+}
+
+/** Reads both the current array and the legacy single-assignee shape. */
+export function assigneeIds(session: SessionRecord): string[] {
+  const ids = session.assigneeUids?.length
+    ? session.assigneeUids
+    : session.assigneeUid
+      ? [session.assigneeUid]
+      : [];
+  return [...new Set(ids.filter(Boolean))];
 }
 
 /** Handing a session over is the owner's to do, or the team's to arrange. */

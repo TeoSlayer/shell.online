@@ -82,6 +82,7 @@ export async function registerSession(
     ownerUid: input.ownerUid ?? uid,
     /* The person who started it is responsible until they hand it over. */
     assigneeUid: input.ownerUid ?? uid,
+    assigneeUids: [input.ownerUid ?? uid],
     shareUrl: input.shareUrl,
     command: input.command.slice(0, 300),
     name: typeof input.name === "string" && input.name.trim()

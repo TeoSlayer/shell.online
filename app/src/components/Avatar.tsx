@@ -59,3 +59,14 @@ export function AvatarStack({ people, max = 4 }: { people: Person[]; max?: numbe
     </span>
   );
 }
+
+/** A compact, explicit summary for a group of people. */
+export function PeopleChip({ people }: { people: Person[] }) {
+  if (people.length === 0) return <span className="people-empty">Unassigned</span>;
+  return (
+    <span className="people-chip" title={people.map(displayName).join(", ")}>
+      <AvatarStack people={people} max={3} />
+      <span>{people.length === 1 ? displayName(people[0]) : `${people.length} people`}</span>
+    </span>
+  );
+}

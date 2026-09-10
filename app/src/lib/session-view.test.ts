@@ -72,6 +72,12 @@ describe("which column a session belongs in", () => {
     expect(canEdit(session({ ownerUid: "uid-2", assigneeUid: "uid-1" }), you)).toBe(true);
   });
 
+  it("lets every assignee write to a multi-assigned session", () => {
+    expect(
+      canEdit(session({ ownerUid: "uid-3", assigneeUids: ["uid-2", "uid-1"] }), you),
+    ).toBe(true);
+  });
+
   it("puts a colleague's session in read", () => {
     expect(canEdit(session({ ownerUid: "uid-2" }), you)).toBe(false);
   });

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { X, Trash, Terminal as TerminalIcon, List, Plus, CaretRight, MagnifyingGlass, Rows, Columns } from "@phosphor-icons/react";
 import { Link, useSearchParams } from "react-router-dom";
-import { PersonChip } from "../components/Avatar";
-import { PersonPicker } from "../components/PersonPicker";
+import { PeopleChip, PersonChip } from "../components/Avatar";
+import { MultiPersonPicker } from "../components/PersonPicker";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
-import { canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
+import { assigneeIds, canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { LaunchPrompt } from "../components/LaunchPrompt";
 import { SessionBoard } from "../components/SessionBoard";
@@ -162,6 +162,8 @@ export function Workspace() {
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
   const sharedWith = useRef(new Map<string, Set<string>>());
+  /* Keeps rapid multi-select ticks ordered without disabling the picker. */
+  const assignmentQueue = useRef(new Map<string, Promise<{ session: SessionRecord }>>());
 
   /*
    * The parameter is dropped as soon as it is read, so a reload or a shared
@@ -419,16 +421,47 @@ export function Workspace() {
     }
   }
 
-  async function handleAssign(session: SessionRecord, uid: string) {
+  async function handleAssign(session: SessionRecord, uids: string[]) {
     setError("");
     setNotice("");
+    const previous = assigneeIds(session);
+    const optimistic = { ...session, assigneeUid: uids[0], assigneeUids: uids };
+    setSessions((current) =>
+      current?.map((entry) => entry.id === session.id ? optimistic : entry) ?? null,
+    );
+
+    const earlier = assignmentQueue.current.get(session.id);
+    const request = (earlier?.catch(() => undefined) ?? Promise.resolve()).then(() =>
+      assignSession(session.id, uids),
+    );
+    assignmentQueue.current.set(session.id, request);
     try {
-      await assignSession(session.id, uid);
-      const to = members.find((member) => member.uid === uid);
-      setNotice(`${session.name || session.command} is now assigned to ${to?.email ?? "them"}.`);
-      await load();
+      const { session: updated } = await request;
+      if (assignmentQueue.current.get(session.id) !== request) return;
+      setSessions((current) => current?.map(
+        (entry) => entry.id === updated.id ? updated : entry,
+      ) ?? null);
+      const names = members
+        .filter((member) => uids.includes(member.uid))
+        .map((member) => member.name || member.email);
+      setNotice(
+        names.length
+          ? `${session.name || session.command} is assigned to ${names.join(", ")}.`
+          : `${session.name || session.command} is unassigned.`,
+      );
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not hand it off.");
+      if (assignmentQueue.current.get(session.id) === request) {
+        setSessions((current) => current?.map(
+          (entry) => entry.id === session.id
+            ? { ...entry, assigneeUid: previous[0], assigneeUids: previous }
+            : entry,
+        ) ?? null);
+        setError(caught instanceof Error ? caught.message : "Could not update assignees.");
+      }
+    } finally {
+      if (assignmentQueue.current.get(session.id) === request) {
+        assignmentQueue.current.delete(session.id);
+      }
     }
   }
 
@@ -593,6 +626,12 @@ export function Workspace() {
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && query) {
+                      event.preventDefault();
+                      setQuery("");
+                    }
+                  }}
                   placeholder="Search name or command"
                   aria-label="Search sessions by name or command"
                 />
@@ -603,6 +642,7 @@ export function Workspace() {
                   type="button"
                   className={view === "list" ? "view-option is-active" : "view-option"}
                   aria-pressed={view === "list"}
+                  aria-label="Show sessions as a list"
                   onClick={() => {
                     setView("list");
                     writeViewMode("list");
@@ -615,6 +655,7 @@ export function Workspace() {
                   type="button"
                   className={view === "board" ? "view-option is-active" : "view-option"}
                   aria-pressed={view === "board"}
+                  aria-label="Show sessions as columns"
                   onClick={() => {
                     setView("board");
                     writeViewMode("board");
@@ -753,7 +794,7 @@ function SessionGroup({
   onOpen: (session: SessionRecord) => void;
   onKill: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
-  onAssign: (session: SessionRecord, uid: string) => void;
+  onAssign: (session: SessionRecord, uids: string[]) => void;
 }) {
   /*
    * Which commands are shown in full. Collapsed by default: an agent command
@@ -776,7 +817,7 @@ function SessionGroup({
           <tr>
             <th scope="col">Session</th>
             <th scope="col">Owner</th>
-            <th scope="col">Assignee</th>
+            <th scope="col">Assignees</th>
             <th scope="col" className="table-optional">Machine</th>
             <th scope="col">{live ? "Uptime" : "Ran for"}</th>
             <th scope="col" className="table-end">Actions</th>
@@ -785,7 +826,8 @@ function SessionGroup({
         <tbody>
           {sessions.map((session) => {
             const owner = findPerson(members, session.ownerUid);
-            const assignee = findPerson(members, session.assigneeUid);
+            const assigned = new Set(assigneeIds(session));
+            const assignees = members.filter((member) => assigned.has(member.uid));
             return (
               /*
                * The row is the link. `.table-subject` is stretched over the
@@ -839,16 +881,16 @@ function SessionGroup({
                   * unlabelled faces in a row do not say which is which.
                   */}
                 <td className="table-person" data-label="Owner"><PersonChip person={owner} /></td>
-                <td className="table-person" data-label="Assignee">
+                <td className="table-person" data-label="Assignees">
                   {live && canHandOff(session, you) ? (
-                    <PersonPicker
+                    <MultiPersonPicker
                       people={members}
-                      value={session.assigneeUid}
-                      label={`Assignee for ${session.name || session.command}`}
-                      onChange={(uid) => onAssign(session, uid)}
+                      values={assigneeIds(session)}
+                      label={`Assignees for ${session.name || session.command}`}
+                      onChange={(uids) => onAssign(session, uids)}
                     />
                   ) : (
-                    <PersonChip person={assignee} />
+                    <PeopleChip people={assignees} />
                   )}
                 </td>
                 <td className="table-quiet table-optional" data-label="Machine">

@@ -1134,6 +1134,28 @@ describe("session ownership and handoff", () => {
     expect(handed.body.session.ownerUid).toBe("uid-1");
   });
 
+  it("assigns a session to several teammates in one update", async () => {
+    await orgWithColleague();
+    const handed = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uids: ["uid-1", "uid-2", "uid-2"] },
+    });
+    expect(handed.status).toBe(200);
+    expect(handed.body.session.assigneeUids).toEqual(["uid-1", "uid-2"]);
+    expect(handed.body.session.assigneeUid).toBe("uid-1");
+  });
+
+  it("allows a session to be left unassigned", async () => {
+    await orgWithColleague();
+    const handed = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uids: [] },
+    });
+    expect(handed.status).toBe(200);
+    expect(handed.body.session.assigneeUids).toEqual([]);
+    expect(handed.body.session.assigneeUid).toBeUndefined();
+  });
+
   it("lets only the owner share a session key, and only with current members", async () => {
     const { colleague } = await orgWithColleague();
     const path = `/api/sessions/${session.id}/keys`;

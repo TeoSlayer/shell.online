@@ -725,15 +725,22 @@ export function createApp(options: AppOptions) {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
-        const result = await assignSession(store, membership, assignRoute[1], String(body.uid ?? ""));
+        const requested = Array.isArray(body.uids)
+          ? body.uids.map(String)
+          : body.uid
+            ? [String(body.uid)]
+            : [];
+        const result = await assignSession(store, membership, assignRoute[1], requested);
         if (!result.ok) return send(response, result.status, { error: result.error });
-        await notifyAssigned(
-          store,
-          membership,
-          assignRoute[1],
-          String(body.uid ?? ""),
-          result.session.name || result.session.command,
-        );
+        for (const uid of result.addedUids) {
+          await notifyAssigned(
+            store,
+            membership,
+            assignRoute[1],
+            uid,
+            result.session.name || result.session.command,
+          );
+        }
         return send(response, 200, { session: result.session });
       }
 

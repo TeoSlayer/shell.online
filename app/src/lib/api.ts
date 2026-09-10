@@ -108,10 +108,10 @@ export function shareSessionKeys(
   );
 }
 
-export function assignSession(sessionId: string, uid: string) {
+export function assignSession(sessionId: string, uids: string[]) {
   return request<{ session: SessionRecord }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/assignee`,
-    { method: "PUT", body: JSON.stringify({ uid }) },
+    { method: "PUT", body: JSON.stringify({ uids }) },
   );
 }
 
@@ -179,7 +179,9 @@ export interface SessionRecord {
   origin?: string;
   orgId?: string;
   ownerUid?: string;
+  /** First assignee, retained for compatibility with older app versions. */
   assigneeUid?: string;
+  assigneeUids?: string[];
   /** Linked machine that owns the local process. */
   deviceId?: string;
   /** The password sealed to the caller, when one has been shared with them. */

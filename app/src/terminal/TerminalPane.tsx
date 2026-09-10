@@ -21,7 +21,7 @@ export interface TerminalPaneProps {
   /** The password sealed to this browser by whoever started the session. */
   keyShare?: { senderPublicKey: string; sealed: string };
   /**
-   * False for a colleague who is neither owner nor assignee. They can watch
+   * False for a colleague who is neither owner nor an assignee. They can watch
    * but not type, which is what "readable by the team, editable by
    * the people responsible" means in a terminal.
    */
@@ -343,7 +343,7 @@ export function TerminalPane({
       )}
 
       {!canType && status === "connected" && (
-        <div className="pane-banner pane-watching">Watching. Only the owner and assignee can type.</div>
+        <div className="pane-banner pane-watching">Watching. Only the owner and assignees can type.</div>
       )}
 
       {status === "disconnected" && (

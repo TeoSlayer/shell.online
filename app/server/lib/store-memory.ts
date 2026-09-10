@@ -86,6 +86,12 @@ export class MemoryStore implements Store {
         changed = true;
       }
     }
+    for (const session of this.data.sessions) {
+      if (!session.assigneeUids) {
+        session.assigneeUids = session.assigneeUid ? [session.assigneeUid] : [];
+        changed = true;
+      }
+    }
     if (changed) this.flush();
   }
 
@@ -269,6 +275,7 @@ export class MemoryStore implements Store {
     );
     if (index >= 0) {
       const existing = this.data.sessions[index];
+      const hadAssignment = existing.assigneeUids !== undefined;
       this.data.sessions[index] = {
         ...existing,
         ...session,
@@ -277,10 +284,23 @@ export class MemoryStore implements Store {
          * owner as assignee. Letting that through would silently undo a
          * handoff, so an assignment already made stands.
          */
-        assigneeUid: existing.assigneeUid ?? session.assigneeUid,
+        assigneeUid: hadAssignment
+          ? existing.assigneeUid
+          : existing.assigneeUid ?? session.assigneeUid,
+        assigneeUids:
+          hadAssignment
+            ? existing.assigneeUids
+            : session.assigneeUids?.length
+              ? session.assigneeUids
+              : session.assigneeUid
+                ? [session.assigneeUid]
+                : [],
       };
     } else {
-      this.data.sessions.push(session);
+      this.data.sessions.push({
+        ...session,
+        assigneeUids: session.assigneeUids ?? (session.assigneeUid ? [session.assigneeUid] : []),
+      });
     }
     this.flush();
     return index < 0;
@@ -314,10 +334,11 @@ export class MemoryStore implements Store {
     ) ?? null;
   }
 
-  async assignSession(orgId: string, id: string, assigneeUid: string): Promise<SessionRecord | null> {
+  async assignSession(orgId: string, id: string, assigneeUids: string[]): Promise<SessionRecord | null> {
     const session = await this.sessionInOrg(orgId, id);
     if (!session) return null;
-    session.assigneeUid = assigneeUid;
+    session.assigneeUids = [...new Set(assigneeUids)];
+    session.assigneeUid = session.assigneeUids[0];
     this.flush();
     return session;
   }

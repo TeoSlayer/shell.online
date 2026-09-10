@@ -56,8 +56,11 @@ export async function assignSession(
   store: Store,
   membership: Membership,
   sessionId: string,
-  assigneeUid: string,
-): Promise<{ ok: true; session: SessionRecord } | { ok: false; status: number; error: string }> {
+  assigneeUids: string[],
+): Promise<
+  | { ok: true; session: SessionRecord; addedUids: string[] }
+  | { ok: false; status: number; error: string }
+> {
   const session = await store.sessionInOrg(membership.orgId, sessionId);
   if (!session) return { ok: false, status: 404, error: "no such session" };
 
@@ -67,20 +70,34 @@ export async function assignSession(
     return { ok: false, status: 403, error: "only the session's owner can hand it off" };
   }
 
-  const assignee = (await store.members(membership.orgId)).find((entry) => entry.uid === assigneeUid);
-  if (!assignee) {
-    return { ok: false, status: 404, error: "that person is not in this organization" };
+  const unique = [...new Set(assigneeUids.filter(Boolean))];
+  if (unique.length > 50) {
+    return { ok: false, status: 400, error: "a session may have at most 50 assignees" };
+  }
+  const members = await store.members(membership.orgId);
+  const byUid = new Map(members.map((entry) => [entry.uid, entry]));
+  if (unique.some((uid) => !byUid.has(uid))) {
+    return { ok: false, status: 404, error: "an assignee is not in this organization" };
   }
 
-  const updated = await store.assignSession(membership.orgId, sessionId, assigneeUid);
+  const previous = session.assigneeUids?.length
+    ? session.assigneeUids
+    : session.assigneeUid
+      ? [session.assigneeUid]
+      : [];
+  const addedUids = unique.filter((uid) => !previous.includes(uid));
+
+  const updated = await store.assignSession(membership.orgId, sessionId, unique);
   if (!updated) return { ok: false, status: 404, error: "no such session" };
 
   await recordAudit(store, membership, {
     sessionId,
     kind: "handoff",
-    text: `assigned to ${assignee.email}`,
+    text: unique.length
+      ? `assigned to ${unique.map((uid) => byUid.get(uid)?.email).join(", ")}`
+      : "cleared assignees",
   });
-  return { ok: true, session: updated };
+  return { ok: true, session: updated, addedUids };
 }
 
 /** Collaboration metadata as CSV, retained for prerelease API compatibility. */

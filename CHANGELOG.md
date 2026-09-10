@@ -6,6 +6,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Assign a session to several teammates from the same dropdown. Each tick saves immediately, every assignee can type, and older clients still see the first assignee.
 - Choose who can open a session when you start it. The password is generated and sealed to each person ticked, so nothing is typed and nobody is told a secret; people can be added afterwards from the session page.
 - Offer the session you just started as soon as the machine publishes it, instead of leaving you to find its row.
 - Pick a model for Claude Code and Codex sessions.

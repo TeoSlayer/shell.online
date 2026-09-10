@@ -116,8 +116,10 @@ export interface SessionRecord {
   orgId?: string;
   /** Who started it. */
   ownerUid?: string;
-  /** Who is responsible for it now; the owner until handed off. */
+  /** First assignee, retained for clients from before multi-assignment. */
   assigneeUid?: string;
+  /** Everyone currently responsible for the session. */
+  assigneeUids?: string[];
   /**
    * The session password, sealed once per member. The service relays these
    * and can open none of them.

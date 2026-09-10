@@ -235,7 +235,7 @@ export function Terms() {
             A team is a shared workspace, and it is shared in a strong
             sense. <b>Everyone in your team can see every member&rsquo;s
             sessions</b> and can read their comments and handoff history. A
-            session has an owner and an assignee, and
+            session has an owner and may have multiple assignees, and
             only they can edit it — but visibility is not restricted that way.
           </p>
           <p>

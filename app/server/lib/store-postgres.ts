@@ -152,12 +152,18 @@ function toToken(row: Row): CliToken {
 }
 
 function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
+  const assigneeUids = Array.isArray(row.assignee_uids)
+    ? (row.assignee_uids as string[])
+    : row.assignee_uid
+      ? [row.assignee_uid as string]
+      : [];
   const session = defined({
     id: row.id,
     uid: row.uid,
     orgId: row.org_id,
     ownerUid: row.owner_uid,
     assigneeUid: row.assignee_uid,
+    assigneeUids,
     shareUrl: row.share_url,
     command: row.command,
     origin: row.origin,
@@ -636,13 +642,14 @@ export class PostgresStore implements Store {
      */
     const row = await this.row(
       `INSERT INTO sessions
-         (uid, id, org_id, owner_uid, assignee_uid, share_url, command, origin, name,
+         (uid, id, org_id, owner_uid, assignee_uid, assignee_uids, share_url, command, origin, name,
           read_only, encrypted, persistent, host, started_at, closed_at, exit_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        ON CONFLICT (uid, id) DO UPDATE SET
          org_id = EXCLUDED.org_id,
          owner_uid = EXCLUDED.owner_uid,
-         assignee_uid = COALESCE(sessions.assignee_uid, EXCLUDED.assignee_uid),
+         assignee_uid = sessions.assignee_uid,
+         assignee_uids = sessions.assignee_uids,
          share_url = EXCLUDED.share_url,
          command = EXCLUDED.command,
          origin = EXCLUDED.origin,
@@ -661,6 +668,7 @@ export class PostgresStore implements Store {
         session.orgId ?? null,
         session.ownerUid ?? null,
         session.assigneeUid ?? null,
+        session.assigneeUids ?? (session.assigneeUid ? [session.assigneeUid] : []),
         session.shareUrl,
         session.command,
         session.origin ?? null,
@@ -764,11 +772,14 @@ export class PostgresStore implements Store {
   async assignSession(
     orgId: string,
     id: string,
-    assigneeUid: string,
+    assigneeUids: string[],
   ): Promise<SessionRecord | null> {
     const row = await this.row(
-      "UPDATE sessions SET assignee_uid = $3 WHERE org_id = $1 AND id = $2 RETURNING *",
-      [orgId, id, assigneeUid],
+      `UPDATE sessions
+       SET assignee_uid = $3, assignee_uids = $4
+       WHERE org_id = $1 AND id = $2
+       RETURNING *`,
+      [orgId, id, assigneeUids[0] ?? null, assigneeUids],
     );
     return row ? (await this.hydrate([row]))[0] : null;
   }

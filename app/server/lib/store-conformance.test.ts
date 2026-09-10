@@ -368,9 +368,21 @@ for (const implementation of implementations) {
 
       it("keeps a handoff when a persistent session re-registers", async () => {
         await store.upsertSession(session());
-        await store.assignSession("org_1", "s1", "uid-2");
+        await store.assignSession("org_1", "s1", ["uid-2"]);
         await store.upsertSession(session({ assigneeUid: "uid-1" }));
         expect((await store.sessionInOrg("org_1", "s1"))?.assigneeUid).toBe("uid-2");
+      });
+
+      it("keeps multiple assignees, including an intentional empty set", async () => {
+        await store.upsertSession(session());
+        await store.assignSession("org_1", "s1", ["uid-1", "uid-2"]);
+        expect((await store.sessionInOrg("org_1", "s1"))?.assigneeUids).toEqual([
+          "uid-1",
+          "uid-2",
+        ]);
+        await store.assignSession("org_1", "s1", []);
+        await store.upsertSession(session({ assigneeUid: "uid-1" }));
+        expect((await store.sessionInOrg("org_1", "s1"))?.assigneeUids).toEqual([]);
       });
 
       it("scopes a list to one account and one organization", async () => {
@@ -436,7 +448,7 @@ for (const implementation of implementations) {
       it("says so when the session is not in the organization", async () => {
         await store.upsertSession(session());
         expect(await store.putKeyShares("org_2", "s1", [])).toBe(false);
-        expect(await store.assignSession("org_2", "s1", "uid-2")).toBeNull();
+        expect(await store.assignSession("org_2", "s1", ["uid-2"])).toBeNull();
       });
     });
 

@@ -1550,4 +1550,18 @@
     margin-left: auto;
     order: 1;
   }
+
+  .picker,
+  .picker-trigger-multi {
+    max-width: 100%;
+  }
+
+  .picker-trigger-multi {
+    min-height: 40px;
+  }
+
+  .table-person .picker-pop,
+  .board-card .picker-pop {
+    width: min(300px, calc(100vw - 40px));
+  }
 }

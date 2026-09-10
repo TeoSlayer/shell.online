@@ -74,7 +74,7 @@ export interface Store {
   listSessions(uid: string): Promise<SessionRecord[]>;
   listOrgSessions(orgId: string): Promise<SessionRecord[]>;
   sessionInOrg(orgId: string, id: string): Promise<SessionRecord | null>;
-  assignSession(orgId: string, id: string, assigneeUid: string): Promise<SessionRecord | null>;
+  assignSession(orgId: string, id: string, assigneeUids: string[]): Promise<SessionRecord | null>;
   /**
    * Removes a session's record from an organization.
    *

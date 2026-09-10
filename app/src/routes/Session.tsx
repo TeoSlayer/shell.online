@@ -6,8 +6,8 @@ import {
   Terminal as TerminalIcon,
 } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
-import { Avatar, PersonChip } from "../components/Avatar";
-import { PersonPicker } from "../components/PersonPicker";
+import { Avatar, PeopleChip, PersonChip } from "../components/Avatar";
+import { MultiPersonPicker } from "../components/PersonPicker";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { Booting } from "../components/Booting";
@@ -24,6 +24,7 @@ import {
 import { splitMentions } from "../lib/mentions";
 import { displayName, findPerson } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
+import { assigneeIds } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
 
 function CommentBody({ body, members }: { body: string; members: Member[] }) {
@@ -68,6 +69,8 @@ export function Session() {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const assignmentRevision = useRef(0);
+  const assignmentQueue = useRef<Promise<void>>(Promise.resolve());
 
   const load = useCallback(async () => {
     try {
@@ -100,7 +103,8 @@ export function Session() {
 
   const { session, members, you, comments } = detail;
   const owner = findPerson(members, session.ownerUid);
-  const assignee = findPerson(members, session.assigneeUid);
+  const selected = new Set(assigneeIds(session));
+  const assignees = members.filter((member) => selected.has(member.uid));
   const live = !session.closedAt;
   const canAssign =
     session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
@@ -126,6 +130,35 @@ export function Session() {
     const handle = `@${displayName(member)} `;
     setDraft((current) => (current.endsWith(" ") || !current ? current : `${current} `) + handle);
     composer.current?.focus();
+  }
+
+  async function handleAssign(uids: string[]) {
+    const revision = ++assignmentRevision.current;
+    const previous = assigneeIds(session);
+    setDetail((current) => current ? {
+      ...current,
+      session: { ...current.session, assigneeUid: uids[0], assigneeUids: uids },
+    } : current);
+
+    const request = assignmentQueue.current.catch(() => undefined).then(async () => {
+      const { session: updated } = await assignSession(session.id, uids);
+      if (assignmentRevision.current === revision) {
+        setDetail((current) => current ? { ...current, session: updated } : current);
+      }
+    });
+    assignmentQueue.current = request;
+    try {
+      await request;
+      if (assignmentRevision.current === revision) setError("");
+    } catch (caught) {
+      if (assignmentRevision.current === revision) {
+        setDetail((current) => current ? {
+          ...current,
+          session: { ...current.session, assigneeUid: previous[0], assigneeUids: previous },
+        } : current);
+        setError(caught instanceof Error ? caught.message : "Could not update assignees.");
+      }
+    }
   }
 
   return (
@@ -230,20 +263,17 @@ export function Session() {
               <dd><PersonChip person={owner} /></dd>
             </div>
             <div className="detail-row">
-              <dt>Assignee</dt>
+              <dt>Assignees</dt>
               <dd>
                 {canAssign && live ? (
-                  <PersonPicker
+                  <MultiPersonPicker
                     people={members}
-                    value={session.assigneeUid}
-                    label="Assignee"
-                    onChange={async (uid) => {
-                      await assignSession(session.id, uid);
-                      await load();
-                    }}
+                    values={assigneeIds(session)}
+                    label="Assignees"
+                    onChange={(uids) => void handleAssign(uids)}
                   />
                 ) : (
-                  <PersonChip person={assignee} />
+                  <PeopleChip people={assignees} />
                 )}
               </dd>
             </div>

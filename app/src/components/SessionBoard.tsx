@@ -1,10 +1,9 @@
 import { Terminal as TerminalIcon, Trash, Eye } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
-import { PersonChip } from "./Avatar";
-import { findPerson } from "../lib/people";
+import { PeopleChip } from "./Avatar";
 import { kindForCommand } from "../lib/session-kinds";
-import { canHandOff, canRemove } from "../lib/session-view";
-import { PersonPicker } from "./PersonPicker";
+import { assigneeIds, canHandOff, canRemove } from "../lib/session-view";
+import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
@@ -39,10 +38,11 @@ function Card({
   members: Member[];
   you: Member | null;
   action: React.ReactNode;
-  onAssign: (session: SessionRecord, uid: string) => void;
+  onAssign: (session: SessionRecord, uids: string[]) => void;
 }) {
   const kind = kindForCommand(session.command);
-  const assignee = findPerson(members, session.assigneeUid);
+  const selected = new Set(assigneeIds(session));
+  const assignees = members.filter((member) => selected.has(member.uid));
 
   return (
     <li className="board-card">
@@ -77,16 +77,14 @@ function Card({
           * reachable by switching back to the table.
           */}
         {!session.closedAt && canHandOff(session, you) ? (
-          <PersonPicker
+          <MultiPersonPicker
             people={members}
-            value={session.assigneeUid}
-            label={`Assignee for ${session.name || session.command}`}
-            onChange={(uid) => onAssign(session, uid)}
+            values={assigneeIds(session)}
+            label={`Assignees for ${session.name || session.command}`}
+            onChange={(uids) => onAssign(session, uids)}
           />
-        ) : assignee ? (
-          <PersonChip person={assignee} />
         ) : (
-          <span className="board-card-unassigned">Unassigned</span>
+          <PeopleChip people={assignees} />
         )}
         {action}
       </div>
@@ -115,7 +113,7 @@ export function SessionBoard({
   removing: string;
   onOpen: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
-  onAssign: (session: SessionRecord, uid: string) => void;
+  onAssign: (session: SessionRecord, uids: string[]) => void;
 }) {
   const columns: Column[] = [
     {
