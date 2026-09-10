@@ -13,6 +13,21 @@ import type {
 
 export * from "./types";
 
+export interface AuditPageQuery {
+  limit: number;
+  offset: number;
+  sessionId?: string;
+  actorUid?: string;
+  kind?: AuditEvent["kind"];
+  query?: string;
+  sinceAt?: number;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+}
+
 /**
  * Everything the service keeps.
  *
@@ -123,6 +138,7 @@ export interface Store {
   putAudit(event: AuditEvent): Promise<void>;
   auditFor(orgId: string, sessionId: string): Promise<AuditEvent[]>;
   auditForOrg(orgId: string, limit?: number): Promise<AuditEvent[]>;
+  auditPage(orgId: string, query: AuditPageQuery): Promise<AuditPage>;
 
   /* ---- Comments and notifications ---- */
   putComment(comment: Comment): Promise<void>;

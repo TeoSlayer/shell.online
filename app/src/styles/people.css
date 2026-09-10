@@ -292,6 +292,35 @@
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 
+.filtered-table-empty:hover {
+  background: transparent !important;
+}
+
+.filtered-table-empty td {
+  padding: 22px 4px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.filtered-table-empty td:first-child {
+  width: auto;
+  max-width: none;
+  min-width: 0;
+}
+
+.filtered-table-empty button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+}
+
+.filtered-table-empty button:hover {
+  text-decoration: underline;
+}
+
 .table td {
   padding: 12px;
   vertical-align: middle;

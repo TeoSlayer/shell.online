@@ -615,6 +615,32 @@ for (const implementation of implementations) {
         }
         expect((await store.auditForOrg("org_1", 2)).map((entry) => entry.text)).toEqual(["3", "4"]);
       });
+
+      it("pages a filtered organization trail newest first", async () => {
+        await store.putAudit(auditEvent({ id: "a1", at: 1000, actorUid: "uid-1", text: "npm test" }));
+        await store.putAudit(auditEvent({ id: "a2", at: 2000, actorUid: "uid-2", text: "git status" }));
+        await store.putAudit(auditEvent({ id: "a3", at: 3000, actorUid: "uid-1", text: "npm run build" }));
+        await store.putAudit(auditEvent({ id: "a4", at: 4000, actorUid: "uid-1", sessionId: "s2", text: "npm lint" }));
+
+        const first = await store.auditPage("org_1", {
+          limit: 1,
+          offset: 0,
+          actorUid: "uid-1",
+          sessionId: "s1",
+          query: "NPM",
+        });
+        const second = await store.auditPage("org_1", {
+          limit: 1,
+          offset: 1,
+          actorUid: "uid-1",
+          sessionId: "s1",
+          query: "npm",
+        });
+
+        expect(first.total).toBe(2);
+        expect(first.events.map((entry) => entry.id)).toEqual(["a3"]);
+        expect(second.events.map((entry) => entry.id)).toEqual(["a1"]);
+      });
     });
 
     describe("comments and notifications", () => {

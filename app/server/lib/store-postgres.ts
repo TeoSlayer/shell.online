@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { Invite, Membership, Organization, Role } from "./orgs";
-import type { Store } from "./store";
+import type { AuditPage, AuditPageQuery, Store } from "./store";
 import type {
   AgentCommand,
   AuditEvent,
@@ -1122,6 +1122,39 @@ export class PostgresStore implements Store {
       [orgId, limit],
     );
     return rows.map(toAudit);
+  }
+
+  async auditPage(orgId: string, query: AuditPageQuery): Promise<AuditPage> {
+    const where = ["org_id = $1"];
+    const values: unknown[] = [orgId];
+    const add = (clause: string, value: unknown) => {
+      values.push(value);
+      where.push(clause.replace("?", `$${values.length}`));
+    };
+
+    if (query.sessionId) add("session_id = ?", query.sessionId);
+    if (query.actorUid) add("actor_uid = ?", query.actorUid);
+    if (query.kind) add("kind = ?", query.kind);
+    if (query.sinceAt) add("at >= ?", query.sinceAt);
+    if (query.query) {
+      const literal = query.query.replace(/[\\%_]/g, "\\$&");
+      add("text ILIKE ? ESCAPE '\\'", `%${literal}%`);
+    }
+
+    const condition = where.join(" AND ");
+    const totalRows = await this.rows(
+      `SELECT COUNT(*)::int AS total FROM audit_events WHERE ${condition}`,
+      values,
+    );
+    const pageValues = [...values, query.limit, query.offset];
+    const rows = await this.rows(
+      `SELECT * FROM audit_events
+       WHERE ${condition}
+       ORDER BY at DESC, id COLLATE "C" DESC
+       LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      pageValues,
+    );
+    return { events: rows.map(toAudit), total: Number(totalRows[0]?.total ?? 0) };
   }
 
   /* ---- Comments and notifications ---- */

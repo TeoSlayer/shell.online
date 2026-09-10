@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
 import type { Invite, Membership } from "./lib/orgs";
+import type { AuditEvent } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
@@ -529,9 +530,27 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/audit") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
-        const asked = Number(url.searchParams.get("limit") ?? "");
-        const limit = Number.isFinite(asked) && asked > 0 ? Math.min(asked, 5000) : 2000;
-        return send(response, 200, { events: await store.auditForOrg(membership.orgId, limit) });
+        const askedLimit = Number(url.searchParams.get("limit") ?? "");
+        const askedPage = Number(url.searchParams.get("page") ?? "");
+        const limit = Number.isInteger(askedLimit) && askedLimit > 0
+          ? Math.min(askedLimit, 100)
+          : 50;
+        const page = Number.isInteger(askedPage) && askedPage > 0
+          ? Math.min(askedPage, 10_000)
+          : 1;
+        const askedKind = url.searchParams.get("kind") ?? "";
+        const kinds = new Set(["input", "interrupt", "opened", "handoff", "stopped", "deleted"]);
+        const askedSince = Number(url.searchParams.get("since_at") ?? "");
+        const result = await store.auditPage(membership.orgId, {
+          limit,
+          offset: (page - 1) * limit,
+          sessionId: url.searchParams.get("session")?.slice(0, 64) || undefined,
+          actorUid: url.searchParams.get("actor")?.slice(0, 256) || undefined,
+          kind: kinds.has(askedKind) ? askedKind as AuditEvent["kind"] : undefined,
+          query: url.searchParams.get("q")?.trim().slice(0, 200) || undefined,
+          sinceAt: Number.isFinite(askedSince) && askedSince > 0 ? askedSince : undefined,
+        });
+        return send(response, 200, { ...result, page, limit });
       }
 
       const auditRoute = url.pathname.match(/^\/api\/audit\/([A-Za-z0-9_-]{6,64})$/);

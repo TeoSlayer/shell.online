@@ -45,6 +45,7 @@ import { elapsed } from "../lib/time";
 import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 import { shouldOpenSurface } from "../lib/surface-navigation";
+import { SearchSelect } from "../components/SearchSelect";
 
 const POLL_MS = 4000;
 /* Well inside the service's 15s agent-online window, so the state stays true. */
@@ -53,6 +54,13 @@ const DEVICE_POLL_MS = 5000;
 const AFTER_COMMAND_MS = 1500;
 /* How long to wait for a started session before saying so. */
 const LAUNCH_PATIENCE_MS = 45_000;
+
+const SESSION_SCOPES = [
+  { value: "all", label: "All sessions", detail: "Live and finished sessions" },
+  { value: "write", label: "Live write", detail: "Sessions you can control" },
+  { value: "read", label: "Live read", detail: "Sessions you can watch" },
+  { value: "finished", label: "Finished", detail: "Processes that have exited" },
+];
 
 /*
  * Removes a session from the lists. Asks first, because it cannot be undone
@@ -142,6 +150,7 @@ export function Workspace() {
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState("all");
   const [view, setView] = useState<ViewMode>(readViewMode);
   const [removing, setRemoving] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
@@ -472,7 +481,13 @@ export function Workspace() {
    * row: "Running" mixed sessions you can drive with sessions you can only
    * watch, and the difference showed only once a tab was open.
    */
-  const matching = (sessions ?? []).filter((session) => matches(session, query));
+  const matching = (sessions ?? []).filter((session) => {
+    if (!matches(session, query)) return false;
+    if (scope === "write") return !session.closedAt && canEdit(session, you);
+    if (scope === "read") return !session.closedAt && !canEdit(session, you);
+    if (scope === "finished") return Boolean(session.closedAt);
+    return true;
+  });
   const liveWrite = matching.filter((session) => !session.closedAt && canEdit(session, you));
   const liveRead = matching.filter((session) => !session.closedAt && !canEdit(session, you));
   const finished = matching.filter((session) => session.closedAt);
@@ -638,6 +653,15 @@ export function Workspace() {
                 />
               </label>
 
+              <SearchSelect
+                label="Session status"
+                value={scope}
+                options={SESSION_SCOPES}
+                onChange={setScope}
+                searchable={false}
+                align="right"
+              />
+
               <div className="view-toggle" role="group" aria-label="How to show sessions">
                 <button
                   type="button"
@@ -670,9 +694,9 @@ export function Workspace() {
 
             {matching.length === 0 ? (
               <div className="sessions-empty">
-                <p>Nothing matches that search.</p>
-                <button type="button" className="session-action" onClick={() => setQuery("")}>
-                  Clear it
+                <p>Nothing matches those filters.</p>
+                <button type="button" className="session-action" onClick={() => { setQuery(""); setScope("all"); }}>
+                  Clear filters
                 </button>
               </div>
             ) : view === "board" ? (

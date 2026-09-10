@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { Invite, Membership, Organization, Role } from "./orgs";
-import type { Store } from "./store";
+import type { AuditPage, AuditPageQuery, Store } from "./store";
 import type {
   AgentCommand,
   AuditEvent,
@@ -533,6 +533,24 @@ export class MemoryStore implements Store {
       .filter((entry) => entry.orgId === orgId)
       .sort(byTime((entry) => entry.at, (entry) => entry.id))
       .slice(-limit);
+  }
+
+  async auditPage(orgId: string, query: AuditPageQuery): Promise<AuditPage> {
+    const needle = query.query?.trim().toLocaleLowerCase();
+    const matching = this.data.audit.filter((entry) => {
+      if (entry.orgId !== orgId) return false;
+      if (query.sessionId && entry.sessionId !== query.sessionId) return false;
+      if (query.actorUid && entry.actorUid !== query.actorUid) return false;
+      if (query.kind && entry.kind !== query.kind) return false;
+      if (query.sinceAt && entry.at < query.sinceAt) return false;
+      if (needle && !entry.text.toLocaleLowerCase().includes(needle)) return false;
+      return true;
+    });
+    const newest = matching.sort(byTime((entry) => entry.at, (entry) => entry.id, true));
+    return {
+      events: newest.slice(query.offset, query.offset + query.limit),
+      total: newest.length,
+    };
   }
 
   /* ---------------------------------------------------------------

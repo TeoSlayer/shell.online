@@ -250,6 +250,36 @@
   color: var(--blue-deep);
 }
 
+.audit-reading-key {
+  display: flex;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  margin-bottom: 18px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12.5px;
+  align-items: center;
+  gap: 9px;
+}
+
+.audit-reading-key b {
+  color: var(--ink);
+  font-weight: 580;
+}
+
+.audit-reading-key > svg {
+  color: var(--faint);
+  flex: none;
+}
+
+.audit-reading-key small {
+  color: var(--faint);
+  font-size: 11.5px;
+  margin-left: auto;
+}
+
 /* ---- Summary ---- */
 
 .stat-row {
@@ -480,7 +510,7 @@
   display: grid;
   padding: 3px 0;
   gap: 12px;
-  grid-template-columns: 86px minmax(0, 1fr);
+  grid-template-columns: 86px 76px minmax(0, 1fr);
   align-items: baseline;
 }
 
@@ -489,6 +519,18 @@
   font-family: var(--mono);
   font-size: 11px;
   white-space: nowrap;
+}
+
+.trace-kind {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 560;
+}
+
+.trace-lines li[data-kind="interrupt"] .trace-kind,
+.trace-lines li[data-kind="stopped"] .trace-kind,
+.trace-lines li[data-kind="deleted"] .trace-kind {
+  color: var(--danger);
 }
 
 .trace-lines code {
@@ -507,6 +549,40 @@
 .trace-lines li[data-kind="handoff"] code {
   color: var(--muted);
   font-family: var(--sans);
+}
+
+.pagination {
+  display: flex;
+  padding: 18px 0 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 26px;
+  color: var(--muted);
+  font-size: 12.5px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.pagination button {
+  min-width: 84px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font: inherit;
+}
+
+.pagination button:hover:not(:disabled) {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+.pagination button:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 @media (max-width: 1080px) {
@@ -544,8 +620,22 @@
 
 @media (max-width: 560px) {
   .trace-lines li {
-    grid-template-columns: 1fr;
-    gap: 2px;
+    gap: 2px 8px;
+    grid-template-columns: auto 1fr;
+  }
+
+  .trace-lines code {
+    grid-column: 1 / -1;
+  }
+
+  .audit-reading-key {
+    display: grid;
+    grid-template-columns: auto 14px auto 14px auto;
+  }
+
+  .audit-reading-key small {
+    grid-column: 1 / -1;
+    margin: 3px 0 0;
   }
 
   .filter-search {

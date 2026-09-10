@@ -1317,6 +1317,27 @@ describe("audit log", () => {
     expect(log.body.events[0].text).toBe("refactor the parser");
   });
 
+  it("filters and paginates the team trail in the service", async () => {
+    await withSession();
+    await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: {
+        entries: [
+          { session_id: session.id, kind: "input", text: "npm test", at: 1000 },
+          { session_id: session.id, kind: "input", text: "git status", at: 2000 },
+          { session_id: session.id, kind: "input", text: "npm run build", at: 3000 },
+        ],
+      },
+    });
+
+    const first = await call("GET", "/api/audit?q=npm&limit=1&page=1", { auth: await idToken() });
+    const second = await call("GET", "/api/audit?q=npm&limit=1&page=2", { auth: await idToken() });
+
+    expect(first.body).toMatchObject({ total: 2, page: 1, limit: 1 });
+    expect(first.body.events.map((entry: { text: string }) => entry.text)).toEqual(["npm run build"]);
+    expect(second.body.events.map((entry: { text: string }) => entry.text)).toEqual(["npm test"]);
+  });
+
   it("will not read another organization's log", async () => {
     await withSession();
     const read = await call("GET", `/api/audit/${session.id}`, {

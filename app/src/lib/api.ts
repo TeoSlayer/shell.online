@@ -339,10 +339,30 @@ export function deleteSession(sessionId: string) {
   });
 }
 
-/** The whole team's trail, including sessions that have since been removed. */
-export function fetchOrgAudit(limit?: number) {
-  const query = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
-  return request<{ events: AuditEvent[] }>(`/api/audit${query}`);
+export interface AuditPageRequest {
+  page?: number;
+  limit?: number;
+  session?: string;
+  actor?: string;
+  kind?: string;
+  query?: string;
+  sinceAt?: number;
+}
+
+/** The team's trail, filtered and paged by the service rather than the browser. */
+export function fetchOrgAudit(input: AuditPageRequest = {}) {
+  const params = new URLSearchParams();
+  if (input.page) params.set("page", String(input.page));
+  if (input.limit) params.set("limit", String(input.limit));
+  if (input.session) params.set("session", input.session);
+  if (input.actor) params.set("actor", input.actor);
+  if (input.kind) params.set("kind", input.kind);
+  if (input.query?.trim()) params.set("q", input.query.trim());
+  if (input.sinceAt) params.set("since_at", String(input.sinceAt));
+  const query = params.toString();
+  return request<{ events: AuditEvent[]; total: number; page: number; limit: number }>(
+    `/api/audit${query ? `?${query}` : ""}`,
+  );
 }
 
 export function fetchAudit(sessionId: string) {

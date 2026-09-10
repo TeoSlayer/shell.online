@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Copy, Check, Trash, UserPlus, PencilSimple, Warning } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Copy, Check, Trash, UserPlus, PencilSimple, Warning, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
@@ -19,12 +19,35 @@ import { displayName } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
 import { publicKey } from "../lib/keypair";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
+import { SearchSelect } from "../components/SearchSelect";
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
   member: "Member",
 };
+
+const MEMBER_ROLES = [
+  { value: "all", label: "All roles", detail: "Owners, admins, and members" },
+  { value: "owner", label: "Owners", detail: "Full organization control" },
+  { value: "admin", label: "Admins", detail: "Can invite and manage sessions" },
+  { value: "member", label: "Members", detail: "Standard team access" },
+];
+
+const INVITE_STATES = [
+  { value: "all", label: "All invites", detail: "Every invite status" },
+  { value: "live", label: "Waiting", detail: "Can still be accepted" },
+  { value: "accepted", label: "Accepted", detail: "Already used" },
+  { value: "expired", label: "Expired", detail: "Past its expiry time" },
+  { value: "revoked", label: "Revoked", detail: "Cancelled by the team" },
+];
+
+function inviteStateKey(invite: Invite): string {
+  if (invite.acceptedAt) return "accepted";
+  if (invite.revokedAt) return "revoked";
+  if (invite.expiresAt < Date.now()) return "expired";
+  return "live";
+}
 
 function inviteLink(invite: Invite): string {
   return `${window.location.origin}/join/${invite.id}`;
@@ -82,6 +105,10 @@ export function Team() {
   const [inviteRole, setInviteRole] = useState("member");
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberRole, setMemberRole] = useState("all");
+  const [inviteQuery, setInviteQuery] = useState("");
+  const [inviteStatus, setInviteStatus] = useState("all");
 
   const load = useCallback(async () => {
     try {
@@ -101,6 +128,23 @@ export function Team() {
   const you = view?.you;
   const isOwner = you?.role === "owner";
   const canInvite = you?.role === "owner" || you?.role === "admin";
+  const visibleMembers = useMemo(() => {
+    const needle = memberQuery.trim().toLocaleLowerCase();
+    return (view?.members ?? []).filter((member) => {
+      if (memberRole !== "all" && member.role !== memberRole) return false;
+      return !needle || [displayName(member), member.email, member.role]
+        .some((part) => part.toLocaleLowerCase().includes(needle));
+    });
+  }, [view, memberQuery, memberRole]);
+  const visibleInvites = useMemo(() => {
+    const needle = inviteQuery.trim().toLocaleLowerCase();
+    return (view?.invites ?? []).filter((invite) => {
+      if (inviteStatus !== "all" && inviteStateKey(invite) !== inviteStatus) return false;
+      const target = invite.email || "Anyone with the link";
+      return !needle || [target, invite.role, inviteState(invite).label]
+        .some((part) => part.toLocaleLowerCase().includes(needle));
+    });
+  }, [view, inviteQuery, inviteStatus]);
 
   async function act(work: () => Promise<unknown>, done: string) {
     setBusy(true);
@@ -186,6 +230,31 @@ export function Team() {
 
           <section className="sessions-group">
             <h2>Members</h2>
+            <div className="list-toolbar">
+              <label className="sessions-search">
+                <MagnifyingGlass size={15} />
+                <input
+                  type="search"
+                  value={memberQuery}
+                  onChange={(event) => setMemberQuery(event.target.value)}
+                  placeholder="Search people or email"
+                  aria-label="Search team members"
+                />
+                {memberQuery && (
+                  <button type="button" className="search-clear" onClick={() => setMemberQuery("")} aria-label="Clear member search">
+                    <X size={12} weight="bold" />
+                  </button>
+                )}
+              </label>
+              <SearchSelect
+                label="Member role"
+                value={memberRole}
+                options={MEMBER_ROLES}
+                onChange={setMemberRole}
+                searchable={false}
+                align="right"
+              />
+            </div>
             <table className="table">
               <thead>
                 <tr>
@@ -197,7 +266,7 @@ export function Team() {
                 </tr>
               </thead>
               <tbody>
-                {view.members.map((member) => {
+                {visibleMembers.map((member) => {
                   const isYou = member.uid === you!.uid;
                   const rank = { owner: 3, admin: 2, member: 1 } as const;
                   const canAct = !isYou && rank[you!.role] > rank[member.role];
@@ -260,6 +329,16 @@ export function Team() {
                     </tr>
                   );
                 })}
+                {visibleMembers.length === 0 && (
+                  <tr className="filtered-table-empty">
+                    <td colSpan={5}>
+                      No members match those filters.{" "}
+                      <button type="button" onClick={() => { setMemberQuery(""); setMemberRole("all"); }}>
+                        Clear filters
+                      </button>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </section>
@@ -292,7 +371,33 @@ export function Team() {
               <h2 className="invites-heading">Invites</h2>
 
               {view.invites.length > 0 && (
-                <table className="table invites-table">
+                <>
+                  <div className="list-toolbar invites-toolbar">
+                    <label className="sessions-search">
+                      <MagnifyingGlass size={15} />
+                      <input
+                        type="search"
+                        value={inviteQuery}
+                        onChange={(event) => setInviteQuery(event.target.value)}
+                        placeholder="Search invite email"
+                        aria-label="Search invites"
+                      />
+                      {inviteQuery && (
+                        <button type="button" className="search-clear" onClick={() => setInviteQuery("")} aria-label="Clear invite search">
+                          <X size={12} weight="bold" />
+                        </button>
+                      )}
+                    </label>
+                    <SearchSelect
+                      label="Invite status"
+                      value={inviteStatus}
+                      options={INVITE_STATES}
+                      onChange={setInviteStatus}
+                      searchable={false}
+                      align="right"
+                    />
+                  </div>
+                  <table className="table invites-table">
                   <thead>
                     <tr>
                       <th scope="col">Invited</th>
@@ -302,7 +407,7 @@ export function Team() {
                     </tr>
                   </thead>
                   <tbody>
-                    {view.invites.map((invite) => {
+                    {visibleInvites.map((invite) => {
                       const state = inviteState(invite);
                       return (
                         <tr key={invite.id} data-live={state.live}>
@@ -340,8 +445,19 @@ export function Team() {
                         </tr>
                       );
                     })}
+                    {visibleInvites.length === 0 && (
+                      <tr className="filtered-table-empty">
+                        <td colSpan={4}>
+                          No invites match those filters.{" "}
+                          <button type="button" onClick={() => { setInviteQuery(""); setInviteStatus("all"); }}>
+                            Clear filters
+                          </button>
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
-                </table>
+                  </table>
+                </>
               )}
             </section>
           )}

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Desktop } from "@phosphor-icons/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Desktop, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { AppShell, LinkHint } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
@@ -7,12 +7,21 @@ import { fetchDevices, revokeDevice, type Device } from "../lib/api";
 import { machineOnline } from "../lib/agent";
 import { usePageTitle } from "../lib/page-title";
 import { ago } from "../lib/time";
+import { SearchSelect } from "../components/SearchSelect";
+
+const MACHINE_STATUS = [
+  { value: "all", label: "All machines", detail: "Online and offline machines" },
+  { value: "online", label: "Online", detail: "Listening for browser-started sessions" },
+  { value: "offline", label: "Offline", detail: "Linked, but not listening right now" },
+];
 
 export function Machines() {
   usePageTitle("Machines");
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState("");
   const [unlinking, setUnlinking] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
 
   const load = useCallback(async () => {
     try {
@@ -61,13 +70,27 @@ export function Machines() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const visibleDevices = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return (devices ?? []).filter((device) => {
+      const online = machineOnline(device, now);
+      if (status === "online" && !online) return false;
+      if (status === "offline" && online) return false;
+      if (!needle) return true;
+      return [device.label, device.id, ...(device.harnesses ?? [])]
+        .some((part) => part.toLocaleLowerCase().includes(needle));
+    });
+  }, [devices, now, query, status]);
+
   return (
     <AppShell
       title="Machines"
       aside={
         devices && devices.length > 0 ? (
           <span className="topbar-count">
-            {devices.length} linked
+            {visibleDevices.length === devices.length
+              ? `${devices.length} linked`
+              : `${visibleDevices.length} of ${devices.length}`}
           </span>
         ) : null
       }
@@ -86,6 +109,34 @@ export function Machines() {
       <LinkHint className="machines-hint" />
 
       {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
+
+      {devices && devices.length > 0 && (
+        <div className="list-toolbar">
+          <label className="sessions-search">
+            <MagnifyingGlass size={15} />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search machines"
+              aria-label="Search machines by name, id, or capability"
+            />
+            {query && (
+              <button type="button" className="search-clear" onClick={() => setQuery("")} aria-label="Clear machine search">
+                <X size={12} weight="bold" />
+              </button>
+            )}
+          </label>
+          <SearchSelect
+            label="Machine status"
+            value={status}
+            options={MACHINE_STATUS}
+            onChange={setStatus}
+            searchable={false}
+            align="right"
+          />
+        </div>
+      )}
 
       {devices === null ? (
         <div className="sessions-skeleton" aria-hidden="true">
@@ -109,9 +160,16 @@ export function Machines() {
             <li>The machine appears in this list.</li>
           </ol>
         </div>
+      ) : visibleDevices.length === 0 ? (
+        <div className="sessions-empty compact-empty">
+          <p>No machines match those filters.</p>
+          <button type="button" className="session-action" onClick={() => { setQuery(""); setStatus("all"); }}>
+            Clear filters
+          </button>
+        </div>
       ) : (
         <ul className="sessions-list">
-          {devices.map((device) => (
+          {visibleDevices.map((device) => (
             <li key={device.id} className="session">
               <div className="session-main">
                 <span className="device-label">

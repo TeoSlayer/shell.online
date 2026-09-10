@@ -22,7 +22,6 @@ import {
 import {
   EMPTY_FILTERS,
   activity,
-  applyFilters,
   byActor,
   isFiltered,
   memberOf,
@@ -37,6 +36,8 @@ import { displayName } from "../lib/people";
 import { SearchSelect } from "../components/SearchSelect";
 import type { SearchSelectOption } from "../lib/search-options";
 
+const PAGE_SIZE = 40;
+
 const RANGES = [
   { label: "All time", detail: "The complete retained audit trail", value: 0 },
   { label: "Last hour", detail: "Activity from the past 60 minutes", value: 60 * 60 * 1000 },
@@ -48,10 +49,20 @@ const KINDS = [
   { label: "Everything", detail: "Every recorded event type", value: "" },
   { label: "Commands and prompts", detail: "Submitted terminal input and agent prompts", value: "input" },
   { label: "Interrupts", detail: "Ctrl-C and interrupted input", value: "interrupt" },
+  { label: "Opened", detail: "Sessions opened from the workspace", value: "opened" },
   { label: "Handoffs", detail: "Assignment changes between teammates", value: "handoff" },
   { label: "Stopped", detail: "Processes stopped from the app", value: "stopped" },
   { label: "Removed", detail: "Sessions removed from the workspace", value: "deleted" },
 ];
+
+const EVENT_LABEL: Record<AuditEvent["kind"], string> = {
+  input: "Submitted",
+  interrupt: "Interrupted",
+  opened: "Opened",
+  handoff: "Assigned",
+  stopped: "Stopped",
+  deleted: "Removed",
+};
 
 /** A bar chart of when things happened. Inline SVG; no charting library. */
 function ActivityChart({ events }: { events: AuditEvent[] }) {
@@ -63,7 +74,7 @@ function ActivityChart({ events }: { events: AuditEvent[] }) {
 
   return (
     <figure className="chart">
-      <figcaption>Activity</figcaption>
+      <figcaption>Activity on this page</figcaption>
       <div className="chart-bars" role="img" aria-label={`${events.length} entries over time`}>
         {buckets.map((bucket) => (
           <span
@@ -131,38 +142,63 @@ export function Audit() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(() => Math.max(1, Number(params.get("page")) || 1));
 
   const [filters, setFilters] = useState<Filters>({
-    ...EMPTY_FILTERS,
+    actor: params.get("actor") ?? "",
+    kind: params.get("kind") ?? "",
+    query: params.get("q") ?? "",
+    since: Math.max(0, Number(params.get("since")) || 0),
     session: params.get("session") ?? "",
   });
 
-  const load = useCallback(async () => {
+  const loadContext = useCallback(async () => {
     try {
-      const [list, trail] = await Promise.all([fetchSessions(), fetchOrgAudit()]);
+      const list = await fetchSessions();
       setSessions(list.sessions);
       setMembers(list.members ?? []);
-      /*
-       * Read as one trail rather than session by session. Asking each session
-       * for its own log cannot return the entry for a session that has been
-       * removed, and that entry is exactly what somebody comes here to find.
-       */
-      setEvents([...trail.events].sort((a, b) => b.at - a.at));
-      setError("");
     } catch (caught) {
-      setEvents([]);
       setError(caught instanceof Error ? caught.message : "Could not load the audit log.");
     }
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadContext();
+  }, [loadContext]);
 
-  const shown = useMemo(
-    () => (events ? applyFilters(events, filters) : []),
-    [events, filters],
-  );
+  useEffect(() => {
+    let current = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const trail = await fetchOrgAudit({
+          page,
+          limit: PAGE_SIZE,
+          session: filters.session || undefined,
+          actor: filters.actor || undefined,
+          kind: filters.kind || undefined,
+          query: filters.query || undefined,
+          sinceAt: filters.since ? Date.now() - filters.since : undefined,
+        });
+        if (!current) return;
+        setEvents(trail.events);
+        setTotal(trail.total);
+        setError("");
+        if (trail.events.length === 0 && trail.total > 0 && page > 1) setPage(page - 1);
+      } catch (caught) {
+        if (!current) return;
+        setEvents([]);
+        setTotal(0);
+        setError(caught instanceof Error ? caught.message : "Could not load the audit log.");
+      }
+    }, filters.query ? 180 : 0);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [filters, page]);
+
+  const shown = useMemo(() => events ?? [], [events]);
   const summary = useMemo(() => summarise(shown), [shown]);
   const sessionOptions = useMemo<SearchSelectOption[]>(() => [
     { value: "", label: "All sessions", detail: "Activity across every session" },
@@ -182,16 +218,31 @@ export function Audit() {
     })),
   ], [members]);
 
+  function writeParams(next: Filters, nextPage: number) {
+    const query = new URLSearchParams();
+    if (next.session) query.set("session", next.session);
+    if (next.actor) query.set("actor", next.actor);
+    if (next.kind) query.set("kind", next.kind);
+    if (next.query.trim()) query.set("q", next.query.trim());
+    if (next.since) query.set("since", String(next.since));
+    if (nextPage > 1) query.set("page", String(nextPage));
+    setParams(query, { replace: true });
+  }
+
   function set(patch: Partial<Filters>) {
     setFilters((current) => {
       const next = { ...current, ...patch };
-      if (patch.session !== undefined) {
-        /* Keep the address bar honest, so a filtered view can be shared. */
-        if (patch.session) setParams({ session: patch.session }, { replace: true });
-        else setParams({}, { replace: true });
-      }
+      writeParams(next, 1);
       return next;
     });
+    setPage(1);
+  }
+
+  function goToPage(nextPage: number) {
+    setPage(nextPage);
+    setEvents(null);
+    writeParams(filters, nextPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleExport() {
@@ -283,6 +334,7 @@ export function Audit() {
         {isFiltered(filters) && (
           <button type="button" className="filter-clear" onClick={() => {
             setFilters(EMPTY_FILTERS);
+            setPage(1);
             setParams({}, { replace: true });
           }}>
             Clear
@@ -298,42 +350,53 @@ export function Audit() {
         </div>
       ) : (
         <>
-          <div className="stat-row">
-            <Stat label="Entries" value={summary.total} />
-            <Stat label="Commands and prompts" value={summary.inputs} />
-            <Stat label="Interrupts" value={summary.interrupts} />
-            <Stat label="People" value={summary.people} />
-            <Stat label="Sessions" value={summary.sessions} />
+          <div className="audit-reading-key" aria-label="How to read the audit log">
+            <span><b>Person</b> who acted</span>
+            <ArrowRight size={13} weight="bold" />
+            <span><b>Action</b> they took</span>
+            <ArrowRight size={13} weight="bold" />
+            <span><b>Session</b> where it happened</span>
+            <small>Newest activity is first. Times use your local timezone.</small>
           </div>
 
           {shown.length > 0 && (
-            <div className="chart-row">
-              <ActivityChart events={shown} />
-              <RankChart
-                caption="By user"
-                rows={byActor(shown).slice(0, 6)}
-                onPick={(uid) => set({ actor: uid === filters.actor ? "" : uid })}
-                render={(uid) => {
-                  const member = memberOf(members, uid);
-                  return (
-                    <span className="rank-person">
-                      <Avatar person={member} size="xs" />
-                      {displayName(member)}
-                    </span>
-                  );
-                }}
-              />
-              <RankChart
-                caption="Most used"
-                rows={topCommands(shown)}
-                onPick={(word) => set({ query: word })}
-                render={(word) => <code>{word}</code>}
-              />
+            <div className="audit-page-summary">
+              <div className="stat-row">
+                <Stat label="Matching entries" value={total} />
+                <Stat label="On this page" value={summary.total} />
+                <Stat label="People on this page" value={summary.people} />
+                <Stat label="Sessions on this page" value={summary.sessions} />
+              </div>
+              <div className="chart-row">
+                <ActivityChart events={shown} />
+                <RankChart
+                  caption="People on this page"
+                  rows={byActor(shown).slice(0, 6)}
+                  onPick={(uid) => set({ actor: uid === filters.actor ? "" : uid })}
+                  render={(uid) => {
+                    const member = memberOf(members, uid);
+                    return (
+                      <span className="rank-person">
+                        <Avatar person={member} size="xs" />
+                        {displayName(member)}
+                      </span>
+                    );
+                  }}
+                />
+                <RankChart
+                  caption="Commands on this page"
+                  rows={topCommands(shown)}
+                  onPick={(word) => set({ query: word })}
+                  render={(word) => <code>{word}</code>}
+                />
+              </div>
             </div>
           )}
 
           <h2 className="detail-heading">
-            {isFiltered(filters) ? `${shown.length} matching` : "Everything"}
+            {total > 0
+              ? `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`
+              : isFiltered(filters) ? "No matches" : "Everything"}
           </h2>
 
           {shown.length === 0 ? (
@@ -346,11 +409,41 @@ export function Audit() {
               </ol>
             </div>
           ) : (
-            <Trace events={shown} members={members} sessions={sessions} />
+            <>
+              <Trace events={shown} members={members} sessions={sessions} />
+              <Pagination
+                page={page}
+                pageCount={Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                onPage={goToPage}
+              />
+            </>
           )}
         </>
       )}
     </AppShell>
+  );
+}
+
+function Pagination({
+  page,
+  pageCount,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  onPage(page: number): void;
+}) {
+  if (pageCount <= 1) return null;
+  return (
+    <nav className="pagination" aria-label="Audit pages">
+      <button type="button" onClick={() => onPage(page - 1)} disabled={page <= 1}>
+        Previous
+      </button>
+      <span>Page {page} of {pageCount}</span>
+      <button type="button" onClick={() => onPage(page + 1)} disabled={page >= pageCount}>
+        Next
+      </button>
+    </nav>
   );
 }
 
@@ -379,15 +472,16 @@ function Trace({
   sessions: SessionRecord[];
 }) {
   const groups = traceGroups(events);
-
-  let lastDay = "";
+  const withDay = groups.map((group, index) => {
+    const day = new Date(group.events[0].at).toDateString();
+    const previous = groups[index - 1];
+    const previousDay = previous ? new Date(previous.events[0].at).toDateString() : "";
+    return { group, newDay: day !== previousDay };
+  });
   return (
     <ol className="trace">
-      {groups.map((group) => {
+      {withDay.map(({ group, newDay }) => {
         const person = memberOf(members, group.actorUid);
-        const day = new Date(group.events[0].at).toDateString();
-        const newDay = day !== lastDay;
-        lastDay = day;
 
         return (
           <li key={group.key} className="trace-group">
@@ -425,6 +519,7 @@ function Trace({
                       second: "2-digit",
                     })}
                   </span>
+                  <span className="trace-kind">{EVENT_LABEL[event.kind]}</span>
                   <code>
                     {event.kind === "interrupt"
                       ? `^C${event.text ? ` while typing ${event.text}` : ""}`
