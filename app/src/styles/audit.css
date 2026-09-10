@@ -56,9 +56,16 @@
   color: var(--ink);
 }
 
-.filters select {
+.filter-picker {
+  position: relative;
+  flex: none;
+}
+
+.filter-picker-trigger {
+  display: inline-flex;
+  max-width: 200px;
   height: 40px;
-  padding: 0 10px;
+  padding: 0 11px 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-control);
   outline: 0;
@@ -67,6 +74,161 @@
   cursor: pointer;
   font-family: inherit;
   font-size: 13.5px;
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-picker-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-picker-trigger svg {
+  color: var(--faint);
+  flex: none;
+}
+
+.filter-picker-trigger:hover,
+.filter-picker-trigger[aria-expanded="true"] {
+  border-color: var(--muted);
+}
+
+.filter-picker-trigger:focus-visible {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.filter-picker-scrim {
+  display: none;
+}
+
+.filter-picker-pop {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% + 6px);
+  left: 0;
+  overflow: hidden;
+  width: 330px;
+  max-width: calc(100vw - 32px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.filter-picker-right .filter-picker-pop {
+  right: 0;
+  left: auto;
+}
+
+.filter-picker-head {
+  padding: 11px 12px 8px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.filter-picker-search {
+  display: flex;
+  height: 40px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--faint);
+  align-items: center;
+  gap: 8px;
+}
+
+.filter-picker-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  flex: 1;
+}
+
+.filter-picker-list {
+  overflow-y: auto;
+  max-height: 320px;
+  padding: 5px;
+  margin: 0;
+  list-style: none;
+}
+
+.filter-picker-option {
+  display: flex;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.filter-picker-option:hover,
+.filter-picker-option.is-active {
+  background: var(--paper);
+}
+
+.filter-picker-option:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+.filter-picker-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+}
+
+.filter-picker-copy b {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-picker-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-picker-check {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--white);
+  flex: none;
+  place-items: center;
+}
+
+.filter-picker-check.is-selected {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.filter-picker-empty {
+  padding: 18px 10px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .filter-clear {
@@ -386,5 +548,64 @@
 
   .filter-search {
     min-width: 100%;
+  }
+
+  .filter-picker {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 0;
+  }
+
+  .filter-picker-trigger {
+    width: 100%;
+    max-width: none;
+  }
+
+  .filter-picker-scrim {
+    position: fixed;
+    z-index: 69;
+    display: block;
+    border: 0;
+    background: color-mix(in srgb, var(--ink) 32%, transparent);
+    inset: 0;
+  }
+
+  .filter-picker-pop {
+    position: fixed;
+    z-index: 70;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh / var(--zoom) - 20px);
+    border-width: 1px 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    box-shadow: 0 -18px 50px color-mix(in srgb, var(--ink) 20%, transparent);
+  }
+
+  .filter-picker-right .filter-picker-pop {
+    right: 0;
+    left: 0;
+  }
+
+  .filter-picker-head {
+    padding: 14px 16px 10px;
+    font-size: 12px;
+  }
+
+  .filter-picker-search {
+    height: 46px;
+    padding: 0 16px;
+  }
+
+  .filter-picker-list {
+    max-height: calc(100dvh / var(--zoom) - 120px);
+    padding: 7px 10px calc(12px + env(safe-area-inset-bottom));
+  }
+
+  .filter-picker-option {
+    min-height: 58px;
+    padding: 9px 7px;
   }
 }

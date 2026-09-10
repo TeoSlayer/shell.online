@@ -34,21 +34,23 @@ import {
 } from "../lib/audit-view";
 import { usePageTitle } from "../lib/page-title";
 import { displayName } from "../lib/people";
+import { SearchSelect } from "../components/SearchSelect";
+import type { SearchSelectOption } from "../lib/search-options";
 
 const RANGES = [
-  { label: "All time", value: 0 },
-  { label: "Last hour", value: 60 * 60 * 1000 },
-  { label: "Last 24 hours", value: 24 * 60 * 60 * 1000 },
-  { label: "Last 7 days", value: 7 * 24 * 60 * 60 * 1000 },
+  { label: "All time", detail: "The complete retained audit trail", value: 0 },
+  { label: "Last hour", detail: "Activity from the past 60 minutes", value: 60 * 60 * 1000 },
+  { label: "Last 24 hours", detail: "Activity since this time yesterday", value: 24 * 60 * 60 * 1000 },
+  { label: "Last 7 days", detail: "Activity from the past week", value: 7 * 24 * 60 * 60 * 1000 },
 ];
 
 const KINDS = [
-  { label: "Everything", value: "" },
-  { label: "Commands and prompts", value: "input" },
-  { label: "Interrupts", value: "interrupt" },
-  { label: "Handoffs", value: "handoff" },
-  { label: "Stopped", value: "stopped" },
-  { label: "Removed", value: "deleted" },
+  { label: "Everything", detail: "Every recorded event type", value: "" },
+  { label: "Commands and prompts", detail: "Submitted terminal input and agent prompts", value: "input" },
+  { label: "Interrupts", detail: "Ctrl-C and interrupted input", value: "interrupt" },
+  { label: "Handoffs", detail: "Assignment changes between teammates", value: "handoff" },
+  { label: "Stopped", detail: "Processes stopped from the app", value: "stopped" },
+  { label: "Removed", detail: "Sessions removed from the workspace", value: "deleted" },
 ];
 
 /** A bar chart of when things happened. Inline SVG; no charting library. */
@@ -162,6 +164,23 @@ export function Audit() {
     [events, filters],
   );
   const summary = useMemo(() => summarise(shown), [shown]);
+  const sessionOptions = useMemo<SearchSelectOption[]>(() => [
+    { value: "", label: "All sessions", detail: "Activity across every session" },
+    ...sessions.map((session) => ({
+      value: session.id,
+      label: session.name || session.command,
+      detail: `${session.command}${session.host ? ` · ${session.host}` : ""}`,
+      keywords: session.closedAt ? "finished offline" : "running live",
+    })),
+  ], [sessions]);
+  const memberOptions = useMemo<SearchSelectOption[]>(() => [
+    { value: "", label: "Everyone", detail: "Activity from every teammate" },
+    ...members.map((member) => ({
+      value: member.uid,
+      label: displayName(member),
+      detail: [member.email, member.role].filter(Boolean).join(" · "),
+    })),
+  ], [members]);
 
   function set(patch: Partial<Filters>) {
     setFilters((current) => {
@@ -227,55 +246,39 @@ export function Audit() {
           )}
         </div>
 
-        <select
+        <SearchSelect
+          label="Session"
           value={filters.session}
-          onChange={(event) => set({ session: event.target.value })}
-          aria-label="Session"
-        >
-          <option value="">All sessions</option>
-          {sessions.map((session) => (
-            <option key={session.id} value={session.id}>
-              {session.name || session.command}
-            </option>
-          ))}
-        </select>
+          options={sessionOptions}
+          onChange={(session) => set({ session })}
+          searchPlaceholder="Search sessions, commands, or machines"
+        />
 
-        <select
+        <SearchSelect
+          label="Person"
           value={filters.actor}
-          onChange={(event) => set({ actor: event.target.value })}
-          aria-label="Person"
-        >
-          <option value="">Everyone</option>
-          {members.map((member) => (
-            <option key={member.uid} value={member.uid}>
-              {displayName(member)}
-            </option>
-          ))}
-        </select>
+          options={memberOptions}
+          onChange={(actor) => set({ actor })}
+          searchPlaceholder="Search people, emails, or roles"
+        />
 
-        <select
+        <SearchSelect
+          label="Event type"
           value={filters.kind}
-          onChange={(event) => set({ kind: event.target.value })}
-          aria-label="Kind"
-        >
-          {KINDS.map((kind) => (
-            <option key={kind.value} value={kind.value}>
-              {kind.label}
-            </option>
-          ))}
-        </select>
+          options={KINDS}
+          onChange={(kind) => set({ kind })}
+          searchable={false}
+          align="right"
+        />
 
-        <select
+        <SearchSelect
+          label="Time range"
           value={String(filters.since)}
-          onChange={(event) => set({ since: Number(event.target.value) })}
-          aria-label="Time range"
-        >
-          {RANGES.map((range) => (
-            <option key={range.value} value={range.value}>
-              {range.label}
-            </option>
-          ))}
-        </select>
+          options={RANGES.map((range) => ({ ...range, value: String(range.value) }))}
+          onChange={(since) => set({ since: Number(since) })}
+          searchable={false}
+          align="right"
+        />
 
         {isFiltered(filters) && (
           <button type="button" className="filter-clear" onClick={() => {

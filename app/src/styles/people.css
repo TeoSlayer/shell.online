@@ -352,6 +352,24 @@
   justify-content: flex-end;
 }
 
+/* A row's controls are one compact sentence: open, copy, stop, remove. */
+.table .session-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.table .session-action {
+  height: 34px;
+  padding: 0 7px;
+  font-size: 12.5px;
+  gap: 4px;
+}
+
+.table .session-copy {
+  width: 34px;
+  height: 34px;
+}
+
 .table-subject {
   display: inline-flex;
   min-width: 0;
@@ -511,15 +529,7 @@
     min-width: 118px;
   }
 
-  .table .session-action {
-    height: 34px;
-    padding: 0 11px;
-    font-size: 13px;
-  }
-
-  .table .session-actions {
-    gap: 6px;
-  }
+  .table .session-actions { gap: 4px; }
 }
 
 /*
