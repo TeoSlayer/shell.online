@@ -1087,7 +1087,7 @@ a {
 
 .settings-button,
 .theme-button {
-  min-height: 30px;
+  min-height: 36px;
   padding: 6px 11px;
   border: 1px solid #303746;
   border-radius: 999px;
@@ -1120,9 +1120,9 @@ a {
 
 .theme-button {
   display: grid;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
   padding: 0;
   place-items: center;
 }
@@ -1597,13 +1597,13 @@ a {
 
   .settings-button,
   .theme-button {
-    min-height: 38px;
+    min-height: 44px;
   }
 
   .theme-button {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
   }
 
   .terminal .xterm-helper-textarea {
@@ -2054,7 +2054,7 @@ a {
   .session-header {
     padding: 4px max(10px, env(safe-area-inset-right)) 3px max(10px, env(safe-area-inset-left));
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-rows: 30px 26px;
+    grid-template-rows: 44px 28px;
     grid-template-areas:
       "brand actions"
       "identity identity";
@@ -2063,9 +2063,9 @@ a {
   }
 
   .session-page {
-    --session-header-height: 66px;
+    --session-header-height: 79px;
 
-    grid-template-rows: 66px minmax(0, 1fr) auto;
+    grid-template-rows: 79px minmax(0, 1fr) auto;
   }
 
   .session-page.keyboard-open {
@@ -2078,6 +2078,10 @@ a {
     padding-top: 2px;
     padding-bottom: 2px;
     grid-template-rows: 26px 23px;
+  }
+
+  .session-page.keyboard-open .theme-button {
+    display: none;
   }
 
   .session-header .wordmark {
@@ -2098,6 +2102,15 @@ a {
 
   .session-identity.has-typing .status {
     display: none;
+  }
+
+  .session-access.encryption {
+    font-size: 0;
+  }
+
+  .session-access.encryption::after {
+    font-size: 9px;
+    content: "E2EE";
   }
 }
 
@@ -2151,8 +2164,9 @@ a {
   }
 
   .settings-button {
-    width: 30px;
-    min-width: 30px;
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 0;
   }
 
@@ -2161,8 +2175,9 @@ a {
   }
 
   .theme-button {
-    width: 30px;
-    min-width: 30px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
   }
 
@@ -2206,7 +2221,7 @@ a {
   }
 
   .theme-options button {
-    min-height: 27px;
+    min-height: 44px;
     padding-right: 2px;
     padding-left: 2px;
     font-size: 8px;
@@ -2232,7 +2247,7 @@ a {
   }
 
   .settings-copy {
-    min-height: 38px;
+    min-height: 44px;
     padding-right: 12px;
     padding-left: 12px;
   }
@@ -2409,14 +2424,22 @@ a {
 
 @media (max-width: 480px) and (pointer: coarse) {
   .theme-button {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
   }
 
   .settings-button {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  .session-page button,
+  .session-page summary,
+  .session-page select {
+    min-height: 44px;
   }
 }

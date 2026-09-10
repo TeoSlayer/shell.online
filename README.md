@@ -47,7 +47,7 @@ shell --foreground <command>              # also show it locally
 shell --auto-close 5m <command>           # set an earlier deadline
 shell --persistent <file> <command>       # reuse a URL and password
 
-shell list                                # list local sessions
+shell list                                # list local sessions (adapts to terminal width)
 shell attach <id>                         # attach locally
 shell kill <id>                           # stop a session
 ```

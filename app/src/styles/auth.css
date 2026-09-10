@@ -850,6 +850,14 @@
   margin-top: 22px;
 }
 
+.sessions-error .alert > span {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .sessions-group {
   margin-top: 38px;
 }

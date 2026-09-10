@@ -258,10 +258,10 @@
   .knowledge-nav .marketing-links { min-width: 0; justify-content: flex-end; }
   .marketing-nav.knowledge-nav .marketing-links > a,
   .marketing-nav.knowledge-nav .marketing-links > a:last-of-type { display: none; }
-  .knowledge-search { width: min(42vw, 230px); height: 34px; }
+  .knowledge-search { width: min(42vw, 230px); height: 44px; }
   .knowledge-search kbd { display: none; }
   .knowledge-mobile-menu { display: block; position: relative; order: 2; }
-  .knowledge-mobile-menu summary { display: flex; height: 34px; padding: 0 10px; border: 1px solid #d8dee8; border-radius: 6px; background: #fff; color: #425466; font-size: 12px; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
+  .knowledge-mobile-menu summary { display: flex; height: 44px; padding: 0 10px; border: 1px solid #d8dee8; border-radius: 6px; background: #fff; color: #425466; font-size: 12px; align-items: center; gap: 7px; cursor: pointer; list-style: none; }
   .knowledge-mobile-menu summary::-webkit-details-marker { display: none; }
   .knowledge-mobile-menu summary > span,
   .knowledge-mobile-menu summary > span::before,
@@ -269,9 +269,9 @@
   .knowledge-mobile-menu summary > span { position: relative; }
   .knowledge-mobile-menu summary > span::before { position: absolute; top: -4px; }
   .knowledge-mobile-menu summary > span::after { position: absolute; top: 4px; }
-  .knowledge-mobile-menu nav { display: grid; position: absolute; z-index: 70; top: 42px; right: 0; width: min(280px, calc(100vw - 36px)); padding: 12px; border: 1px solid #d8dee8; border-radius: 8px; background: #fff; box-shadow: 0 18px 50px rgb(50 50 93 / 18%); gap: 2px; }
+  .knowledge-mobile-menu nav { display: grid; position: absolute; z-index: 70; top: 50px; right: 0; width: min(280px, calc(100vw - 36px)); padding: 12px; border: 1px solid #d8dee8; border-radius: 8px; background: #fff; box-shadow: 0 18px 50px rgb(50 50 93 / 18%); gap: 2px; }
   .knowledge-mobile-menu label { display: grid; margin-bottom: 8px; color: #697386; font-size: 10px; gap: 5px; text-transform: uppercase; letter-spacing: .06em; }
-  .knowledge-mobile-menu a { padding: 8px 9px; border-radius: 5px; color: #425466; font-size: 13px; text-decoration: none; }
+  .knowledge-mobile-menu a { display: flex; min-height: 44px; padding: 8px 9px; border-radius: 5px; color: #425466; font-size: 13px; text-decoration: none; align-items: center; }
   .knowledge-mobile-menu a.active { background: #f0efff; color: #4f46e5; font-weight: 620; }
   .knowledge-layout { display: block; width: min(100%, 720px); min-height: calc(100dvh - 58px); padding: 28px 20px 72px; }
   .knowledge-sidebar { display: none; }
@@ -351,7 +351,7 @@
 
 .nav-install {
   min-width: 108px;
-  height: 38px;
+  height: 44px;
   padding: 0 15px;
   border: 1px solid #1d1f1b;
   border-radius: 999px;
@@ -1359,14 +1359,21 @@
 }
 
 .install-path-card li {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  gap: 7px;
+  position: relative;
+  padding-left: 19px;
 }
 
 .install-path-card li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
   color: #697064;
   content: "✓";
+}
+
+.install-path-card li code {
+  color: inherit;
+  font: inherit;
 }
 
 .numbers {
@@ -1594,6 +1601,56 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 13px;
+}
+
+.product-path {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #d4d2c9;
+  border-radius: 16px;
+  background: rgb(252 251 247 / 63%);
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.product-path a {
+  display: grid;
+  position: relative;
+  min-height: 94px;
+  padding: 20px 48px 20px 20px;
+  color: #2d302a;
+  gap: 5px;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.product-path a + a {
+  border-left: 1px solid #d4d2c9;
+}
+
+.product-path a:hover,
+.product-path a:focus-visible {
+  background: #fff;
+  color: #171a16;
+}
+
+.product-path b {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.product-path span {
+  color: #747970;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.product-path i {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: #8b8f86;
+  font-style: normal;
 }
 
 .step-card {
@@ -2730,7 +2787,7 @@
 
   .nav-install {
     min-width: 96px;
-    height: 35px;
+    height: 44px;
     padding: 0 12px;
     font-size: 11px;
   }
@@ -2972,6 +3029,19 @@
     grid-template-columns: 1fr;
   }
 
+  .product-path {
+    grid-template-columns: 1fr;
+  }
+
+  .product-path a {
+    min-height: 82px;
+  }
+
+  .product-path a + a {
+    border-top: 1px solid #d4d2c9;
+    border-left: 0;
+  }
+
   .step-card {
     min-height: 0;
     padding: 18px;
@@ -3169,5 +3239,38 @@
   .marketing *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (pointer: coarse) {
+  .marketing button,
+  .marketing-nav .wordmark,
+  .hero-secondary-actions a,
+  .marketing-footer nav a,
+  .assurance-page button,
+  .assurance-page summary,
+  .assurance-page select,
+  .knowledge-nav .wordmark,
+  .knowledge-next a {
+    min-height: 44px;
+  }
+
+  .marketing-nav .wordmark,
+  .hero-secondary-actions a,
+  .marketing-footer nav a,
+  .knowledge-nav .wordmark,
+  .knowledge-next a {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .knowledge-search input {
+    height: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .knowledge-mobile-menu summary {
+    min-width: 44px;
   }
 }

@@ -142,6 +142,7 @@ export function Audit() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [reload, setReload] = useState(0);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(() => Math.max(1, Number(params.get("page")) || 1));
 
@@ -152,6 +153,9 @@ export function Audit() {
     since: Math.max(0, Number(params.get("since")) || 0),
     session: params.get("session") ?? "",
   });
+  const [filtersOpen, setFiltersOpen] = useState(() =>
+    ["actor", "kind", "session", "since"].some((name) => params.has(name)),
+  );
 
   const loadContext = useCallback(async () => {
     try {
@@ -196,10 +200,12 @@ export function Audit() {
       current = false;
       window.clearTimeout(timer);
     };
-  }, [filters, page]);
+  }, [filters, page, reload]);
 
   const shown = useMemo(() => events ?? [], [events]);
   const summary = useMemo(() => summarise(shown), [shown]);
+  const secondaryFilterCount = [filters.session, filters.actor, filters.kind, filters.since]
+    .filter(Boolean).length;
   const sessionOptions = useMemo<SearchSelectOption[]>(() => [
     { value: "", label: "All sessions", detail: "Activity across every session" },
     ...sessions.map((session) => ({
@@ -279,7 +285,25 @@ export function Audit() {
         terminal, prompts to an agent, and who entered them.
       </p>
 
-      {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
+      {error && (
+        <div className="sessions-alert audit-error">
+          <Alert tone="error">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="inline-retry"
+              onClick={() => {
+                setError("");
+                setEvents(null);
+                setReload((current) => current + 1);
+                void loadContext();
+              }}
+            >
+              Retry
+            </button>
+          </Alert>
+        </div>
+      )}
 
       <div className="filters">
         <div className="filter-search">
@@ -297,49 +321,61 @@ export function Audit() {
           )}
         </div>
 
-        <SearchSelect
-          label="Session"
-          value={filters.session}
-          options={sessionOptions}
-          onChange={(session) => set({ session })}
-          searchPlaceholder="Search sessions, commands, or machines"
-        />
+        <details
+          className="audit-filter-more"
+          open={filtersOpen}
+          onToggle={(event) => setFiltersOpen(event.currentTarget.open)}
+        >
+          <summary>
+            Filters
+            {secondaryFilterCount > 0 && <span>{secondaryFilterCount}</span>}
+          </summary>
+          <div className="audit-filter-panel">
+            <SearchSelect
+              label="Session"
+              value={filters.session}
+              options={sessionOptions}
+              onChange={(session) => set({ session })}
+              searchPlaceholder="Search sessions, commands, or machines"
+            />
 
-        <SearchSelect
-          label="Person"
-          value={filters.actor}
-          options={memberOptions}
-          onChange={(actor) => set({ actor })}
-          searchPlaceholder="Search people, emails, or roles"
-        />
+            <SearchSelect
+              label="Person"
+              value={filters.actor}
+              options={memberOptions}
+              onChange={(actor) => set({ actor })}
+              searchPlaceholder="Search people, emails, or roles"
+            />
 
-        <SearchSelect
-          label="Event type"
-          value={filters.kind}
-          options={KINDS}
-          onChange={(kind) => set({ kind })}
-          searchable={false}
-          align="right"
-        />
+            <SearchSelect
+              label="Event type"
+              value={filters.kind}
+              options={KINDS}
+              onChange={(kind) => set({ kind })}
+              searchable={false}
+              align="right"
+            />
 
-        <SearchSelect
-          label="Time range"
-          value={String(filters.since)}
-          options={RANGES.map((range) => ({ ...range, value: String(range.value) }))}
-          onChange={(since) => set({ since: Number(since) })}
-          searchable={false}
-          align="right"
-        />
+            <SearchSelect
+              label="Time range"
+              value={String(filters.since)}
+              options={RANGES.map((range) => ({ ...range, value: String(range.value) }))}
+              onChange={(since) => set({ since: Number(since) })}
+              searchable={false}
+              align="right"
+            />
 
-        {isFiltered(filters) && (
-          <button type="button" className="filter-clear" onClick={() => {
-            setFilters(EMPTY_FILTERS);
-            setPage(1);
-            setParams({}, { replace: true });
-          }}>
-            Clear
-          </button>
-        )}
+            {isFiltered(filters) && (
+              <button type="button" className="filter-clear" onClick={() => {
+                setFilters(EMPTY_FILTERS);
+                setPage(1);
+                setParams({}, { replace: true });
+              }}>
+                Clear all
+              </button>
+            )}
+          </div>
+        </details>
       </div>
 
       {events === null ? (
@@ -360,7 +396,12 @@ export function Audit() {
           </div>
 
           {shown.length > 0 && (
-            <div className="audit-page-summary">
+            <details className="audit-overview">
+              <summary>
+                <span>Activity overview</span>
+                <small>{total} matching entries</small>
+              </summary>
+              <div className="audit-page-summary">
               <div className="stat-row">
                 <Stat label="Matching entries" value={total} />
                 <Stat label="On this page" value={summary.total} />
@@ -390,7 +431,8 @@ export function Audit() {
                   render={(word) => <code>{word}</code>}
                 />
               </div>
-            </div>
+              </div>
+            </details>
           )}
 
           <h2 className="detail-heading">

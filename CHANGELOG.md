@@ -4,6 +4,28 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.11.3] — 2026-09-11
+
+### Changed
+
+- Keep the public site focused on the core flow, real use cases, and three
+  installation paths; move deeper material into the versioned documentation.
+- Make `shell help` a short guided overview while retaining the exhaustive
+  `shell help reference`, and render `shell list` as readable cards in narrow
+  terminals.
+- Keep audit search visible, move secondary filters into one searchable
+  disclosure, and collapse charts until they are requested.
+
+### Fixed
+
+- Keep every session action visible at ordinary laptop widths without making
+  table rows taller, and make mobile pickers reliable bottom sheets.
+- Open browser-started sessions as soon as they arrive, and make failed session
+  or audit loads recoverable in place.
+- Prevent mobile terminal header controls and documentation controls from
+  colliding, and give touch controls dependable target sizes.
+- Stop inline code from overlapping install checklist copy.
+
 ## [0.11.2] — 2026-09-10
 
 ### Added

@@ -90,8 +90,20 @@ export function Session() {
   if (error && !detail) {
     return (
       <AppShell title="Session">
-        <div className="sessions-alert">
-          <Alert tone="error">{error}</Alert>
+        <div className="sessions-alert sessions-error">
+          <Alert tone="error">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="inline-retry"
+              onClick={() => {
+                setError("");
+                void load();
+              }}
+            >
+              Retry
+            </button>
+          </Alert>
         </div>
         <p className="page-dek">
           <Link to="/sessions">Back to sessions</Link>

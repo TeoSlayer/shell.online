@@ -108,7 +108,24 @@ export function Machines() {
        */}
       <LinkHint className="machines-hint" />
 
-      {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
+      {error && (
+        <div className="sessions-alert sessions-error">
+          <Alert tone="error">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="inline-retry"
+              onClick={() => {
+                setError("");
+                setDevices(null);
+                void load();
+              }}
+            >
+              Retry
+            </button>
+          </Alert>
+        </div>
+      )}
 
       {devices && devices.length > 0 && (
         <div className="list-toolbar">

@@ -30,17 +30,17 @@ export function SearchSelect({
 
   useEffect(() => {
     if (!open) return;
-    const close = (event: MouseEvent) => {
+    const close = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", close);
+    document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", key);
     if (searchable) search.current?.focus();
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", key);
     };
   }, [open, searchable]);

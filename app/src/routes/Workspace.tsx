@@ -7,7 +7,6 @@ import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
 import { assigneeIds, canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
 import { NewSessionModal } from "../components/NewSessionModal";
-import { LaunchPrompt } from "../components/LaunchPrompt";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SignedInModal } from "../components/SignedInModal";
@@ -145,7 +144,6 @@ export function Workspace() {
   /* The session being started, from the request until its row turns up. */
   const [launching, setLaunching] = useState("");
   /* The one that just turned up, waiting to be opened or dismissed. */
-  const [launched, setLaunched] = useState<SessionRecord | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [composing, setComposing] = useState(false);
   const [killing, setKilling] = useState("");
@@ -203,7 +201,11 @@ export function Workspace() {
         awaitingOpen.current.delete(arrived.origin);
         setLaunching("");
         setNotice("");
-        setLaunched(arrived);
+        dispatch({
+          type: "open",
+          session: arrived,
+          canType: canEdit(arrived, result.you ?? null),
+        });
       }
       setSessions(result.sessions);
       setMembers(result.members ?? []);
@@ -602,8 +604,21 @@ export function Workspace() {
           </div>
         )}
         {error && (
-          <div className="sessions-alert">
-            <Alert tone="error">{error}</Alert>
+          <div className="sessions-alert sessions-error">
+            <Alert tone="error">
+              <span>{error}</span>
+              <button
+                type="button"
+                className="inline-retry"
+                onClick={() => {
+                  setError("");
+                  setSessions(null);
+                  void load();
+                }}
+              >
+                Retry
+              </button>
+            </Alert>
           </div>
         )}
 
@@ -767,17 +782,6 @@ export function Workspace() {
           </>
         )}
       </div>
-
-      {launched && (
-        <LaunchPrompt
-          session={launched}
-          onOpen={() => {
-            openSession(launched);
-            setLaunched(null);
-          }}
-          onClose={() => setLaunched(null)}
-        />
-      )}
 
       {composing && (
         <NewSessionModal

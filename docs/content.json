@@ -1,9 +1,9 @@
 {
-  "version": "0.11.2",
+  "version": "0.11.3",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
-      "title": "Share any terminal process with one link.",
+      "title": "Share any terminal process in a browser.",
       "intro": "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL. Link the machine to an account and those sessions also gather in a web app you and your organization can work from.",
       "seo": {
         "description": "Install shell.online, share interactive or read-only terminal processes, link machines, and manage sessions and organizations from the web app.",
@@ -29,7 +29,7 @@
         ],
         [
           "Manage locally",
-          "Use shell list to see local process uptime and the relay's independent online, reconnecting, expired, or unknown state. Use shell attach <ID> to take over locally and shell kill <ID> to stop one. Task exit always closes an ordinary share."
+          "Use shell list to see local process uptime and the relay's independent online, reconnecting, expired, or unknown state. Wide terminals get a compact table; narrow terminals get one readable card per share with the same URL, password, rejoin, and stop details. Use shell attach <ID> to take over locally and shell kill <ID> to stop one. Task exit always closes an ordinary share."
         ],
         [
           "Link a machine",
@@ -37,7 +37,7 @@
         ],
         [
           "Work from the web app",
-          "Sessions from every linked machine appear in one list. They open as in-app tabs you can type into rather than links out, and you can create a session or kill one without returning to the machine that owns it. Each session has its own page carrying comments and @mentions, and mentions and assignments collect in an inbox."
+          "Sessions from every linked machine appear in one searchable list or board, grouped by live access and finished work. Row controls act independently from the row link, assignee pickers show names and email context, and failed loads can be retried without losing the current view. A session started in the browser opens its terminal tab as soon as the machine publishes it; switching tabs does not disconnect any terminal."
         ],
         [
           "Start sessions from the browser",
@@ -45,7 +45,7 @@
         ],
         [
           "Organizations and collaboration",
-          "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and an assignee, and the owner can hand a running session to someone else. Comments, mentions, notifications, and handoffs provide context without copying terminal input into the accounts service."
+          "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and multiple assignees, and the owner can hand a running session to someone else. The audit log opens on the activity itself; search stays visible while session, person, event, and time filters plus charts are revealed only when needed."
         ]
       ]
     },
@@ -69,7 +69,7 @@
         ],
         [
           "Keyboard-aware",
-          "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths. Browser Ctrl-D warns on its first press and sends EOF only when deliberately repeated within three seconds."
+          "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. On phones, identity and controls occupy separate header rows so status never collides with E2EE, presence, or appearance controls. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths. Browser Ctrl-D warns on its first press and sends EOF only when deliberately repeated within three seconds."
         ],
         [
           "Large paste, bounded",
@@ -245,11 +245,11 @@
         ],
         [
           "List sessions",
-          "List locally managed processes and independently check the relay. The owner-only record retains the generated browser password so access can be shared again without replacing the session. Table states are online, starting, reconnecting, expired, and unknown; unknown means the check was inconclusive, not that the link died.",
+          "List locally managed processes and independently check the relay. Wide terminals use a dense table; terminals narrower than 132 columns use one session card with the same status, URL, password, rejoin, and stop information. The owner-only record retains the generated browser password so access can be shared again without replacing the session. States are online, starting, reconnecting, expired, and unknown; unknown means the check was inconclusive, not that the link died.",
           [
             [
               "shell list",
-              "Print ID, uptime, relay, closing rule, access, command, URL, and password."
+              "Print ID, uptime, relay, closing rule, access, command, URL, and password in a width-aware table or card layout."
             ],
             [
               "shell list --json",
@@ -427,7 +427,7 @@
         ],
         [
           "Output and exit status",
-          "Normal starts show an animated connection state, then print a compact colored card after the task survives the startup handshake. A task that exits during that handshake prints its real status and no URL, attach, or kill instruction. Animation and color are disabled for JSON, pipes, NO_COLOR, and non-TTY output. Structured starts emit one JSON event on stderr so the wrapped process keeps stdout.",
+          "Normal starts show an immediate animated connection state, then print a compact colored card after the task survives the startup handshake. Top-level help shows only the normal start, share, rejoin, and stop lifecycle; shell help reference remains exhaustive. A task that exits during the handshake prints its real status and no URL, attach, or kill instruction. Animation and color are disabled for JSON, pipes, NO_COLOR, and non-TTY output. Structured starts emit one JSON event on stderr so the wrapped process keeps stdout.",
           [
             [
               "e2ee_password",
@@ -553,7 +553,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.11.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.11.3 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

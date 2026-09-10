@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 
 const stylesheet = readFileSync(new URL("../web/style.css", import.meta.url), "utf8");
+const landingStylesheet = readFileSync(new URL("../web/landing.css", import.meta.url), "utf8");
+const appBaseStylesheet = readFileSync(new URL("../app/src/styles/base.css", import.meta.url), "utf8");
+const appPeopleStylesheet = readFileSync(new URL("../app/src/styles/people.css", import.meta.url), "utf8");
 const buttonRules = Array.from(
   stylesheet.matchAll(/\.mobile-terminal-keys button\s*\{([^}]*)\}/g),
   (match) => match[1],
@@ -21,4 +24,23 @@ if (!stylesheet.includes("content: attr(data-compact-label)")) {
   throw new Error("Mobile encryption labels must expose a deliberate compact label");
 }
 
-console.log("Mobile terminal navigation and compact badges passed.");
+if (!stylesheet.includes(".session-page button") || !stylesheet.includes("min-height: 44px")) {
+  throw new Error("Every shared-terminal button needs a coarse-pointer touch target");
+}
+if (!landingStylesheet.includes(".marketing button") || !landingStylesheet.includes("min-height: 44px")) {
+  throw new Error("Landing and documentation controls need coarse-pointer touch targets");
+}
+if (!landingStylesheet.includes(".knowledge-mobile-menu summary") || !landingStylesheet.includes("min-width: 44px")) {
+  throw new Error("The documentation menu needs a full-size mobile target");
+}
+if (!appBaseStylesheet.includes("button,\n  summary,\n  select") || !appBaseStylesheet.includes("min-height: 44px")) {
+  throw new Error("Authenticated-app controls need coarse-pointer touch targets");
+}
+if (!appBaseStylesheet.includes("button[aria-label]") || !appBaseStylesheet.includes("min-width: 44px")) {
+  throw new Error("Authenticated-app icon controls need a full-width touch target");
+}
+if (!appPeopleStylesheet.includes("@media (max-width: 1500px)") || !appPeopleStylesheet.includes(".table-optional")) {
+  throw new Error("Session actions must retain their width before the app rail crowds the table");
+}
+
+console.log("Mobile terminal navigation, compact badges, and touch targets passed.");

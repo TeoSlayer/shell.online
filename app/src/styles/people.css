@@ -151,6 +151,19 @@
   white-space: normal;
 }
 
+.picker-scrim {
+  display: none;
+}
+
+.picker-head {
+  padding: 11px 12px 8px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .picker-right .picker-pop {
   right: 0;
   left: auto;
@@ -535,11 +548,12 @@
  * go, but in the invites table it is Actions, so every invite lost its copy
  * and revoke buttons and an invite link could not be copied on a phone.
  *
- * They go at 1240px rather than 1080px because the sessions row has four
- * action buttons to keep on screen, and the machine is the column you are
- * least often reading.
+ * The app rail consumes 264px before the table gets a vote, so this follows
+ * the table's available width rather than waiting for the browser itself to
+ * become narrow. The machine is the least actionable column and remains
+ * available in the session detail.
  */
-@media (max-width: 1240px) {
+@media (max-width: 1500px) {
   .table thead th.table-optional,
   .table tbody td.table-optional {
     display: none;
@@ -623,5 +637,42 @@
   .table-end .session-actions {
     justify-content: flex-start;
     text-align: left;
+  }
+}
+
+@media (max-width: 760px) {
+  .picker-scrim {
+    position: fixed;
+    z-index: 69;
+    display: block;
+    border: 0;
+    background: color-mix(in srgb, var(--ink) 32%, transparent);
+    inset: 0;
+  }
+
+  .picker-pop,
+  .picker-right .picker-pop,
+  .table-person .picker-pop,
+  .board-card .picker-pop {
+    position: fixed;
+    z-index: 70;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh / var(--zoom) - 20px);
+    border-width: 1px 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    box-shadow: 0 -18px 50px color-mix(in srgb, var(--ink) 20%, transparent);
+  }
+
+  .picker-item {
+    min-height: 52px;
+  }
+
+  .picker-search input {
+    height: 48px;
   }
 }

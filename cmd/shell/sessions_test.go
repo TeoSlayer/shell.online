@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,43 @@ import (
 	"testing"
 	"time"
 )
+
+func TestCompactSessionListKeepsEveryRecoveryAction(t *testing.T) {
+	now := time.Date(2026, time.September, 11, 12, 0, 0, 0, time.UTC)
+	closesAt := now.Add(5 * time.Minute)
+	record := localSessionRecord{
+		ID:         "abcdefghijklmnopqrstuvwxyzABCDEF",
+		ShareURL:   "https://shell.online/s/abcdefghijklmnopqrstuvwxyzABCDEF#salt=public",
+		ReadOnly:   true,
+		Encrypted:  true,
+		Persistent: true,
+		Password:   "Ab3dE7-_",
+		Command:    "python train.py --epochs 100",
+		StartedAt:  now.Add(-2*time.Hour - 14*time.Minute),
+		ClosesAt:   &closesAt,
+	}
+	var output bytes.Buffer
+	printCompactSessionList(
+		&output,
+		[]localSessionRecord{record},
+		map[string]relaySessionStatus{record.ID: relayStatusConnected},
+		now,
+	)
+
+	for _, expected := range []string{
+		"abcdefghij  python train.py --epochs 100",
+		"online · 2h14m · view only · E2EE · stable link",
+		"Closes    in 5m, or when the task exits",
+		"Link      " + record.ShareURL,
+		"Password  Ab3dE7-_",
+		"Rejoin    shell attach abcdefghij",
+		"Stop      shell kill abcdefghij",
+	} {
+		if !strings.Contains(output.String(), expected) {
+			t.Errorf("compact session card does not contain %q\n%s", expected, output.String())
+		}
+	}
+}
 
 func TestCompactDuration(t *testing.T) {
 	tests := []struct {

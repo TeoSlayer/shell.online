@@ -49,17 +49,17 @@ export function PersonPicker<T extends Person>({
 
   useEffect(() => {
     if (!open) return;
-    const onPointer = (event: MouseEvent) => {
+    const onPointer = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     if (searchable) search.current?.focus();
     return () => {
-      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
     };
   }, [open, searchable]);
@@ -93,61 +93,70 @@ export function PersonPicker<T extends Person>({
       </button>
 
       {open && (
-        <div className="picker-pop" role="listbox" aria-label={label}>
-          {searchable && (
-            <div className="picker-search">
-              <MagnifyingGlass size={14} />
-              <input
-                ref={search}
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setActive(0);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setActive((current) => Math.min(current + 1, matches.length - 1));
-                  } else if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setActive((current) => Math.max(current - 1, 0));
-                  } else if (event.key === "Enter" && matches[active]) {
-                    event.preventDefault();
-                    choose(matches[active].uid);
-                  }
-                }}
-                placeholder="Search people"
-                aria-label="Search people"
-              />
-            </div>
-          )}
-
-          <ul className="picker-list">
-            {matches.length === 0 ? (
-              <li className="picker-none">Nobody matches that.</li>
-            ) : (
-              matches.map((person, index) => (
-                <li key={person.uid}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={person.uid === value}
-                    className={index === active && searchable ? "picker-item is-active" : "picker-item"}
-                    onMouseEnter={() => setActive(index)}
-                    onClick={() => choose(person.uid)}
-                  >
-                    <Avatar person={person} size="sm" />
-                    <span className="picker-item-text">
-                      <span className="picker-item-name">{displayName(person)}</span>
-                      {person.email && <span className="picker-item-mail">{person.email}</span>}
-                    </span>
-                    {person.uid === value && <Check size={14} weight="bold" />}
-                  </button>
-                </li>
-              ))
+        <>
+          <button
+            type="button"
+            className="picker-scrim"
+            aria-label={`Close ${label.toLocaleLowerCase()} choices`}
+            onClick={() => setOpen(false)}
+          />
+          <div className="picker-pop" role="listbox" aria-label={label}>
+            <div className="picker-head">{label}</div>
+            {searchable && (
+              <div className="picker-search">
+                <MagnifyingGlass size={14} />
+                <input
+                  ref={search}
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setActive(0);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowDown") {
+                      event.preventDefault();
+                      setActive((current) => Math.min(current + 1, matches.length - 1));
+                    } else if (event.key === "ArrowUp") {
+                      event.preventDefault();
+                      setActive((current) => Math.max(current - 1, 0));
+                    } else if (event.key === "Enter" && matches[active]) {
+                      event.preventDefault();
+                      choose(matches[active].uid);
+                    }
+                  }}
+                  placeholder="Search people"
+                  aria-label="Search people"
+                />
+              </div>
             )}
-          </ul>
-        </div>
+
+            <ul className="picker-list">
+              {matches.length === 0 ? (
+                <li className="picker-none">Nobody matches that.</li>
+              ) : (
+                matches.map((person, index) => (
+                  <li key={person.uid}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={person.uid === value}
+                      className={index === active && searchable ? "picker-item is-active" : "picker-item"}
+                      onMouseEnter={() => setActive(index)}
+                      onClick={() => choose(person.uid)}
+                    >
+                      <Avatar person={person} size="sm" />
+                      <span className="picker-item-text">
+                        <span className="picker-item-name">{displayName(person)}</span>
+                        {person.email && <span className="picker-item-mail">{person.email}</span>}
+                      </span>
+                      {person.uid === value && <Check size={14} weight="bold" />}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+        </>
       )}
     </div>
   );
@@ -189,17 +198,17 @@ export function MultiPersonPicker<T extends Person>({
 
   useEffect(() => {
     if (!open) return;
-    const close = (event: MouseEvent) => {
+    const close = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", close);
+    document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", escape);
     if (searchable) search.current?.focus();
     return () => {
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("pointerdown", close);
       document.removeEventListener("keydown", escape);
     };
   }, [open, searchable]);
@@ -231,7 +240,15 @@ export function MultiPersonPicker<T extends Person>({
       </button>
 
       {open && (
+        <>
+        <button
+          type="button"
+          className="picker-scrim"
+          aria-label={`Close ${label.toLocaleLowerCase()} choices`}
+          onClick={() => setOpen(false)}
+        />
         <div className="picker-pop" role="listbox" aria-label={label} aria-multiselectable="true">
+          <div className="picker-head">{label}</div>
           {searchable && (
             <div className="picker-search">
               <MagnifyingGlass size={14} />
@@ -291,6 +308,7 @@ export function MultiPersonPicker<T extends Person>({
             )}
           </ul>
         </div>
+        </>
       )}
     </div>
   );

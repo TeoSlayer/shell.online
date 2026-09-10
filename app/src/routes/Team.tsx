@@ -181,7 +181,24 @@ export function Team() {
         ) : null
       }
     >
-      {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
+      {error && (
+        <div className="sessions-alert sessions-error">
+          <Alert tone="error">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="inline-retry"
+              onClick={() => {
+                setError("");
+                setView(null);
+                void load();
+              }}
+            >
+              Retry
+            </button>
+          </Alert>
+        </div>
+      )}
       {notice && <div className="sessions-alert"><Alert tone="success">{notice}</Alert></div>}
 
       {!view ? (

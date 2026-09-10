@@ -101,7 +101,7 @@ check(landingSource.includes("v${RELEASE_VERSION} · SHA-256"), "Visible release
 check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");
 
 const useCaseCards = landingSource.match(/class="use-case-card"/gu) ?? [];
-check(useCaseCards.length === 8, `Expected 8 visible use-case cards, found ${useCaseCards.length}`);
+check(useCaseCards.length === 4, `Expected 4 focused use-case cards, found ${useCaseCards.length}`);
 for (const example of [
   "shell codex",
   "shell go test -race ./...",

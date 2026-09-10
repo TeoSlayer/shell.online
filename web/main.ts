@@ -1,13 +1,4 @@
 import { Terminal, type ITheme } from "@xterm/xterm";
-import {
-  CLAUDE_CODE_PATH,
-  CLINE_PATH,
-  CURSOR_PATH,
-  GEMINI_PATH,
-  GITHUB_COPILOT_PATH,
-  OPENCODE_PATH,
-  WINDSURF_PATH,
-} from "./agent-icons";
 import "@xterm/xterm/css/xterm.css";
 import {
   decodeLatencyProbe,
@@ -75,26 +66,6 @@ const PILOT_PROTOCOL_URL = "https://pilotprotocol.network/";
  */
 const WEB_APP_URL = "https://app.shell.online";
 const SIGNUP_URL = `${WEB_APP_URL}/signup`;
-const GITHUB_MARK_PATH = "M8 0C3.58 0 0 3.64 0 8.13c0 3.59 2.29 6.64 5.47 7.71.4.08.55-.18.55-.39 0-.19-.01-.82-.01-1.49-2.01.44-2.53-.5-2.69-.96-.09-.23-.48-.96-.82-1.16-.28-.15-.68-.52-.01-.53.63-.01 1.08.59 1.23.83.72 1.23 1.87.88 2.33.67.07-.53.28-.88.51-1.08-1.78-.21-3.65-.91-3.65-4.02 0-.89.31-1.62.82-2.19-.08-.2-.36-1.04.08-2.16 0 0 .67-.22 2.2.84A7.52 7.52 0 018 3.84a7.5 7.5 0 012 .28c1.53-1.06 2.2-.84 2.2-.84.44 1.12.16 1.96.08 2.16.51.57.82 1.3.82 2.19 0 3.12-1.88 3.81-3.66 4.01.29.25.54.74.54 1.5 0 1.08-.01 1.95-.01 2.22 0 .22.15.47.55.39A8.16 8.16 0 0016 8.13C16 3.64 12.42 0 8 0z";
-const OPENAI_MARK_PATH = "M196.4 185.8l0-48.6c0-4.1 1.5-7.2 5.1-9.2l97.8-56.3c13.3-7.7 29.2-11.3 45.6-11.3 61.4 0 100.4 47.6 100.4 98.3 0 3.6 0 7.7-.5 11.8L343.3 111.1c-6.1-3.6-12.3-3.6-18.4 0L196.4 185.8zM424.7 375.2l0-116.2c0-7.2-3.1-12.3-9.2-15.9L287 168.4 329 144.3c3.6-2 6.7-2 10.2 0L437 200.7c28.2 16.4 47.1 51.2 47.1 85 0 38.9-23 74.8-59.4 89.6l0 0zM166.2 272.8l-42-24.6c-3.6-2-5.1-5.1-5.1-9.2l0-112.6c0-54.8 42-96.3 98.8-96.3 21.5 0 41.5 7.2 58.4 20L175.4 108.5c-6.1 3.6-9.2 8.7-9.2 15.9l0 148.5 0 0zm90.4 52.2l-60.2-33.8 0-71.7 60.2-33.8 60.2 33.8 0 71.7-60.2 33.8zm38.7 155.7c-21.5 0-41.5-7.2-58.4-20l100.9-58.4c6.1-3.6 9.2-8.7 9.2-15.9l0-148.5 42.5 24.6c3.6 2 5.1 5.1 5.1 9.2l0 112.6c0 54.8-42.5 96.3-99.3 96.3l0 0zM173.8 366.5L76.1 310.2c-28.2-16.4-47.1-51.2-47.1-85 0-39.4 23.6-74.8 59.9-89.6l0 116.7c0 7.2 3.1 12.3 9.2 15.9l128 74.2-42 24.1c-3.6 2-6.7 2-10.2 0zm-5.6 84c-57.9 0-100.4-43.5-100.4-97.3 0-4.1 .5-8.2 1-12.3l100.9 58.4c6.1 3.6 12.3 3.6 18.4 0l128.5-74.2 0 48.6c0 4.1-1.5 7.2-5.1 9.2l-97.8 56.3c-13.3 7.7-29.2 11.3-45.6 11.3l0 0zm127 60.9c62 0 113.7-44 125.4-102.4 57.3-14.9 94.2-68.6 94.2-123.4 0-35.8-15.4-70.7-43-95.7 2.6-10.8 4.1-21.5 4.1-32.3 0-73.2-59.4-128-128-128-13.8 0-27.1 2-40.4 6.7-23-22.5-54.8-36.9-89.6-36.9-62 0-113.7 44-125.4 102.4-57.3 14.8-94.2 68.6-94.2 123.4 0 35.8 15.4 70.7 43 95.7-2.6 10.8-4.1 21.5-4.1 32.3 0 73.2 59.4 128 128 128 13.8 0 27.1-2 40.4-6.7 23 22.5 54.8 36.9 89.6 36.9z";
-
-interface AgentMark {
-  label: string;
-  path: string;
-  viewBox?: string;
-}
-
-const AGENT_MARKS: readonly AgentMark[] = [
-  { label: "Codex", path: OPENAI_MARK_PATH, viewBox: "0 0 512 512" },
-  { label: "Claude Code", path: CLAUDE_CODE_PATH },
-  { label: "Gemini CLI", path: GEMINI_PATH },
-  { label: "GitHub Copilot", path: GITHUB_COPILOT_PATH },
-  { label: "Cursor Agent", path: CURSOR_PATH },
-  { label: "Windsurf", path: WINDSURF_PATH },
-  { label: "Cline", path: CLINE_PATH },
-  { label: "OpenCode", path: OPENCODE_PATH },
-];
-
 interface PresenceParticipant {
   id: number;
   name: string;
@@ -186,9 +157,9 @@ function renderLanding(): void {
         <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
         <nav class="marketing-links" aria-label="Main navigation">
           <a href="/docs/">Docs</a>
-          <a href="#platform">Platform</a>
           <a href="#use-cases">Use cases</a>
-          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub</a>
+          <a href="${SIGNUP_URL}">Web app</a>
+          <a class="marketing-github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub <span id="github-star-count" aria-live="polite">—</span></a>
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
           </button>
@@ -199,7 +170,7 @@ function renderLanding(): void {
         <section class="marketing-hero">
           <div class="hero-copy">
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you one encrypted link to the same live terminal—open it from any desktop or phone to watch or type.</p>
+            <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you a link and password to the same encrypted terminal—open it from any desktop or phone to watch or type.</p>
             <div class="hero-actions">
               <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
@@ -256,6 +227,7 @@ function renderLanding(): void {
             <code>shell terraform apply</code>
             <code>shell ssh my-server</code>
             <code>shell htop</code>
+            <code>shell bash</code>
             <code>shell --read-only python train.py</code>
           </div>
         </section>
@@ -292,104 +264,11 @@ function renderLanding(): void {
               <p>Use read-only to follow progress safely, or keep the default interactive mode to take control and pair in the same terminal.</p>
             </article>
           </div>
-        </section>
-
-        <section class="platform-section" id="platform">
-          <div class="platform-heading">
-            <div class="section-heading">
-              <p>The web app</p>
-              <h2>Sign in once.<br />Every machine reports in.</h2>
-              <span>Run <code>shell login</code> on a machine and it opens a browser to approve, then lands you back in the web app. From then on, that machine's sessions arrive there with the rest.</span>
-            </div>
-            <div class="platform-actions">
-              <button class="method-command platform-command" type="button" data-copy-target="run" data-copy-value="shell login" aria-label="Copy the shell login command">
-                <code><span>$ shell login</span></code>
-                <span data-copy-label aria-live="polite">Copy</span>
-              </button>
-              <a class="platform-signup" href="${SIGNUP_URL}">Create an account <span aria-hidden="true">→</span></a>
-            </div>
-          </div>
-          <div class="platform-grid">
-            <article class="platform-cell platform-cell-lead">
-              <h3>One list, every linked machine</h3>
-              <p>The laptop, the desktop, the box in the corner. Whatever is running on any of them shows up in the same place, live, without you going looking for it.</p>
-            </article>
-            <article class="platform-cell platform-cell-dark">
-              <h3>Tabs you can type into</h3>
-              <p>A session opens inside the app, not as a link out. Take it, type into it, and leave it open beside the others.</p>
-            </article>
-            <article class="platform-cell">
-              <h3>Create and kill from the browser</h3>
-              <p>Start a session or end one without walking back to the machine that owns it.</p>
-            </article>
-            <article class="platform-cell">
-              <h3>A page per session</h3>
-              <p>Comments and @mentions live on the session itself, next to the terminal they are about.</p>
-            </article>
-            <article class="platform-cell">
-              <h3>An inbox for your name</h3>
-              <p>Mentions and assignments collect in one place, so nothing waits on you unseen.</p>
-            </article>
-          </div>
-        </section>
-
-        <section class="launch-section" id="launch">
-          <div class="launch-copy">
-            <div class="section-heading">
-              <p>Remote starts</p>
-              <h2>Pick a machine.<br />Pick what to run.</h2>
-              <span>Agree once at <code>shell login</code> and the machine keeps a small background daemon running. After that it can be given work from the browser, and the session starts there.</span>
-            </div>
-            <ul class="launch-kinds" aria-label="What a machine can be asked to start">
-              <li>Claude Code</li>
-              <li>GPT Codex</li>
-              <li>Hermes Agent</li>
-              <li>OpenClaw</li>
-              <li>A terminal process</li>
-            </ul>
-          </div>
-          <div class="seal-flow" aria-label="How a browser-started session keeps its password private">
-            <article class="seal-node">
-              <i aria-hidden="true">◫</i>
-              <span><b>The browser</b><small>Picks the session password and seals it to one machine with an ephemeral key.</small></span>
-            </article>
-            <p class="seal-link"><span>sealed envelope</span><i aria-hidden="true"></i></p>
-            <article class="seal-node">
-              <i aria-hidden="true">↝</i>
-              <span><b>The service</b><small>Carries the envelope to the machine and cannot open it.</small></span>
-            </article>
-            <p class="seal-link"><span>opened on arrival</span><i aria-hidden="true"></i></p>
-            <article class="seal-node seal-node-end">
-              <i aria-hidden="true">⌘</i>
-              <span><b>Your machine</b><small>Unseals the password and starts the session locally.</small></span>
-            </article>
-          </div>
-        </section>
-
-        <section class="org-section" id="teams">
-          <div class="section-heading org-heading">
-            <p>Organizations</p>
-            <h2>Shared sessions.<br />Clear ownership, private content.</h2>
-            <span>Signing up creates an organization, and invite links add people to it. Everyone inside sees every member's sessions.</span>
-          </div>
-          <div class="org-columns">
-            <section class="org-column">
-              <h3>Working together</h3>
-              <dl>
-                <div><dt>Invite links</dt><dd>Send one and the person lands inside your organization.</dd></div>
-                <div><dt>Owner and assignee</dt><dd>Every session carries both, so it is clear whose work it is and who is on it.</dd></div>
-                <div><dt>Hand it off</dt><dd>The owner can pass a running session to someone else without restarting it.</dd></div>
-              </dl>
-            </section>
-            <section class="org-column">
-              <h3>Context without surveillance</h3>
-              <dl>
-                <div><dt>Terminal input stays private</dt><dd>The accounts service never receives a plaintext copy of what you type.</dd></div>
-                <div><dt>Comments and mentions</dt><dd>Discuss the work beside the session without mixing notes into the terminal.</dd></div>
-                <div><dt>Explicit handoff</dt><dd>Ownership and assignment show who can control a process and who is working on it.</dd></div>
-              </dl>
-            </section>
-          </div>
+          <aside class="product-path" aria-label="More ways to use shell.online">
+            <a href="${SIGNUP_URL}"><b>Manage a team</b><span>Link machines, open sessions, assign work.</span><i>→</i></a>
+            <a href="/e2ee/"><b>Understand E2EE</b><span>See exactly what the relay can and cannot read.</span><i>→</i></a>
+            <a href="/skill"><b>Install for agents</b><span>Give terminal-native agents the same workflow.</span><i>→</i></a>
+          </aside>
         </section>
 
         <section class="use-cases-section" id="use-cases">
@@ -423,30 +302,6 @@ function renderLanding(): void {
               <p>Open a live window into development servers, Docker stacks, file watchers, and other processes that keep printing.</p>
               <code><b>$</b> shell docker compose up</code>
             </article>
-            <article class="use-case-card">
-              <header><span>05</span><i>Infrastructure</i></header>
-              <h3>Stay close to deployments</h3>
-              <p>Watch release commands, Terraform plans, and Kubernetes logs, then respond when the terminal needs a deliberate decision.</p>
-              <code><b>$</b> shell terraform apply</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>06</span><i>Remote systems</i></header>
-              <h3>Put an SSH session in a browser</h3>
-              <p>Start SSH where your keys already live and reach that same interactive remote shell from a trusted browser.</p>
-              <code><b>$</b> shell ssh my-server</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>07</span><i>Terminal UIs</i></header>
-              <h3>Open dashboards and consoles anywhere</h3>
-              <p>Use full-screen tools such as htop, database consoles, debuggers, and other ANSI or TUI applications.</p>
-              <code><b>$</b> shell htop</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>08</span><i>Pairing</i></header>
-              <h3>Debug and hand off together</h3>
-              <p>Give a teammate the link and password to watch, type, and help in the same session. Inside an organization, hand the session over outright.</p>
-              <code><b>$</b> shell bash</code>
-            </article>
           </div>
         </section>
 
@@ -472,18 +327,11 @@ function renderLanding(): void {
           </div>
         </section>
 
-        <section class="numbers" aria-label="shell.online at a glance">
-          <article><strong>1</strong><span>command prefix</span></article>
-          <article><strong>5</strong><span>kinds of session a browser can start</span></article>
-          <article><strong>0</strong><span>retained terminal logs</span></article>
-          <article><strong>Any</strong><span>modern browser</span></article>
-        </section>
-
         <section class="install-paths" id="install">
           <div class="install-paths-heading">
             <p>Install your way</p>
-            <h2>Use Brew.<br />Or do it yourself.</h2>
-            <span>Homebrew fetches the tagged source, installs the Go build dependency, and compiles shell.online on your machine. No Brew? Use the verified binary installer, or build the same source manually.</span>
+            <h2>Three ways<br />to install.</h2>
+            <span>Use Homebrew, the verified standalone installer, or build the tagged source yourself.</span>
           </div>
           <div class="install-path-grid">
             <article class="install-path-card install-path-primary">
@@ -529,58 +377,6 @@ function renderLanding(): void {
           </div>
         </section>
 
-        <section class="security-section" id="security">
-          <div class="security-copy">
-            <p>Built to disappear</p>
-            <h2>Your process<br />stays put.</h2>
-            <span>The browser gets a window into the terminal, not a copy of your machine.</span>
-          </div>
-          <div class="relay-diagram" aria-label="Data flows from your local terminal through a relay to a browser">
-            <div class="relay-node local-node"><i aria-hidden="true">⌘</i><span><b>Your machine</b><small>Process + PTY</small></span></div>
-            <div class="relay-line"><span>E2EE frames</span><i></i></div>
-            <div class="relay-node cloud-node"><i aria-hidden="true">↝</i><span><b>Relay</b><small>No retained output</small></span></div>
-            <div class="relay-line"><span>ciphertext</span><i></i></div>
-            <div class="relay-node browser-node"><i aria-hidden="true">◫</i><span><b>Any browser</b><small>Chosen access</small></span></div>
-          </div>
-          <div class="security-points">
-            <article><i>01</i><h3>Local is the source of truth</h3><p>The CLI owns the process. A local ring buffer restores the current screen for people joining later.</p></article>
-            <article><i>02</i><h3>Encrypted without setup</h3><p>E2EE is the default and prints a browser password. The key lives in the URL fragment, which browsers never send to a server.</p></article>
-            <article><i>03</i><h3>Gone when it’s done</h3><p>When the command exits, the session closes and its relay state is deleted. Old links stop working.</p></article>
-          </div>
-        </section>
-
-        <section class="agents-section">
-          <div class="agents-copy">
-            <p>Made for terminal-native work</p>
-            <h2>Give long-running work<br />a window back to you.</h2>
-            <span>Keep an eye on agents, builds, training runs, servers, and remote shells without staying glued to the terminal that started them.</span>
-          </div>
-          <div class="agents-card">
-            <div class="marketing-agent-marks" aria-label="Works with major terminal agents">${renderAgentMarks()}</div>
-            <h3>Agents can share their own work, too.</h3>
-            <p>Install the shell.online skill so your coding agent knows how to start, monitor with read-only access, rejoin, and stop shared processes.</p>
-            <button class="skill-button" type="button" data-copy-target="skill" data-copy-value="https://shell.online/skill" aria-label="Copy the shell.online agent skill URL">
-              <code>https://shell.online/skill</code>
-              <span data-copy-label aria-live="polite">Copy skill URL</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="final-cta">
-          <p>Ready when your terminal isn’t finished.</p>
-          <h2>Your next command<br />can be a link.</h2>
-          <button class="install-command final-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
-            <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
-            <code>${installCommand}</code>
-            <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
-          </button>
-          <span class="platform-note">macOS · Windows · Linux · BSD · routers · 36 static binaries · free to use</span>
-          <div class="github-star-request">
-            <span aria-hidden="true">★</span>
-            <p><strong>Like what we’re building?</strong>A GitHub star helps more developers find shell.online.</p>
-            <a class="github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star the repo <span id="github-star-count" aria-live="polite">-</span> <i aria-hidden="true">↗</i></a>
-          </div>
-        </section>
       </main>
 
       <footer class="marketing-footer">
@@ -588,8 +384,7 @@ function renderLanding(): void {
         <p>Live browser terminals for the work your machine is already doing.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
         <nav aria-label="Footer navigation">
           <a href="/docs/">Docs</a>
-          <a href="#platform">Platform</a>
-          <a href="#teams">Organizations</a>
+          <a href="${SIGNUP_URL}">Web app</a>
           <a href="#use-cases">Use cases</a>
           <a href="/mobile/">Mobile</a>
           <a href="/reliability/">Reliability</a>
@@ -611,7 +406,7 @@ function renderLanding(): void {
 }
 
 async function wireGitHubStarCount(): Promise<void> {
-  const link = document.querySelector<HTMLAnchorElement>(".github-link");
+  const link = document.querySelector<HTMLAnchorElement>(".marketing-github-link");
   const count = document.querySelector<HTMLElement>("#github-star-count");
   if (!link || !count) return;
 
@@ -635,18 +430,6 @@ async function wireGitHubStarCount(): Promise<void> {
   } catch {
     // The repository link remains useful when GitHub's API is unavailable.
   }
-}
-
-function renderAgentMarks(): string {
-  return AGENT_MARKS.map(
-    ({ label, path, viewBox = "0 0 24 24" }) => `
-      <span class="agent-mark" role="img" aria-label="${label}" title="${label}">
-        <svg viewBox="${viewBox}" aria-hidden="true" focusable="false">
-          <path d="${path}"></path>
-        </svg>
-      </span>
-    `,
-  ).join("");
 }
 
 function wireLandingFit(): void {

@@ -8,65 +8,35 @@ import (
 func printShellHelp(writer io.Writer) {
 	fmt.Fprint(writer, `shell.online — a browser link for a local terminal process
 
-Quick start
-  shell <command> [arguments...]   Run in the background and print an interactive link
-  shell --read-only <command>      Print a view-only link; browser input is blocked
-  SHELL_ONLINE_E2EE_PASSWORD='…' shell <command>
-                                   Replace the generated browser password
-  shell                            Share a fresh instance of your default shell
+Start
+  shell <command>                  Share it in the background
+  shell --read-only <command>      Share it while browser input is blocked
+  shell                            Share a fresh shell
+  shell claude                     Share a fork of this conversation
 
-Every normal share is end-to-end encrypted. shell prints an eight-character browser
-password with the URL and, in an interactive terminal, a one-scan QR containing
-both. Use a longer custom password for sensitive or long-lived sessions.
+shell prints one URL, an eight-character browser password, and a QR containing
+both. Shares are interactive by default and end-to-end encrypted.
 
-From inside Claude Code
-  shell claude                     Share a fork of this conversation and workspace
-
-The guided flow
-  1. Run a process with shell.
-  2. Send the URL and password, or let someone you trust scan the terminal QR.
-     Shares are interactive by default. Use --read-only when recipients should only watch.
-  3. Use shell list to see active shares and how long they have run.
-  4. Use shell attach <ID> to take over locally without ending browser access.
-  5. Press Ctrl-X, then D to detach and leave the process running.
-  6. Use shell kill <ID> to stop the process and close its link.
-     A share also closes automatically when its task exits.
+Then
+  shell list                       See active shares and uptime
+  shell attach <ID>                Rejoin locally; browser access stays live
+  Press Ctrl-X, then D to detach   Leave the process running
+  shell kill <ID>                  Safely stop the process and close its link
 
 Your account (optional)
-  shell login                      Link this machine so your shares appear in your account
-  shell login --no-browser         Print the sign-in URL instead of opening a browser
-  shell whoami                     Show which account this machine is linked to
-  shell logout                     Unlink this machine and revoke its token
-  shell daemon status              Say whether your browser can start sessions here
+  shell login                      Put this machine and its sessions in the web app
+  shell login --no-browser         Print the approval URL instead of opening it
+  shell whoami                     Show the linked account
+  shell logout                     Unlink this machine
 
-Manage sessions
-  shell list                       Show uptime, relay status, URL, and browser password
-  shell list --json                Emit sessions and relay status as JSON
-  shell attach <ID>                Open an active session in this terminal
-  shell kill <ID>                  Stop its process and close its link
-  shell kill --all                 Stop all processes and close their links
+Common options
+  --read-only                      View only
+  --foreground                     Stay attached locally
+  --persistent <state-file>        Keep one encrypted URL across restarts
+  --auto-close <time>              Add an earlier deadline, such as 5m
 
-Options
-  --read-only                      Block all browser input for this share
-  --e2ee                           Compatibility flag; E2EE is already the default
-  --no-e2ee                        Disable payload E2EE; Cloudflare can relay plaintext
-  --persistent <state-file>        Reuse one E2EE URL across process/container restarts
-  --foreground                     Mirror the process in this terminal too
-  --auto-close <duration-or-date>  Add an earlier deadline, such as 5m or tomorrow 09:00
-  --json                           Emit the new-session event as JSON
-  --server <URL>                   Use another shell.online service URL
-  --version                        Print the CLI version
-
-More guidance
-  shell help start
-  shell help attach
-  shell help list
-  shell help kill
-  shell help login
-  shell help e2ee
-  shell help docker
-  shell help platforms
-  shell help reference             Print the complete CLI reference
+Use shell help <start|attach|list|kill|login|e2ee|docker|platforms> for a
+guided topic, or shell help reference for every command, flag, and environment variable.
 `)
 }
 

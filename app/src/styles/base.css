@@ -33,6 +33,13 @@ button {
   font-family: inherit;
 }
 
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 :focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
@@ -70,4 +77,49 @@ button {
 
 .wordmark:hover {
   color: var(--ink);
+}
+
+/* Touch targets stay dependable without making mouse-driven tables taller. */
+@media (pointer: coarse) {
+  button,
+  summary,
+  select {
+    min-height: 44px;
+  }
+
+  .topbar-right .btn,
+  .new-session,
+  .account-trigger,
+  .view-option,
+  .session-action,
+  .session-copy,
+  .picker-trigger,
+  .filter-picker-trigger,
+  .filter-clear,
+  .pagination button,
+  .inline-retry {
+    min-height: 44px;
+  }
+
+  .view-option,
+  .session-copy,
+  .account-trigger {
+    min-width: 44px;
+  }
+
+  .filter-search {
+    min-height: 44px;
+  }
+
+  .filter-search button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  button[aria-label],
+  .tab-close,
+  .session-action,
+  .inbox-trigger {
+    min-width: 44px;
+  }
 }

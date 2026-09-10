@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+
+	"golang.org/x/term"
 )
 
 var localSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
@@ -196,6 +199,10 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 	}
 
 	now := time.Now()
+	if compactSessionList(stdout) {
+		printCompactSessionList(stdout, sessions, relayStatuses, now)
+		return 0
+	}
 	table := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(table, "ID\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL\tPASSWORD")
 	for _, session := range sessions {
@@ -226,6 +233,52 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 	}
 	_ = table.Flush()
 	return 0
+}
+
+func compactSessionList(writer io.Writer) bool {
+	file, ok := writer.(*os.File)
+	if !ok {
+		return false
+	}
+	width, _, err := term.GetSize(int(file.Fd()))
+	return err == nil && width > 0 && width < 132
+}
+
+func printCompactSessionList(
+	writer io.Writer,
+	sessions []localSessionRecord,
+	statuses map[string]relaySessionStatus,
+	now time.Time,
+) {
+	for index, session := range sessions {
+		if index > 0 {
+			fmt.Fprintln(writer)
+		}
+		access := "interactive"
+		if session.ReadOnly {
+			access = "view only"
+		}
+		privacy := "transport encrypted"
+		if session.Encrypted {
+			privacy = "E2EE"
+		}
+		if session.Persistent {
+			privacy += " · stable link"
+		}
+		closes := "when the task exits"
+		if session.ClosesAt != nil {
+			closes = "in " + compactDuration(session.ClosesAt.Sub(now)) + ", or when the task exits"
+		}
+		fmt.Fprintf(writer, "%s  %s\n", shortSessionID(session.ID), truncateText(session.Command, 64))
+		fmt.Fprintf(writer, "  %s · %s · %s · %s\n", relayStatusLabel(statuses[session.ID]), compactDuration(now.Sub(session.StartedAt)), access, privacy)
+		fmt.Fprintf(writer, "  Closes    %s\n", closes)
+		fmt.Fprintf(writer, "  Link      %s\n", session.ShareURL)
+		if session.Password != "" {
+			fmt.Fprintf(writer, "  Password  %s\n", session.Password)
+		}
+		fmt.Fprintf(writer, "  Rejoin    shell attach %s\n", shortSessionID(session.ID))
+		fmt.Fprintf(writer, "  Stop      shell kill %s\n", shortSessionID(session.ID))
+	}
 }
 
 func resolveRelayStatuses(sessions []localSessionRecord) map[string]relaySessionStatus {
