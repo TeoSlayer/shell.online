@@ -31,10 +31,19 @@ export function paneHeight(input: {
   paneTop: number;
   /** Space to leave below the pane. */
   gap?: number;
+  /**
+   * The zoom the answer will be read under. Everything measured here is in
+   * viewport pixels, but the property is read inside a zoomed subtree, where
+   * a length is multiplied by the zoom before it reaches the screen. Without
+   * dividing it back out the pane is sized to the room it has and then drawn
+   * larger than that, which puts the prompt back under the keyboard.
+   */
+  zoom?: number;
 }): number {
   const gap = input.gap ?? GAP;
+  const zoom = input.zoom && input.zoom > 0 ? input.zoom : 1;
   const available = input.viewportHeight + input.offsetTop - input.paneTop - gap;
-  return Math.max(MINIMUM, Math.round(available));
+  return Math.max(MINIMUM, Math.round(available / zoom));
 }
 
 /**
@@ -44,6 +53,18 @@ export function paneHeight(input: {
  * desktop browser has no on-screen keyboard to make room for, and a window
  * that is merely narrow is not a phone.
  */
+/**
+ * The zoom applied to the page, as a number.
+ *
+ * The phone breakpoint zooms the root so the layout is not a desktop page
+ * shrunk to fit. Browsers without `zoom`, and every width above that
+ * breakpoint, report something that is not a number, which is 1.
+ */
+function rootZoom(root: HTMLElement): number {
+  const value = Number.parseFloat(window.getComputedStyle(root).zoom);
+  return Number.isFinite(value) && value > 0 ? value : 1;
+}
+
 export function useKeyboardInset(target: RefObject<HTMLElement | null>, enabled: boolean): void {
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -70,6 +91,7 @@ export function useKeyboardInset(target: RefObject<HTMLElement | null>, enabled:
           viewportHeight: viewport.height,
           offsetTop: viewport.offsetTop,
           paneTop,
+          zoom: rootZoom(root),
         })}px`,
       );
     };
