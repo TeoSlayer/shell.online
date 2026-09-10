@@ -17,4 +17,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Uncut Sans — SIL Open Font License 1.1
 
-The bundled font is Copyright (c) 2022 Kasper Nordkvist. “Uncut Sans” is a trademark of Kasper Nordkvist. Its full license is included at [`public/fonts/OFL-Uncut-Sans.txt`](public/fonts/OFL-Uncut-Sans.txt).
+The bundled font is Copyright (c) 2022 Kasper Nordkvist. “Uncut Sans” is a trademark of Kasper Nordkvist. Its full license is included at [`public/fonts/OFL-Uncut-Sans.txt`](../public/fonts/OFL-Uncut-Sans.txt).

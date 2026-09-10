@@ -5,6 +5,11 @@
       "eyebrow": "Documentation",
       "title": "Share any terminal process with one link.",
       "intro": "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL. Link the machine to an account and those sessions also gather in a web app you and your organization can work from.",
+      "seo": {
+        "description": "Install shell.online, share interactive or read-only terminal processes, link machines, and manage sessions and organizations from the web app.",
+        "socialTitle": "Documentation | shell.online",
+        "socialDescription": "Share, monitor, and manage live terminal processes, from the one-line install to optional organizations."
+      },
       "cards": [
         [
           "Install",
@@ -48,6 +53,11 @@
       "eyebrow": "Terminal fidelity",
       "title": "A real terminal, fitted to the device in your hand.",
       "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches everyone to a compatible 80\u00d724 grid and fits it to each browser.",
+      "seo": {
+        "description": "How shell.online fits shared terminals to phones with deterministic PTY sizing, touch scrolling, keyboard handling, and bounded paste input.",
+        "socialTitle": "A real terminal on mobile | shell.online",
+        "socialDescription": "Deterministic PTY sizing, touch scrolling, keyboard-aware layout, and bounded paste input."
+      },
       "cards": [
         [
           "Deterministic sizing",
@@ -71,6 +81,11 @@
       "eyebrow": "Process continuity",
       "title": "The link can disappear. Your process should not.",
       "intro": "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
+      "seo": {
+        "description": "How shell.online keeps terminal processes alive through relay disconnects, high output, slow browsers, and transient network failures.",
+        "socialTitle": "Terminal process reliability | shell.online",
+        "socialDescription": "Reconnect, bounded queues, screen recovery, and lifecycle behavior for shared terminal processes."
+      },
       "cards": [
         [
           "Automatic reconnect",
@@ -94,6 +109,11 @@
       "eyebrow": "Trust model",
       "title": "Know exactly what the link grants, and what the relay sees.",
       "intro": "The current CLI encrypts terminal payloads on the machine and decrypts them in the browser by default. Cloudflare routes authenticated ciphertext while explicit metadata and bearer-access limits remain; --no-e2ee deliberately changes that boundary.",
+      "seo": {
+        "description": "The shell.online security model: default E2EE, sealed browser passwords, read-only enforcement, Cloudflare metadata, and retention.",
+        "socialTitle": "Security and trust model | shell.online",
+        "socialDescription": "Bearer capabilities, E2EE limits, read-only enforcement, sealed passwords, and retention explained precisely."
+      },
       "cards": [
         [
           "URL plus password is a bearer capability",
@@ -121,6 +141,11 @@
       "eyebrow": "End-to-end encryption",
       "title": "Terminal contents only the machine and its browsers can read.",
       "intro": "E2EE is automatic by default. New shares encrypt terminal payloads with AES-256-GCM before they enter the relay; password derivation happens on-device and URL fragments never reach Cloudflare.",
+      "seo": {
+        "description": "Understand shell.online default end-to-end encryption, generated browser passwords, local key derivation, visible metadata, and recovery limits.",
+        "socialTitle": "End-to-end encryption | shell.online",
+        "socialDescription": "How automatic E2EE and browser passwords work, what Cloudflare sees, and where the trust boundary ends."
+      },
       "cards": [
         [
           "Zero-configuration password",
@@ -148,6 +173,11 @@
       "eyebrow": "CLI reference",
       "title": "Every command and option, in one place.",
       "intro": "The shell CLI starts shares, reports their real relay state, attaches to local PTYs, and stops them. Run shell help reference to keep this complete reference available in the terminal too.",
+      "seo": {
+        "description": "Complete shell.online CLI reference: commands, flags, account linking, the browser-start daemon, environment variables, relay states, and exit status.",
+        "socialTitle": "CLI reference | shell.online",
+        "socialDescription": "Every shell.online command and option, including shell login and browser-started sessions."
+      },
       "cards": [
         [
           "Start and share",
@@ -427,6 +457,11 @@
       "eyebrow": "Platforms and devices",
       "title": "From Windows workstations to ARM and MIPS routers.",
       "intro": "Each advertised target gets a real PTY implementation, background execution, local session management, E2EE, persistent identity, and a SHA-256-verified release artifact. Every Linux artifact executes the full Go and PTY integration suite under QEMU; Windows uses the native ConPTY API.",
+      "seo": {
+        "description": "Supported shell.online platforms: Windows ConPTY, macOS, Linux routers and SBCs, BSD, Solaris, ROS workloads, and checksummed binaries.",
+        "socialTitle": "Platforms and devices | shell.online",
+        "socialDescription": "Windows, macOS, Linux, BSD, Solaris, routers, SBCs, and ROS workloads linked to one account."
+      },
       "cards": [
         [
           "Install",
@@ -510,6 +545,11 @@
       "eyebrow": "Persistent Docker terminal",
       "title": "One encrypted shell and one stable link across restarts.",
       "intro": "The Docker client keeps its workspace, host credential, browser password, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
+      "seo": {
+        "description": "Run the shell.online container with a stable encrypted browser URL, durable workspace, and retained browser password.",
+        "socialTitle": "Persistent Docker terminal | shell.online",
+        "socialDescription": "One stable E2EE browser link and password for a persistent Docker shell and workspace."
+      },
       "cards": [
         [
           "Start once",

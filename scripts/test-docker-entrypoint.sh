@@ -22,7 +22,7 @@ run_entrypoint() {
   SHELL_ONLINE_STATE_DIRECTORY="$state_directory" \
   SHELL_ONLINE_TEST_CAPTURE="$capture_directory" \
   PATH="$fake_bin:$PATH" \
-    sh "$repository_root/docker/entrypoint.sh" /bin/bash -il >/dev/null 2>"$test_root/stderr"
+    sh "$repository_root/scripts/docker-entrypoint.sh" /bin/bash -il >/dev/null 2>"$test_root/stderr"
 }
 
 SHELL_ONLINE_E2EE_PASSWORD='correct horse battery staple'
@@ -50,7 +50,7 @@ unset SHELL_ONLINE_E2EE_PASSWORD
 SHELL_ONLINE_STATE_DIRECTORY="$generated_state" \
 SHELL_ONLINE_TEST_CAPTURE="$capture_directory" \
 PATH="$fake_bin:$PATH" \
-  sh "$repository_root/docker/entrypoint.sh" /bin/bash -il >/dev/null 2>"$test_root/generated-stderr"
+  sh "$repository_root/scripts/docker-entrypoint.sh" /bin/bash -il >/dev/null 2>"$test_root/generated-stderr"
 generated_password=$(cat "$generated_state/password")
 test "${#generated_password}" -eq 8
 case "$generated_password" in

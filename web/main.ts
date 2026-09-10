@@ -32,7 +32,10 @@ import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
 import { BrowserFrameCipher, parseEncryptionFragment } from "./e2ee";
-import documentationContent from "../docs/content.json";
+import {
+  renderDocumentation,
+  resolveCurrentDocumentationRoute,
+} from "./documentation";
 import {
   appendLatencySample,
   buildLatencyPlot,
@@ -151,7 +154,7 @@ const terminalThemes: Record<TerminalColorMode, ITheme> = {
 };
 
 const sessionMatch = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]{32})\/?$/);
-const documentationRoute = resolveDocumentationRoute(window.location.pathname);
+const documentationRoute = resolveCurrentDocumentationRoute(window.location.pathname);
 const statsDashboard = window.location.hostname === "stats.shell.online" ||
   ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
     window.location.pathname === "/stats");
@@ -163,251 +166,9 @@ if (statsDashboard) {
 } else if (window.location.pathname === "/" || window.location.pathname === "") {
   renderLanding();
 } else if (documentationRoute) {
-  void renderAssurancePage(documentationRoute.kind, documentationRoute.version);
+  void renderDocumentation(app, documentationRoute, renderNotFound);
 } else {
   renderNotFound();
-}
-
-type DocumentationKind = keyof typeof documentationContent.pages;
-
-interface DocumentationPage {
-  eyebrow: string;
-  title: string;
-  intro: string;
-  cards: [string, string, [string, string][]?][];
-}
-
-interface DocumentationContent {
-  version: string;
-  pages: Partial<Record<DocumentationKind, DocumentationPage>>;
-}
-
-interface DocumentationRoute {
-  kind: DocumentationKind;
-  version: string;
-}
-
-const DOCUMENTATION_KINDS = ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"] as const;
-
-function resolveDocumentationRoute(pathname: string): DocumentationRoute | null {
-  const shortRoute = pathname.match(/^\/(docs|cli|platforms|mobile|reliability|security|e2ee|docker)\/?$/);
-  if (shortRoute) {
-    return { kind: shortRoute[1] as DocumentationKind, version: documentationContent.version };
-  }
-  const versionedRoute = pathname.match(/^\/docs\/v(\d+\.\d+\.\d+)(?:\/(cli|platforms|mobile|reliability|security|e2ee|docker))?\/?$/);
-  if (!versionedRoute) return null;
-  return {
-    kind: (versionedRoute[2] ?? "docs") as DocumentationKind,
-    version: versionedRoute[1],
-  };
-}
-
-function documentationHref(version: string, kind: DocumentationKind): string {
-  return `/docs/v${version}/${kind === "docs" ? "" : `${kind}/`}`;
-}
-
-function isDocumentationContent(value: unknown, version: string): value is DocumentationContent {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { version?: unknown; pages?: unknown };
-  if (candidate.version !== version || typeof candidate.pages !== "object" || candidate.pages === null) return false;
-  return DOCUMENTATION_KINDS.every((kind) => {
-    const page = (candidate.pages as Record<string, unknown>)[kind];
-    if (page === undefined) return true;
-    if (typeof page !== "object" || page === null) return false;
-    const fields = page as Record<string, unknown>;
-    return typeof fields.eyebrow === "string" && typeof fields.title === "string" &&
-      typeof fields.intro === "string" && Array.isArray(fields.cards) &&
-      fields.cards.every((card) => Array.isArray(card) && (card.length === 2 || card.length === 3) &&
-        typeof card[0] === "string" && typeof card[1] === "string" &&
-        (card[2] === undefined || (Array.isArray(card[2]) && card[2].every((entry) =>
-          Array.isArray(entry) && entry.length === 2 && entry.every((item) => typeof item === "string")))));
-  });
-}
-
-async function loadDocumentationContent(version: string): Promise<DocumentationContent | null> {
-  if (version === documentationContent.version) return documentationContent as DocumentationContent;
-  try {
-    const response = await fetch(`/api/docs/content?version=${encodeURIComponent(version)}`, {
-      headers: { Accept: "application/json" },
-      cache: "force-cache",
-    });
-    if (!response.ok) return null;
-    const content: unknown = await response.json();
-    return isDocumentationContent(content, version) ? content : null;
-  } catch {
-    return null;
-  }
-}
-
-function escapeDocumentationText(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[character]!);
-}
-
-async function renderAssurancePage(kind: DocumentationKind, version: string): Promise<void> {
-  const content = await loadDocumentationContent(version);
-  const page = content?.pages[kind];
-  if (!content || !page) {
-    renderNotFound();
-    return;
-  }
-  const docsLink = (target: DocumentationKind): string => documentationHref(version, target);
-  const nextPage: Record<DocumentationKind, [DocumentationKind, string]> = {
-    docs: ["cli", "CLI reference"],
-    cli: ["platforms", "Platforms and devices"],
-    platforms: ["mobile", "Mobile terminals"],
-    mobile: ["reliability", "Reliability"],
-    reliability: ["security", "Security model"],
-    security: ["e2ee", "End-to-end encryption"],
-    e2ee: ["docker", "Persistent Docker"],
-    docker: ["docs", "Back to overview"],
-  };
-  const [nextKind, nextLabel] = nextPage[kind];
-  document.title = `${page.eyebrow} | shell.online`;
-  document.documentElement.classList.add("marketing-root");
-  document.body.classList.add("marketing-body", "knowledge-body");
-  app!.innerHTML = `
-    <section class="marketing assurance-page">
-      <header class="marketing-nav knowledge-nav">
-        <a class="wordmark knowledge-wordmark" href="/docs/" aria-label="shell.online documentation"><span>shell</span><i>.</i>online<b>Docs</b></a>
-        <details class="knowledge-mobile-menu">
-          <summary aria-label="Open documentation navigation"><span aria-hidden="true"></span>Menu</summary>
-          <nav aria-label="Mobile documentation navigation">
-            <label>Version<select class="docs-version-select" id="docs-version-mobile" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></label>
-            <a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a>
-            <a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a>
-            <a class="${kind === "platforms" ? "active" : ""}" href="${docsLink("platforms")}">Platforms and devices</a>
-            <a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a>
-            <a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a>
-            <a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a>
-            <a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a>
-            <a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a>
-          </nav>
-        </details>
-        <nav class="marketing-links" aria-label="Documentation navigation">
-          <label class="knowledge-search"><span aria-hidden="true">⌕</span><input id="docs-search" type="search" placeholder="Search docs" autocomplete="off" aria-label="Search documentation" /><kbd>⌘ K</kbd></label>
-          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">GitHub ↗</a>
-        </nav>
-      </header>
-      <main class="knowledge-layout">
-        <aside class="knowledge-sidebar" aria-label="Knowledge base">
-          <div class="knowledge-version"><span>Documentation</span><select class="docs-version-select" id="docs-version" aria-label="Documentation version"><option value="${escapeDocumentationText(version)}">v${escapeDocumentationText(version)}</option></select></div>
-          <a class="knowledge-home" href="${docsLink("docs")}">shell.online docs</a>
-          <div><p>Get started</p><a class="${kind === "docs" ? "active" : ""}" href="${docsLink("docs")}">Overview</a><a class="${kind === "platforms" ? "active" : ""}" href="${docsLink("platforms")}">Platforms and devices</a></div>
-          <div><p>Terminal experience</p><a class="${kind === "mobile" ? "active" : ""}" href="${docsLink("mobile")}">Mobile terminals</a><a class="${kind === "reliability" ? "active" : ""}" href="${docsLink("reliability")}">Reliability</a></div>
-          <div><p>Operations and trust</p><a class="${kind === "security" ? "active" : ""}" href="${docsLink("security")}">Security model</a><a class="${kind === "e2ee" ? "active" : ""}" href="${docsLink("e2ee")}">End-to-end encryption</a><a class="${kind === "docker" ? "active" : ""}" href="${docsLink("docker")}">Persistent Docker</a></div>
-          <div><p>Reference</p><a class="${kind === "cli" ? "active" : ""}" href="${docsLink("cli")}">CLI reference</a><a href="${GITHUB_REPOSITORY_URL}">Source ↗</a></div>
-        </aside>
-        <article class="knowledge-article">
-          <div class="knowledge-breadcrumb"><a href="${docsLink("docs")}">Docs</a><span>/</span>v${escapeDocumentationText(version)}<span>/</span>${escapeDocumentationText(page.eyebrow)}</div>
-          <p class="assurance-eyebrow">${escapeDocumentationText(page.eyebrow)}</p>
-          <h1>${escapeDocumentationText(page.title)}</h1>
-          <p class="assurance-intro">${escapeDocumentationText(page.intro)}</p>
-          ${kind === "docs" ? `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
-<span>$</span> shell --read-only python train.py</code></pre>` : kind === "e2ee" ? `<pre class="knowledge-command"><code><span>$</span> shell &lt;command&gt;
-<span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell &lt;command&gt;</code></pre>` : kind === "docker" ? `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
-<span>$</span> docker compose logs shell-online</code></pre>` : kind === "platforms" ? `<pre class="knowledge-command"><code><span>$</span> shell ros2 launch &lt;package&gt; &lt;launch-file&gt;
-<span>PS&gt;</span> irm https://shell.online/install.ps1 | iex</code></pre>` : kind === "cli" ? `<pre class="knowledge-command"><code><span>$</span> shell help reference
-<span>$</span> shell [options] -- &lt;command&gt; [arguments...]</code></pre>` : ""}
-          <div class="knowledge-sections">
-            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>${String(index + 1).padStart(2, "0")}</span><h2>${escapeDocumentationText(title)}</h2><p>${escapeDocumentationText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeDocumentationText(term)}</code></dt><dd>${escapeDocumentationText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
-          </div>
-          ${kind === "platforms" ? "" : `<aside class="knowledge-note"><strong>The invariant</strong><p>${kind === "e2ee" ? "The browser password and derived key exist only at endpoints. Cloudflare receives neither and cannot read terminal payloads." : kind === "docker" ? "The state volume is the identity. Preserve it for the same URL; protect it as a browser password, host credential, and decryption secret." : kind === "cli" ? "The built-in shell help reference and this versioned page describe the same public interface." : "The wrapped command belongs to your machine. Browser and relay failures may interrupt the view, but must not become process lifecycle events."}</p></aside>`}
-          <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${nextLabel} →</a></nav>
-        </article>
-        <aside class="knowledge-toc" aria-label="On this page"><p>On this page</p>${page.cards.map(([title], index) => `<a href="#section-${index + 1}">${escapeDocumentationText(title)}</a>`).join("")}<div class="knowledge-release"><span>Release</span><strong>v${escapeDocumentationText(version)}</strong><a href="${GITHUB_REPOSITORY_URL}/releases/tag/v${escapeDocumentationText(version)}">View release notes ↗</a></div></aside>
-      </main>
-      <footer class="marketing-footer">
-        <a class="wordmark" href="/"><span>shell</span><i>.</i>online</a>
-        <p>Live browser terminals for the work your machine is already doing.</p>
-        <nav><a href="${docsLink("docs")}">Docs</a><a href="${docsLink("cli")}">CLI</a><a href="${docsLink("platforms")}">Platforms</a><a href="${docsLink("mobile")}">Mobile</a><a href="${docsLink("reliability")}">Reliability</a><a href="${docsLink("security")}">Security</a><a href="${docsLink("e2ee")}">E2EE</a><a href="${docsLink("docker")}">Docker</a><a href="${GITHUB_REPOSITORY_URL}">Source</a></nav>
-      </footer>
-    </section>`;
-  wireDocumentationControls(kind, version, content);
-}
-
-function wireDocumentationControls(kind: DocumentationKind, version: string, content: DocumentationContent): void {
-  const selectors = Array.from(document.querySelectorAll<HTMLSelectElement>(".docs-version-select"));
-  const searchInput = document.querySelector<HTMLInputElement>("#docs-search");
-  const searchShell = searchInput?.closest<HTMLElement>(".knowledge-search");
-  for (const selector of selectors) {
-    selector.addEventListener("change", () => {
-      window.location.href = documentationHref(selector.value, kind);
-    });
-  }
-  if (selectors.length > 0) {
-    void fetch("/api/docs/releases", { headers: { Accept: "application/json" } })
-      .then(async (response) => response.ok ? response.json() as Promise<unknown> : null)
-      .then((payload) => {
-        if (typeof payload !== "object" || payload === null) return;
-        const releases = (payload as { releases?: unknown }).releases;
-        if (!Array.isArray(releases)) return;
-        const versions = new Set([version]);
-        for (const release of releases) {
-          if (typeof release !== "object" || release === null) continue;
-          const candidate = (release as { version?: unknown }).version;
-          if (typeof candidate === "string" && /^\d+\.\d+\.\d+$/.test(candidate)) versions.add(candidate);
-        }
-        const ordered = Array.from(versions).sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
-        for (const selector of selectors) {
-          selector.replaceChildren(...ordered.map((candidate) => {
-            const option = document.createElement("option");
-            option.value = candidate;
-            option.textContent = `v${candidate}${candidate === documentationContent.version ? " · current" : ""}`;
-            option.selected = candidate === version;
-            return option;
-          }));
-        }
-      })
-      .catch(() => undefined);
-  }
-
-  if (!searchInput || !searchShell) return;
-  const results = document.createElement("div");
-  results.className = "knowledge-search-results";
-  results.hidden = true;
-  searchShell.append(results);
-  const closeResults = (): void => { results.hidden = true; };
-  const renderResults = (): void => {
-    const query = searchInput.value.trim().toLocaleLowerCase();
-    if (query.length < 2) {
-      closeResults();
-      return;
-    }
-    const matches: { kind: DocumentationKind; title: string; section: number }[] = [];
-    for (const candidateKind of DOCUMENTATION_KINDS) {
-      const candidatePage = content.pages[candidateKind];
-      if (!candidatePage) continue;
-      candidatePage.cards.forEach(([title, copy, entries], index) => {
-        const referenceCopy = entries?.flat().join(" ") ?? "";
-        if (`${title} ${copy} ${referenceCopy}`.toLocaleLowerCase().includes(query)) {
-          matches.push({ kind: candidateKind, title, section: index + 1 });
-        }
-      });
-    }
-    results.innerHTML = matches.length === 0
-      ? `<span>No results in v${escapeDocumentationText(version)}</span>`
-      : matches.slice(0, 8).map((match) => `<a href="${documentationHref(version, match.kind)}#section-${match.section}"><small>${escapeDocumentationText(content.pages[match.kind]?.eyebrow ?? match.kind)}</small>${escapeDocumentationText(match.title)}</a>`).join("");
-    results.hidden = false;
-  };
-  searchInput.addEventListener("input", renderResults);
-  searchInput.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      searchInput.value = "";
-      closeResults();
-      searchInput.blur();
-    }
-  });
-  document.addEventListener("keydown", (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
-      event.preventDefault();
-      searchInput.focus();
-    }
-  });
-  document.addEventListener("pointerdown", (event) => {
-    if (!searchShell.contains(event.target as Node)) closeResults();
-  });
 }
 
 function renderLanding(): void {

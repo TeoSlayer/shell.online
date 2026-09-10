@@ -81,7 +81,7 @@ Set `MAIL_API_KEY` with `wrangler secret put` if invitation email is enabled.
 Keep Hyperdrive query caching disabled because the app depends on read-after-write
 consistency.
 
-The full relay and app setup is documented in [`../SELF-HOSTING.md`](../SELF-HOSTING.md).
+The full relay and app setup is documented in [the self-hosting guide](../docs/self-hosting.md).
 
 ## Structure
 

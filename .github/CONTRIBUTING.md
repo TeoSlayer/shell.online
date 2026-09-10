@@ -27,14 +27,14 @@ go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 Keep changes focused, add regression tests for fixes, and describe the user-visible behavior and security implications. By contributing, you agree that your contribution is licensed under the repository's MIT License.
 
-User-visible changes should update [`CHANGELOG.md`](CHANGELOG.md).
+User-visible changes should update [`CHANGELOG.md`](../CHANGELOG.md).
 
-Documentation copy lives in [`docs/content.json`](docs/content.json) and renders both the current site and tagged, release-selectable docs. Keep its version equal to `package.json`, preserve the schema, and run the SEO test through `npm run check` after editing it.
+Documentation copy lives in [`docs/content.json`](../docs/content.json) and renders both the current site and tagged, release-selectable docs. Keep its version equal to `package.json`, preserve the schema, and run the SEO test through `npm run check` after editing it.
 
 E2EE is the default product invariant for new CLI sessions; only an explicit `--no-e2ee` may opt out. Changes to session startup, structured output, persistent state, or Docker entrypoints must preserve the browser-password flow, prevent accidental downgrade, and include regression tests. Update the built-in CLI help, README, security policy, agent skill, `public/llms.txt`, and versioned documentation together when that flow changes.
 
 ## Deployment
 
-See [`SELF-HOSTING.md`](SELF-HOSTING.md). Maintainers deploy the hosted relay with
+See [the self-hosting guide](../docs/self-hosting.md). Maintainers deploy the hosted relay with
 `npm run deploy:production`, which rebuilds and verifies the web and download
 bundle before invoking Wrangler.

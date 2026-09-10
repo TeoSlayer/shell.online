@@ -12,7 +12,7 @@ RUN apk add --no-cache bash ca-certificates tini \
     && adduser -D -h /home/shellonline shellonline \
     && install -d -o shellonline -g shellonline /var/lib/shell-online /workspace
 COPY --from=build /out/shell /usr/local/bin/shell
-COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/shell-online-entrypoint
+COPY --chmod=0755 scripts/docker-entrypoint.sh /usr/local/bin/shell-online-entrypoint
 USER shellonline
 WORKDIR /workspace
 VOLUME ["/var/lib/shell-online", "/workspace"]

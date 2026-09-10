@@ -30,6 +30,7 @@ import {
   readGitHubApiStarCount,
 } from "../shared/github";
 import { STATS_PRESENCE_REFRESH_MS } from "../shared/stats-snapshot";
+import { isVersionedDocumentationPath } from "../shared/documentation";
 import {
   fetchStatsSnapshot,
   removeStatsPresence,
@@ -251,7 +252,11 @@ export default {
       return json({ error: "not found" }, 404);
     }
 
-    let assetResponse = await env.ASSETS.fetch(request);
+    const assetRequest = (request.method === "GET" || request.method === "HEAD") &&
+      isVersionedDocumentationPath(url.pathname)
+      ? new Request(new URL("/docs/", url), request)
+      : request;
+    let assetResponse = await env.ASSETS.fetch(assetRequest);
     if (downloadAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {
       assetResponse = new Response("Download not found\n", {
         status: 404,

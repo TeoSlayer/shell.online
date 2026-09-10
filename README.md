@@ -65,7 +65,7 @@ Use `--no-e2ee` only when transport encryption without payload E2EE is required.
 Anyone with both the URL and password can open a share. Interactive shares can
 type with the permissions of the wrapped process; use `--read-only` when viewers
 should only watch. See the [security model](https://shell.online/security/) and
-[`SECURITY.md`](SECURITY.md).
+[the security policy](.github/SECURITY.md).
 
 ## Accounts and containers
 
@@ -89,7 +89,7 @@ docker compose logs shell-online
 - [End-to-end encryption](https://shell.online/e2ee/)
 - [Containers](https://shell.online/docker/)
 - [Platforms](https://shell.online/platforms/)
-- [Self-hosting](SELF-HOSTING.md)
+- [Self-hosting](docs/self-hosting.md)
 
 ## Development
 
@@ -102,7 +102,7 @@ go test -race ./...
 npm run test:app
 ```
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
+See [the contribution guide](.github/CONTRIBUTING.md) before opening a pull request.
 
 ## Star History
 

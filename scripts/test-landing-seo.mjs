@@ -2,17 +2,13 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, docsHtml, cliHtml, platformsHtml, mobileHtml, reliabilityHtml, securityHtml, e2eeHtml, dockerHtml, landingSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
+const [indexHtml, documentationHtml, landingSource, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
-  readSource("docs/index.html"),
-  readSource("cli/index.html"),
-  readSource("platforms/index.html"),
-  readSource("mobile/index.html"),
-  readSource("reliability/index.html"),
-  readSource("security/index.html"),
-  readSource("e2ee/index.html"),
-  readSource("docker/index.html"),
+  readSource("web/documentation.html"),
   readSource("web/main.ts"),
+  readSource("web/documentation.ts"),
+  readSource("shared/documentation.ts"),
+  readSource("vite.config.ts"),
   readSource("public/sitemap.xml"),
   readSource("public/robots.txt"),
   readSource("public/site.webmanifest"),
@@ -122,9 +118,16 @@ for (const example of [
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
 check((sitemap.match(/<loc>/gu) ?? []).length === 9, "Sitemap should list the homepage and knowledge base");
-for (const [html, path] of [[docsHtml, "docs"], [cliHtml, "cli"], [platformsHtml, "platforms"], [mobileHtml, "mobile"], [reliabilityHtml, "reliability"], [securityHtml, "security"], [e2eeHtml, "e2ee"], [dockerHtml, "docker"]]) {
-  check(html.includes(`<link rel="canonical" href="https://shell.online/${path}/"`), `${path} canonical URL is missing`);
-  check(html.includes('<meta name="robots" content="index, follow'), `${path} robots directive is invalid`);
+check(documentationHtml.includes("__DOC_DESCRIPTION__"), "Documentation description build token is missing");
+check(documentationHtml.includes("__DOC_SOCIAL_TITLE__"), "Documentation title build token is missing");
+check(documentationHtml.includes("__DOC_SOCIAL_DESCRIPTION__"), "Documentation social-description build token is missing");
+check(documentationHtml.includes("__DOC_PATH__"), "Documentation canonical-path build token is missing");
+check(documentationHtml.includes('<meta name="robots" content="index, follow'), "Documentation robots directive is invalid");
+for (const path of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
+  const seo = docsContent.pages?.[path]?.seo;
+  check(typeof seo?.description === "string", `${path} SEO description is missing from versioned content`);
+  check(typeof seo?.socialTitle === "string", `${path} social title is missing from versioned content`);
+  check(typeof seo?.socialDescription === "string", `${path} social description is missing from versioned content`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
 for (const guide of ["platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
@@ -136,10 +139,14 @@ for (const guarantee of ["Any connected phone selects", "Paste input is split", 
 check(readme.includes("end-to-end encrypted by default"), "README default E2EE summary is missing");
 check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
-for (const page of ["docs", "cli", "mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const page of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
   check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);
 }
-check(landingSource.includes('import documentationContent from "../docs/content.json"'), "Website must render from the repository documentation source");
+check(documentationRenderer.includes('import documentationSource from "../docs/content.json"'), "Website must render from the repository documentation source");
+check(documentationRenderer.includes("resolveAvailableDocumentationKind"), "Historical docs must fall back when a page did not exist yet");
+check(documentationRoutes.includes("VERSIONED_DOCUMENTATION_ROUTE"), "Versioned documentation routing is missing");
+check(viteSource.includes('documentation: resolve(import.meta.dirname, "web/documentation.html")'), "Vite must use one documentation entry point");
+check(viteSource.includes('fileName: `${kind}/index.html`'), "Vite must generate each public documentation route");
 check(workerSource.includes('url.pathname === "/api/docs/releases"'), "Dynamic documentation release endpoint is missing");
 check(
   workerSource.includes('url.searchParams.get("go-get") === "1"') &&
@@ -147,6 +154,8 @@ check(
   "The canonical domain must publish Go module discovery metadata",
 );
 check(workerSource.includes("raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json"), "Tagged documentation source endpoint is missing");
+check(workerSource.includes("isVersionedDocumentationPath(url.pathname)"), "Versioned routes must load the documentation shell");
+check(workerSource.includes('new URL("/docs/", url)'), "Versioned routes must not flash the landing page");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
 check(
