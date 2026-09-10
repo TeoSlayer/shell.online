@@ -56,7 +56,7 @@ describe("terminal typography", () => {
   it("uses a denser readable terminal while the mobile keyboard is open", () => {
     expect(terminalTypography(true, false, 390, 844)).toEqual({
       fontSize: 13,
-      lineHeight: 1.18,
+      lineHeight: 1.8,
     });
     expect(terminalTypography(true, true, 390, 493)).toEqual({
       fontSize: 8.5,
@@ -65,6 +65,17 @@ describe("terminal typography", () => {
     expect(terminalTypography(true, true, 360, 420)).toEqual({
       fontSize: 8,
       lineHeight: 1.08,
+    });
+  });
+
+  it("uses the available height for a portrait terminal without changing its grid", () => {
+    expect(terminalTypography(false, false, 1080, 1920)).toEqual({
+      fontSize: 14,
+      lineHeight: 1.8,
+    });
+    expect(terminalTypography(false, false, 1920, 1080)).toEqual({
+      fontSize: 14,
+      lineHeight: 1.18,
     });
   });
 

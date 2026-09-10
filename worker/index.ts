@@ -117,6 +117,8 @@ interface SocketAttachment {
   snapshotRequestedAt?: number;
   terminalCols?: number;
   terminalRows?: number;
+  portrait?: boolean;
+  supportsPortraitGrid?: boolean;
 }
 
 interface TrafficWindow {
@@ -904,6 +906,8 @@ export class TerminalSession extends DurableObject<Env> {
       device: analyticsContext.device,
       client: analyticsContext.client,
       referrer: analyticsContext.referrer,
+      portrait: role === "viewer" && new URL(request.url).searchParams.get("layout") === "portrait",
+      supportsPortraitGrid: role === "host" && request.headers.get("X-Shell-Terminal-Grid") === "80x40",
     };
 
     server.serializeAttachment(attachment);
@@ -1003,15 +1007,22 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
 
-    let event: { type?: unknown; code?: unknown; attached?: unknown };
+    let event: { type?: unknown; code?: unknown; attached?: unknown; portrait?: unknown };
     try {
-      event = JSON.parse(message) as { type?: unknown; code?: unknown };
+      event = JSON.parse(message) as typeof event;
     } catch {
       safeClose(socket, 4002, "invalid control message");
       return;
     }
 
     if (attachment.role === "viewer") {
+      if (event.type === "viewer_layout" && typeof event.portrait === "boolean") {
+        if (attachment.portrait === event.portrait) return;
+        attachment.portrait = event.portrait;
+        socket.serializeAttachment(attachment);
+        this.broadcastTerminalGrid();
+        return;
+      }
       if (event.type === "snapshot_request") {
         const now = Date.now();
         if (now - (attachment.snapshotRequestedAt ?? 0) < 1_000) return;
@@ -1520,8 +1531,15 @@ export class TerminalSession extends DurableObject<Env> {
     const devices = this.state
       .getWebSockets("viewer")
       .filter((socket) => socket !== excluded && socket.readyState === 1)
-      .map((socket) => readAttachment(socket)?.device ?? "unknown");
-    const grid = terminalGridForDevices(devices);
+      .map((socket) => {
+        const attachment = readAttachment(socket);
+        return attachment?.portrait ? "portrait" : attachment?.device ?? "unknown";
+      });
+    const supportsPortraitGrid = this.state
+      .getWebSockets("host")
+      .filter((socket) => socket.readyState === 1)
+      .some((socket) => readAttachment(socket)?.supportsPortraitGrid === true);
+    const grid = terminalGridForDevices(devices, supportsPortraitGrid);
     const message = JSON.stringify({ type: "terminal_size", ...grid });
     for (const socket of this.state.getWebSockets()) {
       if (socket === excluded) continue;

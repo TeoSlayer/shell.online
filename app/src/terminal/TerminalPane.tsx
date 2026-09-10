@@ -198,7 +198,7 @@ export function TerminalPane({
           setReadOnly(value);
           term.options.disableStdin = value;
         },
-        /* A phone joining takes the session to 80x24, and back when it leaves. */
+        /* A portrait viewer takes a capable session to 80x40, and back when it leaves. */
         onGrid: (next) => {
           grid.current = next;
           refit();

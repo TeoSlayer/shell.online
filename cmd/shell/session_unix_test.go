@@ -295,7 +295,7 @@ func TestSharedTerminalUsesLargeGridUntilPhoneCompatibilityIsRequested(t *testin
 	if size.Cols != 120 || size.Rows != 36 {
 		t.Fatalf("shared terminal size = %dx%d, want 120x36", size.Cols, size.Rows)
 	}
-	for _, candidate := range [][2]uint16{{120, 36}, {80, 24}} {
+	for _, candidate := range [][2]uint16{{120, 36}, {80, 40}, {80, 24}} {
 		if !isCanonicalTerminalSize(candidate[0], candidate[1]) {
 			t.Fatalf("canonical terminal size %v was rejected", candidate)
 		}

@@ -4,6 +4,7 @@ import { Opcode, encodeFrame } from "./protocol";
 import { BrowserFrameCipher } from "./e2ee";
 import {
   DESKTOP_TERMINAL_GRID,
+  LEGACY_MOBILE_TERMINAL_GRID,
   MOBILE_TERMINAL_GRID,
   type TerminalGrid,
 } from "./terminal-grid";
@@ -383,10 +384,16 @@ describe("the session grid", () => {
     expect(recorded.grids).toEqual([MOBILE_TERMINAL_GRID]);
   });
 
+  it("still renders the legacy mobile grid from an older CLI", async () => {
+    const { connection, socket } = await connected();
+    socket.control({ type: "terminal_size", ...LEGACY_MOBILE_TERMINAL_GRID });
+    expect(connection.grid).toEqual(LEGACY_MOBILE_TERMINAL_GRID);
+  });
+
   it("refuses a grid the CLI would reject", async () => {
     /*
-     * cmd/shell/session_unix.go only resizes the PTY to one of the two
-     * canonical grids. Drawing anything else means rendering a shape the
+     * cmd/shell/session_unix.go only resizes the PTY to a canonical grid.
+     * Drawing anything else means rendering a shape the
      * process is not writing, which is the bug this whole model prevents.
      */
     const { connection, recorded, socket } = await connected();

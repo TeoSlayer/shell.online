@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { fittedTerminal, type TerminalCell } from "../web/terminal-fit";
-import { DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID, terminalGridForDevices } from "../shared/terminal-grid";
+import {
+  DESKTOP_TERMINAL_GRID,
+  LEGACY_MOBILE_TERMINAL_GRID,
+  MOBILE_TERMINAL_GRID,
+  terminalGridForDevices,
+} from "../shared/terminal-grid";
 
 /*
  * A monospaced font measured the way the browser measures one: an advance
@@ -24,9 +29,11 @@ function drawn(
 
 describe("viewer-local terminal fitting", () => {
   it("uses compatibility sizing only while a phone is connected", () => {
-    expect(terminalGridForDevices([])).toEqual(DESKTOP_TERMINAL_GRID);
-    expect(terminalGridForDevices(["desktop", "tablet"])).toEqual(DESKTOP_TERMINAL_GRID);
-    expect(terminalGridForDevices(["desktop", "mobile"])).toEqual(MOBILE_TERMINAL_GRID);
+    expect(terminalGridForDevices([], true)).toEqual(DESKTOP_TERMINAL_GRID);
+    expect(terminalGridForDevices(["desktop", "tablet"], true)).toEqual(DESKTOP_TERMINAL_GRID);
+    expect(terminalGridForDevices(["desktop", "mobile"], true)).toEqual(MOBILE_TERMINAL_GRID);
+    expect(terminalGridForDevices(["desktop", "portrait"], true)).toEqual(MOBILE_TERMINAL_GRID);
+    expect(terminalGridForDevices(["mobile"], false)).toEqual(LEGACY_MOBILE_TERMINAL_GRID);
   });
 
   it("fills a pane wider than the grid instead of leaving it empty", () => {
@@ -87,6 +94,20 @@ describe("viewer-local terminal fitting", () => {
     expect(phone.fontSize).toBeLessThan(10);
     expect(desktop.fontSize).toBeGreaterThan(16);
     expect(desktop.fontSize).toBeLessThanOrEqual(24);
+  });
+
+  it("uses most of a portrait pane with the taller mobile grid", () => {
+    const box = { width: 380, height: 620 };
+    const measure = font();
+    const fitted = fittedTerminal(box, MOBILE_TERMINAL_GRID, measure, {
+      maxLineHeight: 1.8,
+      pixelRatio: 3,
+    });
+    const size = drawn(measure(fitted.fontSize), fitted.lineHeight, MOBILE_TERMINAL_GRID, 3);
+
+    expect(size.width / box.width).toBeGreaterThan(0.95);
+    expect(size.height / box.height).toBeGreaterThan(0.9);
+    expect(size.height).toBeLessThanOrEqual(box.height);
   });
 
   it("applies personal zoom without changing terminal dimensions", () => {

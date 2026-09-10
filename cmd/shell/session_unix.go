@@ -30,7 +30,8 @@ const (
 	desktopTerminalCols    = 120
 	desktopTerminalRows    = 36
 	mobileTerminalCols     = 80
-	mobileTerminalRows     = 24
+	mobileTerminalRows     = 40
+	legacyMobileRows       = 24
 	backgroundStartupGrace = 250 * time.Millisecond
 )
 
@@ -481,7 +482,7 @@ func sharedTerminalSize() terminalGrid {
 
 func isCanonicalTerminalSize(cols, rows uint16) bool {
 	return (cols == desktopTerminalCols && rows == desktopTerminalRows) ||
-		(cols == mobileTerminalCols && rows == mobileTerminalRows)
+		(cols == mobileTerminalCols && (rows == mobileTerminalRows || rows == legacyMobileRows))
 }
 
 func terminalEnvironment(environment []string) []string {

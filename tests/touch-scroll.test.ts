@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TerminalLineScroller,
+  TerminalPinchZoomGesture,
   TerminalTouchScrollBridge,
   TouchWheelGesture,
   type TouchSample,
@@ -72,5 +73,27 @@ describe("terminal touch scrolling", () => {
     expect(bridge.move([touch(240)])).toBe(true);
     bridge.end();
     expect(viewportY).toBe(206);
+  });
+});
+
+describe("terminal pinch zoom", () => {
+  it("scales from the zoom active when the second finger lands", () => {
+    const gesture = new TerminalPinchZoomGesture();
+    gesture.start([touch(100, 100, 1), touch(100, 200, 2)], 80);
+
+    expect(gesture.move([touch(100, 100, 1), touch(100, 202, 2)])).toBeNull();
+    expect(gesture.move([touch(100, 100, 1), touch(100, 250, 2)])).toBe(120);
+    expect(gesture.move([touch(100, 100, 1), touch(100, 175, 2)])).toBe(60);
+  });
+
+  it("clamps zoom and tracks the original two fingers", () => {
+    const gesture = new TerminalPinchZoomGesture();
+    gesture.start([touch(100, 100, 4), touch(100, 200, 9)], 100);
+
+    expect(gesture.move([touch(100, 100, 4), touch(100, 400, 9)])).toBe(150);
+    expect(gesture.move([touch(100, 100, 4), touch(100, 110, 9)])).toBe(50);
+    expect(gesture.move([touch(100, 100, 4), touch(100, 200, 7)])).toBeNull();
+    gesture.end();
+    expect(gesture.move([touch(100, 100, 4), touch(100, 250, 9)])).toBeNull();
   });
 });

@@ -66,8 +66,9 @@ export function terminalTypography(
   viewportWidth: number,
   viewportHeight: number,
 ): TerminalTypography {
-  if (!compact) return { fontSize: 14, lineHeight: 1.18 };
-  if (!keyboardOpen) return { fontSize: 13, lineHeight: 1.18 };
+  const portraitLineHeight = viewportHeight > viewportWidth * 1.15 ? 1.8 : 1.18;
+  if (!compact) return { fontSize: 14, lineHeight: portraitLineHeight };
+  if (!keyboardOpen) return { fontSize: 13, lineHeight: portraitLineHeight };
   if (viewportWidth <= 360 || viewportHeight <= 430) {
     return { fontSize: 8, lineHeight: 1.08 };
   }

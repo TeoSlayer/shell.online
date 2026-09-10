@@ -121,6 +121,9 @@ func (connection *Connection) run(firstResult chan<- error) {
 func (connection *Connection) dial() (*websocket.Conn, *http.Response, error) {
 	header := make(http.Header)
 	header.Set("Authorization", "Bearer "+connection.hostToken)
+	// Lets the relay choose the taller portrait grid without sending it to an
+	// older CLI that only knows the original 80x24 compatibility size.
+	header.Set("X-Shell-Terminal-Grid", "80x40")
 	return websocket.Dial(connection.ctx, connection.endpoint, &websocket.DialOptions{HTTPHeader: header})
 }
 

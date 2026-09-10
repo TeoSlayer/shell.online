@@ -43,10 +43,15 @@ import {
 import { MobileViewportTracker, terminalTypography } from "./mobile-viewport";
 import { fittedTerminal } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
-import { DESKTOP_TERMINAL_GRID } from "../shared/terminal-grid";
+import {
+  DESKTOP_TERMINAL_GRID,
+  LEGACY_MOBILE_TERMINAL_GRID,
+  MOBILE_TERMINAL_GRID,
+} from "../shared/terminal-grid";
 import { renderStatsDashboard } from "./stats";
 import {
   TerminalLineScroller,
+  TerminalPinchZoomGesture,
   TerminalTouchScrollBridge,
   type TouchSample,
 } from "./touch-scroll";
@@ -1268,6 +1273,7 @@ function renderTerminal(sessionId: string): void {
   let lastViewportWidth = 0;
   let lastViewportHeight = 0;
   let lastKeyboardOpen = false;
+  let lastViewerPortrait: boolean | undefined;
   const mobileViewport = new MobileViewportTracker();
   let copyAttempt = 0;
   let copyResetTimer: number | undefined;
@@ -1651,6 +1657,25 @@ function renderTerminal(sessionId: string): void {
     height: Math.round(window.visualViewport?.height ?? window.innerHeight),
   });
 
+  const isPortraitViewer = (): boolean => {
+    // Keep the pre-keyboard layout while the visual viewport is compressed;
+    // otherwise opening the keyboard would falsely turn a portrait phone into
+    // a landscape viewer and resize the shared PTY underneath the user.
+    if (mobileViewport.keyboardOpen && lastViewerPortrait !== undefined) {
+      return lastViewerPortrait;
+    }
+    return window.innerHeight > window.innerWidth;
+  };
+
+  const reportViewerLayout = (): void => {
+    const portrait = isPortraitViewer();
+    if (portrait === lastViewerPortrait) return;
+    lastViewerPortrait = portrait;
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "viewer_layout", portrait }));
+    }
+  };
+
   const commitViewport = (
     current: { width: number; height: number },
     keyboardOpen: boolean,
@@ -1666,6 +1691,7 @@ function renderTerminal(sessionId: string): void {
       document.documentElement.style.setProperty("--session-viewport-height", `${current.height}px`);
     }
     if (widthChanged || heightChanged || keyboardChanged) scheduleFit();
+    reportViewerLayout();
   };
 
   const handleViewportResize = (): void => {
@@ -1760,7 +1786,11 @@ function renderTerminal(sessionId: string): void {
     if (stopped) return;
     setStatus(waitingForCapacity ? "full" : "connecting");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    socket = new WebSocket(`${protocol}//${window.location.host}/api/sessions/${sessionId}/ws`);
+    const portrait = isPortraitViewer();
+    lastViewerPortrait = portrait;
+    const websocketURL = new URL(`${protocol}//${window.location.host}/api/sessions/${sessionId}/ws`);
+    websocketURL.searchParams.set("layout", portrait ? "portrait" : "landscape");
+    socket = new WebSocket(websocketURL);
     socket.binaryType = "arraybuffer";
 
     socket.addEventListener("open", () => {
@@ -1884,7 +1914,11 @@ function renderTerminal(sessionId: string): void {
     }
     if (
       message.type === "terminal_size" &&
-      ((message.cols === 80 && message.rows === 24) || (message.cols === 120 && message.rows === 36))
+      typeof message.cols === "number" &&
+      typeof message.rows === "number" &&
+      [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID, LEGACY_MOBILE_TERMINAL_GRID].some(
+        (grid) => message.cols === grid.cols && message.rows === grid.rows,
+      )
     ) {
       terminalColumns = message.cols;
       terminalRows = message.rows;
@@ -2067,15 +2101,22 @@ function renderTerminal(sessionId: string): void {
     if (event.target === settingsDialog) closeSettings();
   });
 
-  zoomInput.addEventListener("input", () => {
-    terminalZoomPercent = Number(zoomInput.value);
+  const applyTerminalZoom = (zoomPercent: number, persist: boolean): void => {
+    terminalZoomPercent = Math.min(150, Math.max(50, Math.round(zoomPercent)));
+    zoomInput.value = String(terminalZoomPercent);
     zoomValue.value = `${terminalZoomPercent}%`;
-    try {
-      localStorage.setItem("shell-online-terminal-zoom", String(terminalZoomPercent));
-    } catch {
-      // Zoom remains active for this page when storage is unavailable.
+    if (persist) {
+      try {
+        localStorage.setItem("shell-online-terminal-zoom", String(terminalZoomPercent));
+      } catch {
+        // Zoom remains active for this page when storage is unavailable.
+      }
     }
     scheduleFit();
+  };
+
+  zoomInput.addEventListener("input", () => {
+    applyTerminalZoom(Number(zoomInput.value), true);
   });
 
   for (const button of themeOptionButtons) {
@@ -2121,6 +2162,7 @@ function renderTerminal(sessionId: string): void {
       / Math.max(terminal.rows, 1),
     (lines) => terminal.scrollLines(lines),
   );
+  const pinchZoom = new TerminalPinchZoomGesture();
   const touchScroll = new TerminalTouchScrollBridge((wheel) => {
     if (
       terminal.buffer.active.type === "normal" &&
@@ -2158,21 +2200,34 @@ function renderTerminal(sessionId: string): void {
       y: touch.clientY,
     }));
   terminalWrap.addEventListener("touchstart", (event) => {
+    const touches = readTouches(event.touches);
     touchLineScroller.reset();
-    touchScroll.start(readTouches(event.touches));
+    touchScroll.start(touches);
+    pinchZoom.start(touches, terminalZoomPercent);
   }, { passive: true });
   terminalWrap.addEventListener("touchmove", (event) => {
-    if (!terminalScrollSurface || !touchScroll.move(readTouches(event.touches))) return;
+    const touches = readTouches(event.touches);
+    const zoom = pinchZoom.move(touches);
+    if (zoom !== null) {
+      applyTerminalZoom(zoom, false);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (!terminalScrollSurface || !touchScroll.move(touches)) return;
     event.preventDefault();
     event.stopPropagation();
   }, { passive: false });
   terminalWrap.addEventListener("touchend", () => {
     touchLineScroller.reset();
     touchScroll.end();
+    pinchZoom.end();
+    applyTerminalZoom(terminalZoomPercent, true);
   }, { passive: true });
   terminalWrap.addEventListener("touchcancel", () => {
     touchLineScroller.reset();
     touchScroll.end();
+    pinchZoom.end();
   }, { passive: true });
 
   helperTextarea?.addEventListener("focus", () => sampleViewportTransition());

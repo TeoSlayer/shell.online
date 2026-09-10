@@ -2,6 +2,7 @@ import { Opcode, encodeFrame, isSnapshotOpcode } from "./protocol";
 import { BrowserFrameCipher, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
 import {
   DESKTOP_TERMINAL_GRID,
+  LEGACY_MOBILE_TERMINAL_GRID,
   MOBILE_TERMINAL_GRID,
   type TerminalGrid,
 } from "./terminal-grid";
@@ -270,14 +271,14 @@ export class TerminalConnection {
   }
 
   /*
-   * Only the two grids the CLI will actually open a PTY at are honoured. It
-   * refuses anything else (`isCanonicalTerminalSize`), so rendering a size it
+   * Only grids the CLI will actually open a PTY at are honoured. It refuses
+   * anything else (`isCanonicalTerminalSize`), so rendering a size it
    * would have rejected is how a viewer ends up drawing 94 columns of a
    * 120-column process.
    */
   private adoptGrid(cols: unknown, rows: unknown): void {
     if (typeof cols !== "number" || typeof rows !== "number") return;
-    const grid = [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID].find(
+    const grid = [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID, LEGACY_MOBILE_TERMINAL_GRID].find(
       (candidate) => candidate.cols === cols && candidate.rows === rows,
     );
     if (!grid) return;

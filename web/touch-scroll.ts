@@ -10,6 +10,52 @@ export interface TouchWheelDelta {
   y: number;
 }
 
+/** Converts a two-finger pinch into a viewer-local terminal zoom percentage. */
+export class TerminalPinchZoomGesture {
+  private touchIDs: [number, number] | undefined;
+  private startDistance = 0;
+  private startZoom = 100;
+
+  constructor(
+    private readonly minimumZoom = 50,
+    private readonly maximumZoom = 150,
+    private readonly threshold = 3,
+  ) {}
+
+  start(touches: readonly TouchSample[], zoomPercent: number): void {
+    this.reset();
+    if (touches.length !== 2) return;
+    const distance = touchDistance(touches[0], touches[1]);
+    if (distance <= 0) return;
+    this.touchIDs = [touches[0].id, touches[1].id];
+    this.startDistance = distance;
+    this.startZoom = clamp(zoomPercent, this.minimumZoom, this.maximumZoom);
+  }
+
+  move(touches: readonly TouchSample[]): number | null {
+    if (!this.touchIDs || touches.length !== 2) return null;
+    const first = touches.find((touch) => touch.id === this.touchIDs![0]);
+    const second = touches.find((touch) => touch.id === this.touchIDs![1]);
+    if (!first || !second) return null;
+    const distance = touchDistance(first, second);
+    if (Math.abs(distance - this.startDistance) < this.threshold) return null;
+    return clamp(
+      Math.round(this.startZoom * distance / this.startDistance),
+      this.minimumZoom,
+      this.maximumZoom,
+    );
+  }
+
+  end(): void {
+    this.reset();
+  }
+
+  private reset(): void {
+    this.touchIDs = undefined;
+    this.startDistance = 0;
+  }
+}
+
 /** Accumulates pixel movement into whole terminal rows without losing small pans. */
 export class TerminalLineScroller {
   private lineRemainder = 0;
@@ -112,4 +158,12 @@ export class TerminalTouchScrollBridge {
   end(): void {
     this.gesture.end();
   }
+}
+
+function touchDistance(first: TouchSample, second: TouchSample): number {
+  return Math.hypot(second.x - first.x, second.y - first.y);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
