@@ -206,6 +206,20 @@
   display: none;
 }
 
+/*
+ * A page action in the bar keeps its label on one line. `.btn` is built for a
+ * form, where it is full width and wrapping is not a question; up here the row
+ * is tight enough on a phone that "Export CSV" broke across two lines and the
+ * bar grew to fit it.
+ */
+.topbar-right .btn {
+  width: auto;
+  height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
 .new-session {
   display: inline-flex;
   height: 40px;
@@ -652,12 +666,48 @@
     display: block;
   }
 
+  /*
+   * Four things now share this row: the wordmark, the page action, the inbox
+   * and the account. At 390px they do not all fit at desktop sizes, and what
+   * happened instead was the action sliding over the wordmark. Everything in
+   * the row gives up a little.
+   */
   .topbar-right {
+    gap: 8px;
+  }
+
+  .topbar-inner {
     gap: 10px;
   }
 
+  .topbar-right .btn {
+    height: 38px;
+    padding: 0 13px;
+    font-size: 13.5px;
+    gap: 7px;
+  }
+
+  .topbar-mark .wordmark {
+    font-size: 17px;
+  }
+
+  /*
+   * The page name is gone from the top bar, because the bottom bar is already
+   * showing it: the marked destination is the page you are on, and printing
+   * it again above bought nothing while taking the room the wordmark and the
+   * account menu now need. Hidden rather than dropped, so the document still
+   * has its heading.
+   */
   .topbar-title {
-    font-size: 19px;
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    margin: -1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .topbar-inner {

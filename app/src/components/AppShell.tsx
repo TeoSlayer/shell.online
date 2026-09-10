@@ -161,10 +161,22 @@ export function AppShell({ title, aside, children }: AppShellProps) {
         <header className="topbar">
           <div className="topbar-inner">
             <div className="topbar-heading">
-              {/* Shown only where the rail is not: see .topbar-mark. */}
-              <Link to="/sessions" className="topbar-mark" aria-label="shell.online">
+              {/*
+                * Shown only where the rail is not: see .topbar-mark. A span
+                * rather than a link, because Wordmark is already one and an
+                * anchor inside an anchor is invalid; React said so on every
+                * render of a phone-width page.
+                */}
+              <span className="topbar-mark">
                 <Wordmark />
-              </Link>
+              </span>
+              {/*
+                * The title is hidden on a phone, not removed: the bottom bar
+                * already names the page it has marked, so the heading was the
+                * same word twice, and it was crowding a row that now also
+                * carries the wordmark and the account menu. Screen readers
+                * keep it.
+                */}
               <h1 className="topbar-title">{title}</h1>
             </div>
             <div className="topbar-right">
