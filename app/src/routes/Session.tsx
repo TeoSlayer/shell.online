@@ -30,6 +30,8 @@ import { displayName, findPerson } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
 import { assigneeIds, canRemove, canStop } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
+import { useVault } from "../vault/VaultProvider";
+import { shareWith } from "../vault/share-with";
 
 function CommentBody({ body, members }: { body: string; members: Member[] }) {
   return (
@@ -77,6 +79,7 @@ export function Session() {
   const navigate = useNavigate();
   const assignmentRevision = useRef(0);
   const assignmentQueue = useRef<Promise<void>>(Promise.resolve());
+  const vault = useVault();
 
   const load = useCallback(async () => {
     try {
@@ -204,6 +207,15 @@ export function Session() {
     try {
       await request;
       if (assignmentRevision.current === revision) setError("");
+      /*
+       * Whoever is made responsible can open it straight away. The owner
+       * assigning from their own browser is the say-so, the same as sharing,
+       * and only the owner holds the password to seal.
+       */
+      const added = uids.filter((uid) => !previous.includes(uid));
+      if (session.ownerUid === you.uid && added.length > 0) {
+        void shareWith(vault, you.uid, session, members.filter((member) => added.includes(member.uid)));
+      }
     } catch (caught) {
       if (assignmentRevision.current === revision) {
         setDetail((current) => current ? {

@@ -28,11 +28,12 @@ import {
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { sealTargets } from "../lib/session-share";
+import { sealTargets, trustedAssignees } from "../lib/session-share";
 import { shareSessionKeys } from "../lib/api";
 import { keyTrust, trustKey } from "../lib/known-keys";
 import { isVaultShare } from "../lib/vault-crypto";
 import { useVault } from "../vault/VaultProvider";
+import { shareWith } from "../vault/share-with";
 import {
   adoptOrigin,
   audienceFor,
@@ -461,10 +462,23 @@ export function Workspace() {
 
       /* Only the owner shares with colleagues. */
       if (!me || session.ownerUid !== me.uid) continue;
+      /*
+       * Everyone chosen in this browser, and every assignee whose key this
+       * browser already trusts. An assignee it has never sealed to is left to
+       * the owner on the session page; see trustedAssignees.
+       */
+      const assignees = trustedAssignees({
+        assignees: assigneeIds(session),
+        members: roster,
+        you: me,
+        holders: session.sharedWith ?? [],
+        isKnown: (member) =>
+          Boolean(member.accountKey) && keyTrust(me.uid, member.uid, member.accountKey ?? "") === "known",
+      }).map((member) => member.uid);
       const missing = sealTargets({
         members: roster,
         you: me,
-        chosen: audienceFor(session.id),
+        chosen: [...audienceFor(session.id), ...assignees],
         done: sharedWith.current.get(session.id),
       });
       if (missing.length === 0) continue;
@@ -517,6 +531,20 @@ export function Workspace() {
       setSessions((current) => current?.map(
         (entry) => entry.id === updated.id ? updated : entry,
       ) ?? null);
+      /*
+       * Whoever is made responsible can open it straight away. The owner
+       * assigning from their own browser is the say-so, the same as sharing,
+       * and only the owner holds the password to seal.
+       */
+      const added = uids.filter((uid) => !previous.includes(uid));
+      if (you && session.ownerUid === you.uid && added.length > 0) {
+        void shareWith(
+          vaultRef.current,
+          you.uid,
+          session,
+          members.filter((member) => added.includes(member.uid)),
+        );
+      }
       const names = members
         .filter((member) => uids.includes(member.uid))
         .map((member) => member.name || member.email);

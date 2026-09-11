@@ -1069,6 +1069,14 @@
     flex-direction: column-reverse;
   }
 
+  /*
+   * In a column, `flex: 1` sets the height basis to zero and the buttons
+   * collapse to the height of their text. Stacked, they take their own height.
+   */
+  .consent-actions .btn {
+    flex: none;
+  }
+
   .session {
     align-items: flex-start;
     flex-direction: column;

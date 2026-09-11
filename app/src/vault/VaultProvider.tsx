@@ -295,8 +295,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 async function carryOver(uid: string, previous: OpenedVault, next: OpenedVault): Promise<void> {
   try {
     const { sessions } = await fetchSessions();
+    /* Finished sessions too: a persistent one comes back under the same password. */
     for (const session of sessions) {
-      if (session.closedAt || !session.keyShare) continue;
+      if (!session.keyShare) continue;
       const password = await openFromAccount(previous.privateKey, session.id, uid, session.keyShare);
       if (!password) continue;
       const share = await sealToAccount(next.publicKey, session.id, uid, password);

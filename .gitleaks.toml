@@ -1,0 +1,11 @@
+title = "shell.online"
+
+[extend]
+useDefault = true
+
+# Fixed cross-language test vectors for the session vault. The private keys
+# and passwords in them are throwaway values made for these tests alone, so a
+# scanner flagging them is a false positive. Nothing else is exempt.
+[allowlist]
+description = "Session vault test vectors"
+paths = ['''(^|/)internal/account/testdata/vault-share-v2-(go|browser)\.json$''']

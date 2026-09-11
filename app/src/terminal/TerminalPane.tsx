@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Terminal } from "@xterm/xterm";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
@@ -7,7 +7,7 @@ import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
-import { cachedPassword, forgetUnverified, markVerified, rememberFor } from "../lib/session-passwords";
+import { cachedPassword, forgetUnverified, markVerified, rememberVerified } from "../lib/session-passwords";
 import { isVaultShare } from "../lib/vault-crypto";
 import { useVault } from "../vault/VaultProvider";
 import { AuditSink } from "./audit-sink";
@@ -143,25 +143,23 @@ export function TerminalPane({
   }, []);
 
   /*
-   * A stable identity for the sealed password.
-   *
-   * The sessions list is refetched every few seconds and every fetch builds
-   * new objects, so the keyShare prop is a different object each time even
-   * when the bytes are identical. It is in the dependency list of the effect
-   * below, which builds the terminal and opens the socket, so an unstable
-   * identity tears the terminal down and reconnects it on every poll. What
-   * matters is the content, so that is what is compared.
+   * The sealed password, read when the terminal is built rather than being a
+   * reason to build it again. The session list is refetched every few
+   * seconds, and a copy saved to the vault has different bytes every time it
+   * is sealed, so rebuilding on a change tore an open terminal down and put
+   * it back, scrollback and all. A share that arrives while the pane is still
+   * asking for a password is picked up by the effect after the one below.
    */
+  const shareRef = useRef(keyShare);
+  shareRef.current = keyShare;
   const sealed = keyShare ? `${keyShare.senderPublicKey}:${keyShare.sealed}` : "";
-  const stableShare = useMemo(
-    () => keyShare,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- content, not identity
-    [sealed],
-  );
+  /* Shares already tried in this pane, so one that does not open is not tried in a loop. */
+  const tried = useRef(new Set<string>());
 
   useEffect(() => {
     const node = mount.current;
     if (!node) return;
+    tried.current = new Set();
 
     /* A pane reused for another session starts from the default again. */
     grid.current = DESKTOP_TERMINAL_GRID;
@@ -203,15 +201,16 @@ export function TerminalPane({
           let shown = message;
           if (next === "needs-password" && message) {
             /*
-             * An attempt failed. Only a guess is thrown away. A password from
-             * the vault, or one that has opened this session before, is kept:
-             * a frame can fail to open for reasons other than a wrong
-             * password, and deleting the only copy of a right one is how
-             * sessions used to be lost for good.
+             * An attempt failed. Only a cached guess is thrown away. A
+             * password from the vault, or one that has opened this session
+             * before, is kept: a frame can fail to open for reasons other than
+             * a wrong password, and deleting the only copy of a right one is
+             * how sessions used to be lost for good. A typed password was
+             * never written, so there is nothing of it to remove.
              */
             const failed = attempt.current;
             attempt.current = null;
-            if (failed && sessionId && (failed.source === "cache" || failed.source === "typed")) {
+            if (failed && sessionId && failed.source === "cache") {
               forgetUnverified(sessionId, failed.password);
             }
             /* Another source may still hold the right one. */
@@ -229,15 +228,15 @@ export function TerminalPane({
           attempt.current = null;
           pending.current = [];
           if (!worked || !sessionId) return;
-          if (worked.source === "cache" || worked.source === "typed") {
-            markVerified(sessionId, worked.password);
-          }
+          /* Written only now that it has proved itself; see handleUnlock. */
+          if (worked.source === "typed") rememberVerified(sessionId, worked.password);
+          if (worked.source === "cache") markVerified(sessionId, worked.password);
           /*
            * A password that opened the session but did not come from the
            * vault goes into it now, so no browser has to be told it again.
            * That includes one a colleague sealed to this browser's old key.
            */
-          if (worked.source !== "vault") void vaultRef.current.keep(sessionId, worked.password);
+          if (worked.source !== "vault") void keepIfMissing(sessionId, worked.password);
         },
         onData: (bytes, reset) => {
           if (reset) term.reset();
@@ -293,6 +292,8 @@ export function TerminalPane({
      * one a colleague sealed to this browser's old key. The gate appears only
      * when all of them fail, or there are none.
      */
+    const initial = shareRef.current;
+    if (initial) tried.current.add(`${initial.senderPublicKey}:${initial.sealed}`);
     void connected.start().then(async () => {
       if (!connected.needsPassword || !sessionId) return;
       const found: Attempt[] = [];
@@ -302,12 +303,26 @@ export function TerminalPane({
       const opener = vaultRef.current;
       const cached = cachedPassword(sessionId);
       if (cached?.verified) add("cache", cached.password);
-      if (stableShare && isVaultShare(stableShare.sealed)) add("vault", await opener.openShare(sessionId, stableShare));
+      if (initial && isVaultShare(initial.sealed)) add("vault", await opener.openShare(sessionId, initial));
       add("cache", cached?.password);
-      if (stableShare && !isVaultShare(stableShare.sealed)) add("legacy", await opener.openShare(sessionId, stableShare));
+      if (initial && !isVaultShare(initial.sealed)) add("legacy", await opener.openShare(sessionId, initial));
       pending.current = found;
       tryNext();
     });
+
+    /*
+     * Seals a password that worked into the vault, unless the vault already
+     * holds exactly this one. Sealing is never byte-for-byte repeatable, so
+     * doing it regardless would rewrite the share on every open. Only a vault
+     * share counts as held: one sealed to an old browser key is the thing
+     * being moved into the vault.
+     */
+    async function keepIfMissing(id: string, password: string): Promise<void> {
+      const opener = vaultRef.current;
+      const share = shareRef.current;
+      if (share && isVaultShare(share.sealed) && (await opener.openShare(id, share)) === password) return;
+      await opener.keep(id, password);
+    }
 
     const observer = new ResizeObserver(() => refit());
     observer.observe(node);
@@ -324,7 +339,27 @@ export function TerminalPane({
       measure.current = null;
       connection.current = null;
     };
-  }, [shareUrl, refit, canType, stableShare]);
+  }, [shareUrl, refit, canType]);
+
+  /*
+   * A share that arrives while the pane is asking for a password, such as the
+   * CLI's own copy landing a moment after the session appears, is tried
+   * without anyone having to reload. Each share is tried once.
+   */
+  useEffect(() => {
+    const share = shareRef.current;
+    const id = sessionIdFromShareUrl(shareUrl);
+    if (status !== "needs-password" || !share || !id || attempt.current) return;
+    const key = `${share.senderPublicKey}:${share.sealed}`;
+    if (tried.current.has(key)) return;
+    tried.current.add(key);
+    void vaultRef.current.openShare(id, share).then((password) => {
+      if (!password || !connection.current || attempt.current) return;
+      pending.current = [];
+      attempt.current = { source: isVaultShare(share.sealed) ? "vault" : "legacy", password };
+      void connection.current.submitPassword(password);
+    });
+  }, [sealed, status, shareUrl]);
 
   /* A hidden pane measures as zero, so it has to be refitted when it returns. */
   useEffect(() => {
@@ -342,13 +377,11 @@ export function TerminalPane({
     setUnlocking(true);
     setDetail("");
     /*
-     * Cached as a guess now, and kept for good once a frame opens with it: it
-     * is sealed into the vault then, so this is the last time it is typed for
-     * this session in any browser. A wrong one is dropped by the failure path
-     * above.
+     * Nothing is written until the password opens the session. Then it is
+     * cached as proven and sealed into the vault, so this is the last time it
+     * is typed for this session in any browser. A typo is simply forgotten,
+     * and never takes the place of a password that works.
      */
-    const sessionId = sessionIdFromShareUrl(shareUrl);
-    if (sessionId) rememberFor(sessionId, password);
     pending.current = [];
     attempt.current = { source: "typed", password };
     await connection.current.submitPassword(password);

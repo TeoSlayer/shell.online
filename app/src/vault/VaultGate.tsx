@@ -256,15 +256,26 @@ function VaultUnlock() {
         <label className="vault-label" htmlFor="vault-recovery">
           Recovery key
         </label>
-        <input
+        {/*
+          Two lines, so the whole key is in view on a phone: a single line
+          scrolled most of it out of sight, which is no way to check it.
+        */}
+        <textarea
           id="vault-recovery"
           className="vault-input vault-input-wide"
+          rows={2}
           value={text}
           onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+          placeholder="Paste or type your recovery key"
         />
         <div className="consent-actions">
           <Button type="submit" busy={busy} busyLabel="Unlocking" disabled={busy || !text.trim()}>

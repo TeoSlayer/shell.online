@@ -7,7 +7,7 @@
 .vault-form {
   display: grid;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 14px;
 }
 
 .vault-label {
@@ -74,8 +74,13 @@
   border-radius: var(--radius-control);
 }
 
+/* A whole key is 39 characters, so it wraps at its dashes rather than scrolling. */
 .vault-input-wide {
   width: 100%;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  resize: none;
+  overflow-wrap: anywhere;
 }
 
 .vault-input:focus-visible {
@@ -129,6 +134,24 @@
 
 .vault-reset {
   margin-top: 20px;
+}
+
+/* Assignees who cannot open the session yet, each with the way to let them. */
+.audience-assigned {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.audience-assigned li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
 }
 
 /* Under the password gate: where a terminal-started session's password is. */

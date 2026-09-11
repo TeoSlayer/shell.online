@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sealTargets, shareCandidates } from "./session-share";
+import { sealTargets, shareCandidates, trustedAssignees } from "./session-share";
 import type { Member } from "./api";
 
 function member(uid: string, accountKey?: string): Member {
@@ -81,5 +81,39 @@ describe("who a session password is sealed to", () => {
   it("ignores a chosen uid that is not in the team", () => {
     const targets = sealTargets({ members: team, you, chosen: ["nobody"] });
     expect(targets).toEqual([]);
+  });
+});
+
+/*
+ * An assignee should be able to open what they are responsible for, but the
+ * assignee list is the service's word. These hold the line between the two.
+ */
+describe("which assignees are sealed to without asking", () => {
+  const team = [you, member("a", "key-a"), member("b", "key-b"), member("c")];
+  const knownA = (entry: Member) => entry.uid === "a";
+  const uids = (members: Member[]) => members.map((entry) => entry.uid);
+
+  it("includes an assignee whose key this browser has sealed to before", () => {
+    expect(uids(trustedAssignees({ assignees: ["a"], members: team, you, holders: [], isKnown: knownA }))).toEqual(["a"]);
+  });
+
+  it("leaves an assignee with a key never seen here to the owner", () => {
+    expect(trustedAssignees({ assignees: ["b"], members: team, you, holders: [], isKnown: knownA })).toEqual([]);
+  });
+
+  it("does not seal again to an assignee who already holds a copy", () => {
+    expect(trustedAssignees({ assignees: ["a"], members: team, you, holders: ["a"], isKnown: knownA })).toEqual([]);
+  });
+
+  it("skips an assignee who has no vault", () => {
+    expect(trustedAssignees({ assignees: ["c"], members: team, you, holders: [], isKnown: () => true })).toEqual([]);
+  });
+
+  it("never includes you", () => {
+    expect(trustedAssignees({ assignees: ["me"], members: team, you, holders: [], isKnown: () => true })).toEqual([]);
+  });
+
+  it("ignores someone named as an assignee who is not in the team", () => {
+    expect(trustedAssignees({ assignees: ["stranger"], members: team, you, holders: [], isKnown: () => true })).toEqual([]);
   });
 });

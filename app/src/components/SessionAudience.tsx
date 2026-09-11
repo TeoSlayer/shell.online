@@ -7,6 +7,7 @@ import { shareSessionKeys, type Member, type SessionRecord } from "../lib/api";
 import { addToAudience, audienceFor, passwordFor } from "../lib/session-passwords";
 import { keyTrust, trustKey } from "../lib/known-keys";
 import { displayName } from "../lib/people";
+import { assigneeIds } from "../lib/session-view";
 import { useVault } from "../vault/VaultProvider";
 
 /**
@@ -96,6 +97,15 @@ export function SessionAudience({
   }
 
   const waiting = confirming ? members.find((member) => member.uid === confirming) : undefined;
+  /*
+   * Assigned, but holding no copy. Usually someone assigned from another
+   * browser, whose key this one has never sealed to: the service's say-so is
+   * not enough to seal to it unasked, so it is offered here in one click.
+   */
+  const assigned = new Set(assigneeIds(session));
+  const assignedWithout = members.filter(
+    (member) => member.uid !== you.uid && assigned.has(member.uid) && !holders.has(member.uid),
+  );
 
   return (
     <section className="audience">
@@ -105,26 +115,53 @@ export function SessionAudience({
         <p className="detail-empty">Only you. Add someone and they can open it straight away.</p>
       ) : (
         <ul className="audience-list">
-          {shared.map((member) => {
-            const changed =
-              member.accountKey && keyTrust(you.uid, member.uid, member.accountKey) === "changed";
-            return (
-              <li key={member.uid}>
-                <Avatar person={member} size="xs" />
-                {displayName(member)}
-                {changed && (
-                  <button
-                    type="button"
-                    className="vault-link"
-                    onClick={() => void add(member.uid)}
-                    disabled={busy === member.uid}
-                  >
-                    Share again
-                  </button>
-                )}
-              </li>
-            );
-          })}
+          {/*
+            Everyone listed can be shared with again. The service knows who
+            holds a copy but not whether it still opens: one sealed to a
+            browser key from before the vault, or to a vault its owner has
+            since reset, does not. Sealing again is harmless, so the way back
+            is offered to everyone rather than guessed at.
+          */}
+          {shared.map((member) => (
+            <li key={member.uid}>
+              <Avatar person={member} size="xs" />
+              {displayName(member)}
+              {member.accountKey && (
+                <button
+                  type="button"
+                  className="vault-link"
+                  onClick={() => void add(member.uid)}
+                  disabled={busy === member.uid}
+                  title="Seal the password to their vault again, if they cannot open it"
+                >
+                  {busy === member.uid ? "Sharing" : "Share again"}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {assignedWithout.length > 0 && (
+        <ul className="audience-assigned">
+          {assignedWithout.map((member) => (
+            <li key={member.uid}>
+              <span>
+                {displayName(member)} is assigned but cannot open it yet
+                {member.accountKey ? "." : ", and has not set up a vault."}
+              </span>
+              {member.accountKey && (
+                <button
+                  type="button"
+                  className="vault-link"
+                  onClick={() => void add(member.uid)}
+                  disabled={busy === member.uid}
+                >
+                  {busy === member.uid ? "Sharing" : "Let them open it"}
+                </button>
+              )}
+            </li>
+          ))}
         </ul>
       )}
 
