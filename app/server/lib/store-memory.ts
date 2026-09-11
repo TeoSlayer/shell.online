@@ -2,7 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { Invite, Membership, Organization, Role } from "./orgs";
-import type { AuditPage, AuditPageQuery, Store } from "./store";
+import {
+  DELETED_ACCOUNT_MEMORY_MS,
+  DELETED_ACTOR_EMAIL,
+  type AccountDeletion,
+  type AuditPage,
+  type AuditPageQuery,
+  type Store,
+} from "./store";
 import type {
   AccountKey,
   AgentCommand,
@@ -48,12 +55,13 @@ interface Shape {
   comments: Comment[];
   notifications: Notification[];
   accountKeys: AccountKey[];
+  deletedAccounts: { uid: string; deletedAt: number }[];
 }
 
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
-  comments: [], notifications: [], accountKeys: [],
+  comments: [], notifications: [], accountKeys: [], deletedAccounts: [],
 };
 
 /**
@@ -117,6 +125,7 @@ export class MemoryStore implements Store {
         comments: parsed.comments ?? [],
         notifications: parsed.notifications ?? [],
         accountKeys: parsed.accountKeys ?? [],
+        deletedAccounts: parsed.deletedAccounts ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -243,6 +252,64 @@ export class MemoryStore implements Store {
     }
     this.flush();
     return true;
+  }
+
+  async deleteAccount(uid: string, plan: AccountDeletion, now = Date.now()): Promise<void> {
+    const data = this.data;
+    const { orgId } = plan;
+    if (orgId && plan.dissolve) {
+      data.organizations = data.organizations.filter((entry) => entry.id !== orgId);
+      data.memberships = data.memberships.filter((entry) => entry.orgId !== orgId);
+      data.invites = data.invites.filter((entry) => entry.orgId !== orgId);
+      data.sessions = data.sessions.filter((entry) => entry.orgId !== orgId);
+      data.audit = data.audit.filter((entry) => entry.orgId !== orgId);
+      data.comments = data.comments.filter((entry) => entry.orgId !== orgId);
+      data.notifications = data.notifications.filter((entry) => entry.orgId !== orgId);
+    }
+    if (orgId && plan.successorUid) {
+      const successor = data.memberships.find(
+        (entry) => entry.orgId === orgId && entry.uid === plan.successorUid,
+      );
+      if (successor) successor.role = "owner";
+    }
+
+    data.memberships = data.memberships.filter((entry) => entry.uid !== uid);
+    data.codes = data.codes.filter((entry) => entry.uid !== uid);
+    data.tokens = data.tokens.filter((entry) => entry.uid !== uid);
+    data.commands = data.commands.filter((entry) => entry.uid !== uid);
+    data.sessions = data.sessions.filter((entry) => entry.uid !== uid);
+    for (const session of data.sessions) {
+      if (session.keyShares) {
+        session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
+      }
+      const assignees = session.assigneeUids ?? [];
+      if (assignees.includes(uid) || session.assigneeUid === uid) {
+        session.assigneeUids = assignees.filter((entry) => entry !== uid);
+        if (session.assigneeUid === uid) session.assigneeUid = session.assigneeUids[0];
+      }
+      if (session.ownerUid === uid) session.ownerUid = session.uid;
+    }
+    for (const invite of data.invites) {
+      /* The address an invite was sent to is theirs once they accepted it. */
+      if (invite.acceptedBy === uid) delete invite.email;
+    }
+    data.accountKeys = data.accountKeys.filter((entry) => entry.uid !== uid);
+    data.comments = data.comments.filter((entry) => entry.authorUid !== uid);
+    data.notifications = data.notifications.filter(
+      (entry) => entry.uid !== uid && entry.actorUid !== uid,
+    );
+    for (const event of data.audit) {
+      if (event.actorUid === uid) event.actorEmail = DELETED_ACTOR_EMAIL;
+    }
+    data.deletedAccounts = [
+      ...data.deletedAccounts.filter((entry) => entry.uid !== uid),
+      { uid, deletedAt: now },
+    ];
+    this.flush();
+  }
+
+  async recentlyDeleted(uid: string, since: number): Promise<boolean> {
+    return this.data.deletedAccounts.some((entry) => entry.uid === uid && entry.deletedAt >= since);
   }
 
   /** Records that `shell agent` is polling, and what it publishes about itself. */
@@ -636,7 +703,15 @@ export class MemoryStore implements Store {
     this.data.commands = this.data.commands.filter(
       (entry) => !entry.doneAt || now - entry.doneAt < 10 * 60_000,
     );
-    if (this.data.codes.length !== before || this.data.commands.length !== commandsBefore) {
+    const deletedBefore = this.data.deletedAccounts.length;
+    this.data.deletedAccounts = this.data.deletedAccounts.filter(
+      (entry) => now - entry.deletedAt < DELETED_ACCOUNT_MEMORY_MS,
+    );
+    if (
+      this.data.codes.length !== before ||
+      this.data.commands.length !== commandsBefore ||
+      this.data.deletedAccounts.length !== deletedBefore
+    ) {
       this.flush();
     }
   }

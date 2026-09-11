@@ -97,7 +97,7 @@ export function Terms() {
         <div className="terms-masthead">
           <h1>Terms of Service</h1>
           <p className="terms-updated">
-            Effective: 7 September 2026 · Last updated: 7 September 2026
+            Effective: 7 September 2026 · Last updated: 11 September 2026
           </p>
           <p className="terms-lede">
             These Terms of Service (&ldquo;Terms&rdquo;) are a binding agreement
@@ -114,6 +114,8 @@ export function Terms() {
             process running on your own machine through a browser link, and
             these Terms are written to describe plainly what the software does
             on your machine, what leaves it, and what we each owe the other.
+            The <Link to="/privacy">Privacy Policy</Link> describes the
+            personal data we keep, who else handles it, and for how long.
           </p>
         </div>
 
@@ -654,6 +656,11 @@ export function Terms() {
             <code>shell logout</code>.
           </p>
           <p>
+            You can delete your account from the Account page. The{" "}
+            <Link to="/privacy#deletion">Privacy Policy</Link> sets out what
+            that removes and what stays with your team.
+          </p>
+          <p>
             We may suspend or terminate access to an account at any time for
             violation of these Terms, or where we need to in order to protect
             the Services or the people using them. For the free tier, we may
@@ -723,6 +730,8 @@ export function Terms() {
           <Link to="/signup">Create an account</Link>
           <span aria-hidden="true">·</span>
           <Link to="/login">Sign in</Link>
+          <span aria-hidden="true">·</span>
+          <Link to="/privacy">Privacy policy</Link>
         </footer>
       </article>
     </main>

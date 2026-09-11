@@ -38,6 +38,18 @@ export function readOpenTabs(uid: string): OpenTabs {
   }
 }
 
+/** Forgets the open tabs, if they are this account's. Used when it is deleted. */
+export function forgetOpenTabs(uid: string): void {
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    if (!raw) return;
+    const held = JSON.parse(raw) as { uid?: string };
+    if (held.uid === uid) window.localStorage.removeItem(KEY);
+  } catch {
+    /* nothing to clear */
+  }
+}
+
 export function writeOpenTabs(uid: string, open: OpenTabs): void {
   try {
     window.localStorage.setItem(KEY, JSON.stringify({ uid, ...open }));

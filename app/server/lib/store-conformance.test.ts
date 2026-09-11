@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import { PostgresStore } from "./store-postgres";
-import type { Store } from "./store";
+import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./store";
 import type { AgentCommand, AuditEvent, CliToken, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
@@ -128,6 +128,7 @@ function notification(overrides: Partial<Notification> = {}): Notification {
 type Implementation = { name: string; open: () => Promise<Store>; reset: (store: Store) => Promise<void> };
 
 const TABLES = [
+  "deleted_accounts",
   "account_keys",
   "session_key_shares",
   "sessions",
@@ -818,6 +819,114 @@ for (const implementation of implementations) {
         const after = await store.membershipOf("uid-1");
         expect(after).not.toBeNull();
         expect(["org_1", "org_2"]).toContain(after?.orgId);
+      });
+    });
+
+    describe("account deletion", () => {
+      async function team() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putMembership(
+          membership({ uid: "uid-2", email: "bo@example.com", name: "Bo", role: "member", joinedAt: 2000 }),
+        );
+        await store.putMembership(
+          membership({ uid: "uid-3", email: "cy@example.com", name: "Cy", role: "admin", joinedAt: 3000 }),
+        );
+      }
+
+      it("removes what the account held and keeps the team's trail without its email", async () => {
+        await team();
+        await store.putToken(token());
+        await store.putCommand(command());
+        await store.upsertSession(session());
+        await store.upsertSession(
+          session({ id: "s2", uid: "uid-2", ownerUid: "uid-2", assigneeUid: "uid-1", assigneeUids: ["uid-1", "uid-3"] }),
+        );
+        await store.putKeyShares("org_1", "s2", [
+          { uid: "uid-1", senderPublicKey: "spk", sealed: "for-ana" },
+          { uid: "uid-3", senderPublicKey: "spk", sealed: "for-cy" },
+        ]);
+        await store.putAccountKey({
+          uid: "uid-1",
+          publicKey: "pk",
+          encryptedPrivateKey: "enc",
+          recoveryWrap: "wrap",
+          version: 1,
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        await store.putAudit(auditEvent({ sessionId: "s2" }));
+        await store.putComment({
+          id: "cmt_1",
+          orgId: "org_1",
+          sessionId: "s2",
+          authorUid: "uid-1",
+          body: "looks done",
+          at: 1000,
+          mentions: [],
+        });
+        await store.putNotification(notification());
+        await store.putNotification(notification({ id: "ntf_2", uid: "uid-1", actorUid: "uid-2" }));
+
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: false, successorUid: "uid-3" }, 5000);
+
+        expect(await store.membershipOf("uid-1")).toBeNull();
+        expect((await store.membershipOf("uid-3"))?.role).toBe("owner");
+        expect((await store.membershipOf("uid-2"))?.role).toBe("member");
+        expect(await store.findByAccessHash("access-hash")).toBeNull();
+        expect(await store.listCommands("uid-1")).toEqual([]);
+        expect(await store.listSessions("uid-1")).toEqual([]);
+        expect(await store.accountKey("uid-1")).toBeNull();
+        expect(await store.comments("org_1", "s2")).toEqual([]);
+        expect(await store.notificationsFor("uid-1")).toEqual([]);
+        expect(await store.notificationsFor("uid-2")).toEqual([]);
+
+        const kept = (await store.listOrgSessions("org_1")).find((entry) => entry.id === "s2");
+        expect(kept?.assigneeUids).toEqual(["uid-3"]);
+        expect(kept?.assigneeUid).toBe("uid-3");
+        expect(kept?.keyShares?.map((share) => share.uid)).toEqual(["uid-3"]);
+
+        const trail = await store.auditFor("org_1", "s2");
+        expect(trail).toHaveLength(1);
+        expect(trail[0].actorEmail).toBe(DELETED_ACTOR_EMAIL);
+        expect(trail[0].text).toBe("ls -la");
+      });
+
+      it("dissolves a team nobody else is in", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putInvite(invite());
+        await store.upsertSession(session());
+        await store.putAudit(auditEvent());
+
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: true }, 5000);
+
+        expect(await store.organization("org_1")).toBeNull();
+        expect(await store.members("org_1")).toEqual([]);
+        expect(await store.invites("org_1")).toEqual([]);
+        expect(await store.listOrgSessions("org_1")).toEqual([]);
+        expect(await store.auditFor("org_1", "s1")).toEqual([]);
+      });
+
+      it("forgets the address an invite was sent to once its recipient is gone", async () => {
+        await team();
+        await store.putInvite(invite({ email: "bo@example.com", acceptedBy: "uid-2", acceptedAt: 2000 }));
+
+        await store.deleteAccount("uid-2", { orgId: "org_1", dissolve: false }, 5000);
+
+        expect((await store.invite("inv_1"))?.email).toBeFalsy();
+        expect((await store.membershipOf("uid-1"))?.role).toBe("owner");
+      });
+
+      it("remembers a deleted uid for DELETED_ACCOUNT_MEMORY_MS and no longer", async () => {
+        await store.deleteAccount("uid-9", { dissolve: false }, 5000);
+
+        expect(await store.recentlyDeleted("uid-9", 4000)).toBe(true);
+        expect(await store.recentlyDeleted("uid-9", 6000)).toBe(false);
+        expect(await store.recentlyDeleted("uid-8", 0)).toBe(false);
+
+        await store.purgeExpired(5000 + DELETED_ACCOUNT_MEMORY_MS);
+        expect(await store.recentlyDeleted("uid-9", 0)).toBe(false);
       });
     });
   });

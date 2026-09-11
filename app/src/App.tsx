@@ -10,6 +10,7 @@ import { Machines } from "./routes/Machines";
 import { Team } from "./routes/Team";
 import { Join } from "./routes/Join";
 import { Terms } from "./routes/Terms";
+import { Privacy } from "./routes/Privacy";
 import { Session } from "./routes/Session";
 import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="/join/:inviteId" element={<Join />} />
           {/* Public: it has to be readable before anyone has an account. */}
           <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route
             path="/machines"
             element={

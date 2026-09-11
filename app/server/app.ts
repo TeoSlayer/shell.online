@@ -33,6 +33,7 @@ import {
 } from "./routes/organizations";
 import { recordAudit, assignSession, auditCsv } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
+import { deleteAccount } from "./routes/account";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
 
@@ -104,6 +105,7 @@ const CREDENTIAL_ROUTES = new Set([
   "POST /api/cli/token",
   "POST /api/cli/refresh",
   "POST /api/cli/revoke",
+  "DELETE /api/account",
 ]);
 const CREDENTIAL_BUCKET = { burst: 12, perSecond: 0.2 };
 const GENERAL_BUCKET = { burst: 240, perSecond: 40 };
@@ -290,7 +292,7 @@ export function createApp(options: AppOptions) {
   async function requireMember(request: IncomingMessage, inviteId?: string) {
     const identity = await requireUser(request);
     if (!identity) return null;
-    return (await ensureMembership(store, identity, inviteId)).membership;
+    return (await ensureMembership(store, identity, inviteId))?.membership ?? null;
   }
 
   /* The CLI authenticates with an opaque access token issued by this service. */
@@ -443,6 +445,7 @@ export function createApp(options: AppOptions) {
         const identity = await requireUser(request);
         if (!identity) return send(response, 401, { error: "sign in first" });
         const resolved = await ensureMembership(store, identity, invite);
+        if (!resolved) return send(response, 401, { error: "sign in first" });
         /* Publishing the browser key here keeps it current without a
            separate call on every sign-in. */
         const publicKey = url.searchParams.get("key");
@@ -673,6 +676,19 @@ export function createApp(options: AppOptions) {
         const key = await store.accountKey(token.uid);
         if (!key) return send(response, 404, { error: "no vault" });
         return send(response, 200, { public_key: key.publicKey, version: key.version });
+      }
+
+      /*
+       * Deleting an account. An ID token reaches it, not a membership, so a
+       * second request -- the browser retrying after Firebase refused to
+       * delete the sign-in -- finds nothing left to remove and still succeeds.
+       */
+      if (route === "DELETE /api/account") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const result = await deleteAccount(store, identity, body.confirm);
+        return send(response, result.status, result.body);
       }
 
       /* ---- Session registry ---- */

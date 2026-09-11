@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { SealCheck, SignOut, Warning } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
+import { DeleteAccount } from "../components/DeleteAccount";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
@@ -24,6 +26,7 @@ export function Account() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!user) return null;
 
@@ -98,6 +101,13 @@ export function Account() {
             )}
           </dd>
         </div>
+        <div className="account-row">
+          <dt>Your data</dt>
+          <dd>
+            What shell.online keeps, and for how long, is in the{" "}
+            <Link to="/privacy">privacy policy</Link>.
+          </dd>
+        </div>
       </dl>
 
       {resetting && (
@@ -114,6 +124,8 @@ export function Account() {
           </Button>
         </section>
       )}
+
+      {deleting && <DeleteAccount onCancel={() => setDeleting(false)} />}
 
       {/*
         Sign out lives here as well as in the sidebar. On a phone the sidebar
@@ -142,6 +154,12 @@ export function Account() {
           <SignOut size={15} />
           Sign out
         </Button>
+        {!deleting && (
+          <Button type="button" variant="ghost" onClick={() => setDeleting(true)}>
+            <Trash size={15} />
+            Delete account
+          </Button>
+        )}
       </div>
     </AppShell>
   );

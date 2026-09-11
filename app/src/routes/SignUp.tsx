@@ -224,6 +224,10 @@ export function SignUp() {
               I accept the{" "}
               <Link to="/terms" target="_blank" rel="noreferrer">
                 terms of service
+              </Link>{" "}
+              and have read the{" "}
+              <Link to="/privacy" target="_blank" rel="noreferrer">
+                privacy policy
               </Link>
               .
             </span>

@@ -13,6 +13,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - `shell` seals each encrypted session's password to your vault when it
   registers the session, using the vault key the browser handed it at
   `shell login`, and will not seal to a key that has changed since.
+- A privacy policy at `/privacy`, linked from sign-in, sign-up, the Terms and
+  the Account page.
+- Delete your account from the Account page. It removes your sign-in, your
+  machines' tokens, your sessions, vault, comments and notifications; hands a
+  team you own to its longest-standing admin, or member if there is none; and
+  deletes the team when nobody else is in it.
 
 ### Changed
 

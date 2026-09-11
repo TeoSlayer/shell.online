@@ -309,6 +309,19 @@
   transform: translateY(0);
 }
 
+/* Irreversible actions: quiet until pointed at, so never the obvious button. */
+.btn-danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: var(--white);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--white);
+}
+
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -527,6 +540,48 @@
 }
 
 .account-actions .btn {
+  width: auto;
+  min-width: 168px;
+}
+
+.account-delete {
+  margin-top: 28px;
+}
+
+.account-delete h2 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.account-delete-list {
+  margin: 10px 0 14px;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* The card's own paragraph rule narrows and tightens text meant for a dialog. */
+.account-delete p {
+  max-width: none;
+}
+
+.account-delete .account-delete-note {
+  max-width: none;
+  margin: 0 0 22px;
+  color: var(--faint);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.account-delete-actions {
+  display: flex;
+  margin-top: 18px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.account-delete-actions .btn {
   width: auto;
   min-width: 168px;
 }

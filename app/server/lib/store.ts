@@ -30,6 +30,25 @@ export interface AuditPage {
 }
 
 /**
+ * How long a deleted account's uid is remembered. A Firebase ID token lives an
+ * hour; the second hour is slack for clock skew and for a token minted just
+ * before the deletion.
+ */
+export const DELETED_ACCOUNT_MEMORY_MS = 2 * 60 * 60_000;
+
+/** What the activity trail shows in place of a deleted account's email. */
+export const DELETED_ACTOR_EMAIL = "deleted account";
+
+/** What deleting an account does to the organization it belonged to. */
+export interface AccountDeletion {
+  orgId?: string;
+  /** Delete the organization and everything in it, because nobody else is in it. */
+  dissolve: boolean;
+  /** The member who becomes owner, when the owner is the one leaving. */
+  successorUid?: string;
+}
+
+/**
  * Everything the service keeps.
  *
  * Every method is asynchronous because the real implementation talks to a
@@ -110,6 +129,23 @@ export interface Store {
    * believe they won, and a reset cannot overwrite a reset it has not seen.
    */
   putAccountKey(key: AccountKey, expectedVersion?: number): Promise<boolean>;
+
+  /* ---- Account deletion ---- */
+  /**
+   * Removes what this service holds for one person, in one step.
+   *
+   * Their machines' tokens, their sessions and the passwords sealed to them,
+   * their vault, comments, notifications and membership. What they typed into
+   * colleagues' sessions stays in the team's trail, since it is the record of
+   * what happened on those machines, but no longer carries their email. The
+   * plan says what happens to the organization: dissolved when nobody else is
+   * in it, handed to `successorUid` when its owner is the one leaving.
+   *
+   * The uid is then remembered for DELETED_ACCOUNT_MEMORY_MS.
+   */
+  deleteAccount(uid: string, plan: AccountDeletion, now?: number): Promise<void>;
+  /** Whether this uid was deleted at or after `since`. */
+  recentlyDeleted(uid: string, since: number): Promise<boolean>;
 
   /* ---- Agent commands ---- */
   putCommand(command: AgentCommand): Promise<void>;

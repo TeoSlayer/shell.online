@@ -1,4 +1,4 @@
-import type { Store } from "../lib/store";
+import { DELETED_ACCOUNT_MEMORY_MS, type Store } from "../lib/store";
 import type { Identity } from "../lib/firebase-token";
 import { invitationMessage, type Mailer } from "../lib/mail";
 import {
@@ -33,13 +33,23 @@ export async function ensureMembership(
   store: Store,
   identity: Identity,
   inviteId?: string,
-): Promise<{ membership: Membership; joined: boolean; error?: string }> {
+): Promise<{ membership: Membership; joined: boolean; error?: string } | null> {
   const existing = await store.membershipOf(identity.uid);
 
   if (existing && inviteId) {
     return await acceptAsExistingMember(store, identity, existing, inviteId);
   }
   if (existing) return { membership: existing, joined: false };
+
+  /*
+   * Someone who deleted their account moments ago can still present an ID
+   * token that verifies, from a tab left open or another browser. Building
+   * them a new team from it would quietly undo the deletion, so an account
+   * deleted recently gets no membership at all.
+   */
+  if (await store.recentlyDeleted(identity.uid, Date.now() - DELETED_ACCOUNT_MEMORY_MS)) {
+    return null;
+  }
 
   if (inviteId) {
     const check = checkInvite(await store.invite(inviteId), identity.email);

@@ -1908,3 +1908,71 @@ describe("session vault", () => {
     expect(member.accountKey).toBe(body.public_key);
   });
 });
+
+describe("DELETE /api/account", () => {
+  /* A token from a sign-in that just happened, which deletion asks for. */
+  const freshSignIn = (claims: Record<string, unknown> = {}) =>
+    idToken({ auth_time: Math.floor(Date.now() / 1000), ...claims });
+
+  async function remove(claims: Record<string, unknown> = {}, confirm = "ana@example.com") {
+    return call("DELETE", "/api/account", { auth: await freshSignIn(claims), body: { confirm } });
+  }
+
+  it("asks for the account's email address, typed back", async () => {
+    await call("GET", "/api/org", { auth: await idToken() });
+    const result = await remove({}, "someone@else.com");
+    expect(result.status).toBe(400);
+    expect((await call("GET", "/api/org", { auth: await idToken() })).status).toBe(200);
+  });
+
+  it("asks for a recent sign-in", async () => {
+    const stale = await call("DELETE", "/api/account", {
+      auth: await idToken({ auth_time: Math.floor(Date.now() / 1000) - 3600 }),
+      body: { confirm: "ana@example.com" },
+    });
+    expect(stale).toMatchObject({ status: 403, body: { reauthenticate: true } });
+  });
+
+  it("removes a lone account with its team and machines", async () => {
+    const tokens = await login();
+    expect(await devices()).toHaveLength(1);
+
+    const result = await remove();
+    expect(result).toMatchObject({ status: 200, body: { deleted: true, owner: null } });
+
+    expect(await devices()).toEqual([]);
+    expect((await call("GET", "/api/cli/me", { auth: tokens.access_token })).status).toBe(401);
+  });
+
+  it("does not build a new team for a token that outlived its account", async () => {
+    await call("GET", "/api/org", { auth: await idToken() });
+    await remove();
+
+    expect((await call("GET", "/api/org", { auth: await idToken() })).status).toBe(401);
+    expect((await call("GET", "/api/sessions", { auth: await idToken() })).status).toBe(401);
+  });
+
+  it("hands the team to its longest-standing admin", async () => {
+    const owner = await idToken();
+    const forMember = await call("POST", "/api/org/invites", { auth: owner, body: { role: "member" } });
+    const forAdmin = await call("POST", "/api/org/invites", { auth: owner, body: { role: "admin" } });
+    const member = await idToken({ sub: "uid-2", email: "bo@example.com" });
+    const admin = await idToken({ sub: "uid-3", email: "cy@example.com" });
+    await call("GET", `/api/org?invite=${forMember.body.invite.id}`, { auth: member });
+    await call("GET", `/api/org?invite=${forAdmin.body.invite.id}`, { auth: admin });
+
+    const result = await remove();
+    expect(result.body.owner).toMatchObject({ uid: "uid-3", email: "cy@example.com" });
+
+    const view = await call("GET", "/api/org", { auth: admin });
+    expect(view.body.you.role).toBe("owner");
+    const uids = view.body.members.map((entry: { uid: string }) => entry.uid).sort();
+    expect(uids).toEqual(["uid-2", "uid-3"]);
+  });
+
+  it("succeeds again when the browser retries", async () => {
+    await call("GET", "/api/org", { auth: await idToken() });
+    expect((await remove()).status).toBe(200);
+    expect((await remove()).status).toBe(200);
+  });
+});

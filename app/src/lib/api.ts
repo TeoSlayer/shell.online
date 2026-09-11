@@ -268,6 +268,17 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
+/**
+ * Deletes this account's data from the service. AuthProvider.deleteAccount
+ * signs in again before calling it and deletes the Firebase account after.
+ */
+export function deleteAccountData(confirm: string) {
+  return request<{ deleted: boolean; owner: { uid: string; email: string; name: string } | null }>(
+    "/api/account",
+    { method: "DELETE", body: JSON.stringify({ confirm }) },
+  );
+}
+
 export interface AuthorizeInput {
   redirectUri: string;
   codeChallenge: string;
