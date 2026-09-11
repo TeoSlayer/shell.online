@@ -2,6 +2,7 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -24,6 +25,9 @@ func TestParseCloseDeadline(t *testing.T) {
 		{name: "years", value: "1y", want: now.AddDate(1, 0, 0)},
 		{name: "in prefix", value: "in 15m", want: now.Add(15 * time.Minute)},
 		{name: "tomorrow", value: "tomorrow 09:15", want: time.Date(2026, time.August, 20, 9, 15, 0, 0, location)},
+		{name: "bare tomorrow", value: "tomorrow", want: time.Date(2026, time.August, 20, 0, 0, 0, 0, location)},
+		{name: "bare today", value: "today", want: time.Date(2026, time.August, 19, 23, 59, 59, 0, location)},
+		{name: "today with clock", value: "today 23:50", want: time.Date(2026, time.August, 19, 23, 50, 0, 0, location)},
 		{name: "clock rolls forward", value: "22:00", want: time.Date(2026, time.August, 20, 22, 0, 0, 0, location)},
 		{name: "local date", value: "2026-08-21 12:30", want: time.Date(2026, time.August, 21, 12, 30, 0, 0, location)},
 	}
@@ -86,6 +90,7 @@ func TestNormalizeAutoCloseArguments(t *testing.T) {
 	}{
 		{input: []string{"--auto-close", "5m", "sleep", "30"}, want: []string{"--auto-close=5m", "sleep", "30"}},
 		{input: []string{"--auto-close", "tomorrow", "09:00", "sleep", "30"}, want: []string{"--auto-close=tomorrow 09:00", "sleep", "30"}},
+		{input: []string{"--auto-close", "today", "sleep", "30"}, want: []string{"--auto-close=today", "sleep", "30"}},
 		{input: []string{"--auto-close", "in", "15m", "sleep", "30"}, want: []string{"--auto-close=in 15m", "sleep", "30"}},
 		{input: []string{"--auto-close", "2d", "3h", "sleep", "30"}, want: []string{"--auto-close=2d 3h", "sleep", "30"}},
 		{input: []string{"--auto-close=2h", "echo"}, want: []string{"--auto-close=2h", "echo"}},
@@ -114,5 +119,39 @@ func TestNormalizeAutoCloseArgumentsRejectsMissingAndInvalidValues(t *testing.T)
 		if _, err := normalizeAutoCloseArguments(input, now); err == nil {
 			t.Fatalf("normalizeAutoCloseArguments(%q) unexpectedly succeeded", input)
 		}
+	}
+}
+
+// A bare "today" is only useful if it is a deadline at every hour it can be
+// typed, including during the last minute of the day.
+func TestBareTodayIsADeadlineAllDay(t *testing.T) {
+	location := time.FixedZone("test", 2*60*60)
+	for _, clock := range []struct{ hour, minute, second int }{
+		{0, 0, 0}, {9, 15, 0}, {23, 58, 0}, {23, 59, 30},
+	} {
+		now := time.Date(2026, time.August, 19, clock.hour, clock.minute, clock.second, 0, location)
+		deadline, err := parseCloseDeadline("today", now)
+		if err != nil {
+			t.Fatalf("parseCloseDeadline(\"today\") at %v: %v", now, err)
+		}
+		if !deadline.After(now) {
+			t.Fatalf("parseCloseDeadline(\"today\") at %v = %v, want a future deadline", now, deadline)
+		}
+		if deadline.Day() != now.Day() {
+			t.Fatalf("parseCloseDeadline(\"today\") at %v = %v, want the same day", now, deadline)
+		}
+	}
+}
+
+// A date that has passed is a different mistake from one that cannot be read,
+// and the unquoted form used to report both as "invalid".
+func TestNormalizeAutoCloseArgumentsReportsPastDeadlines(t *testing.T) {
+	now := time.Date(2026, time.August, 19, 23, 40, 0, 0, time.UTC)
+	_, err := normalizeAutoCloseArguments([]string{"--auto-close", "2020-01-01", "sleep", "30"}, now)
+	if err == nil {
+		t.Fatal("normalizeAutoCloseArguments unexpectedly accepted a past date")
+	}
+	if !strings.Contains(err.Error(), "must be in the future") {
+		t.Fatalf("normalizeAutoCloseArguments error = %q, want it to say the deadline has passed", err)
 	}
 }

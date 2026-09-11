@@ -296,7 +296,8 @@ START OPTIONS
   --auto-close <duration-or-date>
       Always close when the task exits; optionally add an earlier deadline.
       Units: ms, s, m, h, d, w, mo, y. Units may be combined, such as 1h30m.
-      Dates: RFC3339, YYYY-MM-DD[ HH:MM[:SS]], HH:MM, today, or tomorrow HH:MM.
+      Dates: RFC3339, YYYY-MM-DD[ HH:MM[:SS]], HH:MM, or today/tomorrow [HH:MM].
+      Bare today means the end of today; bare tomorrow means 00:00 tomorrow.
       Multi-token dates may be written directly, for example: --auto-close tomorrow 09:00.
       A missing or invalid value returns status 2 and never becomes the command.
   --json
