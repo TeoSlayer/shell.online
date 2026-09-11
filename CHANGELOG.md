@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.12.0] — 2026-09-11
+
 ### Added
 
 - A session vault. Every session's password is sealed to your account, so it
