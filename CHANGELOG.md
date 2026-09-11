@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.12.0] — 2026-09-11
+
 ### Added
 
 - A session vault. Every session's password is sealed to your account, so it
@@ -37,6 +39,16 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   the oldest written.
 - Starting a session on a machine that cannot receive a password is refused,
   instead of producing a session nobody can open.
+- The README's Homebrew command taps this repository and includes the one-time
+  `brew trust` step Homebrew 6 asks for. It used to name a tap that does not
+  exist.
+- A request that cannot reach the service says so plainly, instead of "Could
+  not reach the accounts service at . Is it running?", and an outage page from
+  the edge no longer surfaces as a JSON parse error.
+- The `shell login` approval page says what a linked machine shares with
+  your team: the full command line, machine name, session name and timings,
+  and what is typed from a browser. It used to say only the command name and
+  timing were published.
 
 ## [0.11.3] — 2026-09-11
 

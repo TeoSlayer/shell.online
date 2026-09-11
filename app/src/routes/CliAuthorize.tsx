@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { Terminal, ShieldCheck } from "@phosphor-icons/react";
 import { Wordmark } from "../components/Wordmark";
 import { Button } from "../components/Button";
@@ -127,7 +127,8 @@ function Consent({
             <p>
               A terminal on this computer is asking to sign in as{" "}
               <b>{email}</b>. Once linked, sessions you start with{" "}
-              <code>shell</code> show up in your account.
+              <code>shell</code> show up in your account, and everyone on your
+              team can see them.
             </p>
 
             {error && (
@@ -145,7 +146,26 @@ function Consent({
               </div>
               <div className="consent-row">
                 <dt>Grants</dt>
-                <dd>Publishing your sessions to this account, with their passwords sealed to your vault</dd>
+                <dd>
+                  Publishing this machine&rsquo;s sessions to your team, with
+                  their passwords sealed to your vault
+                </dd>
+              </div>
+              {/*
+                What publishing means, spelled out. Terms sections "What Is Sent
+                to the Service" and "Activity Records" are the long form; these
+                two rows must not promise less than they do.
+              */}
+              <div className="consent-row">
+                <dt>Your team sees</dt>
+                <dd>
+                  Each session&rsquo;s link, full command line, machine name,
+                  session name and timings
+                </dd>
+              </div>
+              <div className="consent-row">
+                <dt>Recorded</dt>
+                <dd>What anyone types into a session from a browser</dd>
               </div>
               <div className="consent-row">
                 <dt>Does not grant</dt>
@@ -182,9 +202,16 @@ function Consent({
             <p className="consent-note">
               <ShieldCheck size={14} weight="bold" />
               <span>
-                Terminal content stays end-to-end encrypted. Only the link, the
-                command name and the timing are published; passwords reach this
-                account sealed, and shell.online cannot open them.
+                Terminal output stays end-to-end encrypted, and passwords reach
+                this account sealed, so shell.online cannot open them. The link,
+                command line, machine name and timings are shared with your
+                team, and what you type from a browser is recorded. Starting
+                sessions from a browser is a separate choice, made in your
+                terminal. The{" "}
+                <Link to="/terms" target="_blank" rel="noreferrer">
+                  terms
+                </Link>{" "}
+                list everything that is kept.
               </span>
             </p>
           </>
