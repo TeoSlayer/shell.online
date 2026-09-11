@@ -51,6 +51,15 @@ check(indexHtml.includes("<noscript>"), "Crawlable no-script product summary is 
 check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Landing page must have exactly one primary heading");
 check(landingMarkup.includes('id="use-cases"'), "Visible use-case section is missing");
 
+/*
+ * app.shell.online is the other front door, and it is easy to lose in a
+ * refactor because the install one-liner reads like the only call to action.
+ * Pin both buttons and the no-script link so the account cannot go quiet.
+ */
+check(landingMarkup.includes('class="hero-signup" href="${SIGNUP_URL}"'), "Hero account button is missing");
+check(landingMarkup.includes('class="nav-signup" href="${SIGNUP_URL}"'), "Header account button is missing");
+check(indexHtml.includes("https://app.shell.online/signup"), "No-script account link is missing");
+
 for (const metadata of [
   '<meta property="og:type" content="website"',
   '<meta property="og:site_name" content="shell.online"',

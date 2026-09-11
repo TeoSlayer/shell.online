@@ -158,11 +158,11 @@ function renderLanding(): void {
         <nav class="marketing-links" aria-label="Main navigation">
           <a href="/docs/">Docs</a>
           <a href="#use-cases">Use cases</a>
-          <a href="${SIGNUP_URL}">Web app</a>
           <a class="marketing-github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub <span id="github-star-count" aria-live="polite">—</span></a>
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
           </button>
+          <a class="nav-signup" href="${SIGNUP_URL}">Sign up free</a>
         </nav>
       </header>
 
@@ -172,13 +172,16 @@ function renderLanding(): void {
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
             <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you a link and password to the same encrypted terminal—open it from any desktop or phone to watch or type.</p>
             <div class="hero-actions">
+              <a class="hero-signup" href="${SIGNUP_URL}">
+                <b>Sign up free</b>
+                <span aria-hidden="true">→</span>
+              </a>
               <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
                 <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
                 <code>${installCommand}</code>
                 <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
               </button>
               <div class="hero-secondary-actions">
-                <a class="hero-signup" href="${SIGNUP_URL}">Create an account <span aria-hidden="true">→</span></a>
                 <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
               </div>
             </div>

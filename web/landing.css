@@ -368,6 +368,32 @@
   transform: translateY(-1px);
 }
 
+/*
+ * The account button rides in the header on every scroll position, so it is
+ * the accent control rather than another dark pill: two identically filled
+ * pills side by side would read as one widget split in half.
+ */
+.nav-signup {
+  display: inline-flex;
+  height: 44px;
+  padding: 0 19px;
+  border: 1px solid #b3e336;
+  border-radius: 999px;
+  background: var(--acid);
+  color: #171a13 !important;
+  font-size: 12px;
+  font-weight: 620;
+  text-decoration: none;
+  align-items: center;
+  white-space: nowrap;
+  transition: transform 150ms ease, background 150ms ease;
+}
+
+.nav-signup:hover {
+  background: #d6ff7a;
+  transform: translateY(-1px);
+}
+
 .marketing-hero {
   display: grid;
   width: min(1240px, calc(100% - 64px));
@@ -513,37 +539,46 @@
 }
 
 /*
- * The account route in, beside the install command rather than instead of it.
- * Underlined rather than boxed: two filled controls next to each other would
- * argue about which is the thing to press, and the install one-liner is still
- * the faster start.
+ * app.shell.online is live, so the account is a destination and not a footnote
+ * to the install line. It leads the hero as the one accent-filled control on
+ * the page. The install one-liner keeps its dark terminal styling directly
+ * below: same size, so the pair reads as a ranked choice rather than two
+ * controls arguing about which is the thing to press.
  */
-.hero-signup,
-.platform-signup {
-  color: #22241f;
-  font-size: 13px;
-  font-weight: 560;
-  text-decoration: underline;
-  text-decoration-color: #b9b6ab;
-  text-underline-offset: 4px;
-  white-space: nowrap;
-  transition: text-decoration-color 150ms ease;
+.hero-signup {
+  display: grid;
+  height: 58px;
+  padding: 0 22px;
+  border: 1px solid #b3e336;
+  border-radius: 10px;
+  background: var(--acid);
+  box-shadow: 0 12px 30px rgb(147 194 40 / 30%);
+  color: #171a13;
+  font-size: 16px;
+  letter-spacing: -0.015em;
+  text-decoration: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.hero-signup:hover,
-.platform-signup:hover {
-  text-decoration-color: #22241f;
+.hero-signup:hover {
+  background: #d6ff7a;
+  box-shadow: 0 15px 36px rgb(147 194 40 / 38%);
+  transform: translateY(-2px);
 }
 
-.hero-signup span,
-.platform-signup span {
-  display: inline-block;
-  margin-left: 4px;
+.hero-signup b {
+  font-weight: 600;
+}
+
+.hero-signup span {
+  font-size: 17px;
   transition: transform 150ms ease;
 }
 
-.hero-signup:hover span,
-.platform-signup:hover span {
+.hero-signup:hover span {
   transform: translateX(3px);
 }
 
@@ -2780,16 +2815,25 @@
     display: none;
   }
 
-  .marketing-links > a:last-of-type {
-    display: block;
+  /*
+   * The star count and the account button are what survive the squeeze. The
+   * header's copy-install pill does not: the hero repeats it one screen down,
+   * and a phone is rarely where that line gets pasted. Dropping it is what
+   * leaves room for the account button at 390px.
+   */
+  .marketing-links > a:last-of-type,
+  .marketing-links > .marketing-github-link {
+    display: inline-flex;
+    align-items: center;
     font-size: 11px;
   }
 
+  .nav-signup {
+    padding: 0 15px;
+  }
+
   .nav-install {
-    min-width: 96px;
-    height: 44px;
-    padding: 0 12px;
-    font-size: 11px;
+    display: none;
   }
 
   .marketing-hero {
@@ -3159,12 +3203,17 @@
     font-size: 20px;
   }
 
-  .marketing-links > a:last-of-type {
+  .marketing-links > .marketing-github-link {
     display: none;
   }
 
   .hero-copy h1 {
     font-size: clamp(47px, 14.8vw, 62px);
+  }
+
+  .hero-signup {
+    padding: 0 18px;
+    font-size: 15px;
   }
 
   .install-command code {
