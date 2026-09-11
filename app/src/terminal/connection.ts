@@ -28,6 +28,11 @@ export interface ConnectionEvents {
    * joins or leaves.
    */
   onGrid(grid: TerminalGrid): void;
+  /**
+   * The key opened its first frame. Until then a password is only a guess, so
+   * this is the moment it can be kept as the right one.
+   */
+  onUnlocked?(): void;
 }
 
 export interface ConnectionOptions {
@@ -65,6 +70,8 @@ export class TerminalConnection {
   private stopped = false;
   private readOnly = false;
   private awaitingPassword = false;
+  /* Whether the current key has opened a frame yet. */
+  private proven = false;
   private waitingForCapacity = false;
   private currentGrid: TerminalGrid = DESKTOP_TERMINAL_GRID;
 
@@ -117,6 +124,7 @@ export class TerminalConnection {
     if (this.descriptor?.kind !== "password") return;
     this.cipher = await BrowserFrameCipher.fromPassword(password, this.descriptor.salt);
     this.awaitingPassword = false;
+    this.proven = false;
     this.open();
   }
 
@@ -221,6 +229,10 @@ export class TerminalConnection {
       if (!this.cipher) return;
       try {
         frame = await this.cipher.open(received);
+        if (!this.proven) {
+          this.proven = true;
+          this.options.events.onUnlocked?.();
+        }
       } catch {
         /*
          * A frame that will not open means the derived key is wrong. Drop it,

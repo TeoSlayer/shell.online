@@ -6,6 +6,7 @@ import pg from "pg";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type { AuditPage, AuditPageQuery, Store } from "./store";
 import type {
+  AccountKey,
   AgentCommand,
   AuditEvent,
   AuthorizationCode,
@@ -213,7 +214,20 @@ function toMembership(row: Row): Membership {
     role: row.role,
     joinedAt: row.joined_at,
     publicKey: row.public_key,
+    accountKey: row.account_key,
   }) as unknown as Membership;
+}
+
+function toAccountKey(row: Row): AccountKey {
+  return {
+    uid: row.uid as string,
+    publicKey: row.public_key as string,
+    encryptedPrivateKey: row.encrypted_private_key as string,
+    recoveryWrap: row.recovery_wrap as string,
+    version: row.version as number,
+    createdAt: row.created_at as number,
+    updatedAt: row.updated_at as number,
+  };
 }
 
 function toInvite(row: Row): Invite {
@@ -812,6 +826,35 @@ export class PostgresStore implements Store {
     return true;
   }
 
+  /* ---- Session vault ---- */
+
+  async accountKey(uid: string): Promise<AccountKey | null> {
+    const row = await this.row("SELECT * FROM account_keys WHERE uid = $1", [uid]);
+    return row ? toAccountKey(row) : null;
+  }
+
+  /*
+   * Each branch is one conditional statement, so no other request can land
+   * between the check and the write.
+   */
+  async putAccountKey(key: AccountKey, expectedVersion?: number): Promise<boolean> {
+    const result = expectedVersion === undefined
+      ? await this.pool.query(
+          `INSERT INTO account_keys
+             (uid, public_key, encrypted_private_key, recovery_wrap, version, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (uid) DO NOTHING`,
+          [key.uid, key.publicKey, key.encryptedPrivateKey, key.recoveryWrap, key.version, key.createdAt, key.updatedAt],
+        )
+      : await this.pool.query(
+          `UPDATE account_keys
+           SET public_key = $2, encrypted_private_key = $3, recovery_wrap = $4, version = $5, updated_at = $6
+           WHERE uid = $1 AND version = $7`,
+          [key.uid, key.publicKey, key.encryptedPrivateKey, key.recoveryWrap, key.version, key.updatedAt, expectedVersion],
+        );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /* ---- Agent commands ---- */
 
   async putCommand(command: AgentCommand): Promise<void> {
@@ -1003,8 +1046,11 @@ export class PostgresStore implements Store {
   }
 
   async members(orgId: string): Promise<Membership[]> {
+    /* Each member's vault key rides along, so a password can be sealed to it. */
     const rows = await this.rows(
-      'SELECT * FROM memberships WHERE org_id = $1 ORDER BY joined_at ASC, uid COLLATE "C" ASC',
+      `SELECT m.*, a.public_key AS account_key
+       FROM memberships m LEFT JOIN account_keys a ON a.uid = m.uid
+       WHERE m.org_id = $1 ORDER BY m.joined_at ASC, m.uid COLLATE "C" ASC`,
       [orgId],
     );
     return rows.map(toMembership);

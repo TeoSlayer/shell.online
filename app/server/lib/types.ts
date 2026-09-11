@@ -73,11 +73,36 @@ export interface AuditEvent {
   text: string;
 }
 
-/** A session password sealed to one member's browser key. */
+/**
+ * A session password sealed to one member.
+ *
+ * Older shares are sealed to a browser key; newer ones to the member's account
+ * key, marked by a "v2." prefix on `sealed`. The service cannot tell them
+ * apart any better than that and does not need to.
+ */
 export interface SessionKeyShare {
   uid: string;
   senderPublicKey: string;
   sealed: string;
+}
+
+/**
+ * A person's session vault.
+ *
+ * The public key is what session passwords are sealed to. The private key is
+ * held only encrypted under a vault key, and the vault key only wrapped under
+ * a recovery key this service never receives, so none of this opens anything
+ * here.
+ */
+export interface AccountKey {
+  uid: string;
+  publicKey: string;
+  encryptedPrivateKey: string;
+  recoveryWrap: string;
+  /** Starts at 1 and counts resets. */
+  version: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Comment {

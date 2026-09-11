@@ -17,7 +17,6 @@ import { ago } from "../lib/time";
 import { Avatar } from "../components/Avatar";
 import { displayName } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
-import { publicKey } from "../lib/keypair";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
 import { SearchSelect } from "../components/SearchSelect";
 
@@ -112,7 +111,8 @@ export function Team() {
 
   const load = useCallback(async () => {
     try {
-      const result = await fetchOrg(undefined, await publicKey());
+      /* No browser key is published any more: colleagues seal to the vault. */
+      const result = await fetchOrg();
       setView(result);
       setDraftName(result.organization.name);
       setError("");

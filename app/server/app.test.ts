@@ -7,6 +7,7 @@ import { deferred } from "./lib/store-deferred";
 import type { Store } from "./lib/store";
 import { createVerifier, localKeySet } from "./lib/firebase-token";
 import { base64url, deriveChallenge } from "./lib/pkce";
+import { createVault, sealToAccount } from "../src/lib/vault-crypto";
 
 const PROJECT = "test-firebase-project";
 const REDIRECT = "http://127.0.0.1:51234/callback";
@@ -1156,6 +1157,33 @@ describe("session ownership and handoff", () => {
     expect(handed.body.session.assigneeUid).toBeUndefined();
   });
 
+  it("lets a colleague keep their own copy of a key, and nobody else's", async () => {
+    const { colleague } = await orgWithColleague();
+    const path = `/api/sessions/${session.id}/keys`;
+    const share = { sender_public_key: "BASE64_PUBLIC_KEY", sealed: "v2.BASE64_SEALED" };
+
+    const forOwner = await call("PUT", path, { auth: colleague, body: { shares: [{ uid: "uid-1", ...share }] } });
+    expect(forOwner.status).toBe(403);
+
+    /* A password they typed and saw work, sealed to their own vault. */
+    const own = await call("PUT", path, { auth: colleague, body: { shares: [{ uid: "uid-2", ...share }] } });
+    expect(own.status).toBe(200);
+    const listed = await call("GET", "/api/sessions", { auth: colleague });
+    expect(listed.body.sessions[0].keyShare).toMatchObject({ sealed: "v2.BASE64_SEALED" });
+  });
+
+  it("tells the owner, and only the owner, who holds a copy", async () => {
+    const { colleague } = await orgWithColleague();
+    await call("PUT", `/api/sessions/${session.id}/keys`, {
+      auth: await idToken(),
+      body: { shares: [{ uid: "uid-2", sender_public_key: "K", sealed: "S" }] },
+    });
+    const owner = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(owner.body.sessions[0].sharedWith).toEqual(["uid-2"]);
+    const other = await call("GET", "/api/sessions", { auth: colleague });
+    expect(other.body.sessions[0].sharedWith).toBeUndefined();
+  });
+
   it("lets only the owner share a session key, and only with current members", async () => {
     const { colleague } = await orgWithColleague();
     const path = `/api/sessions/${session.id}/keys`;
@@ -1174,7 +1202,11 @@ describe("session ownership and handoff", () => {
       sealed: "BASE64_SEALED_PASSWORD",
     });
 
-    const overwritten = await call("PUT", path, { auth: colleague, body: { shares } });
+    /* A colleague may keep their own copy, but cannot write one for anyone else. */
+    const overwritten = await call("PUT", path, {
+      auth: colleague,
+      body: { shares: [{ ...shares[0], uid: "uid-1" }] },
+    });
     expect(overwritten.status).toBe(403);
 
     const outsider = await call("PUT", path, {
@@ -1717,5 +1749,162 @@ describe("inviting someone by email", () => {
     });
     expect(sent[0].subject).toContain("Ana Ferreira");
     expect(sent[0].html).toMatch(/Join [^<]*<\/a>/);
+  });
+});
+
+describe("session vault", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t#salt=AAAAAAAAAAAAAAAAAAAAAA",
+    command: "claude",
+    encrypted: true,
+  };
+
+  async function vaultBody(uid = "uid-1") {
+    const made = await createVault(uid);
+    return {
+      made,
+      body: {
+        public_key: made.bundle.publicKey,
+        encrypted_private_key: made.bundle.encryptedPrivateKey,
+        recovery_wrap: made.bundle.recoveryWrap,
+      },
+    };
+  }
+
+  /* A token from a sign-in that just happened, which is what a reset asks for. */
+  const freshSignIn = (claims: Record<string, unknown> = {}) =>
+    idToken({ auth_time: Math.floor(Date.now() / 1000), ...claims });
+
+  it("has none until one is set up", async () => {
+    const result = await call("GET", "/api/vault", { auth: await idToken() });
+    expect(result).toMatchObject({ status: 200, body: { vault: null } });
+  });
+
+  it("keeps the vault it is given and hands it back whole", async () => {
+    const { body } = await vaultBody();
+    const created = await call("POST", "/api/vault", { auth: await idToken(), body });
+    expect(created.status).toBe(201);
+    const fetched = await call("GET", "/api/vault", { auth: await idToken() });
+    expect(fetched.body.vault).toMatchObject({
+      publicKey: body.public_key,
+      encryptedPrivateKey: body.encrypted_private_key,
+      recoveryWrap: body.recovery_wrap,
+      version: 1,
+    });
+  });
+
+  it("will not overwrite a vault by setting one up again", async () => {
+    await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    const again = await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    expect(again.status).toBe(409);
+  });
+
+  it("refuses a vault that is not shaped like one", async () => {
+    const { body } = await vaultBody();
+    const result = await call("POST", "/api/vault", {
+      auth: await idToken(),
+      body: { ...body, recovery_wrap: "too-short" },
+    });
+    expect(result.status).toBe(400);
+  });
+
+  it("keeps each person's vault to themselves", async () => {
+    await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    const other = await call("GET", "/api/vault", { auth: await idToken({ sub: "uid-2" }) });
+    expect(other.body.vault).toBeNull();
+  });
+
+  /*
+   * A reset puts a new key where colleagues and machines seal passwords, so a
+   * token that has merely been refreshed must not be enough for it.
+   */
+  it("refuses a reset without a recent sign-in", async () => {
+    await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    const stale = await call("POST", "/api/vault", {
+      auth: await idToken({ auth_time: Math.floor(Date.now() / 1000) - 3600 }),
+      body: { ...(await vaultBody()).body, replace_version: 1 },
+    });
+    expect(stale).toMatchObject({ status: 403, body: { reauthenticate: true } });
+    const unknown = await call("POST", "/api/vault", {
+      auth: await idToken(),
+      body: { ...(await vaultBody()).body, replace_version: 1 },
+    });
+    expect(unknown.status).toBe(403);
+  });
+
+  it("replaces the vault on a reset from a fresh sign-in, and counts it", async () => {
+    await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    const { body } = await vaultBody();
+    const reset = await call("POST", "/api/vault", {
+      auth: await freshSignIn(),
+      body: { ...body, replace_version: 1 },
+    });
+    expect(reset.status).toBe(200);
+    expect(reset.body.vault).toMatchObject({ publicKey: body.public_key, version: 2 });
+  });
+
+  it("refuses to reset a vault that changed since the page loaded", async () => {
+    await call("POST", "/api/vault", { auth: await idToken(), body: (await vaultBody()).body });
+    const reset = await call("POST", "/api/vault", {
+      auth: await freshSignIn(),
+      body: { ...(await vaultBody()).body, replace_version: 4 },
+    });
+    expect(reset.status).toBe(409);
+  });
+
+  it("tells a linked machine which key to seal to, once there is one", async () => {
+    const tokens = await login();
+    const before = await call("GET", "/api/account/key", { auth: tokens.access_token });
+    expect(before.status).toBe(404);
+
+    const { body } = await vaultBody();
+    await call("POST", "/api/vault", { auth: await idToken(), body });
+    const after = await call("GET", "/api/account/key", { auth: tokens.access_token });
+    expect(after.body).toEqual({ public_key: body.public_key, version: 1 });
+  });
+
+  it("does not hand the key to a caller that is not a linked machine", async () => {
+    const result = await call("GET", "/api/account/key", { auth: await idToken() });
+    expect(result.status).toBe(401);
+  });
+
+  it("keeps the CLI's sealed copy of a password as the owner's", async () => {
+    const tokens = await login();
+    const { made, body } = await vaultBody();
+    await call("POST", "/api/vault", { auth: await idToken(), body });
+    const share = await sealToAccount(made.bundle.publicKey, session.id, "uid-1", "Kw9eHbru");
+
+    const registered = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...session, owner_share: { sender_public_key: share.senderPublicKey, sealed: share.sealed } },
+    });
+    expect(registered.status).toBe(201);
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].keyShare).toMatchObject(share);
+  });
+
+  it("still registers a session whose sealed copy is not shaped like one", async () => {
+    const tokens = await login();
+    const registered = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...session, owner_share: { sender_public_key: "junk", sealed: "junk" } },
+    });
+    expect(registered.status).toBe(201);
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].keyShare).toBeUndefined();
+  });
+
+  it("gives colleagues each member's vault key to seal to", async () => {
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    const { body } = await vaultBody("uid-2");
+    await call("POST", "/api/vault", { auth: colleague, body });
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    const member = listed.body.members.find((entry: { uid: string }) => entry.uid === "uid-2");
+    expect(member.accountKey).toBe(body.public_key);
   });
 });

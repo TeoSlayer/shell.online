@@ -19,7 +19,10 @@ const LoginTimeout = 5 * time.Minute
 // callbackResult carries what the browser handed back on the loopback listener.
 type callbackResult struct {
 	code string
-	err  error
+	// accountKey is the vault public key the browser vouched for, or empty
+	// when it sent none or sent something that is not a key.
+	accountKey string
+	err        error
 }
 
 // callbackPage is what the person sees after approving, in the browser tab the
@@ -123,7 +126,17 @@ func newCallbackHandler(state, webURL string, results chan<- callbackResult) htt
 			return
 		}
 
-		deliver(callbackResult{code: code})
+		// Read only once the state has matched, so it comes from the browser
+		// this login opened. It travels browser to loopback directly, which is
+		// why it is trusted over whatever the accounts service says later. A
+		// malformed value is dropped rather than failing the login: the key is
+		// an addition to signing in, not a condition of it.
+		accountKey := query.Get("account_key")
+		if ParseAccountKey(accountKey) != nil {
+			accountKey = ""
+		}
+
+		deliver(callbackResult{code: code, accountKey: accountKey})
 		if onwards != "" {
 			// 303, because the browser should follow this with a GET and not
 			// re-send anything from the request that got it here.
@@ -231,7 +244,12 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 		if label == "" {
 			label = defaultLabel()
 		}
-		return client.Exchange(ctx, result.code, verifier, redirectURI, label, options.MachineID)
+		credentials, err := client.Exchange(ctx, result.code, verifier, redirectURI, label, options.MachineID)
+		if err != nil {
+			return Credentials{}, err
+		}
+		credentials.AccountKey = result.accountKey
+		return credentials, nil
 	case <-waitContext.Done():
 		if errors.Is(waitContext.Err(), context.DeadlineExceeded) {
 			return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser", timeout)

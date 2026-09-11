@@ -20,6 +20,7 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase";
 import { setPasswordOwner } from "../lib/session-passwords";
+import { clearLocalVault } from "../lib/vault-store";
 
 interface AuthValue {
   user: User | null;
@@ -94,11 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOutUser = useCallback(async () => {
     /*
-     * Stored session passwords are keyed by account, so signing out does not
-     * expose them to whoever signs in next. They are deliberately kept: they
-     * are how this person reopens their own sessions, and how they share them
-     * with colleagues who join later.
+     * Signing out locks the vault in this browser, so a shared computer does
+     * not keep an unlocked key for whoever signed out. The vault itself is
+     * untouched and the next sign-in unlocks it with the recovery key.
+     *
+     * Cached session passwords are keyed by account, so they are not exposed
+     * to whoever signs in next, and they are only a cache now: the vault holds
+     * the copies that matter.
      */
+    const current = auth.currentUser;
+    if (current) await clearLocalVault(current.uid);
     await signOut(auth);
   }, []);
 

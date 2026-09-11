@@ -7,8 +7,9 @@ import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
-import { forget, passwordFor, rememberFor } from "../lib/session-passwords";
-import { openSealed } from "../lib/keypair";
+import { cachedPassword, forgetUnverified, markVerified, rememberFor } from "../lib/session-passwords";
+import { isVaultShare } from "../lib/vault-crypto";
+import { useVault } from "../vault/VaultProvider";
 import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
@@ -26,6 +27,18 @@ export interface TerminalPaneProps {
    * the people responsible" means in a terminal.
    */
   canType?: boolean;
+  /** The machine running it, named in the hint when no password is at hand. */
+  host?: string;
+}
+
+/*
+ * One password to try, and where it came from. The source decides what a
+ * failure means: a password this browser only cached as a guess can be
+ * dropped, while one from the vault, or one that has worked before, is kept.
+ */
+interface Attempt {
+  source: "vault" | "cache" | "legacy" | "typed";
+  password: string;
 }
 
 const THEME = {
@@ -52,7 +65,18 @@ export function TerminalPane({
   active,
   keyShare,
   canType = true,
+  host,
 }: TerminalPaneProps) {
+  /*
+   * Read through a ref inside the effect that builds the terminal, so the
+   * vault changing state never tears down an open session.
+   */
+  const vault = useVault();
+  const vaultRef = useRef(vault);
+  vaultRef.current = vault;
+  /* The password being tried, and the ones still to try after it. */
+  const attempt = useRef<Attempt | null>(null);
+  const pending = useRef<Attempt[]>([]);
   const mount = useRef<HTMLDivElement>(null);
   const terminal = useRef<Terminal | null>(null);
   const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
@@ -176,19 +200,44 @@ export function TerminalPane({
       fragment: encryptionFragment(shareUrl),
       events: {
         onStatus: (next, message) => {
-          setStatus(next);
-          setDetail(message ?? "");
-          if (next === "needs-password") {
-            setUnlocking(false);
+          let shown = message;
+          if (next === "needs-password" && message) {
             /*
-             * A remembered password that no longer works is worse than none:
-             * it would retry forever. Drop it and let the person type one.
+             * An attempt failed. Only a guess is thrown away. A password from
+             * the vault, or one that has opened this session before, is kept:
+             * a frame can fail to open for reasons other than a wrong
+             * password, and deleting the only copy of a right one is how
+             * sessions used to be lost for good.
              */
-            if (message) {
-              const id = sessionIdFromShareUrl(shareUrl);
-              if (id) forget(id);
+            const failed = attempt.current;
+            attempt.current = null;
+            if (failed && sessionId && (failed.source === "cache" || failed.source === "typed")) {
+              forgetUnverified(sessionId, failed.password);
+            }
+            /* Another source may still hold the right one. */
+            if (tryNext()) return;
+            if (failed && failed.source !== "typed") {
+              shown = "The saved password did not open this session. Enter it to continue.";
             }
           }
+          setStatus(next);
+          setDetail(shown ?? "");
+          if (next === "needs-password") setUnlocking(false);
+        },
+        onUnlocked: () => {
+          const worked = attempt.current;
+          attempt.current = null;
+          pending.current = [];
+          if (!worked || !sessionId) return;
+          if (worked.source === "cache" || worked.source === "typed") {
+            markVerified(sessionId, worked.password);
+          }
+          /*
+           * A password that opened the session but did not come from the
+           * vault goes into it now, so no browser has to be told it again.
+           * That includes one a colleague sealed to this browser's old key.
+           */
+          if (worked.source !== "vault") void vaultRef.current.keep(sessionId, worked.password);
         },
         onData: (bytes, reset) => {
           if (reset) term.reset();
@@ -222,21 +271,42 @@ export function TerminalPane({
     });
     term.options.disableStdin = !canType;
 
-    /*
-     * A session this browser started already has its password here, so unlock
-     * without a prompt. Everything else still asks.
-     */
     const sessionId = sessionIdFromShareUrl(shareUrl);
+    attempt.current = null;
+    pending.current = [];
+
+    /* Submits the next password to try. False when none is left. */
+    function tryNext(): boolean {
+      const next = pending.current.shift();
+      if (!next) return false;
+      attempt.current = next;
+      void connected.submitPassword(next.password);
+      return true;
+    }
+
+    /*
+     * Every password within reach is tried before anyone is asked. One this
+     * browser has already seen open the session goes first: a vault copy is
+     * sealed with an ephemeral key, so anyone holding the public key could
+     * have made one, and a proven password should not give way to a copy
+     * nobody can vouch for. Then the vault's copy, then a cached guess, then
+     * one a colleague sealed to this browser's old key. The gate appears only
+     * when all of them fail, or there are none.
+     */
     void connected.start().then(async () => {
-      if (!connected.needsPassword) return;
-      /* This browser's own copy, from starting the session here. */
-      const own = sessionId ? passwordFor(sessionId) : null;
-      if (own) return connected.submitPassword(own);
-      /* Otherwise a copy a colleague sealed to this browser. */
-      if (stableShare) {
-        const shared = await openSealed(stableShare.senderPublicKey, stableShare.sealed);
-        if (shared) return connected.submitPassword(shared);
-      }
+      if (!connected.needsPassword || !sessionId) return;
+      const found: Attempt[] = [];
+      const add = (source: Attempt["source"], password: string | null | undefined) => {
+        if (password && !found.some((entry) => entry.password === password)) found.push({ source, password });
+      };
+      const opener = vaultRef.current;
+      const cached = cachedPassword(sessionId);
+      if (cached?.verified) add("cache", cached.password);
+      if (stableShare && isVaultShare(stableShare.sealed)) add("vault", await opener.openShare(sessionId, stableShare));
+      add("cache", cached?.password);
+      if (stableShare && !isVaultShare(stableShare.sealed)) add("legacy", await opener.openShare(sessionId, stableShare));
+      pending.current = found;
+      tryNext();
     });
 
     const observer = new ResizeObserver(() => refit());
@@ -272,15 +342,15 @@ export function TerminalPane({
     setUnlocking(true);
     setDetail("");
     /*
-     * Kept, so this is the last time it is typed for this session.
-     *
-     * A password only proves itself when a frame opens, which happens after
-     * this returns, so it is written now and removed by the failure path
-     * above if it turns out to be wrong. Storing it early costs a dead entry;
-     * not storing it at all is what made every reload ask again.
+     * Cached as a guess now, and kept for good once a frame opens with it: it
+     * is sealed into the vault then, so this is the last time it is typed for
+     * this session in any browser. A wrong one is dropped by the failure path
+     * above.
      */
     const sessionId = sessionIdFromShareUrl(shareUrl);
     if (sessionId) rememberFor(sessionId, password);
+    pending.current = [];
+    attempt.current = { source: "typed", password };
     await connection.current.submitPassword(password);
     setPassword("");
   }
@@ -299,9 +369,16 @@ export function TerminalPane({
             </span>
             <h2>Enter the session password</h2>
             <p>
-              The password is used on this device to derive the key. It is never
-              sent to shell.online.
+              The password is used on this device to derive the key. Once it
+              opens the session it is sealed into your vault, which shell.online
+              cannot open, and you are not asked for it again.
             </p>
+            {host && (
+              <p className="pane-gate-hint">
+                Started in a terminal on <b>{host}</b>? Running{" "}
+                <code>shell sessions</code> there shows its password.
+              </p>
+            )}
             {detail && <Alert tone="error">{detail}</Alert>}
             <label htmlFor={`pw-${shareUrl}`}>Password</label>
             <input

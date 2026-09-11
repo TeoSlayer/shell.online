@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,6 +50,16 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// statusError is a failing answer from the service. It keeps the status so a
+// caller can tell "there is nothing here" from "something went wrong"; its
+// message is exactly what callers have always seen.
+type statusError struct {
+	status  int
+	message string
+}
+
+func (failure *statusError) Error() string { return failure.message }
+
 // maxErrorBytes caps how much of a failing body is read into an error message.
 const maxErrorBytes = 4 << 10
 
@@ -92,14 +103,17 @@ func (client *Client) do(ctx context.Context, method, path, bearer string, body 
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		var failure errorResponse
 		if json.Unmarshal(contents, &failure) == nil && failure.Error != "" {
-			return nil, fmt.Errorf("accounts service: %s", failure.Error)
+			return nil, &statusError{status: response.StatusCode, message: "accounts service: " + failure.Error}
 		}
 		snippet := contents
 		if len(snippet) > maxErrorBytes {
 			snippet = snippet[:maxErrorBytes]
 		}
-		return nil, fmt.Errorf("accounts service returned %d: %s",
-			response.StatusCode, strings.TrimSpace(string(snippet)))
+		return nil, &statusError{
+			status: response.StatusCode,
+			message: fmt.Sprintf("accounts service returned %d: %s",
+				response.StatusCode, strings.TrimSpace(string(snippet))),
+		}
 	}
 	return contents, nil
 }
@@ -192,6 +206,44 @@ type SessionInput struct {
 	Persistent bool   `json:"persistent"`
 	Host       string `json:"host"`
 	StartedAt  int64  `json:"started_at"`
+	// OwnerShare is the session password sealed to the account's vault key,
+	// so any of the person's browsers can open the session later. Absent when
+	// the session has no password or the account has no vault.
+	OwnerShare *KeyShare `json:"owner_share,omitempty"`
+}
+
+// KeyShare is a session password sealed to one account key. The accounts
+// service stores it and cannot open it.
+type KeyShare struct {
+	SenderPublicKey string `json:"sender_public_key"`
+	Sealed          string `json:"sealed"`
+}
+
+// AccountKey asks for the account's vault public key.
+//
+// ok is false, with no error, when the account has no vault yet: that is the
+// state of every account until its owner sets one up in the browser, and not
+// something to warn about. A key that does not parse is an error rather than
+// a missing vault, so a broken answer is not mistaken for an absent one.
+func (client *Client) AccountKey(ctx context.Context, accessToken string) (key string, ok bool, err error) {
+	contents, err := client.do(ctx, http.MethodGet, "/api/account/key", accessToken, nil)
+	var failure *statusError
+	if errors.As(err, &failure) && failure.status == http.StatusNotFound {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	var decoded struct {
+		PublicKey string `json:"public_key"`
+	}
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return "", false, fmt.Errorf("decode account key: %w", err)
+	}
+	if err := ParseAccountKey(decoded.PublicKey); err != nil {
+		return "", false, fmt.Errorf("the accounts service returned an unusable key: %w", err)
+	}
+	return decoded.PublicKey, true, nil
 }
 
 // RegisterSession publishes a session so it appears in the account.

@@ -229,8 +229,9 @@ export function NewSessionModal({
                 <Warning size={14} weight="fill" />
                 <span>
                   <b>{chosenMachine.label}</b> is running an older build that
-                  cannot receive a password. Update shell there, or the session
-                  will ask for one you cannot see.
+                  cannot receive a password, so a session started there could
+                  never be opened here. Update shell on that machine, then try
+                  again.
                 </span>
               </p>
             )}
@@ -308,7 +309,7 @@ export function NewSessionModal({
                 type="submit"
                 busy={busy}
                 busyLabel="Starting"
-                disabled={!command || !machine || !machineReady}
+                disabled={!command || !machine || !machineReady || !chosenMachine?.agentPublicKey}
               >
                 Start session
               </Button>

@@ -1,5 +1,6 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type {
+  AccountKey,
   AgentCommand,
   AuditEvent,
   AuthorizationCode,
@@ -99,6 +100,16 @@ export interface Store {
    */
   deleteSession(orgId: string, id: string): Promise<boolean>;
   putKeyShares(orgId: string, sessionId: string, shares: SessionKeyShare[]): Promise<boolean>;
+
+  /* ---- Session vault ---- */
+  accountKey(uid: string): Promise<AccountKey | null>;
+  /**
+   * Writes a vault. Without `expectedVersion` it only creates one, and fails
+   * if one exists; with it, it replaces only the vault at that version. False
+   * means the condition failed, so two browsers setting up at once cannot both
+   * believe they won, and a reset cannot overwrite a reset it has not seen.
+   */
+  putAccountKey(key: AccountKey, expectedVersion?: number): Promise<boolean>;
 
   /* ---- Agent commands ---- */
   putCommand(command: AgentCommand): Promise<void>;

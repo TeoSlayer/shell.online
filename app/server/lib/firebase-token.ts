@@ -7,6 +7,12 @@ export interface Identity {
   uid: string;
   email: string;
   name: string;
+  /**
+   * When this person last actually signed in, in milliseconds. A refreshed
+   * token keeps the original time, so this is how an operation that deserves
+   * a fresh sign-in can ask for one.
+   */
+  authTime?: number;
 }
 
 export type VerifyResult =
@@ -51,6 +57,7 @@ export function createVerifier(projectId: string, keys?: KeyLookup) {
         uid,
         email: typeof payload.email === "string" ? payload.email : "",
         name: typeof payload.name === "string" ? payload.name : "",
+        authTime: typeof payload.auth_time === "number" ? payload.auth_time * 1000 : undefined,
       },
     };
   };

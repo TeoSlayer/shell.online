@@ -1,5 +1,13 @@
 /**
- * This browser's key pair, used to receive session passwords from colleagues.
+ * This browser's key pair, from before the session vault.
+ *
+ * Kept only to open passwords a colleague sealed to this browser before the
+ * vault existed. Nothing new is sealed to it and it is no longer published:
+ * shares now go to the account's vault key (see vault-crypto.ts), which every
+ * browser the person unlocks can open. Each old share is resealed to the vault
+ * the first time it opens a session here.
+ *
+ * What follows describes how it worked.
  *
  * A session's password is chosen by whoever starts it. For anyone else in the
  * team to open that session, the password has to reach them without

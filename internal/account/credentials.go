@@ -26,6 +26,15 @@ type Credentials struct {
 	// not a decision worth holding someone to, so the next login asks again,
 	// while agreeing is never asked about twice.
 	RemoteStart bool `json:"remote_start,omitempty"`
+
+	// AccountKey is the account's vault public key, as this machine trusts it.
+	//
+	// It arrives from the signed-in browser on the login callback, which never
+	// passes through the accounts service, or failing that is pinned the first
+	// time the service reports one. After that a different key from the
+	// service is refused rather than believed: sealing a password to a key the
+	// service chose would let the service read it.
+	AccountKey string `json:"account_key,omitempty"`
 }
 
 // ErrNotLinked reports that no account has been linked on this machine.

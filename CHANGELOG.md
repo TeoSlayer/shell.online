@@ -4,6 +4,34 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A session vault. Every session's password is sealed to your account, so it
+  opens in any browser you unlock, including sessions started in a terminal.
+  Setting one up is a one-time step that shows a recovery key; shell.online
+  stores the vault sealed and cannot open it.
+- `shell` seals each encrypted session's password to your vault when it
+  registers the session, using the vault key the browser handed it at
+  `shell login`, and will not seal to a key that has changed since.
+
+### Changed
+
+- Sessions started from the browser use 128-bit passwords, since nobody types
+  them.
+- Sharing a session seals its password to the colleague's vault rather than
+  to one of their browsers, so it opens on every device they use. A colleague
+  whose vault key changed is confirmed before anything is sealed to them.
+- Signing out locks the vault in that browser.
+
+### Fixed
+
+- A stored password is no longer deleted when a frame fails to decrypt, which
+  could lose a browser-started session for good.
+- The browser's password cache drops the least recently used entry rather than
+  the oldest written.
+- Starting a session on a machine that cannot receive a password is refused,
+  instead of producing a session nobody can open.
+
 ## [0.11.3] — 2026-09-11
 
 ### Changed

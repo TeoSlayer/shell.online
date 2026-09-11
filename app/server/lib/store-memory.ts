@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type { AuditPage, AuditPageQuery, Store } from "./store";
 import type {
+  AccountKey,
   AgentCommand,
   AuditEvent,
   AuthorizationCode,
@@ -46,12 +47,13 @@ interface Shape {
   audit: AuditEvent[];
   comments: Comment[];
   notifications: Notification[];
+  accountKeys: AccountKey[];
 }
 
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
-  comments: [], notifications: [],
+  comments: [], notifications: [], accountKeys: [],
 };
 
 /**
@@ -114,6 +116,7 @@ export class MemoryStore implements Store {
         audit: parsed.audit ?? [],
         comments: parsed.comments ?? [],
         notifications: parsed.notifications ?? [],
+        accountKeys: parsed.accountKeys ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -220,6 +223,24 @@ export class MemoryStore implements Store {
       (share) => !shares.some((incoming) => incoming.uid === share.uid),
     );
     session.keyShares = [...kept, ...shares];
+    this.flush();
+    return true;
+  }
+
+  async accountKey(uid: string): Promise<AccountKey | null> {
+    const found = this.data.accountKeys.find((entry) => entry.uid === uid);
+    return found ? { ...found } : null;
+  }
+
+  async putAccountKey(key: AccountKey, expectedVersion?: number): Promise<boolean> {
+    const index = this.data.accountKeys.findIndex((entry) => entry.uid === key.uid);
+    if (expectedVersion === undefined) {
+      if (index >= 0) return false;
+      this.data.accountKeys.push({ ...key });
+    } else {
+      if (index < 0 || this.data.accountKeys[index].version !== expectedVersion) return false;
+      this.data.accountKeys[index] = { ...key };
+    }
     this.flush();
     return true;
   }
@@ -455,7 +476,12 @@ export class MemoryStore implements Store {
   async members(orgId: string): Promise<Membership[]> {
     return this.data.memberships
       .filter((entry) => entry.orgId === orgId)
-      .sort(byTime((entry) => entry.joinedAt, (entry) => entry.uid));
+      .sort(byTime((entry) => entry.joinedAt, (entry) => entry.uid))
+      .map((entry) => {
+        /* Each member's vault key rides along, so a password can be sealed to it. */
+        const accountKey = this.data.accountKeys.find((key) => key.uid === entry.uid)?.publicKey;
+        return accountKey ? { ...entry, accountKey } : entry;
+      });
   }
 
   async removeMember(orgId: string, uid: string): Promise<boolean> {

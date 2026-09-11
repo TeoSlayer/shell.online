@@ -29,6 +29,12 @@ export interface Membership {
    * password to them. Absent until they have signed in somewhere.
    */
   publicKey?: string;
+  /**
+   * Their session vault's public key, once they have set one up. Session
+   * passwords shared with them are sealed to this, so every browser they
+   * unlock can open them. Read from the vault, never written through here.
+   */
+  accountKey?: string;
 }
 
 export interface Invite {

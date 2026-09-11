@@ -238,7 +238,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			Encrypted:  session.Encrypted,
 			Persistent: session.Persistent,
 			StartedAt:  processStartedAt.UnixMilli(),
-		})
+		}, password)
 		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
 				OK:         true,

@@ -55,6 +55,10 @@ type sessionLink struct {
 	accessToken string
 	sessionID   string
 	warn        io.Writer
+	// credentials and path are kept so a vault key seen for the first time
+	// can be pinned into the file it came from.
+	credentials account.Credentials
+	path        string
 }
 
 // openSessionLink loads credentials, refreshes them when stale, and returns a
@@ -91,13 +95,26 @@ func openSessionLink(ctx context.Context, warn io.Writer) *sessionLink {
 		}
 	}
 
-	return &sessionLink{client: client, accessToken: credentials.AccessToken, warn: warn}
+	return &sessionLink{
+		client:      client,
+		accessToken: credentials.AccessToken,
+		warn:        warn,
+		credentials: credentials,
+		path:        path,
+	}
 }
 
 // Register publishes the session. Failure is reported, never fatal.
-func (link *sessionLink) Register(ctx context.Context, input account.SessionInput) {
+//
+// password is the session's browser password, or empty when it has none. A
+// password is sealed to the account's vault so the session can be opened from
+// the web app after this terminal is gone; it is never sent any other way.
+func (link *sessionLink) Register(ctx context.Context, input account.SessionInput, password string) {
 	if link == nil {
 		return
+	}
+	if password != "" {
+		input.OwnerShare = link.vaultShare(ctx, input.ID, password)
 	}
 	if input.Host == "" {
 		if host, err := os.Hostname(); err == nil {
@@ -130,6 +147,54 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 		return
 	}
 	link.sessionID = input.ID
+}
+
+// vaultShare seals a session password to the account's vault key, or returns
+// nil when that cannot be done safely. Failing here costs only the saved copy;
+// the session itself is unaffected.
+//
+// The key is checked against the one this machine already trusts. The first
+// key seen is pinned; a different one later is refused, because the accounts
+// service is the thing that hands the key over and the thing that must not be
+// able to read what is sealed to it.
+func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password string) *account.KeyShare {
+	const notSaved = "shell: this session's password was not saved to your vault"
+	if link.credentials.UID == "" {
+		fmt.Fprintf(link.warn, "%s: this machine's sign-in predates the vault; run 'shell login'\n", notSaved)
+		return nil
+	}
+
+	keyContext, cancel := context.WithTimeout(ctx, linkTimeout)
+	defer cancel()
+	fetched, ok, err := link.client.AccountKey(keyContext, link.accessToken)
+	if err != nil {
+		fmt.Fprintf(link.warn, "%s: %v\n", notSaved, err)
+		return nil
+	}
+	if !ok {
+		return nil
+	}
+
+	switch pinned := link.credentials.AccountKey; {
+	case pinned == "":
+		link.credentials.AccountKey = fetched
+		if saveErr := account.Save(link.path, link.credentials); saveErr != nil {
+			fmt.Fprintf(link.warn, "shell: could not remember your vault key: %v\n", saveErr)
+		}
+		fingerprint, _ := account.Fingerprint(fetched)
+		fmt.Fprintf(link.warn, "shell: saving session passwords to your vault (key %s)\n", fingerprint)
+	case pinned != fetched:
+		fmt.Fprintf(link.warn, "shell: your vault key changed since this machine signed in. "+
+			"Run 'shell login' to trust the new one; %s.\n", strings.TrimPrefix(notSaved, "shell: "))
+		return nil
+	}
+
+	sender, sealed, err := account.SealToAccount(link.credentials.AccountKey, sessionID, link.credentials.UID, password)
+	if err != nil {
+		fmt.Fprintf(link.warn, "%s: %v\n", notSaved, err)
+		return nil
+	}
+	return &account.KeyShare{SenderPublicKey: sender, Sealed: sealed}
 }
 
 // Close marks the session finished in the account.

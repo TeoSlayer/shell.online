@@ -349,6 +349,69 @@ describe("encrypted session", () => {
     expect(sent[0]).toBe(Opcode.Input);
     expect(new TextDecoder().decode(sent.subarray(1))).not.toContain("whoami");
   });
+
+  /*
+   * The first frame that opens is what proves a password right. The pane
+   * keeps a typed password, and seals it into the vault, only after this.
+   */
+  function watchUnlocks() {
+    const unlocked: number[] = [];
+    const statuses: { status: ConnectionStatus; detail?: string }[] = [];
+    const connection = new TerminalConnection({
+      url: "ws://localhost:5173/relay/api/sessions/x/ws",
+      fragment: SALT,
+      createSocket: (url) => new FakeSocket(url) as unknown as WebSocket,
+      events: {
+        onStatus: (status, detail) => statuses.push({ status, detail }),
+        onData: () => undefined,
+        onReadOnly: () => undefined,
+        onGrid: () => undefined,
+        onUnlocked: () => unlocked.push(1),
+      },
+    });
+    return { connection, unlocked, statuses };
+  }
+
+  it("says when a password first opens a frame, and only once", async () => {
+    const { connection, unlocked } = watchUnlocks();
+    await connection.start();
+    await connection.submitPassword("hunter2");
+    const cipher = await BrowserFrameCipher.fromPassword("hunter2", new Uint8Array(16).fill(7));
+    FakeSocket.last!.opened();
+    for (const text of ["one", "two"]) {
+      FakeSocket.last!.binary(await cipher.seal(encodeFrame(Opcode.Output, new TextEncoder().encode(text))));
+    }
+    await waitFor(() => unlocked.length > 0, "the first frame to open");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(unlocked).toHaveLength(1);
+  });
+
+  it("does not say so for a password that cannot decrypt", async () => {
+    const { connection, unlocked, statuses } = watchUnlocks();
+    await connection.start();
+    await connection.submitPassword("wrong");
+    const other = await BrowserFrameCipher.fromPassword("right", new Uint8Array(16).fill(7));
+    FakeSocket.last!.opened();
+    FakeSocket.last!.binary(await other.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("x"))));
+    await waitFor(() => statuses.at(-1)?.status === "needs-password", "the failure");
+    expect(unlocked).toEqual([]);
+  });
+
+  it("asks a second password to prove itself again", async () => {
+    const { connection, unlocked, statuses } = watchUnlocks();
+    await connection.start();
+    await connection.submitPassword("wrong");
+    const right = await BrowserFrameCipher.fromPassword("right", new Uint8Array(16).fill(7));
+    FakeSocket.last!.opened();
+    FakeSocket.last!.binary(await right.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("x"))));
+    await waitFor(() => statuses.at(-1)?.status === "needs-password", "the failure");
+
+    await connection.submitPassword("right");
+    FakeSocket.last!.opened();
+    FakeSocket.last!.binary(await right.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("y"))));
+    await waitFor(() => unlocked.length > 0, "the right password to open a frame");
+    expect(unlocked).toHaveLength(1);
+  });
 });
 
 describe("the session grid", () => {

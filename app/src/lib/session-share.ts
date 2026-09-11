@@ -13,9 +13,9 @@ import type { Member } from "./api";
 /**
  * Splits the team into people a password can reach and people it cannot.
  *
- * A member who has never opened the app in a browser has published no public
- * key, so there is nowhere to send them anything. Offering them a tick box
- * would be offering something that silently does nothing.
+ * A member who has not set up their vault has no key to seal to, so there is
+ * nowhere to send them anything. Offering them a tick box would be offering
+ * something that silently does nothing.
  */
 export function shareCandidates(
   members: Member[],
@@ -23,8 +23,8 @@ export function shareCandidates(
 ): { reachable: Member[]; unreachable: Member[] } {
   const others = members.filter((member) => member.uid !== you?.uid);
   return {
-    reachable: others.filter((member) => Boolean(member.publicKey)),
-    unreachable: others.filter((member) => !member.publicKey),
+    reachable: others.filter((member) => Boolean(member.accountKey)),
+    unreachable: others.filter((member) => !member.accountKey),
   };
 }
 

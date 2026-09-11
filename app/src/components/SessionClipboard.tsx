@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
 import type { Member, SessionRecord } from "../lib/api";
 import { passwordFor } from "../lib/session-passwords";
-import { openSealed } from "../lib/keypair";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
+import { useVault } from "../vault/VaultProvider";
 
 /**
  * The one place a session can be copied from.
@@ -20,17 +20,16 @@ type Item = "link" | "password" | "attach";
  * Where the password comes from, and why the service is not in the list.
  *
  * A session password never reaches the service in the clear. This browser
- * either chose it, or holds a copy a colleague sealed to this browser's public
- * key. So the answer to "may this person copy it" is not a permission the
- * service grants: they either hold a copy or they do not, and someone outside
- * the team holds nothing whatever the interface says.
+ * either holds it already, or opens the copy sealed to this person's vault.
+ * So the answer to "may this person copy it" is not a permission the service
+ * grants: they either hold a copy or they do not, and someone outside the
+ * team holds nothing whatever the interface says.
  */
-async function readPassword(session: SessionRecord): Promise<string | null> {
-  const own = passwordFor(session.id);
-  if (own) return own;
-  const share = session.keyShare;
-  if (!share) return null;
-  return openSealed(share.senderPublicKey, share.sealed);
+async function readPassword(
+  session: SessionRecord,
+  openShare: (sessionId: string, share: SessionRecord["keyShare"]) => Promise<string | null>,
+): Promise<string | null> {
+  return passwordFor(session.id) ?? openShare(session.id, session.keyShare);
 }
 
 export function SessionClipboard({
@@ -67,16 +66,17 @@ export function SessionClipboard({
   const sealed = session.keyShare
     ? `${session.keyShare.senderPublicKey}:${session.keyShare.sealed}`
     : "";
+  const { openShare } = useVault();
   useEffect(() => {
     let live = true;
-    void readPassword(session).then((value) => {
+    void readPassword(session, openShare).then((value) => {
       if (live) setPassword(value);
     });
     return () => {
       live = false;
     };
     /* eslint-disable-next-line react-hooks/exhaustive-deps -- see above */
-  }, [session.id, sealed]);
+  }, [session.id, sealed, openShare]);
 
   useEffect(() => {
     if (!open) return;

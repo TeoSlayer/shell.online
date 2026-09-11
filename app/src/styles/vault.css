@@ -1,0 +1,181 @@
+/* The session vault: setting it up, unlocking it, and its row on Account. */
+
+.vault-card {
+  gap: 16px;
+}
+
+.vault-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.vault-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.vault-key-block {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+}
+
+/* Eight groups of four, wrapping as a grid so a phone never splits a group. */
+.vault-key {
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  gap: 6px 14px;
+  font-family: var(--mono);
+  font-size: 1.12rem;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  user-select: all;
+}
+
+.vault-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vault-key-actions .btn {
+  flex: 1 1 8rem;
+  width: auto;
+}
+
+.vault-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.vault-note svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+.vault-input {
+  width: 8ch;
+  padding: 9px 12px;
+  font: 500 1rem/1.2 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+}
+
+.vault-input-wide {
+  width: 100%;
+}
+
+.vault-input:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.vault-link {
+  margin-left: 12px;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.vault-link:hover {
+  color: var(--ink);
+}
+
+.vault-lost {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.vault-lost summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+}
+
+.vault-lost[open] {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-lost p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.vault-fingerprint {
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.vault-reset {
+  margin-top: 20px;
+}
+
+/* Under the password gate: where a terminal-started session's password is. */
+.pane-gate-hint {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.pane-gate-hint code {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+
+/* A colleague whose vault key changed, held until the owner says go ahead. */
+.audience-confirm {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.audience-confirm p {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+
+.audience-confirm svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--danger);
+}
+
+.audience-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 420px) {
+  .vault-key {
+    grid-template-columns: repeat(2, max-content);
+  }
+}

@@ -19,6 +19,7 @@ import {
   sessionSource,
 } from "./lib/sessions";
 import { mintSecret } from "./lib/tokens";
+import { RESET_SIGN_IN_WINDOW_MS, readOwnerShare, readVaultInput, vaultForApi } from "./lib/vault";
 import {
   changeRole,
   createInvite,
@@ -140,6 +141,19 @@ const KNOWN_HARNESSES = new Set(["claude-code", "codex", "hermes", "openclaw"]);
  */
 function ownsSession(membership: Membership, session: { ownerUid?: string; uid: string }): boolean {
   return (session.ownerUid ?? session.uid) === membership.uid;
+}
+
+/*
+ * Who besides the owner holds a sealed copy of a session's password. Told to
+ * the owner only: it is theirs to know, and the service knows it anyway
+ * because it stores the copies.
+ */
+function sharedWith(
+  membership: Membership,
+  session: { ownerUid?: string; uid: string; keyShares?: { uid: string }[] },
+): string[] | undefined {
+  if (!ownsSession(membership, session)) return undefined;
+  return (session.keyShares ?? []).map((share) => share.uid).filter((uid) => uid !== membership.uid);
 }
 
 /**
@@ -580,6 +594,87 @@ export function createApp(options: AppOptions) {
         return;
       }
 
+      /* ---- Session vault ---- */
+
+      /*
+       * A vault is a public key and two pieces of ciphertext. Its owner gets it
+       * back whole, since none of it opens without the recovery key, and
+       * nobody else gets any of it but the public key.
+       */
+      if (route === "GET /api/vault") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        const key = await store.accountKey(identity.uid);
+        return send(response, 200, { vault: key ? vaultForApi(key) : null });
+      }
+
+      if (route === "POST /api/vault") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        const input = await readVaultInput((await readBody(request)) as Record<string, unknown>);
+        if (!input.ok) return send(response, 400, { error: input.reason });
+        const { publicKey, encryptedPrivateKey, recoveryWrap, replaceVersion } = input.value;
+        const now = Date.now();
+
+        if (replaceVersion === undefined) {
+          const created = await store.putAccountKey({
+            uid: identity.uid,
+            publicKey,
+            encryptedPrivateKey,
+            recoveryWrap,
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+          });
+          if (!created) return send(response, 409, { error: "this account already has a vault" });
+          const stored = await store.accountKey(identity.uid);
+          return send(response, 201, { vault: stored ? vaultForApi(stored) : null });
+        }
+
+        /*
+         * A reset puts a new key where colleagues and machines seal passwords,
+         * so a token that has only been refreshed is not enough for it. The
+         * person has to have signed in recently.
+         */
+        if (!identity.authTime || now - identity.authTime > RESET_SIGN_IN_WINDOW_MS) {
+          return send(response, 403, {
+            error: "Resetting your vault needs a recent sign-in. Sign out, sign back in, and reset within ten minutes.",
+            reauthenticate: true,
+          });
+        }
+        const existing = await store.accountKey(identity.uid);
+        const stale = { error: "Your vault changed since this page loaded. Reload and try again." };
+        if (!existing || existing.version !== replaceVersion) return send(response, 409, stale);
+        const replaced = await store.putAccountKey(
+          {
+            uid: identity.uid,
+            publicKey,
+            encryptedPrivateKey,
+            recoveryWrap,
+            version: existing.version + 1,
+            createdAt: existing.createdAt,
+            updatedAt: now,
+          },
+          existing.version,
+        );
+        if (!replaced) return send(response, 409, stale);
+        const stored = await store.accountKey(identity.uid);
+        return send(response, 200, { vault: stored ? vaultForApi(stored) : null });
+      }
+
+      /*
+       * What a machine seals its sessions' passwords to. The CLI pins the key
+       * it was given when it signed in, and uses this only to notice a change
+       * or to learn a key it was never given.
+       */
+      if (route === "GET /api/account/key") {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const key = await store.accountKey(token.uid);
+        if (!key) return send(response, 404, { error: "no vault" });
+        return send(response, 200, { public_key: key.publicKey, version: key.version });
+      }
+
       /* ---- Session registry ---- */
       if (route === "POST /api/sessions") {
         const token = await requireCli(request);
@@ -603,6 +698,20 @@ export function createApp(options: AppOptions) {
           deviceId: token.id,
         });
         if (!result.ok) return send(response, 400, { error: result.reason });
+        /*
+         * The CLI's own copy of the password, sealed to this account's vault,
+         * so the web app can open the session without asking anyone to type
+         * it. Optional and opaque: one that is not shaped like a share is
+         * dropped, and never allowed to fail the registration.
+         */
+        const ownerShare = result.session.encrypted && result.session.orgId
+          ? await readOwnerShare(body.owner_share)
+          : null;
+        if (ownerShare && result.session.orgId) {
+          await store.putKeyShares(result.session.orgId, result.session.id, [
+            { uid: token.uid, ...ownerShare },
+          ]);
+        }
         /* Only on first sight, so a persistent session restarting is silent. */
         if (result.isNew && membership) {
           await notifySessionStarted(
@@ -687,7 +796,12 @@ export function createApp(options: AppOptions) {
          */
         const sessions = (await store.listOrgSessions(membership.orgId)).map((session) => {
           const mine = session.keyShares?.find((share) => share.uid === membership.uid);
-          return { ...sessionForApi(session), keyShares: undefined, keyShare: mine };
+          return {
+            ...sessionForApi(session),
+            keyShares: undefined,
+            keyShare: mine,
+            sharedWith: sharedWith(membership, session),
+          };
         });
         return send(response, 200, {
           sessions,
@@ -702,9 +816,13 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const session = await store.sessionInOrg(membership.orgId, shareRoute[1]);
         if (!session) return send(response, 404, { error: "no such session" });
-        if (!ownsSession(membership, session)) {
-          return send(response, 403, { error: "only the session owner can share its key" });
-        }
+        /*
+         * The owner shares with colleagues. Anyone else may keep only their
+         * own copy: a password they typed and saw work, sealed to their own
+         * vault so they need not type it again. That grants them nothing they
+         * did not already hold.
+         */
+        const isOwner = ownsSession(membership, session);
 
         const body = (await readBody(request)) as Record<string, unknown>;
         const incoming = Array.isArray(body.shares) ? body.shares : [];
@@ -728,6 +846,9 @@ export function createApp(options: AppOptions) {
             share.senderPublicKey.length > 512 || share.sealed.length > 4096,
         )) {
           return send(response, 400, { error: "invalid key share" });
+        }
+        if (!isOwner && shares.some((share) => share.uid !== membership.uid)) {
+          return send(response, 403, { error: "only the session owner can share its key" });
         }
 
         const memberIds = new Set((await store.members(membership.orgId)).map((member) => member.uid));
@@ -966,7 +1087,12 @@ export function createApp(options: AppOptions) {
         if (!session) return send(response, 404, { error: "no such session" });
         const mine = session.keyShares?.find((share) => share.uid === membership.uid);
         return send(response, 200, {
-          session: { ...sessionForApi(session), keyShares: undefined, keyShare: mine },
+          session: {
+            ...sessionForApi(session),
+            keyShares: undefined,
+            keyShare: mine,
+            sharedWith: sharedWith(membership, session),
+          },
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

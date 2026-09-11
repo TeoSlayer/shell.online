@@ -26,8 +26,10 @@ export interface Member {
   name: string;
   role: Role;
   joinedAt: number;
-  /** Their browser key, so a session password can be sealed to them. */
+  /** A browser key from before the vault. Kept only so old shares still name it. */
   publicKey?: string;
+  /** Their vault's public key; absent until they have set one up. */
+  accountKey?: string;
 }
 
 export interface Team {
@@ -108,6 +110,36 @@ export function shareSessionKeys(
   );
 }
 
+/** Your vault as the service holds it: a public key and two pieces of ciphertext. */
+export interface VaultRecord {
+  publicKey: string;
+  encryptedPrivateKey: string;
+  recoveryWrap: string;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function fetchVault() {
+  return request<{ vault: VaultRecord | null }>("/api/vault");
+}
+
+/** Saves a new vault, or replaces the one at `replaceVersion` when resetting. */
+export function saveVault(
+  bundle: { publicKey: string; encryptedPrivateKey: string; recoveryWrap: string },
+  replaceVersion?: number,
+) {
+  return request<{ vault: VaultRecord | null }>("/api/vault", {
+    method: "POST",
+    body: JSON.stringify({
+      public_key: bundle.publicKey,
+      encrypted_private_key: bundle.encryptedPrivateKey,
+      recovery_wrap: bundle.recoveryWrap,
+      replace_version: replaceVersion,
+    }),
+  });
+}
+
 export function assignSession(sessionId: string, uids: string[]) {
   return request<{ session: SessionRecord }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/assignee`,
@@ -186,6 +218,12 @@ export interface SessionRecord {
   deviceId?: string;
   /** The password sealed to the caller, when one has been shared with them. */
   keyShare?: { senderPublicKey: string; sealed: string };
+  /**
+   * For the session's owner: who else holds a sealed copy. The service knows
+   * this because it stores the copies; it is shown, never used to decide who
+   * to seal to.
+   */
+  sharedWith?: string[];
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;

@@ -28,14 +28,16 @@ import {
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { publicKey, sealForMembers } from "../lib/keypair";
 import { sealTargets } from "../lib/session-share";
-import { fetchOrg, shareSessionKeys } from "../lib/api";
+import { shareSessionKeys } from "../lib/api";
+import { keyTrust, trustKey } from "../lib/known-keys";
+import { isVaultShare } from "../lib/vault-crypto";
+import { useVault } from "../vault/VaultProvider";
 import {
   adoptOrigin,
   audienceFor,
+  cachedPassword,
   forget,
-  passwordFor,
   rememberFor,
   rememberForOrigin,
 } from "../lib/session-passwords";
@@ -136,6 +138,16 @@ function writeViewMode(mode: ViewMode): void {
 export function Workspace() {
   usePageTitle("Sessions");
   const { user } = useAuth();
+  /*
+   * Through a ref, because the session list is loaded by a callback made
+   * once; the vault's functions are stable, but reading them fresh costs
+   * nothing and cannot go stale.
+   */
+  const vault = useVault();
+  const vaultRef = useRef(vault);
+  useEffect(() => {
+    vaultRef.current = vault;
+  }, [vault]);
   const [state, dispatch] = useReducer(reduce, EMPTY);
   const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -170,6 +182,8 @@ export function Workspace() {
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
   const sharedWith = useRef(new Map<string, Set<string>>());
+  /* Sessions whose cached password has been checked against the vault on this page. */
+  const checkedVault = useRef(new Set<string>());
   /* Keeps rapid multi-select ticks ordered without disabling the picker. */
   const assignmentQueue = useRef(new Map<string, Promise<{ session: SessionRecord }>>());
 
@@ -259,16 +273,6 @@ export function Workspace() {
   }, [state, user]);
 
   /*
-   * Publishing this browser's key makes it a possible recipient of a session
-   * password sealed by a colleague.
-   */
-  useEffect(() => {
-    void publicKey()
-      .then((key) => fetchOrg(undefined, key))
-      .catch(() => undefined);
-  }, []);
-
-  /*
    * Machines are polled, not fetched once: whether a machine is reachable is a
    * live fact, and a stale snapshot silently disables the Start button.
    */
@@ -297,27 +301,32 @@ export function Workspace() {
 
     /*
      * Choose the password here and seal it to the machine. The service relays
-     * an envelope it cannot open, and this browser keeps the only other copy,
-     * so a session started here opens without asking for something the person
-     * who started it was never shown.
+     * an envelope it cannot open; the CLI seals its own copy to the vault when
+     * the session registers, and this browser caches one meanwhile. So a
+     * session started here opens anywhere without asking for something the
+     * person who started it was never shown.
      */
     const device = devices.find((candidate) => candidate.id === input.deviceId);
-    let sealed: { senderPublicKey: string; sealedPassword: string } | undefined;
-    let password = "";
-    if (device?.agentPublicKey) {
-      password = generatePassword();
-      sealed = await sealPassword(device.agentPublicKey, password);
+    /*
+     * A machine with no key to seal to would start the session under a
+     * password nobody is ever shown, which is a session nobody can open. The
+     * modal already refuses; this is the backstop.
+     */
+    if (!device?.agentPublicKey) {
+      throw new Error(
+        `${device?.label ?? "That machine"} cannot receive a password yet. Update shell there, then try again.`,
+      );
     }
+    const password = generatePassword();
+    const sealed = await sealPassword(device.agentPublicKey, password);
 
     const queued = await startSession({ ...input, ...sealed });
-    if (password) {
-      rememberForOrigin(queued.command.id, password, input.share);
-      /*
-       * Held here until the session exists to attach the password to. The
-       * colleagues chosen above are sealed to on the poll that finds it.
-       */
-      pendingShares.current.set(queued.command.id, password);
-    }
+    rememberForOrigin(queued.command.id, password, input.share);
+    /*
+     * Held here until the session exists to attach the password to. The
+     * colleagues chosen above are sealed to on the poll that finds it.
+     */
+    pendingShares.current.set(queued.command.id, password);
     /*
      * The machine has to poll, launch, and publish, so the row shows up a
      * moment later rather than on this response.
@@ -391,9 +400,47 @@ export function Workspace() {
    * between starting a session and it appearing still has sealing to do.
    */
   async function shareAnyPending(all: SessionRecord[], roster: Member[], me: Member | null) {
-    for (const session of all) {
-      if (session.closedAt) continue;
+    const vault = vaultRef.current;
 
+    /*
+     * Makes sure the vault holds this person's copy of a session's password,
+     * from whatever this browser already has. True once there is nothing left
+     * to do for the session, so it is not looked at again on this page.
+     *
+     * This is also the migration for everything from before the vault, so it
+     * runs for every session on every page until it is done, and each step is
+     * safe to repeat: it compares with what the vault holds and writes only
+     * when that is missing or known to be wrong. Sources, best first:
+     *
+     * - a password cached here and known to be right, because this browser
+     *   chose it or it opened the session. It replaces a vault copy that
+     *   differs, since a session has one password and this one is proven;
+     * - a copy a colleague sealed to this browser's key before the vault. The
+     *   service holds it in the slot the vault copy takes, so keeping it is
+     *   moving it;
+     * - a password cached before the vault, with no record of whether it
+     *   worked. Kept only when the vault has nothing, since a guess must never
+     *   replace a copy that may be right.
+     *
+     * A password typed since and not yet proven waits: the terminal pane keeps
+     * it the moment it opens the session.
+     */
+    async function keepOwnCopy(session: SessionRecord): Promise<boolean> {
+      const share = session.keyShare;
+      const inVault = isVaultShare(share?.sealed) ? await vault.openShare(session.id, share) : null;
+      const cached = cachedPassword(session.id);
+      if (cached?.verified) {
+        return cached.password === inVault || vault.keep(session.id, cached.password);
+      }
+      if (inVault) return true;
+      const legacyShare = share && !isVaultShare(share.sealed) ? await vault.openShare(session.id, share) : null;
+      const candidate = legacyShare ?? (cached?.legacy ? cached.password : null);
+      if (candidate) return vault.keep(session.id, candidate);
+      /* Nothing here, or only an unproven guess the pane will settle. */
+      return !cached;
+    }
+
+    for (const session of all) {
       /* Newly started here, still waiting for its session to appear. */
       const pending = session.origin ? pendingShares.current.get(session.origin) : undefined;
       if (pending) {
@@ -401,11 +448,19 @@ export function Workspace() {
         rememberFor(session.id, pending);
       }
 
-      /* Only the owner holds the password, so only they can share it. */
-      if (me && session.ownerUid !== me.uid) continue;
-      const password = passwordFor(session.id);
-      if (!password) continue;
+      /*
+       * Finished sessions too: a persistent one comes back under the same
+       * password, so its copy is worth keeping.
+       */
+      if (!checkedVault.current.has(session.id) && (await keepOwnCopy(session))) {
+        checkedVault.current.add(session.id);
+      }
 
+      if (session.closedAt) continue;
+      const cached = cachedPassword(session.id);
+
+      /* Only the owner shares with colleagues. */
+      if (!me || session.ownerUid !== me.uid) continue;
       const missing = sealTargets({
         members: roster,
         you: me,
@@ -413,22 +468,31 @@ export function Workspace() {
         done: sharedWith.current.get(session.id),
       });
       if (missing.length === 0) continue;
+      /* A proven password before a vault copy nobody can vouch for; see TerminalPane. */
+      const password =
+        (cached?.verified ? cached.password : null) ?? (await vault.openShare(session.id, session.keyShare));
+      if (!password) continue;
 
-      try {
-        const shares = await sealForMembers(missing, password);
-        await shareSessionKeys(
-          session.id,
-          shares.map((share) => ({
-            uid: share.uid,
-            sender_public_key: share.senderPublicKey,
-            sealed: share.sealed,
-          })),
-        );
-        const done = sharedWith.current.get(session.id) ?? new Set<string>();
-        for (const share of shares) done.add(share.uid);
-        sharedWith.current.set(session.id, done);
-      } catch {
-        /* Sharing is a convenience; the session still works for its owner. */
+      const done = sharedWith.current.get(session.id) ?? new Set<string>();
+      sharedWith.current.set(session.id, done);
+      for (const member of missing) {
+        /*
+         * Sealed without asking only to a key this browser has sealed to
+         * before, or is seeing for the first time. One that changed waits for
+         * the owner to confirm it on the session page.
+         */
+        if (!member.accountKey || keyTrust(me.uid, member.uid, member.accountKey) === "changed") continue;
+        try {
+          const share = await vault.sealTo(member, session.id, password);
+          if (!share) continue;
+          await shareSessionKeys(session.id, [
+            { uid: member.uid, sender_public_key: share.senderPublicKey, sealed: share.sealed },
+          ]);
+          trustKey(me.uid, member.uid, member.accountKey);
+          done.add(member.uid);
+        } catch {
+          /* Sharing is a convenience; the session still works for its owner. */
+        }
       }
     }
   }
@@ -583,6 +647,7 @@ export function Workspace() {
                 shareUrl={tab.shareUrl}
                 active={state.activeId === tab.id}
                 keyShare={current?.keyShare ?? tab.keyShare}
+                host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
               />
             );

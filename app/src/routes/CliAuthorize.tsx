@@ -8,17 +8,15 @@ import { useAuth } from "../auth/AuthProvider";
 import { Booting } from "../components/Booting";
 import { approveCliLogin } from "../lib/api";
 import { usePageTitle } from "../lib/page-title";
-import { buildCallback, parseAuthorizeRequest } from "../lib/cli-authorize";
+import { buildCallback, parseAuthorizeRequest, type AuthorizeRequest } from "../lib/cli-authorize";
+import { VaultGate } from "../vault/VaultGate";
+import { useVault } from "../vault/VaultProvider";
 
 export function CliAuthorize() {
   usePageTitle("Link a machine");
   const { user, initializing } = useAuth();
   const location = useLocation();
   const parsed = useMemo(() => parseAuthorizeRequest(location.search), [location.search]);
-
-  const [busy, setBusy] = useState<"none" | "approve" | "deny">("none");
-  const [error, setError] = useState("");
-  const [handedOff, setHandedOff] = useState(false);
 
   if (initializing) return <Booting label="Checking your session" />;
 
@@ -40,6 +38,30 @@ export function CliAuthorize() {
     );
   }
 
+  /*
+   * Behind the vault, like the sessions page. The machine being linked will
+   * seal every session's password to the vault key, and it takes that key
+   * from this page, so the page must hold one it has verified itself.
+   */
+  return (
+    <VaultGate>
+      <Consent email={user.email ?? ""} parsed={parsed} />
+    </VaultGate>
+  );
+}
+
+function Consent({
+  email,
+  parsed,
+}: {
+  email: string;
+  parsed: { ok: true; request: AuthorizeRequest } | { ok: false; reason: string };
+}) {
+  const vault = useVault();
+  const [busy, setBusy] = useState<"none" | "approve" | "deny">("none");
+  const [error, setError] = useState("");
+  const [handedOff, setHandedOff] = useState(false);
+
   async function handleApprove() {
     if (!parsed.ok) return;
     setError("");
@@ -50,9 +72,16 @@ export function CliAuthorize() {
         codeChallenge: parsed.request.codeChallenge,
       });
       setHandedOff(true);
-      window.location.replace(
-        buildCallback(parsed.request.redirectUri, { code, state: parsed.request.state }),
-      );
+      /*
+       * The vault key goes to the CLI with the code, straight to its loopback
+       * listener. It is the key this browser checked against the vault's
+       * private half when it unlocked, so a service that wanted a machine to
+       * seal to some other key would have to get it past this page, not just
+       * put it in an API response.
+       */
+      const params: Record<string, string> = { code, state: parsed.request.state };
+      if (vault.publicKey) params.account_key = vault.publicKey;
+      window.location.replace(buildCallback(parsed.request.redirectUri, params));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not complete the request.");
       setBusy("none");
@@ -76,7 +105,7 @@ export function CliAuthorize() {
     <main className="consent">
       <header className="consent-head">
         <Wordmark />
-        <span className="consent-account">{user.email}</span>
+        <span className="consent-account">{email}</span>
       </header>
 
       <section className="consent-card rise rise-1">
@@ -97,7 +126,7 @@ export function CliAuthorize() {
             <h1>Link this terminal?</h1>
             <p>
               A terminal on this computer is asking to sign in as{" "}
-              <b>{user.email}</b>. Once linked, sessions you start with{" "}
+              <b>{email}</b>. Once linked, sessions you start with{" "}
               <code>shell</code> show up in your account.
             </p>
 
@@ -116,12 +145,18 @@ export function CliAuthorize() {
               </div>
               <div className="consent-row">
                 <dt>Grants</dt>
-                <dd>Publishing your sessions to this account</dd>
+                <dd>Publishing your sessions to this account, with their passwords sealed to your vault</dd>
               </div>
               <div className="consent-row">
                 <dt>Does not grant</dt>
-                <dd>Reading terminal output, or your password</dd>
+                <dd>Reading terminal output, or opening your vault</dd>
               </div>
+              {vault.fingerprint && (
+                <div className="consent-row">
+                  <dt>Vault key</dt>
+                  <dd className="vault-fingerprint">{vault.fingerprint}</dd>
+                </div>
+              )}
             </dl>
 
             <div className="consent-actions">
@@ -148,7 +183,8 @@ export function CliAuthorize() {
               <ShieldCheck size={14} weight="bold" />
               <span>
                 Terminal content stays end-to-end encrypted. Only the link, the
-                command name and the timing are published.
+                command name and the timing are published; passwords reach this
+                account sealed, and shell.online cannot open them.
               </span>
             </p>
           </>

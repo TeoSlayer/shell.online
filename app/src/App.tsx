@@ -13,11 +13,14 @@ import { Terms } from "./routes/Terms";
 import { Session } from "./routes/Session";
 import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
+import { VaultProvider } from "./vault/VaultProvider";
+import { VaultGate } from "./vault/VaultGate";
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <VaultProvider>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -56,7 +59,9 @@ export default function App() {
             path="/sessions/:sessionId"
             element={
               <RequireAuth>
-                <Session />
+                <VaultGate>
+                  <Session />
+                </VaultGate>
               </RequireAuth>
             }
           />
@@ -92,7 +97,9 @@ export default function App() {
             path="/sessions"
             element={
               <RequireAuth>
-                <Workspace />
+                <VaultGate>
+                  <Workspace />
+                </VaultGate>
               </RequireAuth>
             }
           />
@@ -103,6 +110,7 @@ export default function App() {
           <Route path="/cli/authorize" element={<CliAuthorize />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </VaultProvider>
       </AuthProvider>
     </BrowserRouter>
   );

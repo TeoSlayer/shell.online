@@ -10,6 +10,7 @@ import "./styles/people.css";
 import "./styles/collab.css";
 import "./styles/audit.css";
 import "./styles/terms.css";
+import "./styles/vault.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -40,7 +40,7 @@ func TestOpenSessionLinkReturnsNilWhenNotSignedIn(t *testing.T) {
 func TestNilLinkMethodsAreSafe(t *testing.T) {
 	// The launch path calls these unconditionally, so nil must be inert.
 	var link *sessionLink
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 	exitCode := 0
 	link.Close(&exitCode)
 }
@@ -63,7 +63,7 @@ func TestRegisterPublishesTheSession(t *testing.T) {
 	if link == nil {
 		t.Fatal("expected a link for a signed-in machine")
 	}
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 
 	if authorization != "Bearer sha_access" {
 		t.Fatalf("Authorization = %q", authorization)
@@ -92,7 +92,7 @@ func TestRegisterWarnsButDoesNotFailTheLaunch(t *testing.T) {
 	linkedAccount(t, service.URL)
 	var warn bytes.Buffer
 	link := openSessionLink(context.Background(), &warn)
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 
 	if !strings.Contains(warn.String(), "will not appear in your account") {
 		t.Fatalf("warning = %q", warn.String())
@@ -113,7 +113,7 @@ func TestCloseIsSkippedWhenRegistrationNeverSucceeded(t *testing.T) {
 	linkedAccount(t, service.URL)
 	var warn bytes.Buffer
 	link := openSessionLink(context.Background(), &warn)
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 
 	exitCode := 0
 	link.Close(&exitCode)
@@ -141,7 +141,7 @@ func TestCloseMarksTheSessionFinished(t *testing.T) {
 	var warn bytes.Buffer
 	link := openSessionLink(context.Background(), &warn)
 	input := sampleSessionInput()
-	link.Register(context.Background(), input)
+	link.Register(context.Background(), input, "")
 
 	exitCode := 3
 	link.Close(&exitCode)
@@ -171,7 +171,7 @@ func TestCloseRunsEvenAfterTheProcessContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	var warn bytes.Buffer
 	link := openSessionLink(ctx, &warn)
-	link.Register(ctx, sampleSessionInput())
+	link.Register(ctx, sampleSessionInput(), "")
 	cancel()
 
 	exitCode := 0
@@ -217,7 +217,7 @@ func TestExpiredCredentialsAreRefreshedAndPersisted(t *testing.T) {
 	if link == nil {
 		t.Fatalf("expected a link after refresh; warnings %q", warn.String())
 	}
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 
 	if !refreshed.Load() {
 		t.Fatal("a stale access token should have been refreshed")
@@ -281,7 +281,7 @@ func TestSharingUsesTheServiceRecordedAtLoginNotTheEnvironment(t *testing.T) {
 	if link == nil {
 		t.Fatalf("a linked machine must produce a link; warnings %q", warn.String())
 	}
-	link.Register(context.Background(), sampleSessionInput())
+	link.Register(context.Background(), sampleSessionInput(), "")
 
 	if !reached {
 		t.Fatal("the share was not published to the service recorded at login")
@@ -319,7 +319,7 @@ func TestEveryShellInvocationPublishesOnALinkedMachine(t *testing.T) {
 		link := openSessionLink(context.Background(), &warn)
 		input := sampleSessionInput()
 		input.ID = id
-		link.Register(context.Background(), input)
+		link.Register(context.Background(), input, "")
 	}
 
 	if len(published) != 3 {
@@ -346,7 +346,7 @@ func TestPublishedLinkKeepsTheSaltSoItCanBeOpened(t *testing.T) {
 	link := openSessionLink(context.Background(), &warn)
 	input := sampleSessionInput()
 	input.ShareURL += "#salt=i6AaAzfYyklCDqgMRgEIDw"
-	link.Register(context.Background(), input)
+	link.Register(context.Background(), input, "")
 
 	if !strings.Contains(shareURL, "#salt=") {
 		t.Fatalf("a link without its salt cannot be opened from the web app: %q", shareURL)

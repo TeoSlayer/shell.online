@@ -1,22 +1,23 @@
 import { useEffect, useState } from "react";
-import { UserPlus } from "@phosphor-icons/react";
+import { UserPlus, Warning } from "@phosphor-icons/react";
 import { Avatar } from "./Avatar";
+import { Button } from "./Button";
 import { PersonPicker } from "./PersonPicker";
 import { shareSessionKeys, type Member, type SessionRecord } from "../lib/api";
-import { openSealed, sealForMembers } from "../lib/keypair";
 import { addToAudience, audienceFor, passwordFor } from "../lib/session-passwords";
+import { keyTrust, trustKey } from "../lib/known-keys";
 import { displayName } from "../lib/people";
+import { useVault } from "../vault/VaultProvider";
 
 /**
  * Who else can open this session.
  *
- * The password is sealed once per person, so this list is the whole of the
- * answer: a colleague who is not on it holds nothing, whatever the session
- * says about who it is assigned to. Assigning a session to somebody used to
- * appear to hand it over because the password had already gone to everyone.
+ * The password is sealed once per person, to their vault, so this list is the
+ * whole of the answer: a colleague who is not on it holds nothing, whatever
+ * the session says about who it is assigned to.
  *
- * Only ever adds. Removing somebody here would not reach into their browser
- * and take back the copy they hold, so a control that offered it would be
+ * Only ever adds. Removing somebody here would not reach into their vault and
+ * take back the copy they hold, so a control that offered it would be
  * describing something that did not happen.
  */
 export function SessionAudience({
@@ -28,61 +29,73 @@ export function SessionAudience({
   members: Member[];
   you: Member | null;
 }) {
+  const vault = useVault();
   const [audience, setAudience] = useState<string[]>(() => audienceFor(session.id));
+  const [password, setPassword] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [held, setHeld] = useState(false);
+  /* Someone whose vault key changed, waiting for the owner to say go ahead. */
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const isOwner = Boolean(you && session.ownerUid === you.uid);
+  const sealed = session.keyShare ? `${session.keyShare.senderPublicKey}:${session.keyShare.sealed}` : "";
 
   /* Only somebody holding the password has anything to seal. */
   useEffect(() => {
     let live = true;
     void (async () => {
-      const own = passwordFor(session.id);
-      if (own) return live && setHeld(true);
-      const share = session.keyShare;
-      const opened = share ? await openSealed(share.senderPublicKey, share.sealed) : null;
-      if (live) setHeld(Boolean(opened));
+      const opened = passwordFor(session.id) ?? (await vault.openShare(session.id, session.keyShare));
+      if (live) setPassword(opened);
     })();
     return () => {
       live = false;
     };
-  }, [session]);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps -- content, not identity */
+  }, [session.id, sealed, vault.openShare]);
 
-  if (!isOwner || !held) return null;
+  if (!isOwner || !password || !you) return null;
 
-  const shared = members.filter((member) => audience.includes(member.uid));
+  /* Who holds a copy: what the service stores, and what this browser has sent. */
+  const holders = new Set([...(session.sharedWith ?? []), ...audience]);
+  const shared = members.filter((member) => member.uid !== you.uid && holders.has(member.uid));
   const candidates = members.filter(
-    (member) =>
-      member.uid !== you?.uid && !audience.includes(member.uid) && Boolean(member.publicKey),
+    (member) => member.uid !== you.uid && !holders.has(member.uid) && Boolean(member.accountKey),
   );
 
-  async function add(uid: string) {
+  async function add(uid: string, confirmedChange = false) {
     const member = members.find((candidate) => candidate.uid === uid);
-    if (!member?.publicKey) return;
-    const password = passwordFor(session.id);
-    if (!password) return setError("This browser no longer holds the password for this session.");
+    if (!member?.accountKey || !password || !you) return;
+
+    /*
+     * A key this browser has sealed to before, and that has since changed, is
+     * either a colleague who reset their vault or a key that is not theirs.
+     * Nothing is sealed to it until the owner has seen that and said so.
+     */
+    if (keyTrust(you.uid, member.uid, member.accountKey) === "changed" && !confirmedChange) {
+      setConfirming(uid);
+      return;
+    }
 
     setBusy(uid);
     setError("");
+    setConfirming(null);
     try {
-      const sealed = await sealForMembers([member], password);
-      await shareSessionKeys(
-        session.id,
-        sealed.map((entry) => ({
-          uid: entry.uid,
-          sender_public_key: entry.senderPublicKey,
-          sealed: entry.sealed,
-        })),
-      );
-      setAudience(addToAudience(session.id, [uid]));
+      const share = await vault.sealTo(member, session.id, password);
+      if (!share) throw new Error(`${displayName(member)} has not set up a vault yet.`);
+      await shareSessionKeys(session.id, [
+        { uid: member.uid, sender_public_key: share.senderPublicKey, sealed: share.sealed },
+      ]);
+      trustKey(you.uid, member.uid, member.accountKey);
+      const kept = addToAudience(session.id, [uid]);
+      setAudience((current) => [...new Set([...current, ...kept, uid])]);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not share the session.");
     } finally {
       setBusy("");
     }
   }
+
+  const waiting = confirming ? members.find((member) => member.uid === confirming) : undefined;
 
   return (
     <section className="audience">
@@ -92,13 +105,48 @@ export function SessionAudience({
         <p className="detail-empty">Only you. Add someone and they can open it straight away.</p>
       ) : (
         <ul className="audience-list">
-          {shared.map((member) => (
-            <li key={member.uid}>
-              <Avatar person={member} size="xs" />
-              {displayName(member)}
-            </li>
-          ))}
+          {shared.map((member) => {
+            const changed =
+              member.accountKey && keyTrust(you.uid, member.uid, member.accountKey) === "changed";
+            return (
+              <li key={member.uid}>
+                <Avatar person={member} size="xs" />
+                {displayName(member)}
+                {changed && (
+                  <button
+                    type="button"
+                    className="vault-link"
+                    onClick={() => void add(member.uid)}
+                    disabled={busy === member.uid}
+                  >
+                    Share again
+                  </button>
+                )}
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {waiting && (
+        <div className="audience-confirm" role="alert">
+          <p>
+            <Warning size={14} weight="fill" />
+            <span>
+              {displayName(waiting)}&apos;s vault key has changed since you last
+              shared with them. That happens when someone resets their vault. If
+              you did not expect it, check with them before sharing.
+            </span>
+          </p>
+          <div className="audience-confirm-actions">
+            <Button type="button" variant="ghost" onClick={() => void add(waiting.uid, true)}>
+              Share anyway
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
 
       {candidates.length > 0 && (

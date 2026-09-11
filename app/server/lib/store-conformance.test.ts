@@ -128,6 +128,7 @@ function notification(overrides: Partial<Notification> = {}): Notification {
 type Implementation = { name: string; open: () => Promise<Store>; reset: (store: Store) => Promise<void> };
 
 const TABLES = [
+  "account_keys",
   "session_key_shares",
   "sessions",
   "agent_commands",
@@ -449,6 +450,57 @@ for (const implementation of implementations) {
         await store.upsertSession(session());
         expect(await store.putKeyShares("org_2", "s1", [])).toBe(false);
         expect(await store.assignSession("org_2", "s1", ["uid-2"])).toBeNull();
+      });
+    });
+
+    describe("session vault", () => {
+      type AccountKey = Parameters<Store["putAccountKey"]>[0];
+
+      function vault(overrides: Partial<AccountKey> = {}): AccountKey {
+        return {
+          uid: "uid-1",
+          publicKey: "pk-1",
+          encryptedPrivateKey: "enc-1",
+          recoveryWrap: "wrap-1",
+          version: 1,
+          createdAt: 1000,
+          updatedAt: 1000,
+          ...overrides,
+        };
+      }
+
+      /* Two browsers setting up at once must not both believe they won. */
+      it("creates a vault once and refuses a second", async () => {
+        expect(await store.putAccountKey(vault())).toBe(true);
+        expect(await store.putAccountKey(vault({ publicKey: "pk-2" }))).toBe(false);
+        expect(await store.accountKey("uid-1")).toEqual(vault());
+      });
+
+      it("replaces a vault only at the version the reset expects", async () => {
+        await store.putAccountKey(vault());
+        const next = vault({ publicKey: "pk-2", version: 2, updatedAt: 2000 });
+        expect(await store.putAccountKey(next, 5)).toBe(false);
+        expect(await store.putAccountKey(next, 1)).toBe(true);
+        expect(await store.accountKey("uid-1")).toEqual(next);
+        /* The same reset replayed finds the version has moved on. */
+        expect(await store.putAccountKey(vault({ publicKey: "pk-3", version: 2 }), 1)).toBe(false);
+      });
+
+      it("does not replace a vault that does not exist", async () => {
+        expect(await store.putAccountKey(vault(), 1)).toBe(false);
+        expect(await store.accountKey("uid-1")).toBeNull();
+      });
+
+      it("hands out each member's vault key with the roster, and only theirs", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putMembership(
+          membership({ uid: "uid-2", email: "bo@example.com", role: "member", joinedAt: 2000 }),
+        );
+        await store.putAccountKey(vault({ uid: "uid-2", publicKey: "pk-bo" }));
+        const roster = await store.members("org_1");
+        expect(roster.find((entry) => entry.uid === "uid-2")?.accountKey).toBe("pk-bo");
+        expect(roster.find((entry) => entry.uid === "uid-1")?.accountKey).toBeUndefined();
       });
     });
 
