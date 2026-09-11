@@ -165,7 +165,11 @@ function Consent({
               </div>
               <div className="consent-row">
                 <dt>Recorded</dt>
-                <dd>What anyone types into a session from a browser</dd>
+                <dd>
+                  What anyone types into a session from a browser, kept in
+                  your team&rsquo;s activity trail and sealed with your
+                  team&rsquo;s key
+                </dd>
               </div>
               <div className="consent-row">
                 <dt>Does not grant</dt>
@@ -205,7 +209,9 @@ function Consent({
                 Terminal output stays end-to-end encrypted, and passwords reach
                 this account sealed, so shell.online cannot open them. The link,
                 command line, machine name and timings are shared with your
-                team, and what you type from a browser is recorded. Starting
+                team, and what anyone types from a browser is kept in your
+                team&rsquo;s activity trail, sealed with your team&rsquo;s key.
+                Starting
                 sessions from a browser is a separate choice, made in your
                 terminal. The{" "}
                 <Link to="/terms" target="_blank" rel="noreferrer">

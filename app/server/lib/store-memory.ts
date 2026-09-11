@@ -21,6 +21,8 @@ import type {
   Notification,
   SessionKeyShare,
   SessionRecord,
+  TeamKey,
+  TeamKeyShare,
 } from "./types";
 
 /*
@@ -43,6 +45,15 @@ function byTime<T>(time: (record: T) => number, id: (record: T) => string, desce
   };
 }
 
+/* Typed input, which the browser seals, as opposed to what the service writes itself. */
+function isTyped(entry: AuditEvent): boolean {
+  return entry.kind === "input" || entry.kind === "interrupt";
+}
+
+function isSealed(text: string): boolean {
+  return text.startsWith("a1.");
+}
+
 interface Shape {
   codes: AuthorizationCode[];
   tokens: CliToken[];
@@ -56,12 +67,15 @@ interface Shape {
   notifications: Notification[];
   accountKeys: AccountKey[];
   deletedAccounts: { uid: string; deletedAt: number }[];
+  teamKeys: TeamKey[];
+  teamKeyShares: TeamKeyShare[];
 }
 
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], accountKeys: [], deletedAccounts: [],
+  teamKeys: [], teamKeyShares: [],
 };
 
 /**
@@ -126,6 +140,8 @@ export class MemoryStore implements Store {
         notifications: parsed.notifications ?? [],
         accountKeys: parsed.accountKeys ?? [],
         deletedAccounts: parsed.deletedAccounts ?? [],
+        teamKeys: parsed.teamKeys ?? [],
+        teamKeyShares: parsed.teamKeyShares ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -613,6 +629,69 @@ export class MemoryStore implements Store {
   async putAudit(event: AuditEvent): Promise<void> {
     this.data.audit.push(event);
     this.flush();
+  }
+
+  async plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]> {
+    return this.data.audit
+      .filter((entry) => entry.orgId === orgId && isTyped(entry) && !isSealed(entry.text))
+      .sort(byTime((entry) => entry.at, (entry) => entry.id))
+      .slice(0, limit);
+  }
+
+  async sealAudit(orgId: string, id: string, text: string, sealedBy: string): Promise<boolean> {
+    const entry = this.data.audit.find((candidate) => candidate.orgId === orgId && candidate.id === id);
+    if (!entry || !isTyped(entry) || isSealed(entry.text)) return false;
+    entry.text = text;
+    entry.sealedBy = sealedBy;
+    this.flush();
+    return true;
+  }
+
+  /* ---------------------------------------------------------------
+     Team audit key
+     --------------------------------------------------------------- */
+
+  async teamKey(orgId: string): Promise<TeamKey | null> {
+    const found = this.data.teamKeys.find((entry) => entry.orgId === orgId);
+    return found ? { ...found } : null;
+  }
+
+  async putTeamKey(key: TeamKey): Promise<boolean> {
+    if (this.data.teamKeys.some((entry) => entry.orgId === key.orgId)) return false;
+    this.data.teamKeys.push({ ...key });
+    this.flush();
+    return true;
+  }
+
+  async teamKeyShares(orgId: string): Promise<TeamKeyShare[]> {
+    return this.data.teamKeyShares
+      .filter((entry) => entry.orgId === orgId)
+      .sort(byTime((entry) => entry.createdAt, (entry) => entry.uid))
+      .map((entry) => ({ ...entry }));
+  }
+
+  async putTeamKeyShares(shares: TeamKeyShare[]): Promise<number> {
+    let written = 0;
+    for (const share of shares) {
+      const exists = this.data.teamKeyShares.some(
+        (entry) => entry.orgId === share.orgId && entry.uid === share.uid,
+      );
+      if (exists) continue;
+      this.data.teamKeyShares.push({ ...share });
+      written += 1;
+    }
+    if (written > 0) this.flush();
+    return written;
+  }
+
+  async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {
+    const before = this.data.teamKeyShares.length;
+    this.data.teamKeyShares = this.data.teamKeyShares.filter(
+      (entry) => !(entry.orgId === orgId && entry.uid === uid),
+    );
+    if (this.data.teamKeyShares.length === before) return false;
+    this.flush();
+    return true;
   }
 
   async auditFor(orgId: string, sessionId: string): Promise<AuditEvent[]> {

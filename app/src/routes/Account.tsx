@@ -10,13 +10,7 @@ import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 import { useVault } from "../vault/VaultProvider";
 import { VaultSetup } from "../vault/VaultGate";
-
-const VAULT_STATE: Record<string, string> = {
-  loading: "Checking",
-  setup: "Not set up yet. It is set up the first time you open Sessions.",
-  locked: "Locked in this browser. Open Sessions to unlock it with your recovery key.",
-  error: "Could not be reached",
-};
+import { VaultPanel } from "../vault/VaultPanel";
 
 export function Account() {
   usePageTitle("Account");
@@ -80,27 +74,7 @@ export function Account() {
           <dt>User id</dt>
           <dd>{user.uid}</dd>
         </div>
-        {/*
-          The fingerprint is what `shell login` prints when a machine first
-          trusts the vault, so the two can be compared by eye.
-        */}
-        <div className="account-row">
-          <dt>Session vault</dt>
-          <dd>
-            {vault.status === "unlocked" ? (
-              <>
-                Unlocked, key <span className="vault-fingerprint">{vault.fingerprint}</span>
-                {!vault.remembered && (
-                  <span className="account-unverified">
-                    <Warning size={13} weight="fill" /> this browser cannot keep it unlocked
-                  </span>
-                )}
-              </>
-            ) : (
-              VAULT_STATE[vault.status]
-            )}
-          </dd>
-        </div>
+        {/* The vault has its own section below, which says what it holds. */}
         <div className="account-row">
           <dt>Your data</dt>
           <dd>
@@ -109,6 +83,13 @@ export function Account() {
           </dd>
         </div>
       </dl>
+
+      {/*
+        What the vault is and what it holds, opened in this browser. The key
+        fingerprint in it is what `shell login` prints when a machine first
+        trusts the vault, so the two can be compared by eye.
+      */}
+      <VaultPanel />
 
       {resetting && (
         <section className="consent-card vault-card vault-reset">

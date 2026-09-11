@@ -148,11 +148,14 @@ export function SignUp() {
       }
       legal={
         <>
-          Terminal content stays end-to-end encrypted either way. The{" "}
+          Terminal output stays end-to-end encrypted. What you type into a
+          session from the browser is recorded in your team&rsquo;s audit log,
+          end-to-end encrypted so your team can read it and shell.online
+          cannot. Session details such as the command line are visible to
+          your team. The{" "}
           <a href="https://shell.online/security/">security model</a> covers the
-          cryptography; the terms describe the limited account and session
-          metadata visible to your team. Terminal input is not copied
-          into the accounts service.
+          cryptography, and the{" "}
+          <Link to="/terms#activity-records">terms</Link> list what is kept.
         </>
       }
     >

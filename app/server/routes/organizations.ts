@@ -249,6 +249,12 @@ export async function removeMember(store: Store, membership: Membership, uid: st
     return denied(`you cannot remove ${target.role === "owner" ? "the owner" : "another admin"}`);
   }
   await store.removeMember(membership.orgId, uid);
+  /*
+   * Their copy of the team's audit key goes with them. A copy they already
+   * opened cannot be taken back out of their browser, but the service stops
+   * handing it to them.
+   */
+  await store.deleteTeamKeyShare(membership.orgId, uid);
   return ok({ removed: true });
 }
 

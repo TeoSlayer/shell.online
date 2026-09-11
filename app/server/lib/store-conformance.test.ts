@@ -138,6 +138,8 @@ const TABLES = [
   "notifications",
   "invites",
   "memberships",
+  "team_key_shares",
+  "team_keys",
   "organizations",
   "cli_tokens",
   "auth_codes",
@@ -502,6 +504,88 @@ for (const implementation of implementations) {
         const roster = await store.members("org_1");
         expect(roster.find((entry) => entry.uid === "uid-2")?.accountKey).toBe("pk-bo");
         expect(roster.find((entry) => entry.uid === "uid-1")?.accountKey).toBeUndefined();
+      });
+    });
+
+    describe("team audit key", () => {
+      type TeamKeyRecord = Parameters<Store["putTeamKey"]>[0];
+      type ShareRecord = Parameters<Store["putTeamKeyShares"]>[0][number];
+
+      function teamKey(overrides: Partial<TeamKeyRecord> = {}): TeamKeyRecord {
+        return { orgId: "org_1", publicKey: "pk-team", version: 1, createdBy: "uid-1", createdAt: 1000, ...overrides };
+      }
+
+      function share(overrides: Partial<ShareRecord> = {}): ShareRecord {
+        return {
+          orgId: "org_1",
+          uid: "uid-1",
+          version: 1,
+          senderUid: "uid-1",
+          sealed: "t1.one",
+          createdAt: 1000,
+          ...overrides,
+        };
+      }
+
+      beforeEach(async () => {
+        await store.putOrganization(organization());
+        await store.putOrganization(organization({ id: "org_2", name: "Elsewhere" }));
+      });
+
+      /* Two browsers making the key at once must not both believe theirs is the team's. */
+      it("creates a team key once and refuses a second", async () => {
+        expect(await store.putTeamKey(teamKey())).toBe(true);
+        expect(await store.putTeamKey(teamKey({ publicKey: "pk-other", createdBy: "uid-2" }))).toBe(false);
+        expect(await store.teamKey("org_1")).toEqual(teamKey());
+        expect(await store.teamKey("org_2")).toBeNull();
+      });
+
+      it("never overwrites a member's copy of the key", async () => {
+        expect(await store.putTeamKeyShares([share(), share({ uid: "uid-2", sealed: "t1.two" })])).toBe(2);
+        expect(await store.putTeamKeyShares([share({ sealed: "t1.replaced", senderUid: "uid-2" })])).toBe(0);
+        const shares = await store.teamKeyShares("org_1");
+        expect(shares.find((entry) => entry.uid === "uid-1")?.sealed).toBe("t1.one");
+        expect(shares).toHaveLength(2);
+      });
+
+      it("deletes only the copy it names", async () => {
+        await store.putTeamKeyShares([share(), share({ uid: "uid-2", sealed: "t1.two" })]);
+        expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(true);
+        expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(false);
+        expect(await store.deleteTeamKeyShare("org_2", "uid-2")).toBe(false);
+        expect((await store.teamKeyShares("org_1")).map((entry) => entry.uid)).toEqual(["uid-2"]);
+      });
+
+      describe("typed input from before the key", () => {
+        beforeEach(async () => {
+          await store.putAudit(auditEvent({ id: "p1", kind: "input", text: "ls -la", at: 1000 }));
+          await store.putAudit(auditEvent({ id: "s1", kind: "input", text: "a1.1.sender.body", at: 2000 }));
+          await store.putAudit(auditEvent({ id: "h1", kind: "handoff", text: "assigned to bo", at: 3000 }));
+          await store.putAudit(auditEvent({ id: "i1", kind: "interrupt", text: "", at: 4000 }));
+          await store.putAudit(auditEvent({ id: "o1", orgId: "org_2", kind: "input", text: "other", at: 5000 }));
+        });
+
+        it("lists only plaintext typed input, oldest first", async () => {
+          expect((await store.plaintextAudit("org_1", 10)).map((entry) => entry.id)).toEqual(["p1", "i1"]);
+          expect((await store.plaintextAudit("org_1", 1)).map((entry) => entry.id)).toEqual(["p1"]);
+        });
+
+        /* Who sealed it is kept: a re-sealed entry must not pass for first-hand. */
+        it("seals a plaintext entry once, recording who did it, and nothing else", async () => {
+          expect(await store.sealAudit("org_1", "p1", "a1.1.sender.sealed", "uid-2")).toBe(true);
+          expect(await store.sealAudit("org_1", "p1", "a1.1.sender.again", "uid-3")).toBe(false);
+          expect(await store.sealAudit("org_1", "s1", "a1.1.sender.over", "uid-2")).toBe(false);
+          expect(await store.sealAudit("org_1", "h1", "a1.1.sender.over", "uid-2")).toBe(false);
+          expect(await store.sealAudit("org_2", "p1", "a1.1.sender.over", "uid-2")).toBe(false);
+          const trail = await store.auditFor("org_1", "s1");
+          const sealed = trail.find((entry) => entry.id === "p1");
+          expect(sealed?.text).toBe("a1.1.sender.sealed");
+          expect(sealed?.sealedBy).toBe("uid-2");
+          /* An entry that arrived sealed was nobody's to re-seal. */
+          expect(trail.find((entry) => entry.id === "s1")?.sealedBy).toBeUndefined();
+          expect(trail.find((entry) => entry.id === "h1")?.text).toBe("assigned to bo");
+          expect((await store.plaintextAudit("org_1", 10)).map((entry) => entry.id)).toEqual(["i1"]);
+        });
       });
     });
 

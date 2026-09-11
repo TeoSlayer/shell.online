@@ -216,7 +216,7 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
 }
 
 /** Opens an existing vault in a browser that has not opened it before. */
-function VaultUnlock() {
+export function VaultUnlock() {
   const vault = useVault();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);

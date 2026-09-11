@@ -71,6 +71,14 @@ export interface AuditEvent {
   actorEmail: string;
   kind: "input" | "interrupt" | "opened" | "handoff" | "stopped" | "deleted";
   text: string;
+  /**
+   * Who sealed this entry afterwards, when a team encrypted a log it had kept
+   * before it had an audit key. Absent means first-hand: it arrived sealed
+   * from the browser that recorded it. A re-sealed entry was sealed by
+   * somebody handed its session, author and time by this service, so it is
+   * only as trustworthy as they are, and a reader is told which it is.
+   */
+  sealedBy?: string;
 }
 
 /**
@@ -103,6 +111,33 @@ export interface AccountKey {
   version: number;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * An organization's audit key.
+ *
+ * The public half of a key pair whose private half the team's members hold,
+ * each copy sealed to that member's vault. Typed input is sealed to it in the
+ * browser, so the audit log the service stores is one it cannot read.
+ */
+export interface TeamKey {
+  orgId: string;
+  publicKey: string;
+  /** Which key an entry was sealed to, so one can be replaced without losing the old. */
+  version: number;
+  createdBy: string;
+  createdAt: number;
+}
+
+/** One member's copy of the team's private audit key, sealed to them by a teammate. */
+export interface TeamKeyShare {
+  orgId: string;
+  uid: string;
+  version: number;
+  /** Who sealed it, so the reader can check the copy came from a teammate's vault. */
+  senderUid: string;
+  sealed: string;
+  createdAt: number;
 }
 
 export interface Comment {

@@ -4,6 +4,26 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Vault management on the Account page: what the vault is, the session
+  passwords it holds, and the team audit key it keeps. Only you can see
+  what is in it.
+- An end-to-end encrypted audit log. What is typed into a session from the
+  browser is encrypted to your team's audit key before it leaves the browser,
+  so every member of the team can read it and shell.online cannot.
+
+### Changed
+
+- Searching and exporting the audit log run in the browser, on the decrypted
+  entries.
+- The service refuses unencrypted input entries for the audit log.
+
+### Fixed
+
+- The sign-up page said typed input was not recorded. It is recorded, now
+  end-to-end encrypted for your team.
+
 ## [0.12.0] — 2026-09-11
 
 ### Added

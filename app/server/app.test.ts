@@ -1285,13 +1285,6 @@ describe("audit log", () => {
     return tokens;
   }
 
-  /*
-   * Terminal input is recorded in plaintext, and the whole organization can
-   * read and export it. That is a deliberate choice rather than an oversight:
-   * it was removed once and put back on the operator's instruction, and the
-   * terms say so. This test is where the choice is written down, so that
-   * removing it again is a decision somebody takes rather than a regression.
-   */
   it("records the removal of a session and keeps the entry after the row is gone", async () => {
     await withSession();
     const removed = await call("DELETE", `/api/sessions/${session.id}`, { auth: await idToken() });
@@ -1326,48 +1319,101 @@ describe("audit log", () => {
     expect(again.status).toBe(404);
   });
 
-  it("records what was typed, in plaintext, for the whole organization", async () => {
+  /*
+   * An entry shaped the way the browser seals one: a real P-256 sender key and
+   * a body of nonce and ciphertext. The service can only check the shape, so
+   * random bytes of the right length stand in for the ciphertext.
+   */
+  async function sealedEntry(bodyBytes = 40) {
+    const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    const sender = base64url(Buffer.from(await crypto.subtle.exportKey("raw", pair.publicKey)));
+    return `a1.1.${sender}.${base64url(randomBytes(bodyBytes))}`;
+  }
+
+  /*
+   * What people type into a session is recorded for their team. That is the
+   * operator's choice, made deliberately: it was removed once and put back on
+   * their instruction, and the terms say so. What changed is who can read it.
+   * The browser seals each entry to the team's audit key before sending it,
+   * and the service refuses anything it could read. This test is where that
+   * is written down, so that accepting plaintext again is a decision somebody
+   * takes rather than a regression.
+   */
+  it("records typed input only as ciphertext sealed for the team", async () => {
     await withSession();
-    const result = await call("POST", "/api/audit", {
+    const plaintext = await call("POST", "/api/audit", {
       auth: await idToken(),
       body: {
         entries: [
-          { session_id: session.id, kind: "input", text: "refactor the parser" },
-          { session_id: session.id, kind: "interrupt", text: "" },
+          { session_id: session.id, kind: "input", text: "refactor the parser", at: 1000 },
+          { session_id: session.id, kind: "interrupt", text: "", at: 1001 },
         ],
       },
     });
-    expect(result.status).toBe(200);
-    expect(result.body.written).toBe(2);
+    expect(plaintext.body).toEqual({ written: 0, refused: 2 });
+
+    const input = await sealedEntry();
+    const interrupt = await sealedEntry(28);
+    const sealed = await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: {
+        entries: [
+          { session_id: session.id, kind: "input", text: input, at: 2000 },
+          { session_id: session.id, kind: "interrupt", text: interrupt, at: 2001 },
+          /* The time is bound into the ciphertext, so an entry without one cannot be stored as sealed. */
+          { session_id: session.id, kind: "input", text: await sealedEntry() },
+        ],
+      },
+    });
+    expect(sealed.body).toEqual({ written: 2, refused: 1 });
 
     const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
-    expect(log.body.events).toHaveLength(2);
-    expect(log.body.events.map((event: { kind: string }) => event.kind)).toEqual([
-      "input",
-      "interrupt",
+    expect(
+      log.body.events.map((event: { kind: string; text: string; at: number }) => [event.kind, event.text, event.at]),
+    ).toEqual([
+      ["input", input, 2000],
+      ["interrupt", interrupt, 2001],
     ]);
-    expect(log.body.events[0].text).toBe("refactor the parser");
   });
 
-  it("filters and paginates the team trail in the service", async () => {
+  /* Longer than the old plaintext cap: trimming ciphertext would destroy it. */
+  it("stores a long sealed entry whole", async () => {
+    await withSession();
+    const long = await sealedEntry(4000 + 28);
+    const result = await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: { entries: [{ session_id: session.id, kind: "input", text: long, at: 3000 }] },
+    });
+    expect(result.body.written).toBe(1);
+    const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
+    expect(log.body.events[0].text).toBe(long);
+  });
+
+  it("filters and pages by who, what and when, and leaves text search to the browser", async () => {
     await withSession();
     await call("POST", "/api/audit", {
       auth: await idToken(),
       body: {
         entries: [
-          { session_id: session.id, kind: "input", text: "npm test", at: 1000 },
-          { session_id: session.id, kind: "input", text: "git status", at: 2000 },
-          { session_id: session.id, kind: "input", text: "npm run build", at: 3000 },
+          { session_id: session.id, kind: "input", text: await sealedEntry(), at: 1000 },
+          { session_id: session.id, kind: "interrupt", text: await sealedEntry(28), at: 2000 },
+          { session_id: session.id, kind: "input", text: await sealedEntry(), at: 3000 },
         ],
       },
     });
 
-    const first = await call("GET", "/api/audit?q=npm&limit=1&page=1", { auth: await idToken() });
-    const second = await call("GET", "/api/audit?q=npm&limit=1&page=2", { auth: await idToken() });
+    /* The service cannot search ciphertext, so a text query changes nothing. */
+    const searched = await call("GET", "/api/audit?q=npm", { auth: await idToken() });
+    expect(searched.body.total).toBe(3);
 
+    const first = await call("GET", "/api/audit?kind=input&limit=1&page=1", { auth: await idToken() });
+    const second = await call("GET", "/api/audit?kind=input&limit=1&page=2", { auth: await idToken() });
     expect(first.body).toMatchObject({ total: 2, page: 1, limit: 1 });
-    expect(first.body.events.map((entry: { text: string }) => entry.text)).toEqual(["npm run build"]);
-    expect(second.body.events.map((entry: { text: string }) => entry.text)).toEqual(["npm test"]);
+    expect(first.body.events.map((entry: { at: number }) => entry.at)).toEqual([3000]);
+    expect(second.body.events.map((entry: { at: number }) => entry.at)).toEqual([1000]);
+
+    const recent = await call("GET", "/api/audit?since_at=2500", { auth: await idToken() });
+    expect(recent.body.total).toBe(1);
   });
 
   it("will not read another organization's log", async () => {
@@ -1974,5 +2020,229 @@ describe("DELETE /api/account", () => {
     await call("GET", "/api/org", { auth: await idToken() });
     expect((await remove()).status).toBe(200);
     expect((await remove()).status).toBe(200);
+  });
+});
+
+describe("team audit key", () => {
+  const session = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    command: "claude",
+  };
+
+  async function publicKey() {
+    const pair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    return base64url(Buffer.from(await crypto.subtle.exportKey("raw", pair.publicKey)));
+  }
+
+  /* A copy the service accepts: t1. and about the size of a sealed PKCS#8 key. */
+  function sealedCopy() {
+    return `t1.${base64url(randomBytes(166))}`;
+  }
+
+  async function sealedEntry() {
+    return `a1.1.${await publicKey()}.${base64url(randomBytes(40))}`;
+  }
+
+  async function withColleague() {
+    await call("GET", "/api/org", { auth: await idToken() });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    return colleague;
+  }
+
+  async function giveVault(auth: string, uid: string) {
+    const made = await createVault(uid);
+    await call("POST", "/api/vault", {
+      auth,
+      body: {
+        public_key: made.bundle.publicKey,
+        encrypted_private_key: made.bundle.encryptedPrivateKey,
+        recovery_wrap: made.bundle.recoveryWrap,
+      },
+    });
+    return made.bundle.publicKey;
+  }
+
+  async function makeKey(shares: { uid: string; sealed: string }[]) {
+    return call("POST", "/api/team-key", {
+      auth: await idToken(),
+      body: { public_key: await publicKey(), shares },
+    });
+  }
+
+  it("has none until a member makes one", async () => {
+    const result = await call("GET", "/api/team-key", { auth: await idToken() });
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject({ teamKey: null, share: null, missing: [] });
+    expect(result.body.you).toMatchObject({ uid: "uid-1", role: "owner" });
+    expect(typeof result.body.you.orgId).toBe("string");
+  });
+
+  /* Two browsers making one at once must not both believe theirs is the team's. */
+  it("is made once, with the maker's own copy", async () => {
+    const copy = sealedCopy();
+    const created = await makeKey([{ uid: "uid-1", sealed: copy }]);
+    expect(created.status).toBe(201);
+    expect(created.body.teamKey).toMatchObject({ version: 1, createdBy: "uid-1" });
+
+    const again = await makeKey([{ uid: "uid-1", sealed: sealedCopy() }]);
+    expect(again.status).toBe(409);
+
+    const read = await call("GET", "/api/team-key", { auth: await idToken() });
+    expect(read.body.teamKey.publicKey).toBe(created.body.teamKey.publicKey);
+    expect(read.body.share).toEqual({ senderUid: "uid-1", sealed: copy, version: 1 });
+  });
+
+  it("refuses a key without the maker's copy, with a copy for an outsider, or of the wrong shape", async () => {
+    await withColleague();
+    expect((await makeKey([{ uid: "uid-2", sealed: sealedCopy() }])).status).toBe(400);
+    expect((await makeKey([{ uid: "uid-1", sealed: sealedCopy() }, { uid: "uid-outside", sealed: sealedCopy() }])).status)
+      .toBe(400);
+    expect((await makeKey([{ uid: "uid-1", sealed: "not a sealed key" }])).status).toBe(400);
+    const badKey = await call("POST", "/api/team-key", {
+      auth: await idToken(),
+      body: { public_key: "not-a-key", shares: [{ uid: "uid-1", sealed: sealedCopy() }] },
+    });
+    expect(badKey.status).toBe(400);
+    expect((await call("GET", "/api/team-key", { auth: await idToken() })).body.teamKey).toBeNull();
+  });
+
+  it("hands each member only their own copy, and names who still needs one", async () => {
+    const colleague = await withColleague();
+    await giveVault(await idToken(), "uid-1");
+    const colleagueKey = await giveVault(colleague, "uid-2");
+    const mine = sealedCopy();
+    await makeKey([{ uid: "uid-1", sealed: mine }]);
+
+    const owner = await call("GET", "/api/team-key", { auth: await idToken() });
+    expect(owner.body.missing).toEqual([{ uid: "uid-2", accountKey: colleagueKey }]);
+    expect((await call("GET", "/api/team-key", { auth: colleague })).body.share).toBeNull();
+
+    const theirs = sealedCopy();
+    const shared = await call("PUT", "/api/team-key/shares", {
+      auth: await idToken(),
+      body: { version: 1, shares: [{ uid: "uid-2", sealed: theirs }] },
+    });
+    expect(shared.body).toEqual({ shared: 1 });
+
+    expect((await call("GET", "/api/team-key", { auth: colleague })).body.share)
+      .toEqual({ senderUid: "uid-1", sealed: theirs, version: 1 });
+    const after = await call("GET", "/api/team-key", { auth: await idToken() });
+    expect(after.body.share.sealed).toBe(mine);
+    expect(after.body.missing).toEqual([]);
+  });
+
+  /* A working copy cannot be replaced with one that does not open. */
+  it("never replaces a copy that exists", async () => {
+    const colleague = await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }]);
+    const first = sealedCopy();
+    const put = (sealed: string) =>
+      call("PUT", "/api/team-key/shares", { auth: colleague, body: { version: 1, shares: [{ uid: "uid-2", sealed }] } });
+    expect((await put(first)).body.shared).toBe(1);
+    expect((await put(sealedCopy())).body.shared).toBe(0);
+    expect((await call("GET", "/api/team-key", { auth: colleague })).body.share.sealed).toBe(first);
+
+    const overOwner = await call("PUT", "/api/team-key/shares", {
+      auth: colleague,
+      body: { version: 1, shares: [{ uid: "uid-1", sealed: sealedCopy() }] },
+    });
+    expect(overOwner.body.shared).toBe(0);
+  });
+
+  it("refuses copies of a key that is not the current one", async () => {
+    await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }]);
+    const stale = await call("PUT", "/api/team-key/shares", {
+      auth: await idToken(),
+      body: { version: 2, shares: [{ uid: "uid-2", sealed: sealedCopy() }] },
+    });
+    expect(stale.status).toBe(409);
+  });
+
+  it("lets a member delete only their own copy", async () => {
+    const colleague = await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }, { uid: "uid-2", sealed: sealedCopy() }]);
+    expect((await call("DELETE", "/api/team-key/share", { auth: colleague })).body).toEqual({ deleted: true });
+    expect((await call("DELETE", "/api/team-key/share", { auth: colleague })).body).toEqual({ deleted: false });
+    expect((await call("GET", "/api/team-key", { auth: colleague })).body.share).toBeNull();
+    expect((await call("GET", "/api/team-key", { auth: await idToken() })).body.share).not.toBeNull();
+  });
+
+  it("takes a removed member's copy away", async () => {
+    await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }, { uid: "uid-2", sealed: sealedCopy() }]);
+    const { orgId } = (await call("GET", "/api/team-key", { auth: await idToken() })).body.you;
+    const removed = await call("DELETE", "/api/org/members/uid-2", { auth: await idToken() });
+    expect(removed.status).toBe(200);
+    expect((await store.teamKeyShares(orgId)).map((share) => share.uid)).toEqual(["uid-1"]);
+  });
+
+  describe("sealing what was recorded before", () => {
+    async function plaintextRow() {
+      const tokens = await login();
+      await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+      const { orgId } = (await call("GET", "/api/team-key", { auth: await idToken() })).body.you;
+      await store.putAudit({
+        id: "aud_plain",
+        orgId,
+        sessionId: session.id,
+        at: 1000,
+        actorUid: "uid-1",
+        actorEmail: "ana@example.com",
+        kind: "input",
+        text: "an old command",
+      });
+      return orgId as string;
+    }
+
+    it("is for an owner or admin only", async () => {
+      await plaintextRow();
+      const colleague = await withColleague();
+      expect((await call("GET", "/api/audit/plaintext", { auth: colleague })).status).toBe(403);
+      const attempt = await call("POST", "/api/audit/seal", {
+        auth: colleague,
+        body: { entries: [{ id: "aud_plain", text: await sealedEntry() }] },
+      });
+      expect(attempt.status).toBe(403);
+    });
+
+    it("replaces plaintext with its sealed form once, and refuses anything else", async () => {
+      await plaintextRow();
+      const listed = await call("GET", "/api/audit/plaintext", { auth: await idToken() });
+      expect(listed.body.events.map((entry: { id: string }) => entry.id)).toEqual(["aud_plain"]);
+
+      const seal = async (text: string) =>
+        call("POST", "/api/audit/seal", { auth: await idToken(), body: { entries: [{ id: "aud_plain", text }] } });
+      expect((await seal("still plaintext")).body).toEqual({ sealed: 0 });
+
+      const envelope = await sealedEntry();
+      expect((await seal(envelope)).body).toEqual({ sealed: 1 });
+      expect((await seal(await sealedEntry())).body).toEqual({ sealed: 0 });
+
+      expect((await call("GET", "/api/audit/plaintext", { auth: await idToken() })).body.events).toEqual([]);
+
+      /*
+       * A re-sealed entry says who sealed it. Their browser was handed the
+       * session, the author and the time by the service, so the entry is only
+       * as trustworthy as they are, and it must not read as first-hand.
+       */
+      const firstHand = await sealedEntry();
+      await call("POST", "/api/audit", {
+        auth: await idToken(),
+        body: { entries: [{ session_id: session.id, kind: "input", text: firstHand, at: 4000 }] },
+      });
+      const trail = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
+      const resealed = trail.body.events.find((entry: { id: string }) => entry.id === "aud_plain");
+      expect(resealed.text).toBe(envelope);
+      expect(resealed.sealedBy).toBe("uid-1");
+      const fresh = trail.body.events.find((entry: { text: string }) => entry.text === firstHand);
+      expect(fresh.sealedBy).toBeUndefined();
+
+      const page = await call("GET", "/api/audit", { auth: await idToken() });
+      expect(page.body.events.find((entry: { id: string }) => entry.id === "aud_plain").sealedBy).toBe("uid-1");
+    });
   });
 });

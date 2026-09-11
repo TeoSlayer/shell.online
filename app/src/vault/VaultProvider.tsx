@@ -25,6 +25,7 @@ import {
 } from "../lib/vault-crypto";
 import { clearLocalVault, loadLocalVault, saveLocalVault } from "../lib/vault-store";
 import { openSealed } from "../lib/keypair";
+import { openTeamKeyShare, sealTeamKeyShare, type TeamKeyContext } from "../lib/team-crypto";
 
 /**
  * The signed-in person's session vault, and what is open in this browser.
@@ -73,6 +74,27 @@ interface VaultValue {
   ): Promise<SealedShare | null>;
   /** Seals a password to this person's own vault and stores it. False when it could not. */
   keep(sessionId: string, password: string): Promise<boolean>;
+  /** The signed-in person, whose vault this is. */
+  uid: string;
+  /** When this vault was made, from the service's record. */
+  createdAt: number | null;
+  /** Locks the vault in this browser. The vault itself is untouched. */
+  lock(): Promise<void>;
+  /**
+   * Seals the team audit key's private half to a teammate, with this vault's
+   * own key, so they can tell who sent it. Null while locked.
+   */
+  sealTeamKey(
+    recipient: { uid: string; accountKey: string },
+    team: TeamKeyContext,
+    pkcs8: Uint8Array<ArrayBuffer>,
+  ): Promise<string | null>;
+  /** Opens a team audit key share sealed to this vault by the teammate it names. */
+  openTeamKey(
+    share: { senderUid: string; sealed: string },
+    senderAccountKey: string,
+    team: TeamKeyContext,
+  ): Promise<Uint8Array<ArrayBuffer> | null>;
 }
 
 const VaultContext = createContext<VaultValue | null>(null);
@@ -270,6 +292,46 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [uid],
   );
 
+  const lock = useCallback(async () => {
+    await clearLocalVault(uid);
+    opened.current = null;
+    setPublicKey(null);
+    setStatus(remote ? "locked" : "setup");
+  }, [uid, remote]);
+
+  /*
+   * The team audit key is sealed with this vault's own key rather than a
+   * throwaway one, so whoever opens it can tell it came from this person.
+   * See team-crypto.ts for why that matters.
+   */
+  const sealTeamKey = useCallback(
+    async (recipient: { uid: string; accountKey: string }, team: TeamKeyContext, pkcs8: Uint8Array<ArrayBuffer>) => {
+      const key = opened.current;
+      if (!key) return null;
+      return sealTeamKeyShare(
+        key.privateKey,
+        recipient.accountKey,
+        { ...team, senderUid: uid, recipientUid: recipient.uid },
+        pkcs8,
+      );
+    },
+    [uid],
+  );
+
+  const openTeamKey = useCallback(
+    async (share: { senderUid: string; sealed: string }, senderAccountKey: string, team: TeamKeyContext) => {
+      const key = opened.current;
+      if (!key) return null;
+      return openTeamKeyShare(
+        key.privateKey,
+        senderAccountKey,
+        { ...team, senderUid: share.senderUid, recipientUid: uid },
+        share.sealed,
+      );
+    },
+    [uid],
+  );
+
   const value = useMemo<VaultValue>(
     () => ({
       status,
@@ -285,8 +347,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       openShare,
       sealTo,
       keep,
+      uid,
+      createdAt: remote?.createdAt ?? null,
+      lock,
+      sealTeamKey,
+      openTeamKey,
     }),
-    [status, error, publicKey, print, remembered, remote, prepare, commit, unlock, retry, openShare, sealTo, keep],
+    [
+      status, error, publicKey, print, remembered, remote, prepare, commit, unlock, retry,
+      openShare, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
+    ],
   );
 
   return <VaultContext.Provider value={value}>{children}</VaultContext.Provider>;

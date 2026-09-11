@@ -132,6 +132,265 @@
   letter-spacing: 0.04em;
 }
 
+/* What protects the audit log, said on the page that reads it. */
+.audit-sealed-note {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--success-wash);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.audit-sealed-note[data-state="waiting"],
+.audit-sealed-note[data-state="error"] {
+  background: var(--warn-wash, var(--danger-wash));
+}
+
+.audit-sealed-note svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--success);
+}
+
+.audit-sealed-note[data-state="waiting"] svg,
+.audit-sealed-note[data-state="error"] svg {
+  color: var(--danger);
+}
+
+.audit-search-note {
+  margin: 0 0 12px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* Where an entry came from, when that is not the person who typed it. */
+.trace-provenance {
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.trace-provenance[data-clear="true"] {
+  color: var(--danger);
+}
+
+/* An entry this browser cannot open: said plainly, never shown as blank. */
+.trace-sealed {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* The vault on the Account page. */
+.vault-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--white);
+}
+
+.vault-panel-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.vault-panel-head h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.vault-panel-head p {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.vault-panel-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--terminal);
+  color: var(--acid);
+}
+
+.vault-panel-private {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--success-wash);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.vault-panel-private svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--success);
+}
+
+.vault-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 10px 20px;
+  margin: 0;
+}
+
+.vault-facts dt,
+.vault-panel-subhead {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vault-facts dd {
+  margin: 2px 0 0;
+  font-size: 0.9rem;
+}
+
+.vault-panel-subhead {
+  margin: 6px 0 0;
+}
+
+.vault-holdings {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vault-holdings li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+}
+
+.vault-holdings svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.vault-holdings small {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.vault-sessions {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.vault-session {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.vault-session-main {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: 3px;
+  min-width: 0;
+}
+
+.vault-session-name {
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.vault-session-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.vault-session-password {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.vault-session-actions {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.vault-session-actions .vault-link,
+.vault-more {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: 0;
+}
+
+.vault-more {
+  justify-self: start;
+}
+
+.vault-panel-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+/* An action, not a banner: it takes the width of its label. */
+.vault-panel-actions .btn {
+  width: auto;
+}
+
+/* The unlock form, borrowed from the gate, sits inside the panel here. */
+.vault-panel-unlock {
+  display: grid;
+  gap: 12px;
+}
+
+.vault-panel-unlock .consent-mark {
+  display: none;
+}
+
+.vault-panel-unlock h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
 .vault-reset {
   margin-top: 20px;
 }

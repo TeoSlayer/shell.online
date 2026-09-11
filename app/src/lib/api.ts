@@ -319,6 +319,12 @@ export interface AuditEvent {
   actorEmail: string;
   kind: "input" | "interrupt" | "opened" | "handoff" | "stopped" | "deleted";
   text: string;
+  /**
+   * Who sealed this entry afterwards, when the log recorded before encryption
+   * was sealed. Absent on an entry that arrived sealed from the browser that
+   * wrote it, which is the only kind that speaks for its author.
+   */
+  sealedBy?: string;
 }
 
 export interface Device {
@@ -386,7 +392,56 @@ export function fetchSessions() {
 export const accountsBaseUrl = BASE;
 
 export function postAudit(entries: { session_id: string; kind: string; text: string; at: number }[]) {
-  return request<{ written: number }>("/api/audit", {
+  return request<{ written: number; refused?: number }>("/api/audit", {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
+}
+
+/**
+ * The team audit key as the service holds it: a public key, and this
+ * person's own sealed copy of the private half. Nobody else's copy is ever
+ * returned.
+ */
+export interface TeamKeyView {
+  teamKey: { publicKey: string; version: number; createdBy: string; createdAt: number } | null;
+  share: { senderUid: string; sealed: string; version: number } | null;
+  /** Members with a vault and no copy yet, for someone holding the key to seal to. */
+  missing: { uid: string; accountKey: string }[];
+  you: { uid: string; role: Role; orgId: string };
+}
+
+export function fetchTeamKey() {
+  return request<TeamKeyView>("/api/team-key");
+}
+
+export function createTeamKey(publicKey: string, shares: { uid: string; sealed: string }[]) {
+  return request<{ teamKey: TeamKeyView["teamKey"] }>("/api/team-key", {
+    method: "POST",
+    body: JSON.stringify({ public_key: publicKey, shares }),
+  });
+}
+
+/** Adds copies for members who have none. The service never replaces an existing one. */
+export function putTeamKeyShares(version: number, shares: { uid: string; sealed: string }[]) {
+  return request<{ shared: number }>("/api/team-key/shares", {
+    method: "PUT",
+    body: JSON.stringify({ version, shares }),
+  });
+}
+
+/** Removes this person's own copy, so a teammate can seal a fresh one. */
+export function dropMyTeamKeyShare() {
+  return request<{ deleted: boolean }>("/api/team-key/share", { method: "DELETE" });
+}
+
+/** Entries recorded before encryption, for an owner or admin to seal. */
+export function fetchPlaintextAudit(limit = 100) {
+  return request<{ events: AuditEvent[] }>(`/api/audit/plaintext?limit=${limit}`);
+}
+
+export function sealAuditEntries(entries: { id: string; text: string }[]) {
+  return request<{ sealed: number }>("/api/audit/seal", {
     method: "POST",
     body: JSON.stringify({ entries }),
   });

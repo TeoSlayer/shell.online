@@ -10,6 +10,8 @@ import type {
   Notification,
   SessionKeyShare,
   SessionRecord,
+  TeamKey,
+  TeamKeyShare,
 } from "./types";
 
 export * from "./types";
@@ -146,6 +148,28 @@ export interface Store {
   deleteAccount(uid: string, plan: AccountDeletion, now?: number): Promise<void>;
   /** Whether this uid was deleted at or after `since`. */
   recentlyDeleted(uid: string, since: number): Promise<boolean>;
+
+  /* ---- Team audit key ---- */
+  teamKey(orgId: string): Promise<TeamKey | null>;
+  /** Creates the team's audit key, and only if it has none. False when one exists. */
+  putTeamKey(key: TeamKey): Promise<boolean>;
+  teamKeyShares(orgId: string): Promise<TeamKeyShare[]>;
+  /**
+   * Stores members' copies of the team key. Insert-only: a copy that exists is
+   * never overwritten, so nobody can replace a teammate's working copy with
+   * one that does not open. Returns how many were written.
+   */
+  putTeamKeyShares(shares: TeamKeyShare[]): Promise<number>;
+  deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean>;
+  /** Typed input still stored as plaintext, oldest first, for a team member to seal. */
+  plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]>;
+  /**
+   * Replaces a plaintext input entry with its sealed form, recording who did
+   * it. Only an entry of a typed kind that is still plaintext can change, so
+   * sealing cannot be used to rewrite an entry that is already sealed or one
+   * the service wrote, and a re-sealed entry never passes for first-hand.
+   */
+  sealAudit(orgId: string, id: string, text: string, sealedBy: string): Promise<boolean>;
 
   /* ---- Agent commands ---- */
   putCommand(command: AgentCommand): Promise<void>;

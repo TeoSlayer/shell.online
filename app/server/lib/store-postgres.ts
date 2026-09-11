@@ -23,6 +23,8 @@ import type {
   Notification,
   SessionKeyShare,
   SessionRecord,
+  TeamKey,
+  TeamKeyShare,
 } from "./types";
 
 /*
@@ -237,6 +239,27 @@ function toAccountKey(row: Row): AccountKey {
   };
 }
 
+function toTeamKey(row: Row): TeamKey {
+  return {
+    orgId: row.org_id as string,
+    publicKey: row.public_key as string,
+    version: row.version as number,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as number,
+  };
+}
+
+function toTeamKeyShare(row: Row): TeamKeyShare {
+  return {
+    orgId: row.org_id as string,
+    uid: row.uid as string,
+    version: row.version as number,
+    senderUid: row.sender_uid as string,
+    sealed: row.sealed as string,
+    createdAt: row.created_at as number,
+  };
+}
+
 function toInvite(row: Row): Invite {
   return defined({
     id: row.id,
@@ -262,6 +285,7 @@ function toAudit(row: Row): AuditEvent {
     actorEmail: row.actor_email as string,
     kind: row.kind as AuditEvent["kind"],
     text: row.text as string,
+    ...(row.sealed_by ? { sealedBy: row.sealed_by as string } : {}),
   };
 }
 
@@ -1205,12 +1229,80 @@ export class PostgresStore implements Store {
     await this.pool.query(`UPDATE invites SET ${set.text} WHERE id = $1`, [id, ...set.values]);
   }
 
+  /* ---- Team audit key ---- */
+
+  async teamKey(orgId: string): Promise<TeamKey | null> {
+    const row = await this.row("SELECT * FROM team_keys WHERE org_id = $1", [orgId]);
+    return row ? toTeamKey(row) : null;
+  }
+
+  async putTeamKey(key: TeamKey): Promise<boolean> {
+    const result = await this.pool.query(
+      `INSERT INTO team_keys (org_id, public_key, version, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (org_id) DO NOTHING`,
+      [key.orgId, key.publicKey, key.version, key.createdBy, key.createdAt],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async teamKeyShares(orgId: string): Promise<TeamKeyShare[]> {
+    const rows = await this.rows(
+      'SELECT * FROM team_key_shares WHERE org_id = $1 ORDER BY created_at ASC, uid COLLATE "C" ASC',
+      [orgId],
+    );
+    return rows.map(toTeamKeyShare);
+  }
+
+  /* One statement per copy, each conditional, so an existing copy is never replaced. */
+  async putTeamKeyShares(shares: TeamKeyShare[]): Promise<number> {
+    let written = 0;
+    for (const share of shares) {
+      const result = await this.pool.query(
+        `INSERT INTO team_key_shares (org_id, uid, version, sender_uid, sealed, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (org_id, uid) DO NOTHING`,
+        [share.orgId, share.uid, share.version, share.senderUid, share.sealed, share.createdAt],
+      );
+      written += result.rowCount ?? 0;
+    }
+    return written;
+  }
+
+  async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM team_key_shares WHERE org_id = $1 AND uid = $2", [
+      orgId,
+      uid,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]> {
+    const rows = await this.rows(
+      `SELECT * FROM audit_events
+       WHERE org_id = $1 AND kind IN ('input', 'interrupt') AND text NOT LIKE 'a1.%'
+       ORDER BY at ASC, id COLLATE "C" ASC
+       LIMIT $2`,
+      [orgId, limit],
+    );
+    return rows.map(toAudit);
+  }
+
+  async sealAudit(orgId: string, id: string, text: string, sealedBy: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE audit_events SET text = $3, sealed_by = $4
+       WHERE org_id = $1 AND id = $2 AND kind IN ('input', 'interrupt') AND text NOT LIKE 'a1.%'`,
+      [orgId, id, text, sealedBy],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /* ---- Audit ---- */
 
   async putAudit(event: AuditEvent): Promise<void> {
     await this.pool.query(
-      `INSERT INTO audit_events (id, org_id, session_id, at, actor_uid, actor_email, kind, text)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO audit_events (id, org_id, session_id, at, actor_uid, actor_email, kind, text, sealed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO NOTHING`,
       [
         event.id,
@@ -1221,6 +1313,8 @@ export class PostgresStore implements Store {
         event.actorEmail,
         event.kind,
         event.text,
+        /* Null is first-hand: sealed by the browser that recorded it. */
+        event.sealedBy ?? null,
       ],
     );
   }

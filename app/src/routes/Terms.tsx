@@ -334,7 +334,7 @@ export function Terms() {
         <Section id="what-we-receive">
           <p>
             Running a session sends a record of it to the accounts service. What
-            that record contains:
+            that record contains, and what else the service keeps:
           </p>
           <dl className="terms-defs">
             <div>
@@ -342,9 +342,37 @@ export function Terms() {
               <dd>
                 The share URL, the command line, the host name of the machine,
                 the session name, timings, the session flags, and the exit code.
-                The command line is stored as written, so treat a command line
-                the way you would treat anything else your team can
-                read.
+                Every member of your team sees these records and is notified
+                when a session starts. The command line is stored as written,
+                including any prompt you put on it, so treat a command line the
+                way you would treat anything else your team, and we, can read.
+              </dd>
+            </div>
+            <div>
+              <dt>Session vault</dt>
+              <dd>
+                Your vault&rsquo;s public key, your vault&rsquo;s private key
+                encrypted under a vault key, and that vault key wrapped under
+                your recovery key; and the session passwords saved to your vault
+                or shared with you, each sealed to it. We never receive the
+                recovery key or anything that opens these records, and we cannot
+                recover your vault if you lose your recovery key.
+              </dd>
+            </div>
+            <div>
+              <dt>Team audit key</dt>
+              <dd>
+                Your team&rsquo;s audit public key, and one copy of its private
+                key for each member, sealed to that member&rsquo;s vault by a
+                teammate. We cannot open these copies.
+              </dd>
+            </div>
+            <div>
+              <dt>Audit records</dt>
+              <dd>
+                For each entry: who made it, in which session, what kind of
+                entry it is, and when. What was typed is stored only as
+                ciphertext; see <Ref id="activity-records" />.
               </dd>
             </div>
             <div>
@@ -377,14 +405,34 @@ export function Terms() {
         <Section id="activity-records">
           <div className="terms-callout">
             <p>
-              <b>What you type into a session is recorded in plaintext.</b>{" "}
+              <b>
+                What you type into a session from the browser is recorded, and
+                every member of your team can read it.
+              </b>{" "}
               Commands, prompts, and anything else entered at the keyboard are
-              sent to the accounts service as you commit them, stored without
-              encryption, and can be read and exported by every member of your
-              team. That includes anything typed by mistake, such as a
-              password or a key pasted into the wrong window.
+              recorded in your team&rsquo;s audit log as you commit them, and
+              can be read and exported by every member of your team. That
+              includes anything typed by mistake, such as a password or a key
+              pasted into the wrong window.
             </p>
           </div>
+          <p>
+            The audit log is end-to-end encrypted. Your browser encrypts each
+            entry to your team&rsquo;s audit key before sending it, and only
+            members of your team hold the key that opens it. We store
+            ciphertext and cannot read what was typed. We do see who made each
+            entry, in which session, what kind of entry it is, and when; and we
+            write some entries ourselves when a session is stopped, removed, or
+            handed to someone else, which name the session and the people
+            involved.
+          </p>
+          <p>
+            Entries recorded before the audit log was encrypted are encrypted in
+            place by the browser of an owner or admin of your team when they
+            next use shell.online. Until then those entries are stored readable,
+            and database backups taken before then keep them until the backups
+            expire.
+          </p>
           <p>
             The recording is of what is entered, not of what the session prints
             back. Terminal output stays inside the end-to-end encrypted stream
@@ -394,7 +442,7 @@ export function Terms() {
             We also retain the collaboration information people deliberately
             create outside the terminal: session ownership and assignment,
             handoffs, comments, mentions, and notifications. Members of the
-            team can see those records.
+            team can see those records, and so can we.
           </p>
           <p>
             If this is not what you want for a particular session, do not type
@@ -406,16 +454,23 @@ export function Terms() {
         </Section>
 
         <Section id="never-received">
-          <p>Three things never reach us.</p>
+          <p>Four things never reach us in readable form.</p>
           <dl className="terms-defs">
             <div>
               <dt>Terminal output</dt>
               <dd>
                 Terminal traffic is end-to-end encrypted in the browser and on
                 the machine, and the relay handles ciphertext only, so what
-                your program prints is not readable by us. What you type is a
-                separate matter: it is recorded, in plaintext, as described
-                above.
+                your program prints is not readable by us.
+              </dd>
+            </div>
+            <div>
+              <dt>What you type</dt>
+              <dd>
+                Input typed into a session from the browser reaches us only as
+                ciphertext for your team&rsquo;s audit key, which we do not
+                hold. Entries recorded before the audit log was encrypted are
+                the exception described in <Ref id="activity-records" />.
               </dd>
             </div>
             <div>
@@ -428,14 +483,16 @@ export function Terms() {
             <div>
               <dt>The session password</dt>
               <dd>
-                It is not sent to us in the clear and we cannot recover it for
+                It reaches us only sealed to a machine or to someone&rsquo;s
+                session vault, never in the clear, and we cannot recover it for
                 you.
               </dd>
             </div>
           </dl>
           <p>
             Because we hold no key and no password, we cannot decrypt a session
-            for you, restore one, or recover anything a session displayed.
+            for you, restore one, recover anything a session displayed, or read
+            your team&rsquo;s audit log.
           </p>
         </Section>
 

@@ -24,10 +24,23 @@ describe("auditCsv", () => {
   it("writes a header and a row per event", async () => {
     const csv = auditCsv([event()], sessions);
     const [header, row] = csv.split("\r\n");
-    expect(header).toBe('"timestamp","session","command","actor","kind","text"');
+    expect(header).toBe('"timestamp","session","command","actor","kind","text","sealed_by"');
     expect(row).toContain('"ana@example.com"');
     expect(row).toContain('"npm test"');
     expect(row).toContain('"refactor run"');
+  });
+
+  /*
+   * An entry sealed after the fact says who sealed it. Their browser was given
+   * the session, the author and the time by the service, so the export has to
+   * show that it is not the first-hand record the other rows are.
+   */
+  it("names who sealed an entry that was not sealed first-hand", async () => {
+    const [, firstHand] = auditCsv([event()], sessions).split("\r\n");
+    expect(firstHand.endsWith(',""')).toBe(true);
+
+    const [, resealed] = auditCsv([event({ sealedBy: "uid-2" })], sessions).split("\r\n");
+    expect(resealed.endsWith(',"uid-2"')).toBe(true);
   });
 
   it("uses CRLF between rows, as a CSV reader expects", async () => {

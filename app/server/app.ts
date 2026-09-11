@@ -19,7 +19,8 @@ import {
   sessionSource,
 } from "./lib/sessions";
 import { mintSecret } from "./lib/tokens";
-import { RESET_SIGN_IN_WINDOW_MS, readOwnerShare, readVaultInput, vaultForApi } from "./lib/vault";
+import { RESET_SIGN_IN_WINDOW_MS, isP256PublicKey, readOwnerShare, readVaultInput, vaultForApi } from "./lib/vault";
+import { isAuditEnvelope, isTeamKeyShare } from "./lib/audit-seal";
 import {
   changeRole,
   createInvite,
@@ -156,6 +157,21 @@ function sharedWith(
 ): string[] | undefined {
   if (!ownsSession(membership, session)) return undefined;
   return (session.keyShares ?? []).map((share) => share.uid).filter((uid) => uid !== membership.uid);
+}
+
+/*
+ * Copies of the team audit key as a browser sends them. Null for anything that
+ * is not a list of well-formed copies, one per person: they are refused
+ * together rather than stored in part.
+ */
+function readTeamShares(value: unknown): { uid: string; sealed: string }[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 500) return null;
+  const shares = value.map((entry) => (entry ?? {}) as Record<string, unknown>);
+  if (shares.some((share) => typeof share.uid !== "string" || !share.uid || !isTeamKeyShare(share.sealed))) {
+    return null;
+  }
+  if (new Set(shares.map((share) => share.uid)).size !== shares.length) return null;
+  return shares.map((share) => ({ uid: share.uid as string, sealed: share.sealed as string }));
 }
 
 /**
@@ -518,12 +534,19 @@ export function createApp(options: AppOptions) {
 
       /* ---- Audit ---- */
 
+      /*
+       * Typed input, sealed in the browser to the team's audit key. An entry
+       * that is not sealed is refused rather than stored: a browser still
+       * running an older build loses the entry, which is a gap in the trail
+       * and not a plaintext copy of what somebody typed.
+       */
       if (route === "POST /api/audit") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
         const entries = Array.isArray(body.entries) ? body.entries : [];
-        const written = [];
+        let written = 0;
+        let refused = 0;
         for (const entry of entries.slice(0, 100)) {
           const candidate = entry as Record<string, unknown>;
           const result = await recordAudit(store, membership, {
@@ -532,9 +555,175 @@ export function createApp(options: AppOptions) {
             text: String(candidate.text ?? ""),
             at: typeof candidate.at === "number" ? candidate.at : undefined,
           });
-          if (result.ok) written.push(result.event);
+          if (result.ok) written += 1;
+          else refused += 1;
         }
-        return send(response, 200, { written: written.length });
+        return send(response, 200, { written, refused });
+      }
+
+      /*
+       * The team's audit key: its public half, and the caller's own sealed
+       * copy of the private half. Nobody is handed anyone else's copy.
+       * `missing` names the members with a vault and no copy yet, so any
+       * teammate who holds the key can seal one for them.
+       */
+      if (route === "GET /api/team-key") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const key = await store.teamKey(membership.orgId);
+        const shares = key ? await store.teamKeyShares(membership.orgId) : [];
+        const mine = shares.find((share) => share.uid === membership.uid && share.version === key?.version);
+        const holders = new Set(
+          shares.filter((share) => share.version === key?.version).map((share) => share.uid),
+        );
+        const missing = key
+          ? (await store.members(membership.orgId))
+            .filter((member) => member.accountKey && !holders.has(member.uid))
+            .map((member) => ({ uid: member.uid, accountKey: member.accountKey }))
+          : [];
+        return send(response, 200, {
+          teamKey: key
+            ? { publicKey: key.publicKey, version: key.version, createdBy: key.createdBy, createdAt: key.createdAt }
+            : null,
+          share: mine ? { senderUid: mine.senderUid, sealed: mine.sealed, version: mine.version } : null,
+          missing,
+          you: { uid: membership.uid, role: membership.role, orgId: membership.orgId },
+        });
+      }
+
+      /*
+       * The first member to need the key makes it, in their browser, and seals
+       * the private half to every member with a vault. The service keeps the
+       * public half and the sealed copies. Create-only, so two browsers making
+       * one at once cannot both believe theirs is the team's.
+       */
+      if (route === "POST /api/team-key") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        if (!(await isP256PublicKey(body.public_key))) {
+          return send(response, 400, { error: "invalid public key" });
+        }
+        const shares = readTeamShares(body.shares);
+        if (!shares) return send(response, 400, { error: "invalid key shares" });
+        const memberIds = new Set((await store.members(membership.orgId)).map((member) => member.uid));
+        if (shares.some((share) => !memberIds.has(share.uid))) {
+          return send(response, 400, { error: "key shares may only be sent to organization members" });
+        }
+        if (!shares.some((share) => share.uid === membership.uid)) {
+          return send(response, 400, { error: "include your own copy of the key" });
+        }
+        const now = Date.now();
+        const key = {
+          orgId: membership.orgId,
+          publicKey: body.public_key as string,
+          version: 1,
+          createdBy: membership.uid,
+          createdAt: now,
+        };
+        if (!(await store.putTeamKey(key))) {
+          return send(response, 409, { error: "this team already has an audit key" });
+        }
+        await store.putTeamKeyShares(shares.map((share) => ({
+          orgId: membership.orgId,
+          uid: share.uid,
+          version: key.version,
+          senderUid: membership.uid,
+          sealed: share.sealed,
+          createdAt: now,
+        })));
+        return send(response, 201, {
+          teamKey: { publicKey: key.publicKey, version: key.version, createdBy: key.createdBy, createdAt: key.createdAt },
+        });
+      }
+
+      /*
+       * A teammate who holds the key sealing it for members who have none.
+       * Insert-only, so nobody can replace a working copy with one that does
+       * not open; the version must be the current one so a copy of a key that
+       * has been replaced is not handed out.
+       */
+      if (route === "PUT /api/team-key/shares") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const key = await store.teamKey(membership.orgId);
+        if (!key) return send(response, 404, { error: "this team has no audit key yet" });
+        if (body.version !== key.version) {
+          return send(response, 409, { error: "the team's audit key has changed; reload and try again" });
+        }
+        const shares = readTeamShares(body.shares);
+        if (!shares) return send(response, 400, { error: "invalid key shares" });
+        const memberIds = new Set((await store.members(membership.orgId)).map((member) => member.uid));
+        if (shares.some((share) => !memberIds.has(share.uid))) {
+          return send(response, 400, { error: "key shares may only be sent to organization members" });
+        }
+        const now = Date.now();
+        const shared = await store.putTeamKeyShares(shares.map((share) => ({
+          orgId: membership.orgId,
+          uid: share.uid,
+          version: key.version,
+          senderUid: membership.uid,
+          sealed: share.sealed,
+          createdAt: now,
+        })));
+        return send(response, 200, { shared });
+      }
+
+      /*
+       * Only ever the caller's own copy: for when it no longer opens, such as
+       * after a vault reset, so that a teammate can seal a fresh one.
+       */
+      if (route === "DELETE /api/team-key/share") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        return send(response, 200, { deleted: await store.deleteTeamKeyShare(membership.orgId, membership.uid) });
+      }
+
+      /*
+       * Typed input recorded before the audit key existed, still in
+       * plaintext. An owner or admin's browser reads it, seals each entry to
+       * the team key and writes it back, after which the service holds no
+       * readable copy. Limited to them because a sealed entry replaces the
+       * original, and a trail anyone could overwrite would not be a trail.
+       */
+      if (route === "GET /api/audit/plaintext") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        if (membership.role !== "owner" && membership.role !== "admin") {
+          return send(response, 403, { error: "only an owner or admin can seal the team's history" });
+        }
+        const asked = Number(url.searchParams.get("limit") ?? "");
+        const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, 200) : 100;
+        return send(response, 200, { events: await store.plaintextAudit(membership.orgId, limit) });
+      }
+
+      if (route === "POST /api/audit/seal") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        if (membership.role !== "owner" && membership.role !== "admin") {
+          return send(response, 403, { error: "only an owner or admin can seal the team's history" });
+        }
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const entries = Array.isArray(body.entries) ? body.entries.slice(0, 200) : [];
+        let sealed = 0;
+        for (const entry of entries) {
+          const candidate = entry as Record<string, unknown>;
+          if (typeof candidate.id !== "string" || !(await isAuditEnvelope(candidate.text))) continue;
+          /*
+           * Recorded against the person whose browser sealed it. They were
+           * handed the session, the author and the time by this service, so a
+           * re-sealed entry must not read as the words of the person it names.
+           */
+          const done = await store.sealAudit(
+            membership.orgId,
+            candidate.id,
+            candidate.text as string,
+            membership.uid,
+          );
+          if (done) sealed += 1;
+        }
+        return send(response, 200, { sealed });
       }
 
       /*
@@ -564,7 +753,11 @@ export function createApp(options: AppOptions) {
           sessionId: url.searchParams.get("session")?.slice(0, 64) || undefined,
           actorUid: url.searchParams.get("actor")?.slice(0, 256) || undefined,
           kind: kinds.has(askedKind) ? askedKind as AuditEvent["kind"] : undefined,
-          query: url.searchParams.get("q")?.trim().slice(0, 200) || undefined,
+          /*
+           * No text search. Typed input is ciphertext here, and the service
+           * cannot search what it cannot read; the browser searches what it
+           * has decrypted.
+           */
           sinceAt: Number.isFinite(askedSince) && askedSince > 0 ? askedSince : undefined,
         });
         return send(response, 200, { ...result, page, limit });
@@ -580,6 +773,11 @@ export function createApp(options: AppOptions) {
         return send(response, 200, { events: await store.auditFor(membership.orgId, auditRoute[1]) });
       }
 
+      /*
+       * Kept for scripts written against the prerelease API. Typed input in it
+       * is ciphertext now, sealed to the team's audit key: the app builds its
+       * export in the browser, from what it has decrypted.
+       */
       if (route === "GET /api/audit.csv") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
