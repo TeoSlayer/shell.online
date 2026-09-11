@@ -37,6 +37,10 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - A request that cannot reach the service says so plainly, instead of "Could
   not reach the accounts service at . Is it running?", and an outage page from
   the edge no longer surfaces as a JSON parse error.
+- The `shell login` approval page says what a linked machine shares with
+  your team: the full command line, machine name, session name and timings,
+  and what is typed from a browser. It used to say only the command name and
+  timing were published.
 
 ## [0.11.3] — 2026-09-11
 
