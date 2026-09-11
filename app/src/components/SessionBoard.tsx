@@ -1,8 +1,8 @@
-import { Terminal as TerminalIcon, Trash, Eye } from "@phosphor-icons/react";
+import { Eye, Stop as StopIcon, Terminal as TerminalIcon, Trash } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { PeopleChip } from "./Avatar";
 import { kindForCommand } from "../lib/session-kinds";
-import { assigneeIds, canHandOff, canRemove } from "../lib/session-view";
+import { assigneeIds, canHandOff, canRemove, canStop } from "../lib/session-view";
 import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
@@ -34,6 +34,8 @@ function Card({
   action,
   onOpen,
   onAssign,
+  onStop,
+  stopping,
 }: {
   session: SessionRecord;
   now: number;
@@ -42,6 +44,8 @@ function Card({
   action: React.ReactNode;
   onOpen: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uids: string[]) => void;
+  onStop: (session: SessionRecord) => void;
+  stopping: string;
 }) {
   const kind = kindForCommand(session.command);
   const selected = new Set(assigneeIds(session));
@@ -94,6 +98,22 @@ function Card({
         ) : (
           <PeopleChip people={assignees} />
         )}
+        {/*
+          * Stopping was reachable from the table and not from here, so the
+          * board could show a session that was yours to stop and give you no
+          * way to stop it.
+          */}
+        {canStop(session, you) && (
+          <button
+            type="button"
+            className="session-action"
+            onClick={() => void onStop(session)}
+            disabled={stopping === session.id}
+          >
+            <StopIcon size={14} weight="bold" />
+            {stopping === session.id ? "Stopping" : "Stop"}
+          </button>
+        )}
         {action}
       </div>
     </li>
@@ -111,6 +131,8 @@ export function SessionBoard({
   onOpen,
   onRemove,
   onAssign,
+  onStop,
+  stopping,
 }: {
   liveWrite: SessionRecord[];
   liveRead: SessionRecord[];
@@ -122,6 +144,8 @@ export function SessionBoard({
   onOpen: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uids: string[]) => void;
+  onStop: (session: SessionRecord) => void;
+  stopping: string;
 }) {
   const columns: Column[] = [
     {
@@ -167,6 +191,8 @@ export function SessionBoard({
                   you={you}
                   onOpen={onOpen}
                   onAssign={onAssign}
+                  onStop={onStop}
+                  stopping={stopping}
                   action={
                     column.key === "finished" ? (
                       /*

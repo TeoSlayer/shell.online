@@ -1479,6 +1479,23 @@
  * the card, the same arrangement the table row uses, so both views answer a
  * tap in the same place: the session, not nothing.
  */
+/*
+ * Its children may shrink.
+ *
+ * A grid item's automatic minimum is its min-content, and both the card's name
+ * and its meta line are `white-space: nowrap`, so a long machine name set a
+ * floor the card could not go below: the card pushed the column and the column
+ * pushed the page. They were always meant to ellipsize; this is what lets them.
+ */
+.board,
+.board-column,
+.board-cards,
+.board-card,
+.board-card > *,
+.board-card-head > * {
+  min-width: 0;
+}
+
 .board-card {
   position: relative;
   display: grid;
