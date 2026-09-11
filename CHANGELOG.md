@@ -34,6 +34,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - The README's Homebrew command taps this repository and includes the one-time
   `brew trust` step Homebrew 6 asks for. It used to name a tap that does not
   exist.
+- A request that cannot reach the service says so plainly, instead of "Could
+  not reach the accounts service at . Is it running?", and an outage page from
+  the edge no longer surfaces as a JSON parse error.
 
 ## [0.11.3] — 2026-09-11
 

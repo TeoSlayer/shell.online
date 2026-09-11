@@ -7,7 +7,7 @@ import { Alert } from "../components/Alert";
 import { Booting } from "../components/Booting";
 import { useAuth } from "../auth/AuthProvider";
 import { usePageTitle } from "../lib/page-title";
-import { fetchOrg, accountsBaseUrl } from "../lib/api";
+import { fetchOrg, accountsBaseUrl, NETWORK_FAILURE } from "../lib/api";
 
 interface Preview {
   organization: { name: string };
@@ -44,7 +44,7 @@ export function Join() {
         else setPreview(body as Preview);
       })
       .catch(() => {
-        if (!cancelled) setError("Could not reach the accounts service.");
+        if (!cancelled) setError(NETWORK_FAILURE);
       });
     return () => {
       cancelled = true;
