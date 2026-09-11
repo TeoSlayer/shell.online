@@ -27,10 +27,22 @@ export async function shareWith(
     (cached?.verified ? cached.password : null) ?? (await vault.openShare(session.id, session.keyShare));
   if (!password) return [];
 
+  const eligible = recipients.filter(
+    (recipient) =>
+      recipient.accountKey &&
+      recipient.uid !== owner &&
+      keyTrust(owner, recipient.uid, recipient.accountKey) !== "changed",
+  );
+  /*
+   * Recorded as chosen before sealing, not after, so a seal that fails is
+   * retried on the next poll: the audience is the owner's own choice, which
+   * the retry loop is allowed to act on.
+   */
+  if (eligible.length > 0) addToAudience(session.id, eligible.map((recipient) => recipient.uid));
+
   const sealed: string[] = [];
-  for (const recipient of recipients) {
-    if (!recipient.accountKey || recipient.uid === owner) continue;
-    if (keyTrust(owner, recipient.uid, recipient.accountKey) === "changed") continue;
+  for (const recipient of eligible) {
+    if (!recipient.accountKey) continue;
     try {
       const share = await vault.sealTo(recipient, session.id, password);
       if (!share) continue;

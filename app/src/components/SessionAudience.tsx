@@ -98,9 +98,10 @@ export function SessionAudience({
 
   const waiting = confirming ? members.find((member) => member.uid === confirming) : undefined;
   /*
-   * Assigned, but holding no copy. Usually someone assigned from another
-   * browser, whose key this one has never sealed to: the service's say-so is
-   * not enough to seal to it unasked, so it is offered here in one click.
+   * Assigned, but holding no copy: someone assigned by an admin, or from
+   * another browser. The assignee list is the service's word, and owners and
+   * admins can assign anyone, themselves included, so it never seals a
+   * password on its own. The owner lets them open it here, in one click.
    */
   const assigned = new Set(assigneeIds(session));
   const assignedWithout = members.filter(

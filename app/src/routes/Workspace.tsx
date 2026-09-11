@@ -28,7 +28,7 @@ import {
   type SessionRecord,
 } from "../lib/api";
 import { generatePassword, sealPassword } from "../lib/seal";
-import { sealTargets, trustedAssignees } from "../lib/session-share";
+import { sealTargets } from "../lib/session-share";
 import { shareSessionKeys } from "../lib/api";
 import { keyTrust, trustKey } from "../lib/known-keys";
 import { isVaultShare } from "../lib/vault-crypto";
@@ -463,22 +463,17 @@ export function Workspace() {
       /* Only the owner shares with colleagues. */
       if (!me || session.ownerUid !== me.uid) continue;
       /*
-       * Everyone chosen in this browser, and every assignee whose key this
-       * browser already trusts. An assignee it has never sealed to is left to
-       * the owner on the session page; see trustedAssignees.
+       * Only people chosen in this browser: at start, by sharing, or by the
+       * owner assigning them here. Never the service's assignee list on its
+       * own. Owners and admins can assign anyone to any session, themselves
+       * included, so sealing to whoever it names would let them read sessions
+       * nobody shared with them. Those are offered to the owner on the
+       * session page instead.
        */
-      const assignees = trustedAssignees({
-        assignees: assigneeIds(session),
-        members: roster,
-        you: me,
-        holders: session.sharedWith ?? [],
-        isKnown: (member) =>
-          Boolean(member.accountKey) && keyTrust(me.uid, member.uid, member.accountKey ?? "") === "known",
-      }).map((member) => member.uid);
       const missing = sealTargets({
         members: roster,
         you: me,
-        chosen: [...audienceFor(session.id), ...assignees],
+        chosen: audienceFor(session.id),
         done: sharedWith.current.get(session.id),
       });
       if (missing.length === 0) continue;

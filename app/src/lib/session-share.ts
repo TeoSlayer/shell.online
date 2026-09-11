@@ -49,30 +49,3 @@ export function sealTargets(input: {
     (member) => chosen.has(member.uid) && !done.has(member.uid),
   );
 }
-
-/**
- * Assignees whose copy can be sealed without asking anyone.
- *
- * Being made responsible for a session should mean being able to open it. But
- * the list of assignees comes from the service, and a service that could name
- * anyone an assignee and have the password sealed to them would be choosing
- * who reads the session. So only assignees whose key this browser already
- * trusts, because it has sealed to that key before, go without asking. The
- * rest are offered to the owner on the session page, and anyone the owner
- * assigns from their own browser is sealed to there and then.
- */
-export function trustedAssignees(input: {
-  assignees: readonly string[];
-  members: Member[];
-  you: Member | null;
-  /** Who already holds a copy. */
-  holders: readonly string[];
-  /** Whether this browser has sealed to this member's current key before. */
-  isKnown: (member: Member) => boolean;
-}): Member[] {
-  const assigned = new Set(input.assignees);
-  const holders = new Set(input.holders);
-  return shareCandidates(input.members, input.you).reachable.filter(
-    (member) => assigned.has(member.uid) && !holders.has(member.uid) && input.isKnown(member),
-  );
-}
