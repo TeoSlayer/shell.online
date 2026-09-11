@@ -31,6 +31,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   the oldest written.
 - Starting a session on a machine that cannot receive a password is refused,
   instead of producing a session nobody can open.
+- The README's Homebrew command taps this repository and includes the one-time
+  `brew trust` step Homebrew 6 asks for. It used to name a tap that does not
+  exist.
 
 ## [0.11.3] — 2026-09-11
 

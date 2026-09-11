@@ -28,11 +28,16 @@ Windows PowerShell:
 irm https://shell.online/install.ps1 | iex
 ```
 
-Homebrew:
+Homebrew (the tap lives in this repository):
 
 ```sh
-brew install TeoSlayer/shell-online/shell-online
+brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
+brew trust --tap teoslayer/shell-online
+brew install shell-online
 ```
+
+Homebrew 6 asks you to trust a third-party tap once. Older versions have no
+`brew trust` and can skip that line.
 
 Installers verify checksums. Release binaries and `SHA256SUMS` are available on
 the [releases page](https://github.com/TeoSlayer/shell.online/releases).
