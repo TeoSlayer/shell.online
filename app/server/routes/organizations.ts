@@ -1,4 +1,4 @@
-import type { Store } from "../lib/store";
+import { DELETED_ACCOUNT_MEMORY_MS, type Store } from "../lib/store";
 import type { Identity } from "../lib/firebase-token";
 import { invitationMessage, type Mailer } from "../lib/mail";
 import {
@@ -33,13 +33,23 @@ export async function ensureMembership(
   store: Store,
   identity: Identity,
   inviteId?: string,
-): Promise<{ membership: Membership; joined: boolean; error?: string }> {
+): Promise<{ membership: Membership; joined: boolean; error?: string } | null> {
   const existing = await store.membershipOf(identity.uid);
 
   if (existing && inviteId) {
     return await acceptAsExistingMember(store, identity, existing, inviteId);
   }
   if (existing) return { membership: existing, joined: false };
+
+  /*
+   * Someone who deleted their account moments ago can still present an ID
+   * token that verifies, from a tab left open or another browser. Building
+   * them a new team from it would quietly undo the deletion, so an account
+   * deleted recently gets no membership at all.
+   */
+  if (await store.recentlyDeleted(identity.uid, Date.now() - DELETED_ACCOUNT_MEMORY_MS)) {
+    return null;
+  }
 
   if (inviteId) {
     const check = checkInvite(await store.invite(inviteId), identity.email);
@@ -239,6 +249,12 @@ export async function removeMember(store: Store, membership: Membership, uid: st
     return denied(`you cannot remove ${target.role === "owner" ? "the owner" : "another admin"}`);
   }
   await store.removeMember(membership.orgId, uid);
+  /*
+   * Their copy of the team's audit key goes with them. A copy they already
+   * opened cannot be taken back out of their browser, but the service stops
+   * handing it to them.
+   */
+  await store.deleteTeamKeyShare(membership.orgId, uid);
   return ok({ removed: true });
 }
 

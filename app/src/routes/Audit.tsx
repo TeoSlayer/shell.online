@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   DownloadSimple,
+  LockKey,
   MagnifyingGlass,
   X,
   ArrowRight,
@@ -12,16 +13,17 @@ import { Avatar } from "../components/Avatar";
 import { Alert } from "../components/Alert";
 import { Button } from "../components/Button";
 import {
-  downloadAuditCsv,
   fetchOrgAudit,
   fetchSessions,
   type AuditEvent,
+  type AuditPageRequest,
   type Member,
   type SessionRecord,
 } from "../lib/api";
 import {
   EMPTY_FILTERS,
   activity,
+  applyFilters,
   byActor,
   isFiltered,
   memberOf,
@@ -31,12 +33,26 @@ import {
   traceGroups,
   type Filters,
 } from "../lib/audit-view";
+import { auditCsv } from "../lib/audit-csv";
+import { isAuditEnvelope } from "../lib/team-crypto";
 import { usePageTitle } from "../lib/page-title";
 import { displayName } from "../lib/people";
 import { SearchSelect } from "../components/SearchSelect";
 import type { SearchSelectOption } from "../lib/search-options";
+import { useTeamKey } from "../vault/TeamKeyProvider";
 
 const PAGE_SIZE = 40;
+/* The service pages at most 100 at a time. */
+const FETCH_SIZE = 100;
+/*
+ * How far back a text search reaches. What was typed is sealed to the team's
+ * key, so the service cannot search it; the browser fetches entries, opens
+ * them, and searches those. A limit keeps a search from pulling a whole
+ * history down.
+ */
+const SEARCH_PAGES = 10;
+/* An export takes everything, within reason. */
+const EXPORT_PAGES = 100;
 
 const RANGES = [
   { label: "All time", detail: "The complete retained audit trail", value: 0 },
@@ -63,6 +79,26 @@ const EVENT_LABEL: Record<AuditEvent["kind"], string> = {
   stopped: "Stopped",
   deleted: "Removed",
 };
+
+/**
+ * An entry as shown. `sealed` is whether it arrived encrypted at all: one
+ * recorded before the log was encrypted, and not yet sealed, is still in the
+ * clear on the service, and saying so is the point of showing it.
+ */
+type ShownEvent = AuditEvent & { readable: boolean; sealed: boolean };
+
+/*
+ * Everything the service can filter on. The text is not among them: the
+ * service holds it sealed.
+ */
+function metadataRequest(filters: Filters): AuditPageRequest {
+  return {
+    session: filters.session || undefined,
+    actor: filters.actor || undefined,
+    kind: filters.kind || undefined,
+    sinceAt: filters.since ? Date.now() - filters.since : undefined,
+  };
+}
 
 /** A bar chart of when things happened. Inline SVG; no charting library. */
 function ActivityChart({ events }: { events: AuditEvent[] }) {
@@ -136,14 +172,17 @@ function RankChart({
 
 export function Audit() {
   usePageTitle("Audit log");
+  const team = useTeamKey();
   const [params, setParams] = useSearchParams();
-  const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const [events, setEvents] = useState<ShownEvent[] | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [reload, setReload] = useState(0);
   const [total, setTotal] = useState(0);
+  /* For a text search: how many entries were searched, and whether there were more. */
+  const [searched, setSearched] = useState<{ count: number; more: boolean } | null>(null);
   const [page, setPage] = useState(() => Math.max(1, Number(params.get("page")) || 1));
 
   const [filters, setFilters] = useState<Filters>({
@@ -155,6 +194,20 @@ export function Audit() {
   });
   const [filtersOpen, setFiltersOpen] = useState(() =>
     ["actor", "kind", "session", "since"].some((name) => params.has(name)),
+  );
+
+  /* Opens what can be opened here; the rest is marked sealed, never shown as blank. */
+  const { openAudit } = team;
+  const readable = useCallback(
+    async (list: AuditEvent[]): Promise<ShownEvent[]> =>
+      Promise.all(
+        list.map(async (event) => {
+          if (!isAuditEnvelope(event.text)) return { ...event, readable: true, sealed: false };
+          const opened = await openAudit(event);
+          return { ...event, text: opened ?? "", readable: opened !== null, sealed: true };
+        }),
+      ),
+    [openAudit],
   );
 
   const loadContext = useCallback(async () => {
@@ -173,34 +226,52 @@ export function Audit() {
 
   useEffect(() => {
     let current = true;
+    const needle = filters.query.trim();
     const timer = window.setTimeout(async () => {
       try {
-        const trail = await fetchOrgAudit({
-          page,
-          limit: PAGE_SIZE,
-          session: filters.session || undefined,
-          actor: filters.actor || undefined,
-          kind: filters.kind || undefined,
-          query: filters.query || undefined,
-          sinceAt: filters.since ? Date.now() - filters.since : undefined,
-        });
+        if (!needle) {
+          const trail = await fetchOrgAudit({ ...metadataRequest(filters), page, limit: PAGE_SIZE });
+          const shown = await readable(trail.events);
+          if (!current) return;
+          setEvents(shown);
+          setTotal(trail.total);
+          setSearched(null);
+          setError("");
+          if (trail.events.length === 0 && trail.total > 0 && page > 1) setPage(page - 1);
+          return;
+        }
+
+        /*
+         * A text search runs here: fetch the newest entries that match the
+         * other filters, open them, and search what they say.
+         */
+        const fetched: AuditEvent[] = [];
+        let more = false;
+        for (let next = 1; next <= SEARCH_PAGES; next += 1) {
+          const trail = await fetchOrgAudit({ ...metadataRequest(filters), page: next, limit: FETCH_SIZE });
+          fetched.push(...trail.events);
+          more = fetched.length < trail.total;
+          if (!more || trail.events.length < FETCH_SIZE) break;
+        }
+        const matches = applyFilters(await readable(fetched), { ...EMPTY_FILTERS, query: needle }) as ShownEvent[];
         if (!current) return;
-        setEvents(trail.events);
-        setTotal(trail.total);
+        setEvents(matches.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE));
+        setTotal(matches.length);
+        setSearched({ count: fetched.length, more });
         setError("");
-        if (trail.events.length === 0 && trail.total > 0 && page > 1) setPage(page - 1);
       } catch (caught) {
         if (!current) return;
         setEvents([]);
         setTotal(0);
         setError(caught instanceof Error ? caught.message : "Could not load the audit log.");
       }
-    }, filters.query ? 180 : 0);
+    }, needle ? 180 : 0);
     return () => {
       current = false;
       window.clearTimeout(timer);
     };
-  }, [filters, page, reload]);
+    /* team.status: entries opened once the team key arrives. */
+  }, [filters, page, reload, readable, team.status]);
 
   const shown = useMemo(() => events ?? [], [events]);
   const summary = useMemo(() => summarise(shown), [shown]);
@@ -251,11 +322,30 @@ export function Audit() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /*
+   * Built here, from entries opened here. The service cannot build it any
+   * more: it holds what was typed sealed to the team's key.
+   */
   async function handleExport() {
     setExporting(true);
     try {
-      const blob = await downloadAuditCsv(filters.session || undefined);
-      const url = URL.createObjectURL(blob);
+      const fetched: AuditEvent[] = [];
+      for (let next = 1; next <= EXPORT_PAGES; next += 1) {
+        const trail = await fetchOrgAudit({ ...metadataRequest(filters), page: next, limit: FETCH_SIZE });
+        fetched.push(...trail.events);
+        if (fetched.length >= trail.total || trail.events.length < FETCH_SIZE) break;
+      }
+      let rows = await readable(fetched);
+      if (filters.query.trim()) rows = applyFilters(rows, { ...EMPTY_FILTERS, query: filters.query }) as ShownEvent[];
+      const csv = auditCsv(
+        rows.map((event) => ({
+          ...event,
+          text: event.readable ? event.text : "[sealed: this browser does not hold the team's audit key]",
+          sealedBy: event.sealedBy,
+        })),
+        sessions,
+      );
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = "shell-online-audit.csv";
@@ -283,6 +373,23 @@ export function Audit() {
       <p className="page-dek">
         Everything entered in this team's sessions: commands in a
         terminal, prompts to an agent, and who entered them.
+      </p>
+
+      {/*
+        What protects this page, said where it is read. The team's audit key
+        opens it; the service stores it sealed.
+      */}
+      <p className="audit-sealed-note" data-state={team.status}>
+        <LockKey size={14} weight="bold" />
+        <span>
+          {team.status === "ready"
+            ? "End-to-end encrypted for your team. shell.online stores what was typed sealed to your team's key and cannot read it; this page opens it in your browser, where search and export run too."
+            : team.status === "waiting"
+              ? "This browser does not have your team's audit key yet. A teammate's browser seals it to you the next time they open shell.online; until then, what was typed shows as sealed."
+              : team.status === "error"
+                ? team.error
+                : "Opening your team's audit key."}
+        </span>
       </p>
 
       {error && (
@@ -377,6 +484,13 @@ export function Audit() {
           </div>
         </details>
       </div>
+
+      {searched && (
+        <p className="audit-search-note">
+          Searched the newest {searched.count} matching entr{searched.count === 1 ? "y" : "ies"} in your browser
+          {searched.more ? ". Narrow the filters or the time range to search further back." : "."}
+        </p>
+      )}
 
       {events === null ? (
         <div className="sessions-skeleton" aria-hidden="true">
@@ -509,7 +623,7 @@ function Trace({
   members,
   sessions,
 }: {
-  events: AuditEvent[];
+  events: ShownEvent[];
   members: Member[];
   sessions: SessionRecord[];
 }) {
@@ -552,7 +666,7 @@ function Trace({
               </time>
             </div>
             <ol className="trace-lines">
-              {group.events.map((event) => (
+              {(group.events as ShownEvent[]).map((event) => (
                 <li key={event.id} data-kind={event.kind}>
                   <span className="trace-at">
                     {new Date(event.at).toLocaleTimeString(undefined, {
@@ -562,11 +676,33 @@ function Trace({
                     })}
                   </span>
                   <span className="trace-kind">{EVENT_LABEL[event.kind]}</span>
-                  <code>
-                    {event.kind === "interrupt"
-                      ? `^C${event.text ? ` while typing ${event.text}` : ""}`
-                      : event.text || "—"}
-                  </code>
+                  {event.readable ? (
+                    <code>
+                      {event.kind === "interrupt"
+                        ? `^C${event.text ? ` while typing ${event.text}` : ""}`
+                        : event.text || "—"}
+                    </code>
+                  ) : (
+                    <span className="trace-sealed">
+                      <LockKey size={12} weight="bold" /> Sealed. This browser does not hold the team&apos;s key yet.
+                    </span>
+                  )}
+                  {/*
+                    Where an entry came from, when that is not simply "the
+                    person who typed it". One sealed afterwards was bound to
+                    this person and time by whoever sealed it, not by them, and
+                    one still in the clear is readable by the service.
+                  */}
+                  {event.sealedBy && (
+                    <span className="trace-provenance">
+                      sealed later by {displayName(memberOf(members, event.sealedBy))}
+                    </span>
+                  )}
+                  {!event.sealed && (event.kind === "input" || event.kind === "interrupt") && (
+                    <span className="trace-provenance" data-clear="true">
+                      recorded before encryption, still in the clear
+                    </span>
+                  )}
                 </li>
               ))}
             </ol>

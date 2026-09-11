@@ -4,7 +4,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { Invite, Membership, Organization, Role } from "./orgs";
-import type { AuditPage, AuditPageQuery, Store } from "./store";
+import {
+  DELETED_ACCOUNT_MEMORY_MS,
+  DELETED_ACTOR_EMAIL,
+  type AccountDeletion,
+  type AuditPage,
+  type AuditPageQuery,
+  type Store,
+} from "./store";
 import type {
   AccountKey,
   AgentCommand,
@@ -16,6 +23,8 @@ import type {
   Notification,
   SessionKeyShare,
   SessionRecord,
+  TeamKey,
+  TeamKeyShare,
 } from "./types";
 
 /*
@@ -230,6 +239,27 @@ function toAccountKey(row: Row): AccountKey {
   };
 }
 
+function toTeamKey(row: Row): TeamKey {
+  return {
+    orgId: row.org_id as string,
+    publicKey: row.public_key as string,
+    version: row.version as number,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as number,
+  };
+}
+
+function toTeamKeyShare(row: Row): TeamKeyShare {
+  return {
+    orgId: row.org_id as string,
+    uid: row.uid as string,
+    version: row.version as number,
+    senderUid: row.sender_uid as string,
+    sealed: row.sealed as string,
+    createdAt: row.created_at as number,
+  };
+}
+
 function toInvite(row: Row): Invite {
   return defined({
     id: row.id,
@@ -255,6 +285,7 @@ function toAudit(row: Row): AuditEvent {
     actorEmail: row.actor_email as string,
     kind: row.kind as AuditEvent["kind"],
     text: row.text as string,
+    ...(row.sealed_by ? { sealedBy: row.sealed_by as string } : {}),
   };
 }
 
@@ -855,6 +886,77 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /* ---- Account deletion ---- */
+
+  /*
+   * One transaction. An account half deleted is worse than either state: it
+   * can leave a team with no owner, or a session assigned to nobody.
+   */
+  async deleteAccount(uid: string, plan: AccountDeletion, now = Date.now()): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      if (plan.orgId && plan.dissolve) {
+        /* Key shares go with their sessions, through the foreign key's cascade. */
+        for (const table of ["sessions", "audit_events", "comments", "notifications", "invites", "memberships"]) {
+          await client.query(`DELETE FROM ${table} WHERE org_id = $1`, [plan.orgId]);
+        }
+        await client.query("DELETE FROM organizations WHERE id = $1", [plan.orgId]);
+      }
+      if (plan.orgId && plan.successorUid) {
+        await client.query("UPDATE memberships SET role = 'owner' WHERE org_id = $1 AND uid = $2", [
+          plan.orgId,
+          plan.successorUid,
+        ]);
+      }
+      for (const statement of [
+        "DELETE FROM memberships WHERE uid = $1",
+        "DELETE FROM auth_codes WHERE uid = $1",
+        "DELETE FROM cli_tokens WHERE uid = $1",
+        "DELETE FROM agent_commands WHERE uid = $1",
+        "DELETE FROM sessions WHERE uid = $1",
+        "DELETE FROM session_key_shares WHERE uid = $1",
+        "DELETE FROM account_keys WHERE uid = $1",
+        "DELETE FROM comments WHERE author_uid = $1",
+        "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
+        /* The address an invite was sent to is theirs once they accepted it. */
+        "UPDATE invites SET email = NULL WHERE accepted_by = $1",
+        /* The right-hand sides read the row as it was, so [1] is the next assignee. */
+        `UPDATE sessions SET
+           assignee_uids = array_remove(assignee_uids, $1),
+           assignee_uid = CASE WHEN assignee_uid = $1
+             THEN (array_remove(assignee_uids, $1))[1] ELSE assignee_uid END,
+           owner_uid = CASE WHEN owner_uid = $1 THEN uid ELSE owner_uid END
+         WHERE $1 = ANY(assignee_uids) OR assignee_uid = $1 OR owner_uid = $1`,
+      ]) {
+        await client.query(statement, [uid]);
+      }
+      await client.query("UPDATE audit_events SET actor_email = $2 WHERE actor_uid = $1", [
+        uid,
+        DELETED_ACTOR_EMAIL,
+      ]);
+      await client.query(
+        `INSERT INTO deleted_accounts (uid, deleted_at) VALUES ($1, $2)
+         ON CONFLICT (uid) DO UPDATE SET deleted_at = EXCLUDED.deleted_at`,
+        [uid, now],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async recentlyDeleted(uid: string, since: number): Promise<boolean> {
+    const row = await this.row(
+      "SELECT 1 FROM deleted_accounts WHERE uid = $1 AND deleted_at >= $2",
+      [uid, since],
+    );
+    return row !== null;
+  }
+
   /* ---- Agent commands ---- */
 
   async putCommand(command: AgentCommand): Promise<void> {
@@ -1127,12 +1229,80 @@ export class PostgresStore implements Store {
     await this.pool.query(`UPDATE invites SET ${set.text} WHERE id = $1`, [id, ...set.values]);
   }
 
+  /* ---- Team audit key ---- */
+
+  async teamKey(orgId: string): Promise<TeamKey | null> {
+    const row = await this.row("SELECT * FROM team_keys WHERE org_id = $1", [orgId]);
+    return row ? toTeamKey(row) : null;
+  }
+
+  async putTeamKey(key: TeamKey): Promise<boolean> {
+    const result = await this.pool.query(
+      `INSERT INTO team_keys (org_id, public_key, version, created_by, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (org_id) DO NOTHING`,
+      [key.orgId, key.publicKey, key.version, key.createdBy, key.createdAt],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async teamKeyShares(orgId: string): Promise<TeamKeyShare[]> {
+    const rows = await this.rows(
+      'SELECT * FROM team_key_shares WHERE org_id = $1 ORDER BY created_at ASC, uid COLLATE "C" ASC',
+      [orgId],
+    );
+    return rows.map(toTeamKeyShare);
+  }
+
+  /* One statement per copy, each conditional, so an existing copy is never replaced. */
+  async putTeamKeyShares(shares: TeamKeyShare[]): Promise<number> {
+    let written = 0;
+    for (const share of shares) {
+      const result = await this.pool.query(
+        `INSERT INTO team_key_shares (org_id, uid, version, sender_uid, sealed, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (org_id, uid) DO NOTHING`,
+        [share.orgId, share.uid, share.version, share.senderUid, share.sealed, share.createdAt],
+      );
+      written += result.rowCount ?? 0;
+    }
+    return written;
+  }
+
+  async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM team_key_shares WHERE org_id = $1 AND uid = $2", [
+      orgId,
+      uid,
+    ]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]> {
+    const rows = await this.rows(
+      `SELECT * FROM audit_events
+       WHERE org_id = $1 AND kind IN ('input', 'interrupt') AND text NOT LIKE 'a1.%'
+       ORDER BY at ASC, id COLLATE "C" ASC
+       LIMIT $2`,
+      [orgId, limit],
+    );
+    return rows.map(toAudit);
+  }
+
+  async sealAudit(orgId: string, id: string, text: string, sealedBy: string): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE audit_events SET text = $3, sealed_by = $4
+       WHERE org_id = $1 AND id = $2 AND kind IN ('input', 'interrupt') AND text NOT LIKE 'a1.%'`,
+      [orgId, id, text, sealedBy],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /* ---- Audit ---- */
 
   async putAudit(event: AuditEvent): Promise<void> {
     await this.pool.query(
-      `INSERT INTO audit_events (id, org_id, session_id, at, actor_uid, actor_email, kind, text)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO audit_events (id, org_id, session_id, at, actor_uid, actor_email, kind, text, sealed_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO NOTHING`,
       [
         event.id,
@@ -1143,6 +1313,8 @@ export class PostgresStore implements Store {
         event.actorEmail,
         event.kind,
         event.text,
+        /* Null is first-hand: sealed by the browser that recorded it. */
+        event.sealedBy ?? null,
       ],
     );
   }
@@ -1278,6 +1450,9 @@ export class PostgresStore implements Store {
     /* Finished commands are only kept long enough to be reported back. */
     await this.pool.query("DELETE FROM agent_commands WHERE done_at IS NOT NULL AND done_at < $1", [
       now - 10 * 60_000,
+    ]);
+    await this.pool.query("DELETE FROM deleted_accounts WHERE deleted_at <= $1", [
+      now - DELETED_ACCOUNT_MEMORY_MS,
     ]);
   }
 

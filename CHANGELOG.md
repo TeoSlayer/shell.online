@@ -4,6 +4,26 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Vault management on the Account page: what the vault is, the session
+  passwords it holds, and the team audit key it keeps. Only you can see
+  what is in it.
+- An end-to-end encrypted audit log. What is typed into a session from the
+  browser is encrypted to your team's audit key before it leaves the browser,
+  so every member of the team can read it and shell.online cannot.
+
+### Changed
+
+- Searching and exporting the audit log run in the browser, on the decrypted
+  entries.
+- The service refuses unencrypted input entries for the audit log.
+
+### Fixed
+
+- The sign-up page said typed input was not recorded. It is recorded, now
+  end-to-end encrypted for your team.
+
 ## [0.12.0] — 2026-09-11
 
 ### Added
@@ -15,6 +35,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - `shell` seals each encrypted session's password to your vault when it
   registers the session, using the vault key the browser handed it at
   `shell login`, and will not seal to a key that has changed since.
+- A privacy policy at `/privacy`, linked from sign-in, sign-up, the Terms and
+  the Account page.
+- Delete your account from the Account page. It removes your sign-in, your
+  machines' tokens, your sessions, vault, comments and notifications; hands a
+  team you own to its longest-standing admin, or member if there is none; and
+  deletes the team when nobody else is in it.
 
 ### Changed
 
@@ -33,6 +59,16 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   the oldest written.
 - Starting a session on a machine that cannot receive a password is refused,
   instead of producing a session nobody can open.
+- The README's Homebrew command taps this repository and includes the one-time
+  `brew trust` step Homebrew 6 asks for. It used to name a tap that does not
+  exist.
+- A request that cannot reach the service says so plainly, instead of "Could
+  not reach the accounts service at . Is it running?", and an outage page from
+  the edge no longer surfaces as a JSON parse error.
+- The `shell login` approval page says what a linked machine shares with
+  your team: the full command line, machine name, session name and timings,
+  and what is typed from a browser. It used to say only the command name and
+  timing were published.
 
 ## [0.11.3] — 2026-09-11
 

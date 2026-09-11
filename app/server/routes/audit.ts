@@ -1,8 +1,17 @@
 import type { AuditEvent, SessionRecord, Store } from "../lib/store";
 import { newId, type Membership } from "../lib/orgs";
+import { isAuditEnvelope } from "../lib/audit-seal";
 
 export const MAX_TEXT = 4100;
 const KINDS = new Set(["input", "interrupt", "opened", "handoff", "stopped", "deleted"]);
+
+/**
+ * The kinds a browser writes: what a person typed. They arrive sealed to the
+ * team's audit key and nothing else is accepted for them. The rest are written
+ * by the service itself and hold only what it already stores: session names
+ * and the addresses of the people involved.
+ */
+export const SEALED_KINDS = new Set(["input", "interrupt"]);
 
 export interface RecordInput {
   sessionId: string;
@@ -12,12 +21,17 @@ export interface RecordInput {
 }
 
 /**
- * Records collaboration metadata for a session.
+ * Records an event in a session's audit trail.
  *
  * The organization is taken from the actor's membership and the session is
  * checked to belong to it, so an event cannot be written into somebody else's
- * organization by asking nicely. Terminal input is deliberately excluded:
- * the accounts service must not receive a plaintext copy of an E2EE stream.
+ * organization by asking nicely.
+ *
+ * Typed input is recorded, by the operator's choice, but only as ciphertext
+ * sealed in the browser to a key the team holds: plaintext is refused. The
+ * envelope is stored exactly as it came, and so is its time, because the
+ * browser binds the time into the ciphertext. Trimming the one or replacing
+ * the other would make the entry unreadable to the team it was written for.
  */
 export async function recordAudit(
   store: Store,
@@ -26,6 +40,15 @@ export async function recordAudit(
 ): Promise<{ ok: true; event: AuditEvent } | { ok: false; status: number; error: string }> {
   if (!KINDS.has(input.kind)) {
     return { ok: false, status: 400, error: "unknown audit kind" };
+  }
+  const sealed = SEALED_KINDS.has(input.kind);
+  if (sealed) {
+    if (!(await isAuditEnvelope(input.text))) {
+      return { ok: false, status: 400, error: "typed input must be sealed to the team's audit key" };
+    }
+    if (typeof input.at !== "number" || !Number.isInteger(input.at)) {
+      return { ok: false, status: 400, error: "sealed input must carry the time it was sealed with" };
+    }
   }
   const session = await store.sessionInOrg(membership.orgId, input.sessionId);
   if (!session) {
@@ -40,7 +63,7 @@ export async function recordAudit(
     actorUid: membership.uid,
     actorEmail: membership.email,
     kind: input.kind as AuditEvent["kind"],
-    text: String(input.text ?? "").slice(0, MAX_TEXT),
+    text: sealed ? input.text : String(input.text ?? "").slice(0, MAX_TEXT),
   };
   await store.putAudit(event);
   return { ok: true, event };
@@ -103,7 +126,7 @@ export async function assignSession(
 /** Collaboration metadata as CSV, retained for prerelease API compatibility. */
 export function auditCsv(events: AuditEvent[], sessions: SessionRecord[]): string {
   const byId = new Map(sessions.map((session) => [session.id, session]));
-  const header = ["timestamp", "session", "command", "actor", "kind", "text"];
+  const header = ["timestamp", "session", "command", "actor", "kind", "text", "sealed_by"];
   const rows = events.map((event) => {
     const session = byId.get(event.sessionId);
     return [
@@ -113,6 +136,8 @@ export function auditCsv(events: AuditEvent[], sessions: SessionRecord[]): strin
       event.actorEmail,
       event.kind,
       event.text,
+      /* Empty for an entry that arrived sealed from the browser that wrote it. */
+      event.sealedBy ?? "",
     ];
   });
   return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");

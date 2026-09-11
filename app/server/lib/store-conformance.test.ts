@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import { PostgresStore } from "./store-postgres";
-import type { Store } from "./store";
+import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./store";
 import type { AgentCommand, AuditEvent, CliToken, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
@@ -128,6 +128,7 @@ function notification(overrides: Partial<Notification> = {}): Notification {
 type Implementation = { name: string; open: () => Promise<Store>; reset: (store: Store) => Promise<void> };
 
 const TABLES = [
+  "deleted_accounts",
   "account_keys",
   "session_key_shares",
   "sessions",
@@ -137,6 +138,8 @@ const TABLES = [
   "notifications",
   "invites",
   "memberships",
+  "team_key_shares",
+  "team_keys",
   "organizations",
   "cli_tokens",
   "auth_codes",
@@ -504,6 +507,88 @@ for (const implementation of implementations) {
       });
     });
 
+    describe("team audit key", () => {
+      type TeamKeyRecord = Parameters<Store["putTeamKey"]>[0];
+      type ShareRecord = Parameters<Store["putTeamKeyShares"]>[0][number];
+
+      function teamKey(overrides: Partial<TeamKeyRecord> = {}): TeamKeyRecord {
+        return { orgId: "org_1", publicKey: "pk-team", version: 1, createdBy: "uid-1", createdAt: 1000, ...overrides };
+      }
+
+      function share(overrides: Partial<ShareRecord> = {}): ShareRecord {
+        return {
+          orgId: "org_1",
+          uid: "uid-1",
+          version: 1,
+          senderUid: "uid-1",
+          sealed: "t1.one",
+          createdAt: 1000,
+          ...overrides,
+        };
+      }
+
+      beforeEach(async () => {
+        await store.putOrganization(organization());
+        await store.putOrganization(organization({ id: "org_2", name: "Elsewhere" }));
+      });
+
+      /* Two browsers making the key at once must not both believe theirs is the team's. */
+      it("creates a team key once and refuses a second", async () => {
+        expect(await store.putTeamKey(teamKey())).toBe(true);
+        expect(await store.putTeamKey(teamKey({ publicKey: "pk-other", createdBy: "uid-2" }))).toBe(false);
+        expect(await store.teamKey("org_1")).toEqual(teamKey());
+        expect(await store.teamKey("org_2")).toBeNull();
+      });
+
+      it("never overwrites a member's copy of the key", async () => {
+        expect(await store.putTeamKeyShares([share(), share({ uid: "uid-2", sealed: "t1.two" })])).toBe(2);
+        expect(await store.putTeamKeyShares([share({ sealed: "t1.replaced", senderUid: "uid-2" })])).toBe(0);
+        const shares = await store.teamKeyShares("org_1");
+        expect(shares.find((entry) => entry.uid === "uid-1")?.sealed).toBe("t1.one");
+        expect(shares).toHaveLength(2);
+      });
+
+      it("deletes only the copy it names", async () => {
+        await store.putTeamKeyShares([share(), share({ uid: "uid-2", sealed: "t1.two" })]);
+        expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(true);
+        expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(false);
+        expect(await store.deleteTeamKeyShare("org_2", "uid-2")).toBe(false);
+        expect((await store.teamKeyShares("org_1")).map((entry) => entry.uid)).toEqual(["uid-2"]);
+      });
+
+      describe("typed input from before the key", () => {
+        beforeEach(async () => {
+          await store.putAudit(auditEvent({ id: "p1", kind: "input", text: "ls -la", at: 1000 }));
+          await store.putAudit(auditEvent({ id: "s1", kind: "input", text: "a1.1.sender.body", at: 2000 }));
+          await store.putAudit(auditEvent({ id: "h1", kind: "handoff", text: "assigned to bo", at: 3000 }));
+          await store.putAudit(auditEvent({ id: "i1", kind: "interrupt", text: "", at: 4000 }));
+          await store.putAudit(auditEvent({ id: "o1", orgId: "org_2", kind: "input", text: "other", at: 5000 }));
+        });
+
+        it("lists only plaintext typed input, oldest first", async () => {
+          expect((await store.plaintextAudit("org_1", 10)).map((entry) => entry.id)).toEqual(["p1", "i1"]);
+          expect((await store.plaintextAudit("org_1", 1)).map((entry) => entry.id)).toEqual(["p1"]);
+        });
+
+        /* Who sealed it is kept: a re-sealed entry must not pass for first-hand. */
+        it("seals a plaintext entry once, recording who did it, and nothing else", async () => {
+          expect(await store.sealAudit("org_1", "p1", "a1.1.sender.sealed", "uid-2")).toBe(true);
+          expect(await store.sealAudit("org_1", "p1", "a1.1.sender.again", "uid-3")).toBe(false);
+          expect(await store.sealAudit("org_1", "s1", "a1.1.sender.over", "uid-2")).toBe(false);
+          expect(await store.sealAudit("org_1", "h1", "a1.1.sender.over", "uid-2")).toBe(false);
+          expect(await store.sealAudit("org_2", "p1", "a1.1.sender.over", "uid-2")).toBe(false);
+          const trail = await store.auditFor("org_1", "s1");
+          const sealed = trail.find((entry) => entry.id === "p1");
+          expect(sealed?.text).toBe("a1.1.sender.sealed");
+          expect(sealed?.sealedBy).toBe("uid-2");
+          /* An entry that arrived sealed was nobody's to re-seal. */
+          expect(trail.find((entry) => entry.id === "s1")?.sealedBy).toBeUndefined();
+          expect(trail.find((entry) => entry.id === "h1")?.text).toBe("assigned to bo");
+          expect((await store.plaintextAudit("org_1", 10)).map((entry) => entry.id)).toEqual(["i1"]);
+        });
+      });
+    });
+
     describe("agent commands", () => {
       it("hands queued work out exactly once", async () => {
         await store.putCommand(command());
@@ -818,6 +903,114 @@ for (const implementation of implementations) {
         const after = await store.membershipOf("uid-1");
         expect(after).not.toBeNull();
         expect(["org_1", "org_2"]).toContain(after?.orgId);
+      });
+    });
+
+    describe("account deletion", () => {
+      async function team() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putMembership(
+          membership({ uid: "uid-2", email: "bo@example.com", name: "Bo", role: "member", joinedAt: 2000 }),
+        );
+        await store.putMembership(
+          membership({ uid: "uid-3", email: "cy@example.com", name: "Cy", role: "admin", joinedAt: 3000 }),
+        );
+      }
+
+      it("removes what the account held and keeps the team's trail without its email", async () => {
+        await team();
+        await store.putToken(token());
+        await store.putCommand(command());
+        await store.upsertSession(session());
+        await store.upsertSession(
+          session({ id: "s2", uid: "uid-2", ownerUid: "uid-2", assigneeUid: "uid-1", assigneeUids: ["uid-1", "uid-3"] }),
+        );
+        await store.putKeyShares("org_1", "s2", [
+          { uid: "uid-1", senderPublicKey: "spk", sealed: "for-ana" },
+          { uid: "uid-3", senderPublicKey: "spk", sealed: "for-cy" },
+        ]);
+        await store.putAccountKey({
+          uid: "uid-1",
+          publicKey: "pk",
+          encryptedPrivateKey: "enc",
+          recoveryWrap: "wrap",
+          version: 1,
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        await store.putAudit(auditEvent({ sessionId: "s2" }));
+        await store.putComment({
+          id: "cmt_1",
+          orgId: "org_1",
+          sessionId: "s2",
+          authorUid: "uid-1",
+          body: "looks done",
+          at: 1000,
+          mentions: [],
+        });
+        await store.putNotification(notification());
+        await store.putNotification(notification({ id: "ntf_2", uid: "uid-1", actorUid: "uid-2" }));
+
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: false, successorUid: "uid-3" }, 5000);
+
+        expect(await store.membershipOf("uid-1")).toBeNull();
+        expect((await store.membershipOf("uid-3"))?.role).toBe("owner");
+        expect((await store.membershipOf("uid-2"))?.role).toBe("member");
+        expect(await store.findByAccessHash("access-hash")).toBeNull();
+        expect(await store.listCommands("uid-1")).toEqual([]);
+        expect(await store.listSessions("uid-1")).toEqual([]);
+        expect(await store.accountKey("uid-1")).toBeNull();
+        expect(await store.comments("org_1", "s2")).toEqual([]);
+        expect(await store.notificationsFor("uid-1")).toEqual([]);
+        expect(await store.notificationsFor("uid-2")).toEqual([]);
+
+        const kept = (await store.listOrgSessions("org_1")).find((entry) => entry.id === "s2");
+        expect(kept?.assigneeUids).toEqual(["uid-3"]);
+        expect(kept?.assigneeUid).toBe("uid-3");
+        expect(kept?.keyShares?.map((share) => share.uid)).toEqual(["uid-3"]);
+
+        const trail = await store.auditFor("org_1", "s2");
+        expect(trail).toHaveLength(1);
+        expect(trail[0].actorEmail).toBe(DELETED_ACTOR_EMAIL);
+        expect(trail[0].text).toBe("ls -la");
+      });
+
+      it("dissolves a team nobody else is in", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putInvite(invite());
+        await store.upsertSession(session());
+        await store.putAudit(auditEvent());
+
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: true }, 5000);
+
+        expect(await store.organization("org_1")).toBeNull();
+        expect(await store.members("org_1")).toEqual([]);
+        expect(await store.invites("org_1")).toEqual([]);
+        expect(await store.listOrgSessions("org_1")).toEqual([]);
+        expect(await store.auditFor("org_1", "s1")).toEqual([]);
+      });
+
+      it("forgets the address an invite was sent to once its recipient is gone", async () => {
+        await team();
+        await store.putInvite(invite({ email: "bo@example.com", acceptedBy: "uid-2", acceptedAt: 2000 }));
+
+        await store.deleteAccount("uid-2", { orgId: "org_1", dissolve: false }, 5000);
+
+        expect((await store.invite("inv_1"))?.email).toBeFalsy();
+        expect((await store.membershipOf("uid-1"))?.role).toBe("owner");
+      });
+
+      it("remembers a deleted uid for DELETED_ACCOUNT_MEMORY_MS and no longer", async () => {
+        await store.deleteAccount("uid-9", { dissolve: false }, 5000);
+
+        expect(await store.recentlyDeleted("uid-9", 4000)).toBe(true);
+        expect(await store.recentlyDeleted("uid-9", 6000)).toBe(false);
+        expect(await store.recentlyDeleted("uid-8", 0)).toBe(false);
+
+        await store.purgeExpired(5000 + DELETED_ACCOUNT_MEMORY_MS);
+        expect(await store.recentlyDeleted("uid-9", 0)).toBe(false);
       });
     });
   });

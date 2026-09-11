@@ -1,0 +1,11 @@
+-- Who sealed an audit entry, when it was not sealed first-hand.
+--
+-- Typed input now arrives sealed from the browser that recorded it. A log kept
+-- before the team had an audit key is sealed afterwards instead, by an owner or
+-- an admin, and that browser is handed the session, the author and the time by
+-- this service. So a re-sealed entry is only as trustworthy as whoever sealed
+-- it, and it should not read as the words of the person it names.
+--
+-- Null is first-hand: sealed by the browser that wrote it. A uid names the
+-- person whose browser sealed it later.
+ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS sealed_by TEXT;

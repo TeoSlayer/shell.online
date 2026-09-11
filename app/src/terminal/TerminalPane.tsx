@@ -10,6 +10,7 @@ import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from 
 import { cachedPassword, forgetUnverified, markVerified, rememberVerified } from "../lib/session-passwords";
 import { isVaultShare } from "../lib/vault-crypto";
 import { useVault } from "../vault/VaultProvider";
+import { useTeamKey } from "../vault/TeamKeyProvider";
 import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
@@ -74,6 +75,10 @@ export function TerminalPane({
   const vault = useVault();
   const vaultRef = useRef(vault);
   vaultRef.current = vault;
+  /* The team's audit key, for sealing what is typed here; read the same way. */
+  const team = useTeamKey();
+  const teamRef = useRef(team);
+  teamRef.current = team;
   /* The password being tried, and the ones still to try after it. */
   const attempt = useRef<Attempt | null>(null);
   const pending = useRef<Attempt[]>([]);
@@ -259,9 +264,29 @@ export function TerminalPane({
      * Input is recorded per session so a team can see what was run
      * or asked. It watches the same stream the terminal receives, so it sees
      * exactly what was entered and nothing else.
+     *
+     * Each entry is sealed here to the team's audit key before it leaves the
+     * browser, so the team can read it and the service cannot. The time is
+     * part of what is sealed, so it is fixed before sealing and sent as is.
      */
     const audited = sessionIdFromShareUrl(shareUrl);
-    const sink = audited ? new AuditSink(audited, postAudit) : null;
+    const sink = audited
+      ? new AuditSink(audited, async (entries) =>
+          postAudit(
+            await Promise.all(
+              entries.map(async (entry) => ({
+                ...entry,
+                text: await teamRef.current.sealAudit({
+                  sessionId: entry.session_id,
+                  kind: entry.kind,
+                  at: entry.at,
+                  text: entry.text,
+                }),
+              })),
+            ),
+          ),
+        )
+      : null;
 
     const typed = term.onData((data) => {
       if (!canType) return;

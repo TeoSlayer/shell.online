@@ -1,6 +1,8 @@
 import { useState } from "react";
-import { SealCheck, SignOut, Warning } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
+import { SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
+import { DeleteAccount } from "../components/DeleteAccount";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
@@ -8,13 +10,7 @@ import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 import { useVault } from "../vault/VaultProvider";
 import { VaultSetup } from "../vault/VaultGate";
-
-const VAULT_STATE: Record<string, string> = {
-  loading: "Checking",
-  setup: "Not set up yet. It is set up the first time you open Sessions.",
-  locked: "Locked in this browser. Open Sessions to unlock it with your recovery key.",
-  error: "Could not be reached",
-};
+import { VaultPanel } from "../vault/VaultPanel";
 
 export function Account() {
   usePageTitle("Account");
@@ -24,6 +20,7 @@ export function Account() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (!user) return null;
 
@@ -77,28 +74,22 @@ export function Account() {
           <dt>User id</dt>
           <dd>{user.uid}</dd>
         </div>
-        {/*
-          The fingerprint is what `shell login` prints when a machine first
-          trusts the vault, so the two can be compared by eye.
-        */}
+        {/* The vault has its own section below, which says what it holds. */}
         <div className="account-row">
-          <dt>Session vault</dt>
+          <dt>Your data</dt>
           <dd>
-            {vault.status === "unlocked" ? (
-              <>
-                Unlocked, key <span className="vault-fingerprint">{vault.fingerprint}</span>
-                {!vault.remembered && (
-                  <span className="account-unverified">
-                    <Warning size={13} weight="fill" /> this browser cannot keep it unlocked
-                  </span>
-                )}
-              </>
-            ) : (
-              VAULT_STATE[vault.status]
-            )}
+            What shell.online keeps, and for how long, is in the{" "}
+            <Link to="/privacy">privacy policy</Link>.
           </dd>
         </div>
       </dl>
+
+      {/*
+        What the vault is and what it holds, opened in this browser. The key
+        fingerprint in it is what `shell login` prints when a machine first
+        trusts the vault, so the two can be compared by eye.
+      */}
+      <VaultPanel />
 
       {resetting && (
         <section className="consent-card vault-card vault-reset">
@@ -114,6 +105,8 @@ export function Account() {
           </Button>
         </section>
       )}
+
+      {deleting && <DeleteAccount onCancel={() => setDeleting(false)} />}
 
       {/*
         Sign out lives here as well as in the sidebar. On a phone the sidebar
@@ -142,6 +135,12 @@ export function Account() {
           <SignOut size={15} />
           Sign out
         </Button>
+        {!deleting && (
+          <Button type="button" variant="ghost" onClick={() => setDeleting(true)}>
+            <Trash size={15} />
+            Delete account
+          </Button>
+        )}
       </div>
     </AppShell>
   );

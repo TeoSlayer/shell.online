@@ -128,6 +128,24 @@ export function outranks(actor: Role, target: Role): boolean {
   return RANK[actor] > RANK[target];
 }
 
+/**
+ * Who takes over when an owner deletes their account.
+ *
+ * The longest-standing admin, who already helps run the team, and failing that
+ * the longest-standing member. Undefined when nobody else is in it, in which
+ * case the organization goes with its owner. A tie on joinedAt falls to the
+ * uid, so the answer never depends on the order rows come back in.
+ */
+export function successorFor(members: Membership[], leavingUid: string): Membership | undefined {
+  const others = members.filter((entry) => entry.uid !== leavingUid);
+  const byTenure = (a: Membership, b: Membership) =>
+    a.joinedAt - b.joinedAt || (a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0);
+  return (
+    others.filter((entry) => entry.role === "admin").sort(byTenure)[0] ??
+    others.sort(byTenure)[0]
+  );
+}
+
 export type InviteCheck =
   | { ok: true; invite: Invite }
   | { ok: false; reason: string };

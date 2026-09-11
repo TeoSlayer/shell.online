@@ -235,6 +235,13 @@ export interface SessionRecord {
 
 class ApiError extends Error {}
 
+/*
+ * Written for the person reading them. BASE is empty in every deployment, so
+ * a message that names it reads "at ." -- and it was never theirs to fix.
+ */
+export const NETWORK_FAILURE = "Could not reach shell.online. Check your connection and try again.";
+export const SERVER_FAILURE = "Something went wrong on our side. Try again.";
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = auth.currentUser;
   if (!user) throw new ApiError("You are signed out. Sign in and try again.");
@@ -255,17 +262,37 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(
-      `Could not reach the accounts service at ${BASE}. Is it running?`,
-    );
+    throw new ApiError(NETWORK_FAILURE);
   }
 
+  /*
+   * The edge answers an outage with an HTML page, not JSON. The reader is owed
+   * a sentence about what happened, not the parser's complaint about a "<".
+   */
   const text = await response.text();
-  const body = text ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let body: Record<string, unknown> = {};
+  if (text) {
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new ApiError(SERVER_FAILURE);
+    }
+  }
   if (!response.ok) {
-    throw new ApiError(String(body.error ?? `Request failed with ${response.status}`));
+    throw new ApiError(typeof body.error === "string" ? body.error : SERVER_FAILURE);
   }
   return body as T;
+}
+
+/**
+ * Deletes this account's data from the service. AuthProvider.deleteAccount
+ * signs in again before calling it and deletes the Firebase account after.
+ */
+export function deleteAccountData(confirm: string) {
+  return request<{ deleted: boolean; owner: { uid: string; email: string; name: string } | null }>(
+    "/api/account",
+    { method: "DELETE", body: JSON.stringify({ confirm }) },
+  );
 }
 
 export interface AuthorizeInput {
@@ -292,6 +319,12 @@ export interface AuditEvent {
   actorEmail: string;
   kind: "input" | "interrupt" | "opened" | "handoff" | "stopped" | "deleted";
   text: string;
+  /**
+   * Who sealed this entry afterwards, when the log recorded before encryption
+   * was sealed. Absent on an entry that arrived sealed from the browser that
+   * wrote it, which is the only kind that speaks for its author.
+   */
+  sealedBy?: string;
 }
 
 export interface Device {
@@ -359,7 +392,56 @@ export function fetchSessions() {
 export const accountsBaseUrl = BASE;
 
 export function postAudit(entries: { session_id: string; kind: string; text: string; at: number }[]) {
-  return request<{ written: number }>("/api/audit", {
+  return request<{ written: number; refused?: number }>("/api/audit", {
+    method: "POST",
+    body: JSON.stringify({ entries }),
+  });
+}
+
+/**
+ * The team audit key as the service holds it: a public key, and this
+ * person's own sealed copy of the private half. Nobody else's copy is ever
+ * returned.
+ */
+export interface TeamKeyView {
+  teamKey: { publicKey: string; version: number; createdBy: string; createdAt: number } | null;
+  share: { senderUid: string; sealed: string; version: number } | null;
+  /** Members with a vault and no copy yet, for someone holding the key to seal to. */
+  missing: { uid: string; accountKey: string }[];
+  you: { uid: string; role: Role; orgId: string };
+}
+
+export function fetchTeamKey() {
+  return request<TeamKeyView>("/api/team-key");
+}
+
+export function createTeamKey(publicKey: string, shares: { uid: string; sealed: string }[]) {
+  return request<{ teamKey: TeamKeyView["teamKey"] }>("/api/team-key", {
+    method: "POST",
+    body: JSON.stringify({ public_key: publicKey, shares }),
+  });
+}
+
+/** Adds copies for members who have none. The service never replaces an existing one. */
+export function putTeamKeyShares(version: number, shares: { uid: string; sealed: string }[]) {
+  return request<{ shared: number }>("/api/team-key/shares", {
+    method: "PUT",
+    body: JSON.stringify({ version, shares }),
+  });
+}
+
+/** Removes this person's own copy, so a teammate can seal a fresh one. */
+export function dropMyTeamKeyShare() {
+  return request<{ deleted: boolean }>("/api/team-key/share", { method: "DELETE" });
+}
+
+/** Entries recorded before encryption, for an owner or admin to seal. */
+export function fetchPlaintextAudit(limit = 100) {
+  return request<{ events: AuditEvent[] }>(`/api/audit/plaintext?limit=${limit}`);
+}
+
+export function sealAuditEntries(entries: { id: string; text: string }[]) {
+  return request<{ sealed: number }>("/api/audit/seal", {
     method: "POST",
     body: JSON.stringify({ entries }),
   });
@@ -414,9 +496,14 @@ export async function downloadAuditCsv(sessionId?: string): Promise<Blob> {
   if (!user) throw new Error("You are signed out.");
   const token = await user.getIdToken();
   const query = sessionId ? `?session=${encodeURIComponent(sessionId)}` : "";
-  const response = await fetch(`${BASE}/api/audit.csv${query}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/audit.csv${query}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new Error(NETWORK_FAILURE);
+  }
   if (!response.ok) throw new Error("Could not export the audit log.");
   return response.blob();
 }

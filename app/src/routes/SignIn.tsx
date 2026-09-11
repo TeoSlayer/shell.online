@@ -16,6 +16,8 @@ export function SignIn() {
   const location = useLocation();
   const destination =
     (location.state as { from?: string } | null)?.from ?? "/sessions";
+  /* Set by the account page after a deletion, so the person is told it worked. */
+  const deleted = (location.state as { deleted?: boolean } | null)?.deleted === true;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,7 +84,15 @@ export function SignIn() {
           .
         </>
       }
+      legal={
+        <>
+          The <Link to="/terms">terms</Link> and the{" "}
+          <Link to="/privacy">privacy policy</Link> describe what shell.online
+          keeps and why.
+        </>
+      }
     >
+      {deleted && !formError && <Alert tone="success">Your account has been deleted.</Alert>}
       {formError && <Alert tone="error">{formError}</Alert>}
 
       <form onSubmit={handleSubmit} noValidate>

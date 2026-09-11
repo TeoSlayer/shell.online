@@ -6,8 +6,10 @@ import {
   checkInvite,
   newId,
   outranks,
+  successorFor,
   suggestOrgName,
   type Invite,
+  type Membership,
 } from "./orgs";
 
 function invite(overrides: Partial<Invite> = {}): Invite {
@@ -21,6 +23,31 @@ function invite(overrides: Partial<Invite> = {}): Invite {
     ...overrides,
   };
 }
+
+describe("successorFor", () => {
+  function member(uid: string, role: Membership["role"], joinedAt: number): Membership {
+    return { orgId: "org_1", uid, email: `${uid}@example.com`, name: uid, role, joinedAt };
+  }
+
+  it("prefers the longest-standing admin over an earlier member", () => {
+    const members = [
+      member("owner", "owner", 1),
+      member("early-member", "member", 2),
+      member("late-admin", "admin", 4),
+      member("early-admin", "admin", 3),
+    ];
+    expect(successorFor(members, "owner")?.uid).toBe("early-admin");
+  });
+
+  it("falls back to the longest-standing member", () => {
+    const members = [member("owner", "owner", 1), member("b", "member", 3), member("a", "member", 2)];
+    expect(successorFor(members, "owner")?.uid).toBe("a");
+  });
+
+  it("names nobody for an owner who is alone", () => {
+    expect(successorFor([member("owner", "owner", 1)], "owner")).toBeUndefined();
+  });
+});
 
 describe("suggestOrgName", () => {
   it("uses the company domain for a work address", async () => {

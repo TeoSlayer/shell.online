@@ -10,17 +10,20 @@ import { Machines } from "./routes/Machines";
 import { Team } from "./routes/Team";
 import { Join } from "./routes/Join";
 import { Terms } from "./routes/Terms";
+import { Privacy } from "./routes/Privacy";
 import { Session } from "./routes/Session";
 import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
 import { VaultProvider } from "./vault/VaultProvider";
 import { VaultGate } from "./vault/VaultGate";
+import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <VaultProvider>
+        <TeamKeyProvider>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -85,6 +88,7 @@ export default function App() {
           <Route path="/join/:inviteId" element={<Join />} />
           {/* Public: it has to be readable before anyone has an account. */}
           <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route
             path="/machines"
             element={
@@ -110,6 +114,7 @@ export default function App() {
           <Route path="/cli/authorize" element={<CliAuthorize />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </TeamKeyProvider>
         </VaultProvider>
       </AuthProvider>
     </BrowserRouter>

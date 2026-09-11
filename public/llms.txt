@@ -133,10 +133,24 @@ account can start processes on that machine.
 
 ## Collaboration records
 
-The accounts service records explicit collaboration metadata such as session
-ownership, handoffs, comments, mentions, and notifications. It does not receive
-a plaintext copy of terminal input. Prompts, commands, passwords, and other
-keystrokes remain inside the end-to-end encrypted terminal stream.
+The accounts service records collaboration metadata such as session ownership,
+handoffs, comments, mentions, and notifications, and session records: the share
+URL, the command line as written, the machine's host name, the session name,
+timings, and exit code. Every member of the team sees those.
+
+What anyone types into a session from the browser (commands, agent prompts,
+Ctrl-C) is recorded in the team's audit log. It is end-to-end encrypted in the
+browser to the team's audit key: every member of the organization can read and
+export it, and the accounts service stores only ciphertext it cannot read. The
+service still sees who acted, in which session, what kind of entry it was, and
+when. Anything typed by mistake, such as a pasted password, is recorded and
+readable by the whole team. Typing in the terminal a session was started from
+never reaches the browser or the service, and a --read-only share accepts no
+browser input at all.
+
+Session passwords are sealed to each person's session vault; the service stores
+them sealed and cannot open them. Terminal output stays inside the end-to-end
+encrypted stream.
 
 ## Release integrity
 

@@ -2,7 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { Invite, Membership, Organization, Role } from "./orgs";
-import type { AuditPage, AuditPageQuery, Store } from "./store";
+import {
+  DELETED_ACCOUNT_MEMORY_MS,
+  DELETED_ACTOR_EMAIL,
+  type AccountDeletion,
+  type AuditPage,
+  type AuditPageQuery,
+  type Store,
+} from "./store";
 import type {
   AccountKey,
   AgentCommand,
@@ -14,6 +21,8 @@ import type {
   Notification,
   SessionKeyShare,
   SessionRecord,
+  TeamKey,
+  TeamKeyShare,
 } from "./types";
 
 /*
@@ -36,6 +45,15 @@ function byTime<T>(time: (record: T) => number, id: (record: T) => string, desce
   };
 }
 
+/* Typed input, which the browser seals, as opposed to what the service writes itself. */
+function isTyped(entry: AuditEvent): boolean {
+  return entry.kind === "input" || entry.kind === "interrupt";
+}
+
+function isSealed(text: string): boolean {
+  return text.startsWith("a1.");
+}
+
 interface Shape {
   codes: AuthorizationCode[];
   tokens: CliToken[];
@@ -48,12 +66,16 @@ interface Shape {
   comments: Comment[];
   notifications: Notification[];
   accountKeys: AccountKey[];
+  deletedAccounts: { uid: string; deletedAt: number }[];
+  teamKeys: TeamKey[];
+  teamKeyShares: TeamKeyShare[];
 }
 
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
-  comments: [], notifications: [], accountKeys: [],
+  comments: [], notifications: [], accountKeys: [], deletedAccounts: [],
+  teamKeys: [], teamKeyShares: [],
 };
 
 /**
@@ -117,6 +139,9 @@ export class MemoryStore implements Store {
         comments: parsed.comments ?? [],
         notifications: parsed.notifications ?? [],
         accountKeys: parsed.accountKeys ?? [],
+        deletedAccounts: parsed.deletedAccounts ?? [],
+        teamKeys: parsed.teamKeys ?? [],
+        teamKeyShares: parsed.teamKeyShares ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -243,6 +268,64 @@ export class MemoryStore implements Store {
     }
     this.flush();
     return true;
+  }
+
+  async deleteAccount(uid: string, plan: AccountDeletion, now = Date.now()): Promise<void> {
+    const data = this.data;
+    const { orgId } = plan;
+    if (orgId && plan.dissolve) {
+      data.organizations = data.organizations.filter((entry) => entry.id !== orgId);
+      data.memberships = data.memberships.filter((entry) => entry.orgId !== orgId);
+      data.invites = data.invites.filter((entry) => entry.orgId !== orgId);
+      data.sessions = data.sessions.filter((entry) => entry.orgId !== orgId);
+      data.audit = data.audit.filter((entry) => entry.orgId !== orgId);
+      data.comments = data.comments.filter((entry) => entry.orgId !== orgId);
+      data.notifications = data.notifications.filter((entry) => entry.orgId !== orgId);
+    }
+    if (orgId && plan.successorUid) {
+      const successor = data.memberships.find(
+        (entry) => entry.orgId === orgId && entry.uid === plan.successorUid,
+      );
+      if (successor) successor.role = "owner";
+    }
+
+    data.memberships = data.memberships.filter((entry) => entry.uid !== uid);
+    data.codes = data.codes.filter((entry) => entry.uid !== uid);
+    data.tokens = data.tokens.filter((entry) => entry.uid !== uid);
+    data.commands = data.commands.filter((entry) => entry.uid !== uid);
+    data.sessions = data.sessions.filter((entry) => entry.uid !== uid);
+    for (const session of data.sessions) {
+      if (session.keyShares) {
+        session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
+      }
+      const assignees = session.assigneeUids ?? [];
+      if (assignees.includes(uid) || session.assigneeUid === uid) {
+        session.assigneeUids = assignees.filter((entry) => entry !== uid);
+        if (session.assigneeUid === uid) session.assigneeUid = session.assigneeUids[0];
+      }
+      if (session.ownerUid === uid) session.ownerUid = session.uid;
+    }
+    for (const invite of data.invites) {
+      /* The address an invite was sent to is theirs once they accepted it. */
+      if (invite.acceptedBy === uid) delete invite.email;
+    }
+    data.accountKeys = data.accountKeys.filter((entry) => entry.uid !== uid);
+    data.comments = data.comments.filter((entry) => entry.authorUid !== uid);
+    data.notifications = data.notifications.filter(
+      (entry) => entry.uid !== uid && entry.actorUid !== uid,
+    );
+    for (const event of data.audit) {
+      if (event.actorUid === uid) event.actorEmail = DELETED_ACTOR_EMAIL;
+    }
+    data.deletedAccounts = [
+      ...data.deletedAccounts.filter((entry) => entry.uid !== uid),
+      { uid, deletedAt: now },
+    ];
+    this.flush();
+  }
+
+  async recentlyDeleted(uid: string, since: number): Promise<boolean> {
+    return this.data.deletedAccounts.some((entry) => entry.uid === uid && entry.deletedAt >= since);
   }
 
   /** Records that `shell agent` is polling, and what it publishes about itself. */
@@ -548,6 +631,69 @@ export class MemoryStore implements Store {
     this.flush();
   }
 
+  async plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]> {
+    return this.data.audit
+      .filter((entry) => entry.orgId === orgId && isTyped(entry) && !isSealed(entry.text))
+      .sort(byTime((entry) => entry.at, (entry) => entry.id))
+      .slice(0, limit);
+  }
+
+  async sealAudit(orgId: string, id: string, text: string, sealedBy: string): Promise<boolean> {
+    const entry = this.data.audit.find((candidate) => candidate.orgId === orgId && candidate.id === id);
+    if (!entry || !isTyped(entry) || isSealed(entry.text)) return false;
+    entry.text = text;
+    entry.sealedBy = sealedBy;
+    this.flush();
+    return true;
+  }
+
+  /* ---------------------------------------------------------------
+     Team audit key
+     --------------------------------------------------------------- */
+
+  async teamKey(orgId: string): Promise<TeamKey | null> {
+    const found = this.data.teamKeys.find((entry) => entry.orgId === orgId);
+    return found ? { ...found } : null;
+  }
+
+  async putTeamKey(key: TeamKey): Promise<boolean> {
+    if (this.data.teamKeys.some((entry) => entry.orgId === key.orgId)) return false;
+    this.data.teamKeys.push({ ...key });
+    this.flush();
+    return true;
+  }
+
+  async teamKeyShares(orgId: string): Promise<TeamKeyShare[]> {
+    return this.data.teamKeyShares
+      .filter((entry) => entry.orgId === orgId)
+      .sort(byTime((entry) => entry.createdAt, (entry) => entry.uid))
+      .map((entry) => ({ ...entry }));
+  }
+
+  async putTeamKeyShares(shares: TeamKeyShare[]): Promise<number> {
+    let written = 0;
+    for (const share of shares) {
+      const exists = this.data.teamKeyShares.some(
+        (entry) => entry.orgId === share.orgId && entry.uid === share.uid,
+      );
+      if (exists) continue;
+      this.data.teamKeyShares.push({ ...share });
+      written += 1;
+    }
+    if (written > 0) this.flush();
+    return written;
+  }
+
+  async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {
+    const before = this.data.teamKeyShares.length;
+    this.data.teamKeyShares = this.data.teamKeyShares.filter(
+      (entry) => !(entry.orgId === orgId && entry.uid === uid),
+    );
+    if (this.data.teamKeyShares.length === before) return false;
+    this.flush();
+    return true;
+  }
+
   async auditFor(orgId: string, sessionId: string): Promise<AuditEvent[]> {
     return this.data.audit
       .filter((entry) => entry.orgId === orgId && entry.sessionId === sessionId)
@@ -636,7 +782,15 @@ export class MemoryStore implements Store {
     this.data.commands = this.data.commands.filter(
       (entry) => !entry.doneAt || now - entry.doneAt < 10 * 60_000,
     );
-    if (this.data.codes.length !== before || this.data.commands.length !== commandsBefore) {
+    const deletedBefore = this.data.deletedAccounts.length;
+    this.data.deletedAccounts = this.data.deletedAccounts.filter(
+      (entry) => now - entry.deletedAt < DELETED_ACCOUNT_MEMORY_MS,
+    );
+    if (
+      this.data.codes.length !== before ||
+      this.data.commands.length !== commandsBefore ||
+      this.data.deletedAccounts.length !== deletedBefore
+    ) {
       this.flush();
     }
   }

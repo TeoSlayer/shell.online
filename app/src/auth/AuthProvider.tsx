@@ -9,7 +9,11 @@ import {
 } from "react";
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
@@ -19,8 +23,10 @@ import {
   type User,
 } from "firebase/auth";
 import { auth, googleProvider } from "../lib/firebase";
-import { setPasswordOwner } from "../lib/session-passwords";
+import { deleteAccountData } from "../lib/api";
+import { forgetAll, setPasswordOwner } from "../lib/session-passwords";
 import { clearLocalVault } from "../lib/vault-store";
+import { forgetOpenTabs } from "../terminal/tab-store";
 
 interface AuthValue {
   user: User | null;
@@ -32,6 +38,11 @@ interface AuthValue {
   resetPassword: (email: string) => Promise<void>;
   resendVerification: () => Promise<void>;
   signOutUser: () => Promise<void>;
+  /**
+   * Deletes the account from shell.online and from Firebase. Signs in again
+   * first: with the password for an email account, a Google popup otherwise.
+   */
+  deleteAccount: (confirmEmail: string, password?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -108,6 +119,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   }, []);
 
+  const deleteAccount = useCallback(async (confirmEmail: string, password?: string) => {
+    const current = auth.currentUser;
+    if (!current) throw new Error("Sign in first.");
+    /*
+     * Proof of presence before anything is deleted. The service refuses a
+     * sign-in older than ten minutes and Firebase refuses to delete a user
+     * after about five, so signing in again here, first, means neither can
+     * refuse halfway through.
+     */
+    if (current.providerData.some((entry) => entry.providerId === "password")) {
+      if (!password) throw new Error("Enter your password.");
+      await reauthenticateWithCredential(
+        current,
+        EmailAuthProvider.credential(current.email ?? "", password),
+      );
+    } else {
+      await reauthenticateWithPopup(current, googleProvider);
+    }
+    /* A token that carries the sign-in that just happened. */
+    await current.getIdToken(true);
+    /*
+     * The service first, then the sign-in. The other order, interrupted,
+     * would leave data behind for an account nobody can sign in to again.
+     * This one leaves an empty account, and deleting it again finishes the
+     * job: the service treats a second request as nothing left to remove.
+     */
+    await deleteAccountData(confirmEmail);
+    forgetAll();
+    forgetOpenTabs(current.uid);
+    await clearLocalVault(current.uid);
+    await deleteUser(current);
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -118,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       resendVerification,
       signOutUser,
+      deleteAccount,
     }),
     [
       user,
@@ -128,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       resendVerification,
       signOutUser,
+      deleteAccount,
     ],
   );
 
