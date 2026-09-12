@@ -215,19 +215,22 @@ func parseAbsoluteDeadline(value string, now time.Time) (time.Time, bool) {
 			// the last minute, so that the form still works during 23:59.
 			clock := "00:00"
 			second := 0
+			nanosecond := 0
 			if prefix == "today" {
 				clock = "23:59"
 				second = 59
+				nanosecond = int(time.Second - time.Nanosecond)
 			}
 			if len(value) > len(prefix) {
 				clock = strings.TrimSpace(value[len(prefix):])
 				second = 0
+				nanosecond = 0
 			}
 			parsedClock, err := time.ParseInLocation("15:04", clock, now.Location())
 			if err != nil {
 				return time.Time{}, false
 			}
-			return time.Date(day.Year(), day.Month(), day.Day(), parsedClock.Hour(), parsedClock.Minute(), second, 0, now.Location()), true
+			return time.Date(day.Year(), day.Month(), day.Day(), parsedClock.Hour(), parsedClock.Minute(), second, nanosecond, now.Location()), true
 		}
 	}
 

@@ -4,6 +4,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Keep `--auto-close today` valid throughout the final second of the local
+  day, rather than expiring at the instant that second begins.
+
 ## [0.12.1] — 2026-09-12
 
 ### Added

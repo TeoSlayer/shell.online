@@ -26,7 +26,7 @@ func TestParseCloseDeadline(t *testing.T) {
 		{name: "in prefix", value: "in 15m", want: now.Add(15 * time.Minute)},
 		{name: "tomorrow", value: "tomorrow 09:15", want: time.Date(2026, time.August, 20, 9, 15, 0, 0, location)},
 		{name: "bare tomorrow", value: "tomorrow", want: time.Date(2026, time.August, 20, 0, 0, 0, 0, location)},
-		{name: "bare today", value: "today", want: time.Date(2026, time.August, 19, 23, 59, 59, 0, location)},
+		{name: "bare today", value: "today", want: time.Date(2026, time.August, 19, 23, 59, 59, int(time.Second-time.Nanosecond), location)},
 		{name: "today with clock", value: "today 23:50", want: time.Date(2026, time.August, 19, 23, 50, 0, 0, location)},
 		{name: "clock rolls forward", value: "22:00", want: time.Date(2026, time.August, 20, 22, 0, 0, 0, location)},
 		{name: "local date", value: "2026-08-21 12:30", want: time.Date(2026, time.August, 21, 12, 30, 0, 0, location)},
@@ -127,7 +127,7 @@ func TestNormalizeAutoCloseArgumentsRejectsMissingAndInvalidValues(t *testing.T)
 func TestBareTodayIsADeadlineAllDay(t *testing.T) {
 	location := time.FixedZone("test", 2*60*60)
 	for _, clock := range []struct{ hour, minute, second int }{
-		{0, 0, 0}, {9, 15, 0}, {23, 58, 0}, {23, 59, 30},
+		{0, 0, 0}, {9, 15, 0}, {23, 58, 0}, {23, 59, 30}, {23, 59, 59},
 	} {
 		now := time.Date(2026, time.August, 19, clock.hour, clock.minute, clock.second, 0, location)
 		deadline, err := parseCloseDeadline("today", now)
