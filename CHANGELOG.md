@@ -4,6 +4,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A persisted terminal renderer dropdown in public shares and signed-in
+  session tabs. xterm.js remains the default; Refstream can be selected without
+  changing the process, relay protocol, encryption, or session permissions.
+
 ## [0.13.0] — 2026-09-12
 
 ### Added

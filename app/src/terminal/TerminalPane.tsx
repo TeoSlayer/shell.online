@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Terminal } from "@xterm/xterm";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.2/refstream.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
@@ -15,6 +15,7 @@ import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
+import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
 
 export interface TerminalPaneProps {
   shareUrl: string;
@@ -30,6 +31,8 @@ export interface TerminalPaneProps {
   canType?: boolean;
   /** The machine running it, named in the hint when no password is at hand. */
   host?: string;
+  /** Browser renderer selected for every open session in this workspace. */
+  renderer: TerminalRenderer;
 }
 
 /*
@@ -67,6 +70,7 @@ export function TerminalPane({
   keyShare,
   canType = true,
   host,
+  renderer,
 }: TerminalPaneProps) {
   /*
    * Read through a ref inside the effect that builds the terminal, so the
@@ -83,7 +87,7 @@ export function TerminalPane({
   const attempt = useRef<Attempt | null>(null);
   const pending = useRef<Attempt[]>([]);
   const mount = useRef<HTMLDivElement>(null);
-  const terminal = useRef<Terminal | null>(null);
+  const terminal = useRef<TerminalSurface | null>(null);
   const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
   const connection = useRef<TerminalConnection | null>(null);
 
@@ -189,7 +193,7 @@ export function TerminalPane({
     }
     const target = resolved.target;
 
-    const term = new Terminal({
+    const term = createTerminal(renderer, {
       fontFamily: FONT_FAMILY,
       fontSize: BASE_FONT_SIZE,
       /* Opened at the session grid so the first frames land in the right shape. */
@@ -198,7 +202,6 @@ export function TerminalPane({
       lineHeight: BASE_LINE_HEIGHT,
       cursorBlink: true,
       convertEol: false,
-      allowProposedApi: true,
       scrollback: 5000,
       theme: THEME,
     });
@@ -373,7 +376,7 @@ export function TerminalPane({
       measure.current = null;
       connection.current = null;
     };
-  }, [shareUrl, refit]);
+  }, [shareUrl, renderer, refit]);
 
   /*
    * Apply a handoff in place. The relay's own read-only bit still wins, and

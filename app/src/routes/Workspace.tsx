@@ -51,6 +51,11 @@ import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 import { shouldOpenSurface } from "../lib/surface-navigation";
 import { SearchSelect } from "../components/SearchSelect";
 import { sessionEnded, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
+import {
+  readTerminalRenderer,
+  writeTerminalRenderer,
+  type TerminalRenderer,
+} from "../terminal/renderer";
 
 const POLL_MS = 4000;
 /* Well inside the service's 15s agent-online window, so the state stays true. */
@@ -166,6 +171,7 @@ export function Workspace() {
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState("all");
   const [view, setView] = useState<ViewMode>(readViewMode);
+  const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(readTerminalRenderer);
   const [removing, setRemoving] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
@@ -631,51 +637,68 @@ export function Workspace() {
       }
     >
       {state.tabs.length > 0 && (
-        <div className="tabs" role="tablist" aria-label="Open terminals">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={showingList}
-            className={showingList ? "tab is-active" : "tab"}
-            onClick={() => dispatch({ type: "select", id: null })}
-          >
-            <List size={15} />
-            All sessions
-          </button>
+        <div className="terminal-bar">
+          <div className="tabs" role="tablist" aria-label="Open terminals">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={showingList}
+              className={showingList ? "tab is-active" : "tab"}
+              onClick={() => dispatch({ type: "select", id: null })}
+            >
+              <List size={15} />
+              All sessions
+            </button>
 
-          {state.tabs.map((tab) => (
-            <span key={tab.id} className={state.activeId === tab.id ? "tab is-active" : "tab"}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={state.activeId === tab.id}
-                className="tab-label"
-                onClick={() => dispatch({ type: "select", id: tab.id })}
-                title={tab.command}
-              >
-                {/*
-                  The kind of thing running, as the row shows it. This was a
-                  fixed terminal glyph, so opening a Claude Code session and
-                  looking at its tab showed a terminal whatever was running.
-                */}
-                <img
-                  className="tab-icon"
-                  src={kindForCommand(tab.command).icon}
-                  alt=""
-                  title={kindForCommand(tab.command).title}
-                />
-                {tab.label}
-              </button>
-              <button
-                type="button"
-                className="tab-close"
-                onClick={() => dispatch({ type: "close", id: tab.id })}
-                aria-label={`Close ${tab.label}`}
-              >
-                <X size={13} weight="bold" />
-              </button>
-            </span>
-          ))}
+            {state.tabs.map((tab) => (
+              <span key={tab.id} className={state.activeId === tab.id ? "tab is-active" : "tab"}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={state.activeId === tab.id}
+                  className="tab-label"
+                  onClick={() => dispatch({ type: "select", id: tab.id })}
+                  title={tab.command}
+                >
+                  {/*
+                    The kind of thing running, as the row shows it. This was a
+                    fixed terminal glyph, so opening a Claude Code session and
+                    looking at its tab showed a terminal whatever was running.
+                  */}
+                  <img
+                    className="tab-icon"
+                    src={kindForCommand(tab.command).icon}
+                    alt=""
+                    title={kindForCommand(tab.command).title}
+                  />
+                  {tab.label}
+                </button>
+                <button
+                  type="button"
+                  className="tab-close"
+                  onClick={() => dispatch({ type: "close", id: tab.id })}
+                  aria-label={`Close ${tab.label}`}
+                >
+                  <X size={13} weight="bold" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <label className="tab-renderer">
+            <span>Renderer</span>
+            <select
+              aria-label="Terminal renderer"
+              value={terminalRenderer}
+              onChange={(event) => {
+                const next: TerminalRenderer = event.target.value === "refstream" ? "refstream" : "xterm";
+                writeTerminalRenderer(next);
+                setTerminalRenderer(next);
+              }}
+            >
+              <option value="xterm">xterm.js</option>
+              <option value="refstream">Refstream</option>
+            </select>
+          </label>
         </div>
       )}
 
@@ -707,6 +730,7 @@ export function Workspace() {
                 keyShare={current?.keyShare ?? tab.keyShare}
                 host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
+                renderer={terminalRenderer}
               />
             );
           })}
