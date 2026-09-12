@@ -9,7 +9,7 @@ fake_bin="$test_root/bin"
 command_log="$test_root/commands"
 config="$test_root/wrangler.production.jsonc"
 mkdir -p "$fake_bin"
-: > "$config"
+printf 'production-test-config\n' > "$config"
 
 cat > "$fake_bin/npm" <<'SCRIPT'
 #!/bin/sh
@@ -21,23 +21,35 @@ SCRIPT
 
 cat > "$fake_bin/npx" <<'SCRIPT'
 #!/bin/sh
-printf 'npx %s\n' "$*" >> "$SHELL_ONLINE_TEST_COMMAND_LOG"
+test "$1" = "wrangler"
+test "$2" = "deploy"
+test "$3" = "--config"
+case "$4" in
+  "$SHELL_ONLINE_TEST_REPOSITORY_ROOT"/.wrangler.production.*.jsonc) ;;
+  *) printf 'config was not staged beside the source: %s\n' "$4" >&2; exit 43 ;;
+esac
+test "$(cat "$4")" = "production-test-config"
+shift 4
+printf 'npx wrangler deploy --config <repo-local>%s\n' "${*:+ $*}" >> "$SHELL_ONLINE_TEST_COMMAND_LOG"
 SCRIPT
 
 chmod 755 "$fake_bin/npm" "$fake_bin/npx"
 
 SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
+SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
 SHELL_ONLINE_WRANGLER_CONFIG="$config" \
 PATH="$fake_bin:$PATH" \
   sh "$repository_root/scripts/deploy-production.sh"
 
-expected=$(printf 'npm run build\nnpm run verify:downloads\nnpx wrangler deploy --config %s\n' "$config")
+expected=$(printf 'npm run build\nnpm run verify:downloads\nnpx wrangler deploy --config <repo-local>\n')
 test "$(cat "$command_log")" = "$expected"
+test -z "$(find "$repository_root" -maxdepth 1 -name '.wrangler.production.*.jsonc' -print -quit)"
 
 : > "$command_log"
 set +e
 SHELL_ONLINE_TEST_VERIFY_FAIL=1 \
 SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
+SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
 SHELL_ONLINE_WRANGLER_CONFIG="$config" \
 PATH="$fake_bin:$PATH" \
   sh "$repository_root/scripts/deploy-production.sh"
@@ -48,6 +60,7 @@ test "$(cat "$command_log")" = "$(printf 'npm run build\nnpm run verify:download
 
 : > "$command_log"
 if SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
+  SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
   SHELL_ONLINE_WRANGLER_CONFIG="$test_root/missing.jsonc" \
   PATH="$fake_bin:$PATH" \
   sh "$repository_root/scripts/deploy-production.sh" 2>/dev/null; then
