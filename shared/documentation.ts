@@ -7,6 +7,7 @@ export const DOCUMENTATION_KINDS = [
   "security",
   "e2ee",
   "docker",
+  "self-hosting",
 ] as const;
 
 export type DocumentationKind = (typeof DOCUMENTATION_KINDS)[number];
@@ -57,6 +58,7 @@ export const DOCUMENTATION_NAVIGATION: readonly {
       { kind: "security", label: "Security model" },
       { kind: "e2ee", label: "End-to-end encryption" },
       { kind: "docker", label: "Persistent Docker" },
+      { kind: "self-hosting", label: "Self-hosting" },
     ],
   },
   {

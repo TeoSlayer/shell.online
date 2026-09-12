@@ -20,20 +20,26 @@
     "build": "npm run check && npm run build:web && npm run build:cli && npm run verify:downloads",
     "build:cli": "sh ./scripts/build-cli.sh",
     "build:web": "vite build",
+    "build:standalone": "npm run build:web && esbuild standalone/server.ts --bundle --platform=node --format=esm --target=node22 --external:ws --outfile=standalone/dist/server.mjs",
+    "start:standalone": "node standalone/dist/server.mjs",
     "deploy:production": "sh ./scripts/deploy-production.sh",
     "verify:downloads": "node ./scripts/verify-downloads.mjs",
     "check": "npm run typecheck && npm test",
     "test": "vitest run && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs && node ./scripts/test-mobile-controls.mjs && node ./scripts/check-formula.mjs",
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
-    "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.standalone.json --noEmit",
     "test:app": "npm --prefix app ci && npm --prefix app test",
     "verify:published": "node ./scripts/verify-published.mjs"
   },
   "dependencies": {
-    "@xterm/xterm": "^6.0.0"
+    "@xterm/xterm": "^6.0.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260905.1",
+    "@types/node": "^24.10.1",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.0.0",

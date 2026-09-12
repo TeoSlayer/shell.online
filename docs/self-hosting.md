@@ -1,22 +1,61 @@
 # Self-hosting
 
-shell.online has two services:
+The CLI only needs a relay. Choose the standalone Docker deployment for a
+normal server, or the Worker deployment for Cloudflare's edge.
 
-- the relay, which serves the public site and carries encrypted terminal frames;
-- the optional accounts app in `app/`.
+## Standalone Docker relay
 
-The CLI does not need the accounts app.
+Requirements: Docker Engine with Compose, a public domain, and ports 80/443.
 
-## Relay on Cloudflare Workers
+```sh
+git clone https://github.com/TeoSlayer/shell.online.git
+cd shell.online/standalone
 
-Requirements:
+SHELL_ONLINE_PUBLIC_URL=https://relay.example.com \
+SHELL_ONLINE_SITE=relay.example.com \
+docker compose up -d --build
+```
 
-- Node.js 22 and npm;
-- Go 1.26.8 if the deployment should serve downloadable binaries;
-- a Cloudflare account with Workers, Durable Objects, Rate Limiting, and
-  Analytics Engine available.
+Point the domain's A/AAAA record at the host first. Caddy obtains TLS
+automatically. For a local HTTP test, the defaults work at `http://localhost`:
 
-Create a local Wrangler configuration:
+```sh
+docker compose up -d --build
+curl http://localhost/api/health
+```
+
+Use the relay without changing the installed CLI:
+
+```sh
+SHELL_ONLINE_SERVER=https://relay.example.com shell claude
+shell --server https://relay.example.com claude
+```
+
+`relay-state` stores session metadata and host-token hashes so persistent
+clients can recover the same identity after a relay restart. It does not store
+terminal contents, E2EE keys, or browser passwords. Back up this volume and run
+one relay replica per volume. Live sockets reconnect after a restart.
+
+The standalone server enforces the hosted protocol's authentication,
+same-origin browser policy, read-only mode, input lease, viewer/frame/traffic
+limits, slow-client protection, stable terminal grid, and task-bound expiry.
+Terminal frames remain opaque to the relay when the CLI's default E2EE is used.
+
+Configuration:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SHELL_ONLINE_PUBLIC_URL` | `http://localhost` in Compose | Exact public origin used in links and browser origin checks |
+| `SHELL_ONLINE_SITE` | `http://localhost` | Caddy site address; use a hostname for automatic HTTPS |
+| `SHELL_ONLINE_STATE_FILE` | `/var/lib/shell-online/relay.json` | Metadata state file inside the relay container |
+| `SHELL_ONLINE_TRUST_PROXY` | `1` in Compose | Trust the first `X-Forwarded-For` address; enable only behind your proxy |
+
+The standalone relay is a single-node deployment. It does not include the
+optional accounts app or hosted analytics dashboard.
+
+## Cloudflare Workers relay
+
+Copy the credential-free example rather than editing it:
 
 ```sh
 cp wrangler.example.jsonc wrangler.local.jsonc
@@ -25,64 +64,12 @@ npm run build
 npx wrangler deploy --config wrangler.local.jsonc
 ```
 
-`npm run build:web` is enough for relay development, but it does not create the
-download artifacts used by `/install` and `/downloads`.
-
-Wrangler prints the deployment URL. Point the CLI at it with either form:
-
-```sh
-shell --server https://example.workers.dev <command>
-SHELL_ONLINE_SERVER=https://example.workers.dev shell <command>
-```
-
-To use a custom domain, add a `routes` entry to the copied configuration. The
-example uses generic binding names and contains no account identifiers or
-credentials. Choose unique Rate Limiting namespace IDs if the defaults conflict
-with another Worker in your account.
+Set `SHELL_ONLINE_SERVER` to the URL Wrangler prints. Add a `routes` entry to
+the copied config for a custom domain. The Worker path requires Durable
+Objects, Rate Limiting, Analytics Engine, and static assets.
 
 ## Accounts app
 
-The accounts app adds sign-in, organizations, linked machines, and a shared
-session list. It needs Firebase Authentication and PostgreSQL.
-
-```sh
-cd app
-cp .env.example .env
-# Fill in Firebase values, POSTGRES_PASSWORD, WEB_ORIGIN, and RELAY_URL.
-docker compose up --build -d
-```
-
-Add the value of `WEB_ORIGIN` to Firebase's authorized domains. The container
-serves the client and API together on port 8080 and proxies `/relay/*` to
-`RELAY_URL`.
-
-Point account commands at a self-hosted app:
-
-```sh
-SHELL_ONLINE_ACCOUNTS=https://app.example.com \
-SHELL_ONLINE_WEB=https://app.example.com \
-shell login
-```
-
-For a Cloudflare deployment, `app/wrangler.jsonc` is a template. Copy it if you
-want to preserve the hosted defaults, set your Worker name, route, origins,
-`HYPERDRIVE_ID`, `FIREBASE_PROJECT_ID`, and `MAIL_FROM`, then run:
-
-```sh
-cd app
-npm ci
-npm run build
-npm run render:deploy-config
-npx wrangler deploy --config wrangler.deploy.jsonc
-```
-
-The Worker expects a `HYPERDRIVE` binding to PostgreSQL. Set `MAIL_API_KEY` with
-`wrangler secret put` only if invitation email is enabled. Database migrations
-are in `app/server/lib/migrations/`; apply them with `npm run db:migrate` before
-deploying code that depends on a new migration.
-
-## Updating
-
-Pull the desired tag, rebuild, and deploy it. Do not reuse a persistent state
-file with a different relay unless you intend to move that session. Back up the
-PostgreSQL database and Docker volumes before upgrading the accounts app.
+Accounts are optional and do not participate in terminal transport. The app in
+`app/` uses Firebase Authentication and PostgreSQL; its local Docker deployment
+is documented in [`app/README.md`](../app/README.md).

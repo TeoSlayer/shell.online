@@ -211,7 +211,7 @@
             ],
             [
               "--no-e2ee",
-              "Disable payload E2EE for compatibility/debugging; Cloudflare can relay plaintext. Conflicts with passwords and persistence."
+              "Disable payload E2EE for compatibility/debugging; the configured relay can read plaintext. Conflicts with passwords and persistence."
             ],
             [
               "--persistent <state-file>",
@@ -538,6 +538,38 @@
         [
           "One link across restarts",
           "Normal shares already run in the background. --persistent <state-file> stores an owner-only host identity, password, and E2EE material; rerunning with that file restores the same URL and password. The Docker image combines the same mechanism with restart: unless-stopped for automatic recovery after container or host restart. shell kill stops the current process without deleting the persistent identity file."
+        ]
+      ]
+    },
+    "self-hosting": {
+      "eyebrow": "Standalone relay",
+      "title": "Run the relay on any Docker host.",
+      "intro": "The standalone relay uses ordinary Node.js, WebSockets, local disk state, and Caddy. It needs no Cloudflare account or credentials and carries the same opaque E2EE frames as the hosted service.",
+      "seo": {
+        "description": "Self-host the shell.online relay outside Cloudflare with Docker, Caddy, local state, and the standard shell CLI.",
+        "socialTitle": "Self-host shell.online",
+        "socialDescription": "Run the shell.online relay on a normal Linux server without Cloudflare."
+      },
+      "cards": [
+        [
+          "Deploy",
+          "Point a domain at the host, set SHELL_ONLINE_PUBLIC_URL and SHELL_ONLINE_SITE to its HTTPS URL and hostname, then run docker compose up -d --build in standalone/. Caddy obtains and renews TLS certificates automatically."
+        ],
+        [
+          "Use it",
+          "Set SHELL_ONLINE_SERVER=https://relay.example.com or pass --server https://relay.example.com to the CLI. The generated share URL and WebSocket endpoint stay on that origin."
+        ],
+        [
+          "Security boundary",
+          "Terminal payloads remain end-to-end encrypted by default. The relay stores session metadata and SHA-256 host-token hashes, never browser passwords, E2EE keys, or terminal contents. Same-origin checks, frame limits, viewer limits, rate limits, backpressure and non-root containers remain enforced."
+        ],
+        [
+          "Scale and persistence",
+          "This deployment is deliberately single-node. Session metadata survives restarts in the relay-state volume and persistent clients reconnect with the same URL. Live WebSockets reconnect after a restart. Back up the volume, but do not run multiple relay replicas against one state file."
+        ],
+        [
+          "Cloudflare deployment remains available",
+          "wrangler.example.jsonc is still the supported global edge deployment. The standalone server is the portable path for one host; it does not include the optional accounts app or hosted analytics dashboard."
         ]
       ]
     },

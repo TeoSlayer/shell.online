@@ -1,0 +1,42 @@
+services:
+  relay:
+    image: "ghcr.io/teoslayer/shell.online-relay:${SHELL_ONLINE_VERSION:-latest}"
+    build:
+      context: ..
+      dockerfile: standalone/Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      SHELL_ONLINE_PUBLIC_URL: "${SHELL_ONLINE_PUBLIC_URL:-http://localhost}"
+      SHELL_ONLINE_TRUST_PROXY: "1"
+    volumes:
+      - relay-state:/var/lib/shell-online
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    environment:
+      SHELL_ONLINE_SITE: "${SHELL_ONLINE_SITE:-http://localhost}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  relay-state:
+  caddy-data:
+  caddy-config:

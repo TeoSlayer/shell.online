@@ -214,3 +214,16 @@ jobs:
       - run: docker build --build-arg VERSION=test -t shell-online:test .
       - run: test "$(docker run --rm --entrypoint shell shell-online:test --version)" = "shell test"
       - run: test "$(docker image inspect shell-online:test --format '{{.Config.User}}')" = "shellonline"
+      - name: Build the standalone relay image
+        run: docker build -f standalone/Dockerfile -t shell-online-relay:test .
+      - name: Exercise standalone health and static delivery
+        run: |
+          docker run -d --name shell-online-relay -p 18080:8080 shell-online-relay:test
+          trap 'docker rm -f shell-online-relay' EXIT
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:18080/api/health && break
+            test "$attempt" -lt 30
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/ | grep -q 'shell.online'
+          test "$(docker image inspect shell-online-relay:test --format '{{.Config.User}}')" = "shellonline"

@@ -114,7 +114,7 @@ docker compose logs shell-online
 - [End-to-end encryption](https://shell.online/e2ee/)
 - [Containers](https://shell.online/docker/)
 - [Platforms](https://shell.online/platforms/)
-- [Self-hosting](docs/self-hosting.md)
+- [Self-hosting](https://shell.online/self-hosting/) — Docker or Cloudflare
 
 ## Development
 

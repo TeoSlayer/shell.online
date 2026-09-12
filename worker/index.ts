@@ -524,6 +524,7 @@ function recordAssetAnalytics(
     ["/security/", "docs_security"],
     ["/e2ee/", "docs_e2ee"],
     ["/docker/", "docs_docker"],
+    ["/self-hosting/", "docs_self_hosting"],
   ]).get(url.pathname);
   const target = documentTarget ?? (
     SESSION_ID_PATTERN.test(url.pathname.replace(/^\/s\//, "").replace(/\/$/, ""))
@@ -1643,7 +1644,7 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
 }
 
 function isPublicDocumentPath(pathname: string): boolean {
-  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/" || pathname === "/e2ee/" || pathname === "/docker/";
+  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/" || pathname === "/e2ee/" || pathname === "/docker/" || pathname === "/self-hosting/";
 }
 
 function secureStatsResponse(response: Response): Response {

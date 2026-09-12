@@ -23,6 +23,7 @@
       "/security/*",
       "/e2ee/*",
       "/docker/*",
+      "/self-hosting/*",
       "/"
     ]
   },

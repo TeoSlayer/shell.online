@@ -27,7 +27,7 @@ func TestSessionCardWarnsWhenE2EEIsDisabled(t *testing.T) {
 	printSessionCard(&output, backgroundLaunchResult{
 		ID: "abcdefghijklmnopqrstuvwxyzABCDEF", ShareURL: "https://shell.online/s/example",
 	}, true)
-	if !strings.Contains(output.String(), "transport encryption only") || !strings.Contains(output.String(), "Cloudflare can relay terminal plaintext") {
+	if !strings.Contains(output.String(), "transport encryption only") || !strings.Contains(output.String(), "The relay can read terminal plaintext") {
 		t.Fatalf("plaintext boundary is unclear:\n%s", output.String())
 	}
 	if strings.Contains(output.String(), "Password") {

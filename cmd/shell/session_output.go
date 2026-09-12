@@ -46,7 +46,7 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 		fmt.Fprintf(writer, "  %s %s, or when the task exits\n", label("Closes"), result.ClosesAt.Format(time.RFC3339))
 	}
 	if !result.Encrypted {
-		fmt.Fprintf(writer, "  %s %s\n", label("Privacy"), styleSessionText(color, "38;5;209", "Cloudflare can relay terminal plaintext (--no-e2ee)"))
+		fmt.Fprintf(writer, "  %s %s\n", label("Privacy"), styleSessionText(color, "38;5;209", "The relay can read terminal plaintext (--no-e2ee)"))
 	}
 	if result.Handoff == claudeConversationHandoff {
 		fmt.Fprintf(writer, "  %s forked Claude conversation; the original stays open\n", label("Handoff"))

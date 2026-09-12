@@ -134,6 +134,9 @@ function documentationCommand(kind: DocumentationKind): string {
 <span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell &lt;command&gt;</code></pre>`;
   if (kind === "docker") return `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d
 <span>$</span> docker compose logs shell-online</code></pre>`;
+  if (kind === "self-hosting") return `<pre class="knowledge-command"><code><span>$</span> cd standalone
+<span>$</span> SHELL_ONLINE_PUBLIC_URL=https://relay.example.com \\
+  SHELL_ONLINE_SITE=relay.example.com docker compose up -d --build</code></pre>`;
   if (kind === "platforms") return `<pre class="knowledge-command"><code><span>$</span> shell ros2 launch &lt;package&gt; &lt;launch-file&gt;
 <span>PS&gt;</span> irm https://shell.online/install.ps1 | iex</code></pre>`;
   if (kind === "cli") return `<pre class="knowledge-command"><code><span>$</span> shell help reference

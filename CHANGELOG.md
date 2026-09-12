@@ -4,6 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A standalone, single-node relay for ordinary Docker hosts. It uses Node.js,
+  WebSockets, local metadata state and Caddy-managed TLS, and requires no
+  Cloudflare account or credentials.
+- A versioned self-hosting documentation page and a release image at
+  `ghcr.io/teoslayer/shell.online-relay` for amd64 and arm64.
+
+### Changed
+
+- `--no-e2ee` output refers to the configured relay instead of assuming every
+  deployment runs on Cloudflare.
+
 ### Fixed
 
 - Keep `--auto-close today` valid throughout the final second of the local

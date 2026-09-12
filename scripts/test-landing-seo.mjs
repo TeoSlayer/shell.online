@@ -130,13 +130,13 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 9, "Sitemap should list the homepage and knowledge base");
+check((sitemap.match(/<loc>/gu) ?? []).length === 10, "Sitemap should list the homepage and knowledge base");
 check(documentationHtml.includes("__DOC_DESCRIPTION__"), "Documentation description build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_TITLE__"), "Documentation title build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_DESCRIPTION__"), "Documentation social-description build token is missing");
 check(documentationHtml.includes("__DOC_PATH__"), "Documentation canonical-path build token is missing");
 check(documentationHtml.includes('<meta name="robots" content="index, follow'), "Documentation robots directive is invalid");
-for (const path of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const path of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker", "self-hosting"]) {
   const seo = docsContent.pages?.[path]?.seo;
   check(typeof seo?.description === "string", `${path} SEO description is missing from versioned content`);
   check(typeof seo?.socialTitle === "string", `${path} social title is missing from versioned content`);
