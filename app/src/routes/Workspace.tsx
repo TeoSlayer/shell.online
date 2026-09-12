@@ -14,7 +14,7 @@ import { AppShell } from "../components/AppShell";
 import { useAuth } from "../auth/AuthProvider";
 import { Alert } from "../components/Alert";
 import { TerminalPane } from "../terminal/TerminalPane";
-import { EMPTY, reduce, tabFor } from "../terminal/tabs";
+import { EMPTY, reduce, sessionToOpen, tabFor } from "../terminal/tabs";
 import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
 import {
   assignSession,
@@ -263,6 +263,27 @@ export function Workspace() {
       .map((session) => tabFor(session, canEdit(session, you)));
     dispatch({ type: "restore", tabs, activeId: remembered.activeId });
   }, [sessions, you, user]);
+
+  /*
+   * The session detail page's primary action returns here with `?open=<id>`.
+   * Consume it once the list is available, then remove it from the address so
+   * a later refresh does not reopen a tab somebody deliberately closed.
+   */
+  const requestedSessionId = search.get("open");
+  useEffect(() => {
+    if (!requestedSessionId || sessions === null) return;
+    const requested = sessionToOpen(sessions, requestedSessionId);
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("open");
+      return next;
+    }, { replace: true });
+    if (!requested) {
+      setError("That session has finished or is no longer available.");
+      return;
+    }
+    dispatch({ type: "open", session: requested, canType: canEdit(requested, you) });
+  }, [requestedSessionId, sessions, you, setSearch]);
 
   /* Written only after the restore, so an empty first render cannot erase it. */
   useEffect(() => {

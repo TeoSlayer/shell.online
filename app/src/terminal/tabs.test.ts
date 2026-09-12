@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY, MAX_TABS, reduce, tabFor, type TabState } from "./tabs";
+import { EMPTY, MAX_TABS, reduce, sessionToOpen, tabFor, type TabState } from "./tabs";
 import type { SessionRecord } from "../lib/api";
 
 function session(id: string, command = "top"): SessionRecord {
@@ -72,6 +72,26 @@ describe("open", () => {
     expect(state.tabs).toHaveLength(MAX_TABS);
     expect(state.tabs[0].id).toBe("s2");
     expect(state.activeId).toBe(`s${MAX_TABS + 1}`);
+  });
+});
+
+describe("an open request from the session detail page", () => {
+  const sessions = [session("first"), session("second")];
+
+  it("selects the exact session named in the URL", () => {
+    expect(sessionToOpen(sessions, "second")?.id).toBe("second");
+  });
+
+  it("does not treat a prefix as a session id", () => {
+    expect(sessionToOpen(sessions, "sec")).toBeNull();
+  });
+
+  it("does not reopen a process that finished while its detail page was open", () => {
+    expect(sessionToOpen([{ ...session("done"), closedAt: 2 }], "done")).toBeNull();
+  });
+
+  it("does nothing when there is no open request", () => {
+    expect(sessionToOpen(sessions, null)).toBeNull();
   });
 });
 

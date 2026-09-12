@@ -1146,6 +1146,41 @@ describe("session ownership and handoff", () => {
     expect(handed.body.session.assigneeUid).toBe("uid-1");
   });
 
+  it("returns only the caller's password copy after a handoff", async () => {
+    const { colleague } = await orgWithColleague();
+    const path = `/api/sessions/${session.id}/keys`;
+    await call("PUT", path, {
+      auth: await idToken(),
+      body: {
+        shares: [
+          { uid: "uid-1", sender_public_key: "OWNER_KEY", sealed: "OWNER_SHARE" },
+          { uid: "uid-2", sender_public_key: "COLLEAGUE_KEY", sealed: "COLLEAGUE_SHARE" },
+        ],
+      },
+    });
+
+    const handed = await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uids: ["uid-2"] },
+    });
+    expect(handed.status).toBe(200);
+    expect(handed.body.session.keyShare).toEqual({
+      uid: "uid-1",
+      senderPublicKey: "OWNER_KEY",
+      sealed: "OWNER_SHARE",
+    });
+    expect(handed.body.session.keyShares).toBeUndefined();
+    expect(handed.body.session.sharedWith).toEqual(["uid-2"]);
+
+    const colleagueView = await call("GET", `/api/sessions/${session.id}`, { auth: colleague });
+    expect(colleagueView.body.session.keyShare).toMatchObject({
+      uid: "uid-2",
+      sealed: "COLLEAGUE_SHARE",
+    });
+    expect(colleagueView.body.session.keyShares).toBeUndefined();
+    expect(colleagueView.body.session.sharedWith).toBeUndefined();
+  });
+
   it("allows a session to be left unassigned", async () => {
     await orgWithColleague();
     const handed = await call("PUT", `/api/sessions/${session.id}/assignee`, {
@@ -1251,6 +1286,29 @@ describe("session ownership and handoff", () => {
       body: { uid: "uid-stranger" },
     });
     expect(attempt.status).toBe(404);
+  });
+
+  it("keeps another organization outside every session mutation path", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const stranger = await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" });
+
+    expect((await call("GET", `/api/sessions/${session.id}`, { auth: stranger })).status).toBe(404);
+    expect((await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: stranger,
+      body: { uids: ["uid-9"] },
+    })).status).toBe(404);
+    expect((await call("PUT", `/api/sessions/${session.id}/keys`, {
+      auth: stranger,
+      body: {
+        shares: [{ uid: "uid-9", sender_public_key: "STRANGER_KEY", sealed: "STRANGER_SHARE" }],
+      },
+    })).status).toBe(404);
+    expect((await call("DELETE", `/api/sessions/${session.id}`, { auth: stranger })).status).toBe(404);
+    expect((await call("POST", "/api/commands", {
+      auth: stranger,
+      body: { kind: "kill", session_id: session.id },
+    })).status).toBe(404);
   });
 
   it("keeps an assignment when a persistent session re-registers", async () => {
@@ -1374,6 +1432,51 @@ describe("audit log", () => {
       ["input", input, 2000],
       ["interrupt", interrupt, 2001],
     ]);
+  });
+
+  it("does not let a browser forge service-owned audit events", async () => {
+    await withSession();
+    const forged = await call("POST", "/api/audit", {
+      auth: await idToken(),
+      body: {
+        entries: [
+          { session_id: session.id, kind: "handoff", text: "assigned to attacker@example.com" },
+          { session_id: session.id, kind: "stopped", text: "stopped" },
+          { session_id: session.id, kind: "deleted", text: "deleted" },
+        ],
+      },
+    });
+    expect(forged.body).toEqual({ written: 0, refused: 3 });
+    const log = await call("GET", `/api/audit/${session.id}`, { auth: await idToken() });
+    expect(log.body.events).toEqual([]);
+  });
+
+  it("accepts terminal input only from an owner or assignee", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    const input = { session_id: session.id, kind: "input", text: await sealedEntry(), at: 2000 };
+
+    const watching = await call("POST", "/api/audit", {
+      auth: colleague,
+      body: { entries: [input] },
+    });
+    expect(watching.body).toEqual({ written: 0, refused: 1 });
+
+    await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uids: ["uid-2"] },
+    });
+    const assigned = await call("POST", "/api/audit", {
+      auth: colleague,
+      body: { entries: [input] },
+    });
+    expect(assigned.body).toEqual({ written: 1, refused: 0 });
   });
 
   /* Longer than the old plaintext cap: trimming ciphertext would destroy it. */

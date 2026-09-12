@@ -94,6 +94,13 @@ export function TerminalPane({
   const [unlocking, setUnlocking] = useState(false);
 
   /*
+   * Assignment can change while this pane is open. Read the current answer
+   * from a ref inside xterm's long-lived input callback, rather than rebuilding
+   * the terminal and dropping its socket and scrollback on every handoff.
+   */
+  const canTypeRef = useRef(canType);
+
+  /*
    * Only the visible pane measures itself. A hidden one is still laid out, so
    * it would measure fine here, but refusing to refit it at all means no
    * future layout change can quietly restyle somebody's running terminal.
@@ -249,7 +256,7 @@ export function TerminalPane({
         },
         onReadOnly: (value) => {
           setReadOnly(value);
-          term.options.disableStdin = value;
+          term.options.disableStdin = value || !canTypeRef.current;
         },
         /* A portrait viewer takes a capable session to 80x40, and back when it leaves. */
         onGrid: (next) => {
@@ -289,11 +296,11 @@ export function TerminalPane({
       : null;
 
     const typed = term.onData((data) => {
-      if (!canType) return;
+      if (!canTypeRef.current) return;
       connected.send(data);
       sink?.observe(data);
     });
-    term.options.disableStdin = !canType;
+    term.options.disableStdin = !canTypeRef.current;
 
     const sessionId = sessionIdFromShareUrl(shareUrl);
     attempt.current = null;
@@ -364,7 +371,18 @@ export function TerminalPane({
       measure.current = null;
       connection.current = null;
     };
-  }, [shareUrl, refit, canType]);
+  }, [shareUrl, refit]);
+
+  /*
+   * Apply a handoff in place. The relay's own read-only bit still wins, and
+   * the callback above checks the same ref as a second guard against input
+   * arriving between a render and this effect.
+   */
+  useEffect(() => {
+    canTypeRef.current = canType;
+    if (!terminal.current) return;
+    terminal.current.options.disableStdin = readOnly || !canType;
+  }, [canType, readOnly]);
 
   /*
    * A share that arrives while the pane is asking for a password, such as the
@@ -391,10 +409,10 @@ export function TerminalPane({
     if (!active) return;
     const frame = requestAnimationFrame(() => {
       refit();
-      if (!readOnly) terminal.current?.focus();
+      if (!readOnly && canType) terminal.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, readOnly, refit]);
+  }, [active, readOnly, canType, refit]);
 
   async function handleUnlock(event: FormEvent) {
     event.preventDefault();

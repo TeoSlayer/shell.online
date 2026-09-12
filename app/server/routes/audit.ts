@@ -54,6 +54,17 @@ export async function recordAudit(
   if (!session) {
     return { ok: false, status: 404, error: "no such session in this organization" };
   }
+  if (sealed) {
+    const owner = session.ownerUid ?? session.uid;
+    const assignees = session.assigneeUids?.length
+      ? session.assigneeUids
+      : session.assigneeUid
+        ? [session.assigneeUid]
+        : [];
+    if (session.readOnly || (membership.uid !== owner && !assignees.includes(membership.uid))) {
+      return { ok: false, status: 403, error: "only someone who can type may record terminal input" };
+    }
+  }
 
   const event: AuditEvent = {
     id: newId("aud"),

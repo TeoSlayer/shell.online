@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
 import type { Invite, Membership } from "./lib/orgs";
-import type { AuditEvent } from "./lib/types";
+import type { AuditEvent, SessionRecord } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
@@ -32,7 +32,7 @@ import {
   notifyInvited,
   revokeInvite,
 } from "./routes/organizations";
-import { recordAudit, assignSession, auditCsv } from "./routes/audit";
+import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
@@ -157,6 +157,24 @@ function sharedWith(
 ): string[] | undefined {
   if (!ownsSession(membership, session)) return undefined;
   return (session.keyShares ?? []).map((share) => share.uid).filter((uid) => uid !== membership.uid);
+}
+
+/**
+ * The session shape one signed-in member may receive.
+ *
+ * A stored session carries one sealed password per recipient. Even though a
+ * member cannot decrypt somebody else's copy, sending the whole array leaks
+ * who has a credential and makes an optimistic assignment response lose the
+ * caller's singular `keyShare` shape until the next poll. Every app response
+ * therefore goes through the same projection as the list and detail routes.
+ */
+function sessionForMember(membership: Membership, session: SessionRecord) {
+  const mine = session.keyShares?.find((share) => share.uid === membership.uid);
+  return {
+    ...sessionForApi(session),
+    keyShare: mine,
+    sharedWith: sharedWith(membership, session),
+  };
 }
 
 /*
@@ -549,6 +567,15 @@ export function createApp(options: AppOptions) {
         let refused = 0;
         for (const entry of entries.slice(0, 100)) {
           const candidate = entry as Record<string, unknown>;
+          /*
+           * Handoffs, stops and deletions are service facts written beside the
+           * action itself. Letting a browser submit those kinds would let any
+           * member forge the team's audit trail with a plain API request.
+           */
+          if (!SEALED_KINDS.has(String(candidate.kind ?? "input"))) {
+            refused += 1;
+            continue;
+          }
           const result = await recordAudit(store, membership, {
             sessionId: String(candidate.session_id ?? ""),
             kind: String(candidate.kind ?? "input"),
@@ -1008,15 +1035,9 @@ export function createApp(options: AppOptions) {
          * everyone's would be pointless, since they cannot open them, and
          * would put more sealed material on the wire than anyone needs.
          */
-        const sessions = (await store.listOrgSessions(membership.orgId)).map((session) => {
-          const mine = session.keyShares?.find((share) => share.uid === membership.uid);
-          return {
-            ...sessionForApi(session),
-            keyShares: undefined,
-            keyShare: mine,
-            sharedWith: sharedWith(membership, session),
-          };
-        });
+        const sessions = (await store.listOrgSessions(membership.orgId)).map((session) =>
+          sessionForMember(membership, session)
+        );
         return send(response, 200, {
           sessions,
           members: await store.members(membership.orgId),
@@ -1095,7 +1116,7 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
-        return send(response, 200, { session: result.session });
+        return send(response, 200, { session: sessionForMember(membership, result.session) });
       }
 
       /* ---- Driving a machine from the browser ---- */
@@ -1299,14 +1320,8 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const session = await store.sessionInOrg(membership.orgId, oneSession[1]);
         if (!session) return send(response, 404, { error: "no such session" });
-        const mine = session.keyShares?.find((share) => share.uid === membership.uid);
         return send(response, 200, {
-          session: {
-            ...sessionForApi(session),
-            keyShares: undefined,
-            keyShare: mine,
-            sharedWith: sharedWith(membership, session),
-          },
+          session: sessionForMember(membership, session),
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

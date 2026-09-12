@@ -48,7 +48,13 @@ export function sessionSource(session: Pick<SessionRecord, "origin">): SessionSo
 /** Removes the storage envelope before a session is sent to the browser. */
 export function sessionForApi(session: SessionRecord) {
   const source = sessionSource(session);
-  return { ...session, origin: source.origin, deviceId: source.deviceId };
+  /*
+   * Key shares are recipient-specific credentials. Routes serving a browser
+   * add back only that caller's `keyShare`; CLI registration/close responses
+   * need none of them.
+   */
+  const { keyShares: _keyShares, ...safe } = session;
+  return { ...safe, origin: source.origin, deviceId: source.deviceId };
 }
 
 export type RegisterResult =

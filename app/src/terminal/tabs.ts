@@ -21,6 +21,22 @@ export const EMPTY: TabState = { tabs: [], activeId: null };
 
 export const MAX_TABS = 8;
 
+/**
+ * Resolves an `?open=` request against the current live session list.
+ *
+ * The detail page uses this route to hand one exact session back to the
+ * workspace. Keeping the lookup here makes two important rules explicit and
+ * testable: ids are exact (never prefixes), and a process that finished while
+ * the person was reading its details is not reopened as a dead terminal tab.
+ */
+export function sessionToOpen(
+  sessions: readonly SessionRecord[],
+  requestedId: string | null,
+): SessionRecord | null {
+  if (!requestedId) return null;
+  return sessions.find((session) => session.id === requestedId && !session.closedAt) ?? null;
+}
+
 export type TabAction =
   | { type: "open"; session: SessionRecord; canType?: boolean }
   | { type: "close"; id: string }
