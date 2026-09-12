@@ -36,6 +36,7 @@ describe("Cloudflare app assets", () => {
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     expect(response.headers.get("Permissions-Policy")).toBe("camera=(), microphone=(), geolocation=()");
     expect(response.headers.get("Content-Security-Policy")).toContain("script-src 'self'");
+    expect(response.headers.get("Content-Security-Policy")).toContain("https://apis.google.com");
     expect(response.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
   });
 });

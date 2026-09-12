@@ -6,7 +6,7 @@ export const BROWSER_SECURITY_HEADERS: Readonly<Record<string, string>> = {
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
-    "script-src 'self'",
+    "script-src 'self' https://apis.google.com",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: https:",

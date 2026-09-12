@@ -1811,6 +1811,7 @@ describe("guarding the service itself", () => {
     expect(result.headers["X-Content-Type-Options"]).toBe("nosniff");
     expect(result.headers["X-Frame-Options"]).toBe("DENY");
     expect(result.headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+    expect(result.headers["Content-Security-Policy"]).toContain("https://apis.google.com");
   });
 
   it("refuses a flood of credential attempts and says when to come back", async () => {
