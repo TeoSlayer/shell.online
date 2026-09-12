@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.12.2] — 2026-09-12
+
 ### Added
 
 - A standalone, single-node relay for ordinary Docker hosts. It uses Node.js,
@@ -19,11 +21,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 - `--no-e2ee` output refers to the configured relay instead of assuming every
   deployment runs on Cloudflare.
+- Session assignments and permission handoffs now update in place, without a
+  reconnect or a window where the former writer can still send input.
 
 ### Fixed
 
 - Keep `--auto-close today` valid throughout the final second of the local
   day, rather than expiring at the instant that second begins.
+- Keep notifications, audit entries, session password shares, and member
+  removal inside the active organization.
+- Escape CLI login callback content, keep the mobile account menu usable, and
+  reject invalid terminal dimensions before they reach a PTY.
 
 ### Security
 
@@ -37,6 +45,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Removing a team member now deletes every session-password copy sealed to
   that account. Owners must still rotate active sessions to revoke passwords a
   former member may already have seen.
+- Targeted email invitations require a verified Firebase email. Team-key and
+  session-key shares now reject invalid P-256 identities and oversized or
+  malformed ciphertext, and key distributors must already hold the team key.
+- The accounts app now sends a restrictive browser security policy from both
+  its Node server and Cloudflare Worker deployment.
 
 ## [0.12.1] — 2026-09-12
 
