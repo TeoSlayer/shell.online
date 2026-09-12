@@ -66,11 +66,18 @@ func normalizeAutoCloseArguments(arguments []string, now time.Time) ([]string, e
 		}
 
 		lastValid := -1
+		// Why the first token's error is kept: when no prefix parses, the
+		// value the user actually wrote is the single token, and its own
+		// error says what is wrong with it. Reporting "invalid" for all of
+		// them turns "that time has passed" into a grammar complaint.
+		var firstError error
 		for end := index + 1; end < len(arguments); end++ {
 			candidate := strings.Join(arguments[index+1:end+1], " ")
 			if _, err := parseCloseDeadline(candidate, now); err == nil {
 				lastValid = end
 				continue
+			} else if end == index+1 {
+				firstError = err
 			}
 			if lastValid >= 0 {
 				break
@@ -83,6 +90,9 @@ func normalizeAutoCloseArguments(arguments []string, now time.Time) ([]string, e
 			break
 		}
 		if lastValid < 0 {
+			if firstError != nil {
+				return nil, firstError
+			}
 			return nil, fmt.Errorf("invalid auto-close value %q", arguments[index+1])
 		}
 		normalized = append(normalized, "--auto-close="+strings.Join(arguments[index+1:lastValid+1], " "))
@@ -197,15 +207,27 @@ func parseAbsoluteDeadline(value string, now time.Time) (time.Time, bool) {
 			if prefix == "tomorrow" {
 				day = day.AddDate(0, 0, 1)
 			}
+			// A bare day keyword carries no time of day, so it has to stand
+			// for one. "tomorrow" takes the start of that day, which is still
+			// ahead. "today" cannot: midnight has already passed whenever the
+			// command runs, so the only reading of "close this today" that is
+			// ever a deadline is the end of it. The last second rather than
+			// the last minute, so that the form still works during 23:59.
 			clock := "00:00"
+			second := 0
+			if prefix == "today" {
+				clock = "23:59"
+				second = 59
+			}
 			if len(value) > len(prefix) {
 				clock = strings.TrimSpace(value[len(prefix):])
+				second = 0
 			}
 			parsedClock, err := time.ParseInLocation("15:04", clock, now.Location())
 			if err != nil {
 				return time.Time{}, false
 			}
-			return time.Date(day.Year(), day.Month(), day.Day(), parsedClock.Hour(), parsedClock.Minute(), 0, 0, now.Location()), true
+			return time.Date(day.Year(), day.Month(), day.Day(), parsedClock.Hour(), parsedClock.Minute(), second, 0, now.Location()), true
 		}
 	}
 
