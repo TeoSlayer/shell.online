@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat, realpath } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { BROWSER_SECURITY_HEADERS } from "./browser-headers";
 
 /**
  * Serves the built client, so the app and its API share an origin.
@@ -33,14 +34,6 @@ const TYPES: Record<string, string> = {
  * resolves. same-origin-allow-popups keeps the isolation and the handle. The
  * dev server sends the same header; this is the production half of it.
  */
-const DOCUMENT_HEADERS: Record<string, string> = {
-  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "no-referrer",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-};
-
 export interface StaticFiles {
   (request: IncomingMessage, response: ServerResponse): Promise<void>;
 }
@@ -127,7 +120,7 @@ export function staticFiles(root: string): StaticFiles {
       "Content-Length": found.size,
       "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
       "Last-Modified": found.mtime.toUTCString(),
-      ...DOCUMENT_HEADERS,
+      ...BROWSER_SECURITY_HEADERS,
     });
     if (request.method === "HEAD") {
       response.end();

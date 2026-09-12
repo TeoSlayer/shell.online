@@ -114,11 +114,27 @@ export function vaultForApi(key: AccountKey) {
  * register when this is wrong, so the caller drops it rather than failing.
  */
 export async function readOwnerShare(value: unknown): Promise<Omit<SessionKeyShare, "uid"> | null> {
+  const parsed = await readSessionKeyShare(value);
+  return parsed?.sealed.startsWith(VAULT_SHARE_PREFIX) ? parsed : null;
+}
+
+/**
+ * A session-password copy, either the current account-vault envelope (`v2.`)
+ * or the legacy browser-key envelope. The relay cannot authenticate its
+ * plaintext, but it can reject malformed points and oversized/non-base64
+ * ciphertext before either reaches persistent storage.
+ */
+export async function readSessionKeyShare(
+  value: unknown,
+): Promise<Omit<SessionKeyShare, "uid"> | null> {
   if (!value || typeof value !== "object") return null;
   const { sender_public_key: senderPublicKey, sealed } = value as Record<string, unknown>;
   if (!(await isP256PublicKey(senderPublicKey))) return null;
-  if (typeof sealed !== "string" || !sealed.startsWith(VAULT_SHARE_PREFIX)) return null;
-  const length = decodedLength(sealed.slice(VAULT_SHARE_PREFIX.length));
+  if (typeof sealed !== "string") return null;
+  const body = sealed.startsWith(VAULT_SHARE_PREFIX)
+    ? sealed.slice(VAULT_SHARE_PREFIX.length)
+    : sealed;
+  const length = decodedLength(body);
   if (length === null || length < 12 + 16 + 1 || length > SHARE_MAX_BYTES) return null;
   return { senderPublicKey: senderPublicKey as string, sealed };
 }

@@ -51,6 +51,8 @@ describe("staticFiles", () => {
     expect(response.headers.get("x-frame-options")).toBe("DENY");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
+    expect(response.headers.get("content-security-policy")).toContain("script-src 'self'");
+    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
   });
 
   it("caches fingerprinted assets forever and the document never", async () => {

@@ -19,7 +19,14 @@ import {
   sessionSource,
 } from "./lib/sessions";
 import { mintSecret } from "./lib/tokens";
-import { RESET_SIGN_IN_WINDOW_MS, isP256PublicKey, readOwnerShare, readVaultInput, vaultForApi } from "./lib/vault";
+import {
+  RESET_SIGN_IN_WINDOW_MS,
+  isP256PublicKey,
+  readOwnerShare,
+  readSessionKeyShare,
+  readVaultInput,
+  vaultForApi,
+} from "./lib/vault";
 import { isAuditEnvelope, isTeamKeyShare } from "./lib/audit-seal";
 import {
   changeRole,
@@ -483,6 +490,9 @@ export function createApp(options: AppOptions) {
         /* Publishing the browser key here keeps it current without a
            separate call on every sign-in. */
         const publicKey = url.searchParams.get("key");
+        if (publicKey && !(await isP256PublicKey(publicKey))) {
+          return send(response, 400, { error: "invalid browser public key" });
+        }
         if (publicKey) await store.setMemberKey(identity.uid, publicKey);
         const described = await describeOrganization(store, resolved.membership);
         return send(response, described.status, {
@@ -681,6 +691,14 @@ export function createApp(options: AppOptions) {
         }
         const shares = readTeamShares(body.shares);
         if (!shares) return send(response, 400, { error: "invalid key shares" });
+        const current = await store.teamKeyShares(membership.orgId);
+        if (!current.some((share) =>
+          share.uid === membership.uid && share.version === key.version
+        )) {
+          return send(response, 403, {
+            error: "open your own copy of the team key before sharing it",
+          });
+        }
         const memberIds = new Set((await store.members(membership.orgId)).map((member) => member.uid));
         if (shares.some((share) => !memberIds.has(share.uid))) {
           return send(response, 400, { error: "key shares may only be sent to organization members" });
@@ -1061,26 +1079,21 @@ export function createApp(options: AppOptions) {
 
         const body = (await readBody(request)) as Record<string, unknown>;
         const incoming = Array.isArray(body.shares) ? body.shares : [];
-        const shares = incoming
-          .map((entry) => entry as Record<string, unknown>)
-          .filter(
-            (entry) =>
-              typeof entry.uid === "string" &&
-              typeof entry.sender_public_key === "string" &&
-              typeof entry.sealed === "string",
-          )
-          .slice(0, 100)
-          .map((entry) => ({
-            uid: String(entry.uid),
-            senderPublicKey: String(entry.sender_public_key ?? ""),
-            sealed: String(entry.sealed),
-          }));
-
-        if (shares.length !== incoming.length || shares.some(
-          (share) => !share.uid || !share.senderPublicKey || !share.sealed ||
-            share.senderPublicKey.length > 512 || share.sealed.length > 4096,
-        )) {
+        if (incoming.length > 100) {
           return send(response, 400, { error: "invalid key share" });
+        }
+        const shares: { uid: string; senderPublicKey: string; sealed: string }[] = [];
+        for (const candidate of incoming) {
+          if (!candidate || typeof candidate !== "object") {
+            return send(response, 400, { error: "invalid key share" });
+          }
+          const entry = candidate as Record<string, unknown>;
+          if (typeof entry.uid !== "string" || !entry.uid) {
+            return send(response, 400, { error: "invalid key share" });
+          }
+          const parsed = await readSessionKeyShare(entry);
+          if (!parsed) return send(response, 400, { error: "invalid key share" });
+          shares.push({ uid: entry.uid, ...parsed });
         }
         if (!isOwner && shares.some((share) => share.uid !== membership.uid)) {
           return send(response, 403, { error: "only the session owner can share its key" });
@@ -1266,9 +1279,13 @@ export function createApp(options: AppOptions) {
         const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
         /* The agent publishes its key on every poll, so a restart re-keys. */
+        const agentPublicKey = url.searchParams.get("key") ?? undefined;
+        if (agentPublicKey && !(await isP256PublicKey(agentPublicKey))) {
+          return send(response, 400, { error: "invalid agent public key" });
+        }
         await store.markAgentSeen(
           token.id,
-          url.searchParams.get("key") ?? undefined,
+          agentPublicKey,
           readHarnesses(url),
         );
         return send(response, 200, { commands: await store.claimCommands(token.id) });

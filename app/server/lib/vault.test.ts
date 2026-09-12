@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { isP256PublicKey, readOwnerShare, readVaultInput } from "./vault";
+import { isP256PublicKey, readOwnerShare, readSessionKeyShare, readVaultInput } from "./vault";
 import { createVault, openFromAccount, sealToAccount } from "../../src/lib/vault-crypto";
 
 /*
@@ -82,6 +82,16 @@ describe("the CLI's own copy of a password", () => {
     expect(await readOwnerShare({ sender_public_key: share.senderPublicKey, sealed: share.sealed.slice(3) })).toBeNull();
     expect(await readOwnerShare({ sender_public_key: "junk", sealed: share.sealed })).toBeNull();
     expect(await readOwnerShare({ sender_public_key: share.senderPublicKey, sealed: "v2." })).toBeNull();
+  });
+
+  it("accepts both vault and legacy browser envelopes but rejects malformed ciphertext", async () => {
+    const made = await createVault("uid-1");
+    const share = await sealToAccount(made.bundle.publicKey, "sess_1", "uid-1", "Kw9eHbru");
+    const input = { sender_public_key: share.senderPublicKey, sealed: share.sealed };
+    expect(await readSessionKeyShare(input)).toEqual(share);
+    expect(await readSessionKeyShare({ ...input, sealed: share.sealed.slice(3) }))
+      .toEqual({ ...share, sealed: share.sealed.slice(3) });
+    expect(await readSessionKeyShare({ ...input, sealed: "not base64" })).toBeNull();
   });
 });
 

@@ -6,6 +6,7 @@ import type { Store } from "../server/lib/store";
 import { PostgresStore } from "../server/lib/store-postgres";
 import { callNodeHandler, type NodeHandler } from "./node-adapter";
 import { allowedOriginsFor } from "../server/lib/config";
+import { BROWSER_SECURITY_HEADERS } from "../server/lib/browser-headers";
 
 /**
  * The Worker deployment of the accounts service.
@@ -59,14 +60,6 @@ const RELAY_PREFIX = "/relay";
  * wrangler.jsonc sets run_worker_first so Cloudflare Assets cannot bypass
  * this function for a file that already exists.
  */
-const CLIENT_HEADERS: Record<string, string> = {
-  "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
-  "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
-  "Referrer-Policy": "no-referrer",
-  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-};
-
 /*
  * The store belonging to the request being served.
  *
@@ -187,7 +180,7 @@ async function toRelay(request: Request, relayUrl: string): Promise<Response> {
 async function toClient(request: Request, env: Env): Promise<Response> {
   const served = await env.ASSETS.fetch(request);
   const response = new Response(served.body, served);
-  for (const [name, value] of Object.entries(CLIENT_HEADERS)) response.headers.set(name, value);
+  for (const [name, value] of Object.entries(BROWSER_SECURITY_HEADERS)) response.headers.set(name, value);
   return response;
 }
 

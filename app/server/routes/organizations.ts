@@ -18,6 +18,26 @@ export interface Result {
   body: unknown;
 }
 
+/**
+ * A targeted invitation proves who the link was intended for only after the
+ * identity provider has verified that address. Without this check, someone
+ * who can create an unverified account for another address and obtains the
+ * bearer invite link can claim that person's seat.
+ */
+function checkInviteForIdentity(
+  invite: Invite | undefined,
+  identity: Identity,
+): ReturnType<typeof checkInvite> {
+  const checked = checkInvite(invite, identity.email);
+  if (checked.ok && checked.invite.email && !identity.emailVerified) {
+    return {
+      ok: false,
+      reason: "Verify that email address before accepting this invitation.",
+    };
+  }
+  return checked;
+}
+
 const ok = (body: unknown): Result => ({ status: 200, body });
 const created = (body: unknown): Result => ({ status: 201, body });
 const bad = (error: string): Result => ({ status: 400, body: { error } });
@@ -52,7 +72,7 @@ export async function ensureMembership(
   }
 
   if (inviteId) {
-    const check = checkInvite(await store.invite(inviteId), identity.email);
+    const check = checkInviteForIdentity(await store.invite(inviteId), identity);
     if (!check.ok) {
       /*
        * A bad invite still gets an organization, because the alternative is an
@@ -99,7 +119,7 @@ async function acceptAsExistingMember(
   existing: Membership,
   inviteId: string,
 ): Promise<{ membership: Membership; joined: boolean; error?: string }> {
-  const check = checkInvite(await store.invite(inviteId), identity.email);
+  const check = checkInviteForIdentity(await store.invite(inviteId), identity);
   if (!check.ok) return { membership: existing, joined: false, error: check.reason };
 
   if (check.invite.orgId === existing.orgId) {
