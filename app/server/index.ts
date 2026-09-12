@@ -14,6 +14,7 @@ import { staticFiles } from "./lib/static-files";
 import { MemoryStore } from "./lib/store-memory";
 import { PostgresStore } from "./lib/store-postgres";
 import type { Store } from "./lib/store";
+import { relaySessionLiveness } from "./lib/session-liveness";
 
 let config: Config;
 try {
@@ -50,6 +51,7 @@ const server = createAccountsServer({
   mailer: createMailer(config.mail),
   serveClient: config.clientDir ? staticFiles(config.clientDir) : undefined,
   relay: forward ?? undefined,
+  sessionLiveness: config.relayUrl ? relaySessionLiveness(config.relayUrl) : undefined,
 });
 
 if (forward) {

@@ -90,6 +90,15 @@ describe("an open request from the session detail page", () => {
     expect(sessionToOpen([{ ...session("done"), closedAt: 2 }], "done")).toBeNull();
   });
 
+  it("does not open a session the relay says no longer exists", () => {
+    expect(sessionToOpen([{ ...session("gone"), relayStatus: "missing" }], "gone")).toBeNull();
+  });
+
+  it("keeps a disconnected session available for its host to reconnect", () => {
+    expect(sessionToOpen([{ ...session("paused"), relayStatus: "disconnected" }], "paused")?.id)
+      .toBe("paused");
+  });
+
   it("does nothing when there is no open request", () => {
     expect(sessionToOpen(sessions, null)).toBeNull();
   });

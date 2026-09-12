@@ -32,6 +32,7 @@ import { assigneeIds, canRemove, canStop } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
 import { useVault } from "../vault/VaultProvider";
 import { shareWith } from "../vault/share-with";
+import { sessionEnded, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 
 function CommentBody({ body, members }: { body: string; members: Member[] }) {
   return (
@@ -126,7 +127,8 @@ export function Session() {
   const owner = findPerson(members, session.ownerUid);
   const selected = new Set(assigneeIds(session));
   const assignees = members.filter((member) => selected.has(member.uid));
-  const live = !session.closedAt;
+  const live = !sessionEnded(session);
+  const online = sessionOnline(session);
   const canAssign =
     session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
 
@@ -240,8 +242,8 @@ export function Session() {
       <div className="detail">
         <section className="detail-main">
           <div className="detail-head">
-            <span className={live ? "detail-status is-live" : "detail-status"}>
-              {live ? "Running" : "Finished"}
+            <span className={online ? "detail-status is-live" : "detail-status"}>
+              {sessionStateLabel(session)}
             </span>
             <code className="detail-command">{session.command}</code>
           </div>
@@ -375,8 +377,8 @@ export function Session() {
               <dd>{new Date(session.startedAt).toLocaleString()}</dd>
             </div>
             <div className="detail-row">
-              <dt>{live ? "Running for" : "Ran for"}</dt>
-              <dd>{elapsed(session.startedAt, session.closedAt ?? Date.now())}</dd>
+              <dt>{live ? "Open for" : "Ran for"}</dt>
+              <dd>{elapsed(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? Date.now())}</dd>
             </div>
             {!live && session.exitCode !== undefined && (
               <div className="detail-row">

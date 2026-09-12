@@ -934,6 +934,15 @@ export class PostgresStore implements Store {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async updateAccountKeyWrap(uid: string, expectedVersion: number, recoveryWrap: string, updatedAt: number): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE account_keys SET recovery_wrap = $3, updated_at = $4
+       WHERE uid = $1 AND version = $2`,
+      [uid, expectedVersion, recoveryWrap, updatedAt],
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
   /* ---- Account deletion ---- */
 
   /*

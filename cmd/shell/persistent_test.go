@@ -115,7 +115,7 @@ func TestPersistentSessionGeneratesAndReusesBrowserPassword(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(password) != 8 || !strings.Contains(first.ShareURL, "#salt=") {
+	if len(password) != 10 || !strings.Contains(first.ShareURL, "#salt=") {
 		t.Fatalf("generated password/share = %q, %q", password, first.ShareURL)
 	}
 	second, reused, err := preparePersistentSession(context.Background(), client, path, "bash", false, true, "")

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Check, Copy, DownloadSimple, Key, LockKey, ShieldCheck, Warning } from "@phosphor-icons/react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Check, Copy, DownloadSimple, Fingerprint, Key, LockKey, ShieldCheck, Warning } from "@phosphor-icons/react";
 import { Wordmark } from "../components/Wordmark";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
@@ -9,12 +9,9 @@ import { COPY_FAILED, useCopy } from "../lib/clipboard";
 import { useVault, type PreparedVault } from "./VaultProvider";
 
 /**
- * Stands in front of everything that reads or seals a session password.
- *
- * The vault is required. Without one a session's password lives in a single
- * browser again, and a session started in a terminal cannot open here without
- * someone typing its password. So setting it up is a one-time step on the way
- * to the sessions page, not an option somewhere in settings.
+ * Compatibility gate for routes that explicitly require an open vault.
+ * Sessions themselves do not use it: the vault is optional and a password can
+ * always be entered directly when opening a terminal.
  */
 export function VaultGate({ children }: { children: ReactNode }) {
   const vault = useVault();
@@ -78,25 +75,36 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
   const vault = useVault();
   const { user } = useAuth();
   const [prepared, setPrepared] = useState<PreparedVault | null>(null);
-  const [confirm, setConfirm] = useState("");
+  const [keyConfirm, setKeyConfirm] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const { copiedKey, failedKey, copy } = useCopy<"key">();
-  const started = useRef(false);
-
-  useEffect(() => {
-    /* Once: a second key pair would silently replace the key being shown. */
-    if (started.current) return;
-    started.current = true;
-    vault
-      .prepare(reset)
-      .then(setPrepared)
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Could not make a vault here."));
-  }, [vault, reset]);
-
   const groups = prepared?.recoveryKey.split("-") ?? [];
   const lastGroup = groups.at(-1) ?? "";
-  const confirmed = confirm.trim().toUpperCase() === lastGroup && lastGroup !== "";
+  const confirmed = keyConfirm.trim().toUpperCase() === lastGroup && lastGroup !== "";
+
+  async function handlePrepare(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (password.length < 8) {
+      setError("Use at least 8 characters for your vault password.");
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError("The vault passwords do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      setPrepared(await vault.prepare(reset, password));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not make a vault here.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function download() {
     if (!prepared) return;
@@ -158,6 +166,40 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
 
       {error && <Alert tone="error">{error}</Alert>}
 
+      {!prepared && (
+        <form className="vault-form" onSubmit={handlePrepare}>
+          <label className="vault-label" htmlFor="vault-password">Vault password</label>
+          <input
+            id="vault-password"
+            className="vault-input"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+            placeholder="At least 8 characters"
+            maxLength={1024}
+          />
+          <label className="vault-label" htmlFor="vault-password-confirm">Confirm vault password</label>
+          <input
+            id="vault-password-confirm"
+            className="vault-input"
+            type="password"
+            value={passwordConfirm}
+            onChange={(event) => setPasswordConfirm(event.target.value)}
+            autoComplete="new-password"
+            maxLength={1024}
+          />
+          <p className="vault-note">
+            This password unlocks the vault after Google or email sign-in. It never leaves this browser.
+          </p>
+          <div className="consent-actions">
+            <Button type="submit" busy={busy} busyLabel="Creating" disabled={busy}>
+              Create vault
+            </Button>
+          </div>
+        </form>
+      )}
+
       {prepared && (
         <form className="vault-form" onSubmit={handleSubmit}>
           <div className="vault-key-block">
@@ -195,8 +237,8 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
           <input
             id="vault-confirm"
             className="vault-input"
-            value={confirm}
-            onChange={(event) => setConfirm(event.target.value)}
+            value={keyConfirm}
+            onChange={(event) => setKeyConfirm(event.target.value)}
             autoComplete="off"
             autoCapitalize="characters"
             spellCheck={false}
@@ -219,6 +261,9 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
 export function VaultUnlock() {
   const vault = useVault();
   const [text, setText] = useState("");
+  const [mode, setMode] = useState<"password" | "recovery">(
+    vault.unlockMethods.password ? "password" : "recovery",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resetting, setResetting] = useState(false);
@@ -231,7 +276,8 @@ export function VaultUnlock() {
     setBusy(true);
     setError("");
     try {
-      await vault.unlock(text);
+      if (mode === "password") await vault.unlockWithPassword(text);
+      else await vault.unlock(text);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not unlock your vault.");
       setBusy(false);
@@ -245,21 +291,67 @@ export function VaultUnlock() {
       </span>
       <h1>Unlock your session vault</h1>
       <p>
-        This browser has not opened your vault yet. Enter the recovery key you
-        saved when you set it up. The key is used here to open the vault and is
-        never sent to shell.online.
+        Use your vault password or passkey. Recovery is only for when both are unavailable.
       </p>
 
       {error && <Alert tone="error">{error}</Alert>}
 
+      <div className="vault-unlock-methods" role="group" aria-label="Vault unlock method">
+        {vault.unlockMethods.password && (
+          <Button
+            type="button"
+            variant={mode === "password" ? "primary" : "ghost"}
+            onClick={() => { setMode("password"); setText(""); setError(""); }}
+          >
+            <LockKey size={15} /> Password
+          </Button>
+        )}
+        {vault.unlockMethods.passkeys.length > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await vault.unlockWithPasskey();
+              } catch (caught) {
+                setError(caught instanceof Error ? caught.message : "Could not use that passkey.");
+                setBusy(false);
+              }
+            }}
+          >
+            <Fingerprint size={15} /> Use passkey
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant={mode === "recovery" ? "primary" : "ghost"}
+          onClick={() => { setMode("recovery"); setText(""); setError(""); }}
+        >
+          <Key size={15} /> Recovery key
+        </Button>
+      </div>
+
       <form className="vault-form" onSubmit={handleSubmit}>
         <label className="vault-label" htmlFor="vault-recovery">
-          Recovery key
+          {mode === "password" ? "Vault password" : "Recovery key"}
         </label>
         {/*
           Two lines, so the whole key is in view on a phone: a single line
           scrolled most of it out of sight, which is no way to check it.
         */}
+        {mode === "password" ? (
+          <input
+            id="vault-recovery"
+            className="vault-input"
+            type="password"
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            autoComplete="current-password"
+            placeholder="Vault password"
+          />
+        ) : (
         <textarea
           id="vault-recovery"
           className="vault-input vault-input-wide"
@@ -276,21 +368,21 @@ export function VaultUnlock() {
           autoCapitalize="characters"
           spellCheck={false}
           placeholder="Paste or type your recovery key"
-        />
+        />)}
         <div className="consent-actions">
           <Button type="submit" busy={busy} busyLabel="Unlocking" disabled={busy || !text.trim()}>
-            Unlock
+            {mode === "password" ? "Unlock vault" : "Use recovery key"}
           </Button>
         </div>
       </form>
 
       <details className="vault-lost">
-        <summary>Lost your recovery key?</summary>
+        <summary>Cannot use any unlock method?</summary>
         <p>
-          You can make a new vault. Passwords sealed to the old one cannot be
-          opened again, which is what keeps them out of anyone else&apos;s reach
-          too. A session that is still running can be reopened with{" "}
-          <code>shell sessions</code> on the machine running it.
+          If your password, passkeys and recovery key are all unavailable, you
+          can make a new vault. Passwords sealed only to the old vault cannot
+          be opened again. An active session password remains available with{" "}
+          <code>shell password &lt;ID&gt;</code> on its owner machine.
         </p>
         <Button type="button" variant="ghost" onClick={() => setResetting(true)}>
           Make a new vault

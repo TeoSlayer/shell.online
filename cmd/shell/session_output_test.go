@@ -10,9 +10,9 @@ func TestSessionCardMakesEncryptedAccessExplicit(t *testing.T) {
 	var output bytes.Buffer
 	printSessionCard(&output, backgroundLaunchResult{
 		ID: "abcdefghijklmnopqrstuvwxyzABCDEF", ShareURL: "https://shell.online/s/example#salt=value",
-		Password: "Ab3dE7-_", Encrypted: true,
+		Password: "Ab3dE7-_", Encrypted: true, Vault: vaultSaved,
 	}, true)
-	for _, expected := range []string{"shell.online  ✦", "Password", "Ab3dE7-_", "interactive · end-to-end encrypted", "Rejoin", "shell attach abcdefghij"} {
+	for _, expected := range []string{"shell.online  ✦", "Password", "Ab3dE7-_", "Vault", "saved to your account vault", "interactive · end-to-end encrypted", "Rejoin", "shell attach abcdefghij"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("session card does not contain %q:\n%s", expected, output.String())
 		}

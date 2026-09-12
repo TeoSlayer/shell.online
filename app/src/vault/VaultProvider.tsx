@@ -9,20 +9,24 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "../auth/AuthProvider";
-import { fetchSessions, fetchVault, saveVault, shareSessionKeys, type VaultRecord } from "../lib/api";
+import { fetchSessions, fetchVault, saveVault, shareSessionKeys, updateVaultUnlocks, type VaultRecord } from "../lib/api";
 import {
+  addVaultPassword,
   createVault,
   fingerprint,
   isVaultShare,
   openFromAccount,
   openVault,
+  openVaultWithPassword,
   parseRecoveryKey,
   sealToAccount,
   VaultError,
   type OpenedVault,
   type SealedShare,
   type VaultBundle,
+  vaultUnlockMethods,
 } from "../lib/vault-crypto";
+import { registerVaultPasskey, unlockVaultWithPasskey } from "../lib/vault-passkey";
 import { clearLocalVault, loadLocalVault, saveLocalVault } from "../lib/vault-store";
 import { openSealed } from "../lib/keypair";
 import { openTeamKeyShare, sealTeamKeyShare, type TeamKeyContext } from "../lib/team-crypto";
@@ -60,9 +64,14 @@ interface VaultValue {
   remembered: boolean;
   /** The version on the service, when there is a vault at all. */
   version: number | null;
-  prepare(reset: boolean): Promise<PreparedVault>;
+  prepare(reset: boolean, password: string): Promise<PreparedVault>;
   commit(prepared: PreparedVault): Promise<void>;
   unlock(recoveryKey: string): Promise<void>;
+  unlockWithPassword(password: string): Promise<void>;
+  unlockWithPasskey(): Promise<void>;
+  setPassword(recoveryKey: string, password: string): Promise<void>;
+  addPasskey(password: string, label?: string): Promise<void>;
+  unlockMethods: { password: boolean; passkeys: { id: string; label: string }[] };
   retry(): void;
   /** Opens a password sealed to this person: to their vault, or to this browser's old key. */
   openShare(sessionId: string, share: SealedShare | undefined): Promise<string | null>;
@@ -167,8 +176,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, [uid, attempt, becomeUnlocked]);
 
   const prepare = useCallback(
-    async (reset: boolean): Promise<PreparedVault> => {
-      const made = await createVault(uid);
+    async (reset: boolean, password: string): Promise<PreparedVault> => {
+      const made = await createVault(uid, password);
       return { ...made, replaces: reset && remote ? remote.version : undefined };
     },
     [uid, remote],
@@ -250,6 +259,44 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     },
     [uid, remote, becomeUnlocked],
   );
+
+  const keepOpened = useCallback(async (next: OpenedVault) => {
+    if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
+    const kept = await saveLocalVault({
+      uid,
+      publicKey: next.publicKey,
+      version: remote.version,
+      privateKey: next.privateKey,
+    });
+    await becomeUnlocked(next, kept);
+  }, [uid, remote, becomeUnlocked]);
+
+  const unlockWithPassword = useCallback(async (password: string) => {
+    if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
+    await keepOpened(await openVaultWithPassword(uid, remote, password));
+  }, [uid, remote, keepOpened]);
+
+  const unlockWithPasskey = useCallback(async () => {
+    if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
+    await keepOpened(await unlockVaultWithPasskey(uid, remote));
+  }, [uid, remote, keepOpened]);
+
+  const setPassword = useCallback(async (recoveryKey: string, password: string) => {
+    if (!remote) throw new VaultError("damaged", "There is no vault to update. Reload and try again.");
+    const recoveryWrap = await addVaultPassword(uid, remote, recoveryKey, password);
+    const saved = (await updateVaultUnlocks(recoveryWrap, remote.version)).vault;
+    if (!saved) throw new Error("The vault update did not return a vault.");
+    setRemote(saved);
+    await keepOpened(await openVaultWithPassword(uid, saved, password));
+  }, [uid, remote, keepOpened]);
+
+  const addPasskey = useCallback(async (password: string, label = "Passkey") => {
+    if (!remote) throw new VaultError("damaged", "There is no vault to update. Reload and try again.");
+    const recoveryWrap = await registerVaultPasskey(uid, user?.email ?? uid, remote, password, label);
+    const saved = (await updateVaultUnlocks(recoveryWrap, remote.version)).vault;
+    if (!saved) throw new Error("The vault update did not return a vault.");
+    setRemote(saved);
+  }, [uid, user?.email, remote]);
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
@@ -343,6 +390,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       prepare,
       commit,
       unlock,
+      unlockWithPassword,
+      unlockWithPasskey,
+      setPassword,
+      addPasskey,
+      unlockMethods: remote ? vaultUnlockMethods(remote) : { password: false, passkeys: [] },
       retry,
       openShare,
       sealTo,
@@ -354,7 +406,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       openTeamKey,
     }),
     [
-      status, error, publicKey, print, remembered, remote, prepare, commit, unlock, retry,
+      status, error, publicKey, print, remembered, remote, prepare, commit, unlock,
+      unlockWithPassword, unlockWithPasskey, setPassword, addPasskey, retry,
       openShare, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
     ],
   );

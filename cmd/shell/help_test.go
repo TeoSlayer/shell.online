@@ -19,12 +19,16 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 		"shell claude",
 		"fork of this conversation",
 		"Shares are interactive by default",
-		"eight-character browser",
+		"ten-character browser",
 		"shell list",
+		"shell list --json",
 		"shell attach <ID>",
 		"Press Ctrl-X, then D to detach",
 		"shell kill <ID>",
 		"stop the process and close its link",
+		"shell agent",
+		"shell daemon status|start|stop",
+		"shell service install|status",
 	} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("help output does not contain %q", expected)
@@ -40,7 +44,7 @@ func TestE2EEHelpExplainsAutomaticPasswordFlow(t *testing.T) {
 	}
 	for _, expected := range []string{
 		"By default, every new share encrypts",
-		"eight-character password",
+		"ten-character password",
 		"SHELL_ONLINE_E2EE_PASSWORD",
 		"URL and password",
 		"--e2ee flag remains accepted",
@@ -104,6 +108,9 @@ func TestCompleteCLIReferenceCoversPublicInterface(t *testing.T) {
 		"relay_status",
 		"shell attach <session-id-or-prefix>",
 		"shell kill --all",
+		"shell agent",
+		"shell daemon status|start|stop",
+		"shell service install|status|uninstall",
 		"SHELL_ONLINE_SERVER",
 		"SHELL_ONLINE_E2EE_PASSWORD",
 		"invalid CLI usage",

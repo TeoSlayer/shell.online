@@ -140,6 +140,13 @@ export function saveVault(
   });
 }
 
+export function updateVaultUnlocks(recoveryWrap: string, version: number) {
+  return request<{ vault: VaultRecord | null }>("/api/vault", {
+    method: "PATCH",
+    body: JSON.stringify({ recovery_wrap: recoveryWrap, version }),
+  });
+}
+
 export function assignSession(sessionId: string, uids: string[]) {
   return request<{ session: SessionRecord }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/assignee`,
@@ -231,6 +238,9 @@ export interface SessionRecord {
   startedAt: number;
   closedAt?: number;
   exitCode?: number;
+  /** Current process state as reported by the configured terminal relay. */
+  relayStatus?: "waiting" | "connected" | "disconnected" | "exited" | "missing" | "unknown";
+  relayCheckedAt?: number;
 }
 
 class ApiError extends Error {}

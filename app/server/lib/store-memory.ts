@@ -285,6 +285,15 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async updateAccountKeyWrap(uid: string, expectedVersion: number, recoveryWrap: string, updatedAt: number): Promise<boolean> {
+    const found = this.data.accountKeys.find((entry) => entry.uid === uid && entry.version === expectedVersion);
+    if (!found) return false;
+    found.recoveryWrap = recoveryWrap;
+    found.updatedAt = updatedAt;
+    this.flush();
+    return true;
+  }
+
   async deleteAccount(uid: string, plan: AccountDeletion, now = Date.now()): Promise<void> {
     const data = this.data;
     const { orgId } = plan;

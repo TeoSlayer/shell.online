@@ -17,8 +17,8 @@ const (
 	KeyBytes                     = 32
 	NonceBytes                   = 12
 	SaltBytes                    = 16
-	BrowserPasswordBytes         = 6
-	BrowserPasswordLength        = 8
+	BrowserPasswordBytes         = 10
+	BrowserPasswordLength        = 10
 	EnvelopeVersion         byte = 1
 	PBKDF2Iterations             = 600_000
 	MaxBrowserPasswordBytes      = 1_024
@@ -29,7 +29,15 @@ func GenerateBrowserPassword() (string, error) {
 	if _, err := rand.Read(value); err != nil {
 		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(value), nil
+	/* Each character is one independent six-bit symbol. This keeps the human
+	 * password at exactly ten URL-safe characters while carrying 60 random
+	 * bits; ordinary base64 encoding cannot produce exactly ten characters. */
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	password := make([]byte, BrowserPasswordLength)
+	for index := range password {
+		password[index] = alphabet[value[index]&63]
+	}
+	return string(password), nil
 }
 
 func ValidateBrowserPassword(password string) error {

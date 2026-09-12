@@ -1,5 +1,5 @@
 {
-  "version": "0.12.2",
+  "version": "0.13.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -25,7 +25,7 @@
         ],
         [
           "Encryption is automatic",
-          "Every normal share is E2EE. shell prints an eight-character browser password with the URL; set SHELL_ONLINE_E2EE_PASSWORD to use a longer one. --no-e2ee is an explicit compatibility opt-out. Use Docker when the same encrypted shell and URL should survive container restarts."
+          "Every normal share is E2EE. shell prints a ten-character browser password with the URL; set SHELL_ONLINE_E2EE_PASSWORD to choose your own. --no-e2ee is an explicit compatibility opt-out. Use Docker when the same encrypted shell and URL should survive container restarts."
         ],
         [
           "Manage locally",
@@ -37,7 +37,7 @@
         ],
         [
           "Work from the web app",
-          "Sessions from every linked machine appear in one searchable list or board, grouped by live access and finished work. Row controls act independently from the row link, assignee pickers show names and email context, and failed loads can be retried without losing the current view. A session started in the browser opens its terminal tab as soon as the machine publishes it; switching tabs does not disconnect any terminal."
+          "Sessions from every linked machine appear in one searchable list or board, grouped by access and reconciled with the relay's current Online, Starting, Offline, Finished, or Unavailable state. Row controls act independently from the row link, assignee pickers show names and email context, and failed loads can be retried without losing the current view. A session started in the browser opens its terminal tab as soon as the machine publishes it; switching tabs does not disconnect any terminal."
         ],
         [
           "Start sessions from the browser",
@@ -46,6 +46,10 @@
         [
           "Organizations and collaboration",
           "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and multiple assignees, and the owner can hand a running session to someone else. The audit log opens on the activity itself; search stays visible while session, person, event, and time filters plus charts are revealed only when needed."
+        ],
+        [
+          "Optional personal vault",
+          "The CLI always prints and locally retains an active session's password. After shell login, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
         ]
       ]
     },
@@ -149,11 +153,11 @@
       "cards": [
         [
           "Zero-configuration password",
-          "shell <command> generates and prints a cryptographically random eight-character base64url browser password. In an interactive terminal it also renders a one-scan QR containing the salted URL and password; JSON and piped output stay machine-clean."
+          "shell <command> generates and prints a cryptographically random ten-character base64url browser password. In an interactive terminal it also renders a one-scan QR containing the salted URL and password; JSON and piped output stay machine-clean."
         ],
         [
           "Stronger custom password",
-          "Eight generated characters provide 48 bits of entropy for convenient task-bound sharing. For sensitive or long-lived work, set a longer unique SHELL_ONLINE_E2EE_PASSWORD and send it separately from the complete URL when appropriate."
+          "Ten generated Base64URL characters provide 60 random bits for convenient task-bound sharing. Password derivation is deliberately expensive, sessions expire, and online endpoints are rate-limited. For sensitive or long-lived work, set a longer unique SHELL_ONLINE_E2EE_PASSWORD and send it separately from the complete URL when appropriate."
         ],
         [
           "Local key derivation",
@@ -165,7 +169,7 @@
         ],
         [
           "Limits, recovery, and opt-out",
-          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. Active passwords can be retrieved on their owner machine with shell password <ID>; account-linked passwords are also sealed to the user's vault. If both owner-held copies are lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
+          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
         ]
       ]
     },
@@ -435,7 +439,7 @@
             ],
             [
               "SHELL_ONLINE_E2EE_PASSWORD",
-              "Override the generated eight-character password with a longer unique password; derivation remains local."
+              "Override the generated ten-character password with a unique password; derivation remains local."
             ],
             [
               "SHELL_ONLINE_INSTALL_DIR",
@@ -603,7 +607,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.12.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated eight-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.13.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

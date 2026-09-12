@@ -36,4 +36,25 @@ describe("terminal input framing", () => {
     vi.advanceTimersByTime(16);
     expect(socket.sent).toHaveLength(1);
   });
+
+  it("discards input that was still encoding when collaboration locks", async () => {
+    const socket = new FakeSocket();
+    let finishEncoding: ((frame: Uint8Array<ArrayBuffer>) => void) | undefined;
+    const queue = new TerminalInputQueue(
+      () => socket,
+      256_000,
+      1024,
+      () => new Promise((resolve) => {
+        finishEncoding = resolve;
+      }),
+    );
+
+    expect(queue.enqueue(new Uint8Array([1, 2, 3]))).toBe(true);
+    queue.clear();
+    finishEncoding?.(new Uint8Array([Opcode.Input, 1, 2, 3]));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(socket.sent).toHaveLength(0);
+  });
 });

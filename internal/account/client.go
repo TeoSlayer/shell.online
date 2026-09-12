@@ -277,7 +277,7 @@ const saltFragmentPrefix = "#salt="
 // must not hold removed.
 //
 // E2EE produces two fragment forms. "#salt=" carries a PBKDF2 salt, which is
-// not a secret: the eight-character browser password is, and it is never sent
+// not a secret: the ten-character browser password is, and it is never sent
 // here. "#key=" carries the raw AES key, so publishing it would hand the
 // service everything it needs to decrypt the terminal.
 //

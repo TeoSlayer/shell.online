@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CaretDown, Check, MagnifyingGlass } from "@phosphor-icons/react";
 import { filterSearchOptions, type SearchSelectOption } from "../lib/search-options";
 
@@ -24,7 +24,10 @@ export function SearchSelect({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const wrapper = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const optionIdPrefix = useId();
   const selected = options.find((option) => option.value === value) ?? options[0];
   const matches = useMemo(() => filterSearchOptions(options, query), [options, query]);
 
@@ -33,28 +36,51 @@ export function SearchSelect({
     const close = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
     document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", key);
-    if (searchable) search.current?.focus();
+    if (searchable) search.current?.focus(); else popover.current?.focus();
     return () => {
       document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", key);
     };
   }, [open, searchable]);
 
-  function choose(next: string) {
-    onChange(next);
+  function close(returnFocus = false) {
     setOpen(false);
     setQuery("");
     setActive(0);
+    if (returnFocus) requestAnimationFrame(() => trigger.current?.focus());
+  }
+
+  function choose(next: string) {
+    onChange(next);
+    close(true);
+  }
+
+  function navigate(event: ReactKeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((current) => Math.min(current + 1, matches.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((current) => Math.max(current - 1, 0));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActive(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActive(Math.max(matches.length - 1, 0));
+    } else if (event.key === "Enter" && matches[active]) {
+      event.preventDefault();
+      choose(matches[active].value);
+    }
   }
 
   return (
     <div className={`filter-picker filter-picker-${align}`} ref={wrapper}>
       <button
+        ref={trigger}
         type="button"
         className="filter-picker-trigger"
         aria-label={label}
@@ -78,9 +104,17 @@ export function SearchSelect({
             type="button"
             className="filter-picker-scrim"
             aria-label={`Close ${label.toLocaleLowerCase()} choices`}
-            onClick={() => setOpen(false)}
+            onClick={() => close(true)}
           />
-          <div className="filter-picker-pop" role="listbox" aria-label={label}>
+          <div
+            ref={popover}
+            className="filter-picker-pop"
+            role="listbox"
+            aria-label={label}
+            aria-activedescendant={matches[active] ? `${optionIdPrefix}-${active}` : undefined}
+            tabIndex={searchable ? -1 : 0}
+            onKeyDown={navigate}
+          >
             <div className="filter-picker-head">{label}</div>
             {searchable && (
               <label className="filter-picker-search">
@@ -94,18 +128,6 @@ export function SearchSelect({
                     setQuery(event.target.value);
                     setActive(0);
                   }}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowDown") {
-                      event.preventDefault();
-                      setActive((current) => Math.min(current + 1, matches.length - 1));
-                    } else if (event.key === "ArrowUp") {
-                      event.preventDefault();
-                      setActive((current) => Math.max(current - 1, 0));
-                    } else if (event.key === "Enter" && matches[active]) {
-                      event.preventDefault();
-                      choose(matches[active].value);
-                    }
-                  }}
                 />
               </label>
             )}
@@ -116,10 +138,11 @@ export function SearchSelect({
                 matches.map((option, index) => (
                   <li key={option.value || "__all"}>
                     <button
+                      id={`${optionIdPrefix}-${index}`}
                       type="button"
                       role="option"
                       aria-selected={option.value === value}
-                      className={index === active && searchable ? "filter-picker-option is-active" : "filter-picker-option"}
+                      className={index === active ? "filter-picker-option is-active" : "filter-picker-option"}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => choose(option.value)}
                     >

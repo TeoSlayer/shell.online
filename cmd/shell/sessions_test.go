@@ -101,6 +101,30 @@ func TestTruncateText(t *testing.T) {
 	}
 }
 
+func TestTruncateShareURLKeepsHumanSessionListsNarrow(t *testing.T) {
+	url := "https://shell.online/s/abcdefghijklmnopqrstuvwxyzABCDEF#salt=public-key-material"
+	got := truncateShareURL(url)
+	if len([]rune(got)) > 36 {
+		t.Fatalf("truncateShareURL returned %d runes, want at most 36: %q", len([]rune(got)), got)
+	}
+	if got == url {
+		t.Fatal("truncateShareURL did not abbreviate a long share URL")
+	}
+}
+
+func TestConfirmKillAllRequiresExplicitYes(t *testing.T) {
+	for _, answer := range []string{"", "n\n", "no\n", "maybe\n"} {
+		if confirmKillAll(strings.NewReader(answer), new(bytes.Buffer), 2) {
+			t.Fatalf("confirmKillAll accepted %q", answer)
+		}
+	}
+	for _, answer := range []string{"y\n", "yes\n", " YES \n"} {
+		if !confirmKillAll(strings.NewReader(answer), new(bytes.Buffer), 2) {
+			t.Fatalf("confirmKillAll rejected %q", answer)
+		}
+	}
+}
+
 func TestParseSessionKillArgumentsAcceptsLeadingHyphen(t *testing.T) {
 	query, all, valid := parseSessionKillArguments([]string{"-abcde-session-prefix"})
 	if !valid || all || query != "-abcde-session-prefix" {

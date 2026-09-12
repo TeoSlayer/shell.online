@@ -90,14 +90,18 @@ type with the permissions of the wrapped process; use `--read-only` when viewers
 should only watch. See the [security model](https://shell.online/security/) and
 [the security policy](.github/SECURITY.md).
 
-Active passwords remain recoverable on their owner machine; account-linked
-passwords are also sealed into the user's E2EE vault. Without either owner-held
-copy there is intentionally no service-side recovery key.
+The CLI always prints the generated password and retains it while the local
+session is active. After `shell login`, it also saves an encrypted copy when
+that account has enabled its optional personal vault. A vault belongs to one
+person, not the team, and unlocks with its password or a supported passkey;
+the recovery key is the break-glass fallback. Without an owner-held copy there
+is intentionally no service-side recovery backdoor.
 
 ## Accounts and containers
 
 Accounts are optional. `shell login` groups sessions from linked machines in
-[app.shell.online](https://app.shell.online/). The CLI works without one.
+[app.shell.online](https://app.shell.online/). The vault is separately optional,
+and the CLI reports whether each password was saved there.
 
 The published container keeps one encrypted shell, URL, and password across
 restarts:

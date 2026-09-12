@@ -3,6 +3,7 @@ import type { Store } from "./lib/store";
 import type { Invite, Membership } from "./lib/orgs";
 import type { AuditEvent, SessionRecord } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
+import type { SessionLiveness, SessionLivenessSource } from "./lib/session-liveness";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
   checkAccessToken,
@@ -26,6 +27,7 @@ import {
   readSessionKeyShare,
   readVaultInput,
   vaultForApi,
+  readVaultWrapUpdate,
 } from "./lib/vault";
 import { isAuditEnvelope, isTeamKeyShare } from "./lib/audit-seal";
 import {
@@ -82,6 +84,8 @@ export interface AppOptions {
     handles(url: string | undefined): boolean;
     request(request: IncomingMessage, response: ServerResponse): void;
   };
+  /** Relay-backed process state. Absent only in API-only development setups. */
+  sessionLiveness?: SessionLivenessSource;
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -175,12 +179,17 @@ function sharedWith(
  * caller's singular `keyShare` shape until the next poll. Every app response
  * therefore goes through the same projection as the list and detail routes.
  */
-function sessionForMember(membership: Membership, session: SessionRecord) {
+function sessionForMember(
+  membership: Membership,
+  session: SessionRecord,
+  liveness?: SessionLiveness,
+) {
   const mine = session.keyShares?.find((share) => share.uid === membership.uid);
   return {
     ...sessionForApi(session),
     keyShare: mine,
     sharedWith: sharedWith(membership, session),
+    ...liveness,
   };
 }
 
@@ -298,6 +307,15 @@ export function createApp(options: AppOptions) {
   const webOrigin = options.webOrigin ?? allowedOrigins[0] ?? "";
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
+
+  async function sessionsForMember(membership: Membership, sessions: SessionRecord[]) {
+    const states = options.sessionLiveness
+      ? await options.sessionLiveness.many(sessions)
+      : new Map<string, SessionLiveness>();
+    return sessions.map((session) =>
+      sessionForMember(membership, session, states.get(session.id))
+    );
+  }
 
   function send(response: ServerResponse, status: number, body: unknown): void {
     const payload = JSON.stringify(body);
@@ -908,6 +926,24 @@ export function createApp(options: AppOptions) {
         return send(response, 200, { vault: stored ? vaultForApi(stored) : null });
       }
 
+      if (route === "PATCH /api/vault") {
+        const identity = await requireUser(request);
+        if (!identity) return send(response, 401, { error: "sign in first" });
+        const input = readVaultWrapUpdate((await readBody(request)) as Record<string, unknown>);
+        if (!input.ok) return send(response, 400, { error: input.reason });
+        const now = Date.now();
+        if (!identity.authTime || now - identity.authTime > RESET_SIGN_IN_WINDOW_MS) {
+          return send(response, 403, {
+            error: "Changing vault unlock methods needs a recent sign-in. Sign out and sign back in first.",
+            reauthenticate: true,
+          });
+        }
+        const updated = await store.updateAccountKeyWrap(identity.uid, input.version, input.recoveryWrap, now);
+        if (!updated) return send(response, 409, { error: "Your vault changed. Reload and try again." });
+        const stored = await store.accountKey(identity.uid);
+        return send(response, 200, { vault: stored ? vaultForApi(stored) : null });
+      }
+
       /*
        * What a machine seals its sessions' passwords to. The CLI pins the key
        * it was given when it signed in, and uses this only to notice a change
@@ -1080,8 +1116,9 @@ export function createApp(options: AppOptions) {
          * everyone's would be pointless, since they cannot open them, and
          * would put more sealed material on the wire than anyone needs.
          */
-        const sessions = (await store.listOrgSessions(membership.orgId)).map((session) =>
-          sessionForMember(membership, session)
+        const sessions = await sessionsForMember(
+          membership,
+          await store.listOrgSessions(membership.orgId),
         );
         return send(response, 200, {
           sessions,
@@ -1364,8 +1401,11 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const session = await store.sessionInOrg(membership.orgId, oneSession[1]);
         if (!session) return send(response, 404, { error: "no such session" });
+        const liveness = !session.closedAt && options.sessionLiveness
+          ? await options.sessionLiveness.one(session.id)
+          : undefined;
         return send(response, 200, {
-          session: sessionForMember(membership, session),
+          session: sessionForMember(membership, session, liveness),
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

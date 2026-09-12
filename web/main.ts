@@ -1029,6 +1029,8 @@ function renderTerminal(sessionId: string): void {
       typingElement.textContent = "";
     }
     const inputIsLocked = localOwnerIsTyping || typingParticipants.length > 0;
+    const wasInputLocked = terminalElement.classList.contains("input-locked");
+    if (inputIsLocked && !wasInputLocked) terminalInput.clear();
     typingElement.hidden = !inputIsLocked;
     identityElement.classList.toggle("has-typing", inputIsLocked);
     terminalElement.classList.toggle("input-locked", inputIsLocked);

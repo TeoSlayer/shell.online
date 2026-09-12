@@ -7,6 +7,7 @@ import { PostgresStore } from "../server/lib/store-postgres";
 import { callNodeHandler, type NodeHandler } from "./node-adapter";
 import { allowedOriginsFor } from "../server/lib/config";
 import { BROWSER_SECURITY_HEADERS } from "../server/lib/browser-headers";
+import { relaySessionLiveness, type SessionLivenessSource } from "../server/lib/session-liveness";
 
 /**
  * The Worker deployment of the accounts service.
@@ -109,8 +110,10 @@ function openStore(env: Env): Promise<PostgresStore> {
 }
 
 let routing: NodeHandler | undefined;
+let liveness: SessionLivenessSource | undefined;
 
 function routerFor(env: Env): NodeHandler {
+  liveness ??= relaySessionLiveness(env.RELAY_URL);
   return (routing ??= createApp({
     store: currentStore,
     verifyIdToken: createVerifier(env.FIREBASE_PROJECT_ID),
@@ -131,6 +134,7 @@ function routerFor(env: Env): NodeHandler {
       from: env.MAIL_FROM,
     }),
     log: (message, error) => console.error(message, error),
+    sessionLiveness: liveness,
   }));
 }
 

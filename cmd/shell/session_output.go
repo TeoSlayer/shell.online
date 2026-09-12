@@ -20,6 +20,16 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 	fmt.Fprintf(writer, "  %s %s\n", label("Link"), value(result.ShareURL))
 	if result.Password != "" {
 		fmt.Fprintf(writer, "  %s %s\n", label("Password"), styleSessionText(color, "1;38;5;222", result.Password))
+		vault := "not linked · run shell login"
+		switch result.Vault {
+		case vaultSaved:
+			vault = "saved to your account vault"
+		case vaultNotSetUp:
+			vault = "not saved · no account vault"
+		case vaultSaveFailed:
+			vault = "not saved · see warning above"
+		}
+		fmt.Fprintf(writer, "  %s %s\n", label("Vault"), value(vault))
 	}
 
 	access := "interactive"

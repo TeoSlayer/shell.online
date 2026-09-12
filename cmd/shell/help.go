@@ -14,11 +14,12 @@ Start
   shell                            Share a fresh shell
   shell claude                     Share a fork of this conversation
 
-shell prints one URL, an eight-character browser password, and a QR containing
+shell prints one URL, a ten-character browser password, and a QR containing
 both. Shares are interactive by default and end-to-end encrypted.
 
 Then
   shell list                       See active shares and uptime
+  shell list --json                Give agents the complete machine-readable records
   shell password <ID>              Print an active share's password locally
   shell password rotate <ID>       Revoke it and make a fresh password
   shell attach <ID>                Rejoin locally; browser access stays live
@@ -31,13 +32,18 @@ Your account (optional)
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine
 
+Machine services
+  shell agent                      Watch for browser-started sessions in this terminal
+  shell daemon status|start|stop   Manage browser-started sessions in the background
+  shell service install|status     Keep the machine agent running across restarts
+
 Common options
   --read-only                      View only
   --foreground                     Stay attached locally
   --persistent <state-file>        Keep one encrypted URL across restarts
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|attach|list|password|kill|login|e2ee|docker|platforms> for a
+Use shell help <start|attach|list|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
 guided topic, or shell help reference for every command, flag, and environment variable.
 `)
 }
@@ -48,7 +54,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|login|e2ee|docker|platforms|reference]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
 		return 2
 	}
 
@@ -80,8 +86,8 @@ stays open and the two conversations then diverge; shell does not claim to move 
 already-running PID into another terminal.
 
 E2EE notes
-  Every normal share is encrypted automatically. shell generates and prints an
-  eight-character browser password unless SHELL_ONLINE_E2EE_PASSWORD is set.
+  Every normal share is encrypted automatically. shell generates and prints a
+  ten-character browser password unless SHELL_ONLINE_E2EE_PASSWORD is set.
   The URL contains only a random salt; key derivation happens in the CLI and browser.
   shell password <ID> prints an active session's password from its owner-only
   local record. An unlocked account vault can recover passwords that were sealed
@@ -166,6 +172,36 @@ Running against a local stack
 
 Credentials live in your user config directory, readable only by you. Set
 SHELL_ONLINE_CONFIG to keep them somewhere else.
+		`)
+	case "agent":
+		fmt.Fprint(stdout, `Machine agent
+
+  shell agent
+
+Watch for sessions started from the browser. A machine that has enabled browser
+starts normally runs this in the background; use the foreground agent when you
+want to see each command as it starts and stops.
+`)
+	case "daemon":
+		fmt.Fprint(stdout, `Background daemon
+
+  shell daemon status
+  shell daemon start
+  shell daemon stop
+
+The daemon lets your signed-in browser start processes on this machine. It is
+separate from publishing sessions started in this terminal. Stop it to return
+the machine to publish-only mode; existing sessions keep running.
+`)
+	case "service":
+		fmt.Fprint(stdout, `Machine service
+
+  shell service install
+  shell service status
+  shell service uninstall
+
+Install the background agent as the platform service so it returns after a
+restart. This requires a linked account and browser-start permission.
 `)
 		return 0
 
@@ -212,7 +248,7 @@ By default, every new share encrypts terminal payloads between the local CLI and
 The relay sees authenticated ciphertext plus routing, size, timing, IP, and lifecycle
 metadata. It never receives the browser password.
 
-By default, shell prints a random eight-character password. To choose a stronger
+By default, shell prints a random ten-character password. To choose a stronger
 password for sensitive or long-lived work:
 
   SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell <command>
@@ -230,7 +266,7 @@ transport hops, but Cloudflare can then access terminal payloads while relaying 
 
 The official GHCR image runs a persistent E2EE shell against shell.online. Mount
 /var/lib/shell-online to retain one URL, host identity, and browser password across
-container restarts. First launch generates and prints an eight-character password;
+container restarts. First launch generates and prints a ten-character password;
 SHELL_ONLINE_E2EE_PASSWORD can set a longer one before the state is created.
 
 Run `+"`shell password rotate <ID>`"+` inside the container to rotate a live
@@ -270,7 +306,7 @@ process. The Docker image combines it with a restart policy for automatic recove
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, password, kill, e2ee, docker, platforms, reference")
+		fmt.Fprintln(stderr, "Available topics: start, attach, list, password, kill, login, agent, daemon, service, e2ee, docker, platforms, reference")
 		return 2
 	}
 	return 0
@@ -336,6 +372,14 @@ SESSION COMMANDS
   shell list --json
       Emit the same sessions as a JSON array on stdout. relay_status contains
       the raw connected, waiting, disconnected, expired, or unknown value.
+      Use this form in scripts and agents: the human table abbreviates long
+      URLs, while JSON preserves the complete share URL and password fields.
+  shell agent
+      Watch for browser-started sessions in this terminal.
+  shell daemon status|start|stop
+      Manage the background listener for browser-started sessions.
+  shell service install|status|uninstall
+      Install or inspect the persistent machine service.
   shell attach <session-id-or-prefix>
       Attach this terminal to one local session. Prefixes require at least six
       characters and must be unambiguous. Press Ctrl-X, then D to detach;
@@ -354,7 +398,8 @@ SESSION COMMANDS
       vault copy. Old credentials cannot decrypt later frames; teammate copies
       must be shared again.
   shell help [topic]
-      Print guided help. Topic aliases include run/share, ps, stop, and cli.
+      Print guided help. Topic aliases include run/share, ps, stop, account,
+      container, platform, and cli.
 
 ENVIRONMENT
   SHELL
@@ -363,7 +408,7 @@ ENVIRONMENT
   SHELL_ONLINE_SERVER
       Default relay URL; overridden by --server.
   SHELL_ONLINE_E2EE_PASSWORD
-      Override the automatically generated eight-character browser password.
+      Override the automatically generated ten-character browser password.
       The key is derived locally with a random URL salt; the password is never sent.
 
 OUTPUT AND EXIT STATUS

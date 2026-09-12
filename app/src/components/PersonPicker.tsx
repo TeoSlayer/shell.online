@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { CaretDown, Check, MagnifyingGlass } from "@phosphor-icons/react";
 import { Avatar, AvatarStack } from "./Avatar";
 import { displayName, type Person } from "../lib/people";
@@ -34,7 +34,10 @@ export function PersonPicker<T extends Person>({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const wrapper = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const optionIdPrefix = useId();
 
   const selected = people.find((person) => person.uid === value);
   const searchable = people.length > 6;
@@ -52,27 +55,51 @@ export function PersonPicker<T extends Person>({
     const onPointer = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
     document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    if (searchable) search.current?.focus();
+    if (searchable) search.current?.focus(); else popover.current?.focus();
     return () => {
       document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open, searchable]);
 
-  function choose(uid: string) {
-    onChange(uid);
+  function close(returnFocus = false) {
     setOpen(false);
     setQuery("");
+    setActive(0);
+    if (returnFocus) requestAnimationFrame(() => trigger.current?.focus());
+  }
+
+  function choose(uid: string) {
+    onChange(uid);
+    close(true);
+  }
+
+  function navigate(event: ReactKeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((current) => Math.min(current + 1, matches.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((current) => Math.max(current - 1, 0));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActive(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActive(Math.max(matches.length - 1, 0));
+    } else if (event.key === "Enter" && matches[active]) {
+      event.preventDefault();
+      choose(matches[active].uid);
+    }
   }
 
   return (
     <div className={`picker picker-${align}`} ref={wrapper}>
       <button
+        ref={trigger}
         type="button"
         className="picker-trigger"
         onClick={() => setOpen((current) => !current)}
@@ -80,6 +107,12 @@ export function PersonPicker<T extends Person>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
         {selected ? (
           <>
@@ -98,9 +131,17 @@ export function PersonPicker<T extends Person>({
             type="button"
             className="picker-scrim"
             aria-label={`Close ${label.toLocaleLowerCase()} choices`}
-            onClick={() => setOpen(false)}
+            onClick={() => close(true)}
           />
-          <div className="picker-pop" role="listbox" aria-label={label}>
+          <div
+            ref={popover}
+            className="picker-pop"
+            role="listbox"
+            aria-label={label}
+            aria-activedescendant={matches[active] ? `${optionIdPrefix}-${active}` : undefined}
+            tabIndex={searchable ? -1 : 0}
+            onKeyDown={navigate}
+          >
             <div className="picker-head">{label}</div>
             {searchable && (
               <div className="picker-search">
@@ -111,18 +152,6 @@ export function PersonPicker<T extends Person>({
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setActive(0);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "ArrowDown") {
-                      event.preventDefault();
-                      setActive((current) => Math.min(current + 1, matches.length - 1));
-                    } else if (event.key === "ArrowUp") {
-                      event.preventDefault();
-                      setActive((current) => Math.max(current - 1, 0));
-                    } else if (event.key === "Enter" && matches[active]) {
-                      event.preventDefault();
-                      choose(matches[active].uid);
-                    }
                   }}
                   placeholder="Search people"
                   aria-label="Search people"
@@ -137,10 +166,11 @@ export function PersonPicker<T extends Person>({
                 matches.map((person, index) => (
                   <li key={person.uid}>
                     <button
+                      id={`${optionIdPrefix}-${index}`}
                       type="button"
                       role="option"
                       aria-selected={person.uid === value}
-                      className={index === active && searchable ? "picker-item is-active" : "picker-item"}
+                      className={index === active ? "picker-item is-active" : "picker-item"}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => choose(person.uid)}
                     >
@@ -184,7 +214,10 @@ export function MultiPersonPicker<T extends Person>({
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const wrapper = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
+  const optionIdPrefix = useId();
   const selectedIds = new Set(values);
   const selected = people.filter((person) => selectedIds.has(person.uid));
   const searchable = people.length > 6;
@@ -201,25 +234,50 @@ export function MultiPersonPicker<T extends Person>({
     const close = (event: PointerEvent) => {
       if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
     };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
     document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", escape);
-    if (searchable) search.current?.focus();
+    if (searchable) search.current?.focus(); else popover.current?.focus();
     return () => {
       document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
     };
   }, [open, searchable]);
+
+  function close(returnFocus = false) {
+    setOpen(false);
+    setQuery("");
+    setActive(0);
+    if (returnFocus) requestAnimationFrame(() => trigger.current?.focus());
+  }
 
   function toggle(uid: string) {
     onChange(selectedIds.has(uid) ? values.filter((value) => value !== uid) : [...values, uid]);
   }
 
+  function navigate(event: ReactKeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive((current) => Math.min(current + 1, matches.length - 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive((current) => Math.max(current - 1, 0));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setActive(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setActive(Math.max(matches.length - 1, 0));
+    } else if (event.key === "Enter" && matches[active]) {
+      event.preventDefault();
+      toggle(matches[active].uid);
+    }
+  }
+
   return (
     <div className={`picker picker-${align}`} ref={wrapper}>
       <button
+        ref={trigger}
         type="button"
         className="picker-trigger picker-trigger-multi"
         onClick={() => setOpen((current) => !current)}
@@ -227,6 +285,12 @@ export function MultiPersonPicker<T extends Person>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
         {selected.length ? <AvatarStack people={selected} max={3} /> : null}
         <span className={selected.length ? "picker-label" : "picker-label picker-empty"}>
@@ -245,9 +309,18 @@ export function MultiPersonPicker<T extends Person>({
           type="button"
           className="picker-scrim"
           aria-label={`Close ${label.toLocaleLowerCase()} choices`}
-          onClick={() => setOpen(false)}
+          onClick={() => close(true)}
         />
-        <div className="picker-pop" role="listbox" aria-label={label} aria-multiselectable="true">
+        <div
+          ref={popover}
+          className="picker-pop"
+          role="listbox"
+          aria-label={label}
+          aria-multiselectable="true"
+          aria-activedescendant={matches[active] ? `${optionIdPrefix}-${active}` : undefined}
+          tabIndex={searchable ? -1 : 0}
+          onKeyDown={navigate}
+        >
           <div className="picker-head">{label}</div>
           {searchable && (
             <div className="picker-search">
@@ -258,18 +331,6 @@ export function MultiPersonPicker<T extends Person>({
                 onChange={(event) => {
                   setQuery(event.target.value);
                   setActive(0);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowDown") {
-                    event.preventDefault();
-                    setActive((current) => Math.min(current + 1, matches.length - 1));
-                  } else if (event.key === "ArrowUp") {
-                    event.preventDefault();
-                    setActive((current) => Math.max(current - 1, 0));
-                  } else if (event.key === "Enter" && matches[active]) {
-                    event.preventDefault();
-                    toggle(matches[active].uid);
-                  }
                 }}
                 placeholder="Search people"
                 aria-label="Search people"
@@ -286,10 +347,11 @@ export function MultiPersonPicker<T extends Person>({
                 return (
                   <li key={person.uid}>
                     <button
+                      id={`${optionIdPrefix}-${index}`}
                       type="button"
                       role="option"
                       aria-selected={checked}
-                      className={index === active && searchable ? "picker-item is-active" : "picker-item"}
+                      className={index === active ? "picker-item is-active" : "picker-item"}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => toggle(person.uid)}
                     >

@@ -27,15 +27,13 @@ function fromBase64Url(value: string): Uint8Array {
 }
 
 /**
- * A browser password for a session started here: base64url from sixteen
- * random bytes.
- *
- * The CLI's own default is eight characters, a trade for someone who has to
- * type it. Nobody types this one. It travels to the machine sealed and to the
- * vault sealed, so there is no reason for it to be weaker than a key.
+ * A ten-character base64url browser password. Each character carries six
+ * independent random bits, matching the CLI's generated-password format.
  */
 export function generatePassword(): string {
-  return toBase64Url(crypto.getRandomValues(new Uint8Array(16)));
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const random = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(random, (value) => alphabet[value & 63]).join("");
 }
 
 export interface Sealed {

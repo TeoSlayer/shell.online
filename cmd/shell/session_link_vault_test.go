@@ -107,6 +107,15 @@ func registerWithPassword(t *testing.T, password string) string {
 	return warn.String()
 }
 
+func registerVaultStatus(t *testing.T, password string) string {
+	t.Helper()
+	link := openSessionLink(context.Background(), &bytes.Buffer{})
+	if link == nil {
+		t.Fatal("expected a link for a signed-in machine")
+	}
+	return link.Register(context.Background(), sampleSessionInput(), password)
+}
+
 func TestFirstVaultKeyIsPinnedAndUsed(t *testing.T) {
 	key := testAccountKey(t)
 	service := newVaultService(t, http.StatusOK, key)
@@ -149,6 +158,15 @@ func TestPinnedVaultKeyIsUsedSilently(t *testing.T) {
 	}
 }
 
+func TestRegistrationReportsThatThePasswordWasSaved(t *testing.T) {
+	key := testAccountKey(t)
+	service := newVaultService(t, http.StatusOK, key)
+	pinAccountKey(t, linkedAccount(t, service.server.URL), key)
+	if got := registerVaultStatus(t, vaultTestPassword); got != vaultSaved {
+		t.Fatalf("vault status = %q, want %q", got, vaultSaved)
+	}
+}
+
 // The service hands the key over. If it could swap it at will, it could read
 // every password sealed afterwards, so a changed key is refused.
 func TestChangedVaultKeyIsRefused(t *testing.T) {
@@ -182,6 +200,14 @@ func TestNoVaultMeansNoShareAndNoNoise(t *testing.T) {
 	}
 	if warn != "" {
 		t.Fatalf("an account without a vault is normal; got %q", warn)
+	}
+}
+
+func TestRegistrationReportsAnOptionalVaultIsNotConfigured(t *testing.T) {
+	service := newVaultService(t, http.StatusNotFound, "")
+	linkedAccount(t, service.server.URL)
+	if got := registerVaultStatus(t, vaultTestPassword); got != vaultNotSetUp {
+		t.Fatalf("vault status = %q, want %q", got, vaultNotSetUp)
 	}
 }
 

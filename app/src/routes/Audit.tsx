@@ -38,6 +38,7 @@ import { isAuditEnvelope } from "../lib/team-crypto";
 import { usePageTitle } from "../lib/page-title";
 import { displayName } from "../lib/people";
 import { SearchSelect } from "../components/SearchSelect";
+import { sessionStateLabel } from "../lib/session-liveness";
 import type { SearchSelectOption } from "../lib/search-options";
 import { useTeamKey } from "../vault/TeamKeyProvider";
 
@@ -283,7 +284,7 @@ export function Audit() {
       value: session.id,
       label: session.name || session.command,
       detail: `${session.command}${session.host ? ` · ${session.host}` : ""}`,
-      keywords: session.closedAt ? "finished offline" : "running live",
+      keywords: sessionStateLabel(session).toLowerCase(),
     })),
   ], [sessions]);
   const memberOptions = useMemo<SearchSelectOption[]>(() => [

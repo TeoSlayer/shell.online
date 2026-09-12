@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Eye, EyeSlash, Key, LockKey, ShieldCheck, UsersThree } from "@phosphor-icons/react";
+import { Check, Copy, Eye, EyeSlash, Fingerprint, Key, LockKey, ShieldCheck, UsersThree } from "@phosphor-icons/react";
 import { Button } from "../components/Button";
+import { Alert } from "../components/Alert";
 import { fetchSessions, type Member, type SessionRecord } from "../lib/api";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
 import { displayName, findPerson } from "../lib/people";
 import { isVaultShare } from "../lib/vault-crypto";
 import { useVault } from "./VaultProvider";
 import { useTeamKey } from "./TeamKeyProvider";
-import { VaultUnlock } from "./VaultGate";
+import { VaultSetup, VaultUnlock } from "./VaultGate";
+import { sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 
 /* A revealed password goes back into hiding on its own. */
 const REVEAL_MS = 30_000;
@@ -24,6 +26,7 @@ const SHORT_LIST = 12;
  */
 export function VaultPanel() {
   const vault = useVault();
+  const [settingUp, setSettingUp] = useState(false);
 
   return (
     <section className="vault-panel" aria-labelledby="vault-panel-title">
@@ -35,8 +38,8 @@ export function VaultPanel() {
           <h2 id="vault-panel-title">Session vault</h2>
           <p>
             Every session is end-to-end encrypted with its own password. Your
-            vault keeps the passwords of the sessions you can open, sealed to a
-            key only you hold, so a session opens on any browser you unlock.
+            personal vault keeps only the session passwords sealed to your account,
+            so a session opens on any browser you unlock. It is not shared with your team.
           </p>
         </div>
       </header>
@@ -60,10 +63,16 @@ export function VaultPanel() {
         </p>
       )}
       {vault.status === "setup" && (
-        <p className="vault-note">
-          You have not set it up yet. <Link to="/sessions">Open Sessions</Link> to set it up; it
-          takes a minute and shows you a recovery key to keep.
-        </p>
+        settingUp ? (
+          <div className="vault-panel-unlock"><VaultSetup reset={false} onDone={() => setSettingUp(false)} /></div>
+        ) : (
+          <div className="vault-panel-actions">
+            <p className="vault-note">
+              Optional. Without a vault, the CLI still prints every session password and you enter it when opening a terminal.
+            </p>
+            <Button type="button" onClick={() => setSettingUp(true)}>Set up vault</Button>
+          </div>
+        )
       )}
       {vault.status === "locked" && (
         <div className="vault-panel-unlock">
@@ -98,9 +107,12 @@ function VaultContents() {
     };
   }, []);
 
-  /* The copies sealed to this person: to their vault, or to an old browser key. */
-  const held = (sessions ?? []).filter((session) => Boolean(session.keyShare));
-  const running = held.filter((session) => !session.closedAt).length;
+  /* Only v2 copies are in the account vault. Legacy shares belong to one old browser. */
+  const held = (sessions ?? []).filter((session) => isVaultShare(session.keyShare?.sealed));
+  const legacy = (sessions ?? []).filter(
+    (session) => session.keyShare && !isVaultShare(session.keyShare.sealed),
+  ).length;
+  const running = held.filter(sessionOnline).length;
   const shown = showAll ? held : held.slice(0, SHORT_LIST);
 
   return (
@@ -121,7 +133,7 @@ function VaultContents() {
           <dd>
             {vault.remembered
               ? "Keeps it unlocked until you sign out"
-              : "Cannot keep it unlocked, so it asks for your recovery key each visit"}
+              : "Cannot keep it unlocked, so it asks for a password or passkey each visit"}
           </dd>
         </div>
       </dl>
@@ -134,7 +146,7 @@ function VaultContents() {
             <b>
               {sessions === null ? "Session passwords" : `${held.length} session password${held.length === 1 ? "" : "s"}`}
             </b>
-            {sessions !== null && held.length > 0 && ` · ${running} for sessions still running`}
+            {sessions !== null && held.length > 0 && ` · ${running} for sessions online now`}
             <small>Yours, and the ones teammates shared with you. Listed below.</small>
           </span>
         </li>
@@ -155,11 +167,19 @@ function VaultContents() {
         </li>
       </ul>
 
+      <VaultAccessMethods />
+
       {error && <p className="vault-note">{error}</p>}
 
       {sessions !== null && held.length === 0 && (
         <p className="vault-note">
           No session passwords yet. Start or open a session and its password is kept here.
+        </p>
+      )}
+      {legacy > 0 && (
+        <p className="vault-note">
+          {legacy} older browser-only password {legacy === 1 ? "copy is" : "copies are"} not in this vault.
+          They move here only after this browser opens the matching session.
         </p>
       )}
 
@@ -193,10 +213,82 @@ function VaultContents() {
         </Button>
         <p className="vault-note">
           Locking forgets the unlocked key here. The vault is untouched, and your
-          recovery key opens it again.
+          password, passkey or recovery key opens it again.
         </p>
       </div>
     </>
+  );
+}
+
+function VaultAccessMethods() {
+  const vault = useVault();
+  const [recovery, setRecovery] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+
+  async function addPassword() {
+    setError("");
+    setNotice("");
+    if (password.length < 8) return setError("Use at least 8 characters.");
+    if (password !== confirm) return setError("The vault passwords do not match.");
+    setBusy(true);
+    try {
+      await vault.setPassword(recovery, password);
+      setRecovery(""); setPassword(""); setConfirm("");
+      setNotice("Vault password saved. You will not need the recovery key for normal unlocks.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the vault password.");
+    } finally { setBusy(false); }
+  }
+
+  async function addPasskey() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await vault.addPasskey(password);
+      setPassword("");
+      setNotice("Passkey added. It can unlock this vault without a recovery key.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not add the passkey.");
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <section className="vault-access" aria-labelledby="vault-access-title">
+      <h3 id="vault-access-title" className="vault-panel-subhead">Unlock methods</h3>
+      {notice && <p className="vault-note">{notice}</p>}
+      {error && <Alert tone="error">{error}</Alert>}
+      {!vault.unlockMethods.password ? (
+        <div className="vault-form">
+          <p className="vault-note">Add a normal password once; keep the recovery key only for emergencies.</p>
+          <label className="vault-label" htmlFor="vault-access-recovery">Current recovery key</label>
+          <textarea id="vault-access-recovery" className="vault-input vault-input-wide" rows={2} value={recovery} onChange={(e) => setRecovery(e.target.value)} />
+          <label className="vault-label" htmlFor="vault-access-password">New vault password</label>
+          <input id="vault-access-password" className="vault-input" type="password" autoComplete="new-password" maxLength={1024} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label className="vault-label" htmlFor="vault-access-confirm">Confirm password</label>
+          <input id="vault-access-confirm" className="vault-input" type="password" autoComplete="new-password" maxLength={1024} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <Button type="button" busy={busy} busyLabel="Saving" disabled={busy || !recovery || !password} onClick={() => void addPassword()}>
+            Save vault password
+          </Button>
+        </div>
+      ) : (
+        <div className="vault-form">
+          <p className="vault-note">
+            <LockKey size={14} /> Password enabled
+            {vault.unlockMethods.passkeys.length > 0 && ` · ${vault.unlockMethods.passkeys.length} passkey${vault.unlockMethods.passkeys.length === 1 ? "" : "s"}`}
+          </p>
+          <label className="vault-label" htmlFor="vault-passkey-password">Vault password</label>
+          <input id="vault-passkey-password" className="vault-input" type="password" autoComplete="current-password" maxLength={1024} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Button type="button" variant="ghost" busy={busy} busyLabel="Adding passkey" disabled={busy || !password} onClick={() => void addPasskey()}>
+            <Fingerprint size={15} /> Add passkey
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -215,7 +307,6 @@ function VaultSessionRow({
   const { copiedKey, failedKey, copy } = useCopy<"password">();
   const timer = useRef<number | null>(null);
   const owner = findPerson(members, session.ownerUid);
-  const legacy = !isVaultShare(session.keyShare?.sealed);
 
   useEffect(
     () => () => {
@@ -249,9 +340,8 @@ function VaultSessionRow({
         <span className="vault-session-meta">
           {[
             session.host,
-            session.closedAt ? "finished" : "running",
+            sessionStateLabel(session).toLowerCase(),
             session.ownerUid === you ? "yours" : `shared by ${displayName(owner)}`,
-            legacy ? "sealed to an old browser key; moves into your vault when you open it" : "",
           ]
             .filter(Boolean)
             .join(" · ")}

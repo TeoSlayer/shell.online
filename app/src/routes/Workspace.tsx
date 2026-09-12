@@ -50,6 +50,7 @@ import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 import { shouldOpenSurface } from "../lib/surface-navigation";
 import { SearchSelect } from "../components/SearchSelect";
+import { sessionEnded, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 
 const POLL_MS = 4000;
 /* Well inside the service's 15s agent-online window, so the state stays true. */
@@ -60,9 +61,9 @@ const AFTER_COMMAND_MS = 1500;
 const LAUNCH_PATIENCE_MS = 45_000;
 
 const SESSION_SCOPES = [
-  { value: "all", label: "All sessions", detail: "Live and finished sessions" },
-  { value: "write", label: "Live write", detail: "Sessions you can control" },
-  { value: "read", label: "Live read", detail: "Sessions you can watch" },
+  { value: "all", label: "All sessions", detail: "Available and finished sessions" },
+  { value: "write", label: "Write access", detail: "Sessions you can control" },
+  { value: "read", label: "Read access", detail: "Sessions you can watch" },
   { value: "finished", label: "Finished", detail: "Processes that have exited" },
 ];
 
@@ -266,7 +267,7 @@ export function Workspace() {
     const byId = new Map(sessions.map((session) => [session.id, session]));
     const tabs = remembered.ids
       .map((id) => byId.get(id))
-      .filter((session): session is SessionRecord => session !== undefined && !session.closedAt)
+      .filter((session): session is SessionRecord => session !== undefined && !sessionEnded(session))
       .map((session) => tabFor(session, canEdit(session, you)));
     dispatch({ type: "restore", tabs, activeId: remembered.activeId });
   }, [sessions, you, user]);
@@ -491,7 +492,7 @@ export function Workspace() {
         checkedVault.current.add(session.id);
       }
 
-      if (session.closedAt) continue;
+      if (sessionEnded(session)) continue;
 
       /* Only the owner shares with colleagues. */
       if (!me || session.ownerUid !== me.uid) continue;
@@ -606,14 +607,14 @@ export function Workspace() {
    */
   const matching = (sessions ?? []).filter((session) => {
     if (!matches(session, query)) return false;
-    if (scope === "write") return !session.closedAt && canEdit(session, you);
-    if (scope === "read") return !session.closedAt && !canEdit(session, you);
-    if (scope === "finished") return Boolean(session.closedAt);
+    if (scope === "write") return !sessionEnded(session) && canEdit(session, you);
+    if (scope === "read") return !sessionEnded(session) && !canEdit(session, you);
+    if (scope === "finished") return sessionEnded(session);
     return true;
   });
-  const liveWrite = matching.filter((session) => !session.closedAt && canEdit(session, you));
-  const liveRead = matching.filter((session) => !session.closedAt && !canEdit(session, you));
-  const finished = matching.filter((session) => session.closedAt);
+  const liveWrite = matching.filter((session) => !sessionEnded(session) && canEdit(session, you));
+  const liveRead = matching.filter((session) => !sessionEnded(session) && !canEdit(session, you));
+  const finished = matching.filter((session) => sessionEnded(session));
   const openSession = (session: SessionRecord) =>
     dispatch({ type: "open", session, canType: canEdit(session, you) });
   const showingList = state.activeId === null;
@@ -855,7 +856,7 @@ export function Workspace() {
               <>
                 {liveWrite.length > 0 && (
                   <SessionGroup
-                    heading="Live write"
+                    heading="Write access"
                     sessions={liveWrite}
                     now={now}
                     live
@@ -871,7 +872,7 @@ export function Workspace() {
                 )}
                 {liveRead.length > 0 && (
                   <SessionGroup
-                    heading="Live read"
+                    heading="Read access"
                     sessions={liveRead}
                     now={now}
                     live
@@ -972,19 +973,20 @@ function SessionGroup({
             <th scope="col">Owner</th>
             <th scope="col">Assignees</th>
             <th scope="col" className="table-optional">Machine</th>
-            <th scope="col">{live ? "Uptime" : "Ran for"}</th>
+            <th scope="col">{live ? "Open for" : "Ran for"}</th>
             <th scope="col" className="table-end">Actions</th>
           </tr>
         </thead>
         <tbody>
           {sessions.map((session) => {
             const owner = findPerson(members, session.ownerUid);
+            const online = sessionOnline(session);
             const assigned = new Set(assigneeIds(session));
             const assignees = members.filter((member) => assigned.has(member.uid));
             return (
               <tr
                 key={session.id}
-                data-live={live}
+                data-live={online}
                 className="table-row-linked"
                 onClick={(event) => {
                   if (shouldOpenSurface(event.target, event.defaultPrevented)) onOpen(session);
@@ -998,7 +1000,7 @@ function SessionGroup({
                       src={kindForCommand(session.command).icon}
                       alt={kindForCommand(session.command).title}
                       title={kindForCommand(session.command).title}
-                      data-live={live}
+                      data-live={online}
                     />
                     <span className="table-name">{session.name || session.command}</span>
                   </Link>
@@ -1050,10 +1052,10 @@ function SessionGroup({
                 <td className="table-quiet table-optional" data-label="Machine">
                   {session.host || "unknown"}
                 </td>
-                <td className="table-quiet" data-label={live ? "Uptime" : "Ran for"}>
-                  {live
-                    ? elapsed(session.startedAt, now)
-                    : elapsed(session.startedAt, session.closedAt ?? now)}
+                <td className="table-quiet" data-label={live ? "Open for" : "Ran for"}>
+                  {live ? (
+                    <>{sessionStateLabel(session)} · {elapsed(session.startedAt, now)}</>
+                  ) : elapsed(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? now)}
                   {!live && session.exitCode !== undefined && (
                     <span className="table-exit">exit {session.exitCode}</span>
                   )}

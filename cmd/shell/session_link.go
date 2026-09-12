@@ -63,6 +63,13 @@ type sessionLink struct {
 	path        string
 }
 
+const (
+	vaultNotLinked  = "not-linked"
+	vaultNotSetUp   = "not-configured"
+	vaultSaved      = "saved"
+	vaultSaveFailed = "failed"
+)
+
 // openSessionLink loads credentials, refreshes them when stale, and returns a
 // link ready to publish. It returns nil when there is no account to publish to.
 //
@@ -111,17 +118,18 @@ func openSessionLink(ctx context.Context, warn io.Writer) *sessionLink {
 // password is the session's browser password, or empty when it has none. A
 // password is sealed to the account's vault so the session can be opened from
 // the web app after this terminal is gone; it is never sent any other way.
-func (link *sessionLink) Register(ctx context.Context, input account.SessionInput, password string) {
+func (link *sessionLink) Register(ctx context.Context, input account.SessionInput, password string) string {
 	if link == nil {
-		return
+		return vaultNotLinked
 	}
 	/* Live rotation is handled by the local control goroutine, while process
 	 * exit is handled by the main goroutine. Keep their account writes ordered
 	 * so a close cannot race a replacement vault share. */
 	link.mu.Lock()
 	defer link.mu.Unlock()
+	vault := ""
 	if password != "" {
-		input.OwnerShare = link.vaultShare(ctx, input.ID, password)
+		input.OwnerShare, vault = link.vaultShare(ctx, input.ID, password)
 	}
 	if input.Host == "" {
 		if host, err := os.Hostname(); err == nil {
@@ -151,9 +159,10 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 	defer cancel()
 	if err := link.client.RegisterSession(registerContext, link.accessToken, input); err != nil {
 		fmt.Fprintf(link.warn, "shell: this session will not appear in your account: %v\n", err)
-		return
+		return vaultSaveFailed
 	}
 	link.sessionID = input.ID
+	return vault
 }
 
 // vaultShare seals a session password to the account's vault key, or returns
@@ -164,11 +173,11 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 // key seen is pinned; a different one later is refused, because the accounts
 // service is the thing that hands the key over and the thing that must not be
 // able to read what is sealed to it.
-func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password string) *account.KeyShare {
+func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password string) (*account.KeyShare, string) {
 	const notSaved = "shell: this session's password was not saved to your vault"
 	if link.credentials.UID == "" {
 		fmt.Fprintf(link.warn, "%s: this machine's sign-in predates the vault; run 'shell login'\n", notSaved)
-		return nil
+		return nil, vaultSaveFailed
 	}
 
 	keyContext, cancel := context.WithTimeout(ctx, linkTimeout)
@@ -176,10 +185,10 @@ func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password str
 	fetched, ok, err := link.client.AccountKey(keyContext, link.accessToken)
 	if err != nil {
 		fmt.Fprintf(link.warn, "%s: %v\n", notSaved, err)
-		return nil
+		return nil, vaultSaveFailed
 	}
 	if !ok {
-		return nil
+		return nil, vaultNotSetUp
 	}
 
 	switch pinned := link.credentials.AccountKey; {
@@ -193,15 +202,15 @@ func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password str
 	case pinned != fetched:
 		fmt.Fprintf(link.warn, "shell: your vault key changed since this machine signed in. "+
 			"Run 'shell login' to trust the new one; %s.\n", strings.TrimPrefix(notSaved, "shell: "))
-		return nil
+		return nil, vaultSaveFailed
 	}
 
 	sender, sealed, err := account.SealToAccount(link.credentials.AccountKey, sessionID, link.credentials.UID, password)
 	if err != nil {
 		fmt.Fprintf(link.warn, "%s: %v\n", notSaved, err)
-		return nil
+		return nil, vaultSaveFailed
 	}
-	return &account.KeyShare{SenderPublicKey: sender, Sealed: sealed}
+	return &account.KeyShare{SenderPublicKey: sender, Sealed: sealed}, vaultSaved
 }
 
 // Close marks the session finished in the account.

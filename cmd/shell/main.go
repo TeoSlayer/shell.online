@@ -240,7 +240,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		StartedAt:  processStartedAt.UnixMilli(),
 	}
 	announceSession := func() {
-		link.Register(signalContext, publishedSession, password)
+		vault := link.Register(signalContext, publishedSession, password)
 		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
 				OK:         true,
@@ -249,6 +249,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				ReadOnly:   session.ReadOnly,
 				Encrypted:  session.Encrypted,
 				Password:   password,
+				Vault:      vault,
 				Persistent: session.Persistent,
 				ExpiresAt:  session.ExpiresAt,
 				ClosesAt:   closesAt,
@@ -270,6 +271,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			}
 			if password != "" {
 				event["e2ee_password"] = password
+				event["vault"] = vault
 			}
 			if closesAt != nil {
 				event["auto_close"] = "deadline"
@@ -282,6 +284,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		printSessionCard(stderr, backgroundLaunchResult{
 			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
 			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
+			Vault:     vault,
 			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,
 		}, false)
 	}
@@ -310,7 +313,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			rotated := publishedSession
 			rotated.ShareURL = shareURL
 			rotated.CredentialRotation = true
-			link.Register(context.Background(), rotated, rotatedPassword)
+			_ = link.Register(context.Background(), rotated, rotatedPassword)
 		},
 	)
 	// The share is over once the process is; mark it closed in the account.

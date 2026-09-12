@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  addVaultPasskeyWrap,
+  addVaultPassword,
   createVault,
   fingerprint,
   formatRecoveryKey,
   isVaultShare,
   openFromAccount,
   openVault,
+  openVaultWithPasskeySecret,
+  openVaultWithPassword,
   parseRecoveryKey,
   sealToAccount,
   VaultError,
+  vaultUnlockMethods,
 } from "./vault-crypto";
 
 /*
@@ -141,6 +146,47 @@ describe("a vault", () => {
         parseRecoveryKey(made.recoveryKey)!,
       ),
     ).rejects.toBeInstanceOf(VaultError);
+  });
+});
+
+describe("normal vault unlock", () => {
+  it("uses a password without putting that password in the stored bundle", async () => {
+    const made = await createVault("uid-1", "correct horse battery staple");
+    expect(vaultUnlockMethods(made.bundle).password).toBe(true);
+    expect(JSON.stringify(made.bundle)).not.toContain("correct horse");
+    const opened = await openVaultWithPassword("uid-1", made.bundle, "correct horse battery staple");
+    expect(opened.publicKey).toBe(made.bundle.publicKey);
+    await expect(openVaultWithPassword("uid-1", made.bundle, "wrong password")).rejects.toMatchObject({
+      message: "That vault password is not correct.",
+    });
+    expect((await openVault("uid-1", made.bundle, parseRecoveryKey(made.recoveryKey)!)).publicKey)
+      .toBe(made.bundle.publicKey);
+  });
+
+  it("upgrades a legacy recovery-only vault without replacing its account key", async () => {
+    const made = await createVault("uid-1");
+    expect(vaultUnlockMethods(made.bundle).password).toBe(false);
+    const recoveryWrap = await addVaultPassword("uid-1", made.bundle, made.recoveryKey, "new vault password");
+    const upgraded = { ...made.bundle, recoveryWrap };
+    expect(vaultUnlockMethods(upgraded).password).toBe(true);
+    expect((await openVaultWithPassword("uid-1", upgraded, "new vault password")).publicKey)
+      .toBe(made.bundle.publicKey);
+  });
+
+  it("opens a passkey wrap only with the authenticator PRF secret", async () => {
+    const made = await createVault("uid-1", "vault password");
+    const secret = crypto.getRandomValues(new Uint8Array(32));
+    const recoveryWrap = await addVaultPasskeyWrap(
+      "uid-1", made.bundle, "vault password", "credential-1",
+      crypto.getRandomValues(new Uint8Array(32)), secret, "Laptop",
+    );
+    const withPasskey = { ...made.bundle, recoveryWrap };
+    expect(vaultUnlockMethods(withPasskey).passkeys).toHaveLength(1);
+    expect((await openVaultWithPasskeySecret("uid-1", withPasskey, "credential-1", secret)).publicKey)
+      .toBe(made.bundle.publicKey);
+    await expect(openVaultWithPasskeySecret(
+      "uid-1", withPasskey, "credential-1", crypto.getRandomValues(new Uint8Array(32)),
+    )).rejects.toThrow("cannot open this vault");
   });
 });
 

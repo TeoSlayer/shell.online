@@ -168,8 +168,10 @@ export function Privacy() {
             <div>
               <dt>Your session vault</dt>
               <dd>
-                Its public key, and its private key encrypted under a key we
-                never receive. We cannot open it.
+                If you enable it: its public key, its private key encrypted
+                under a random vault key, and encrypted wrappers that let your
+                password, recovery key or supported passkey unlock that key in
+                your browser. The vault is personal, not shared by your team.
               </dd>
             </div>
             <div>
@@ -194,7 +196,8 @@ export function Privacy() {
             Terminal output, which is end-to-end encrypted and reaches us only
             as ciphertext. The encryption key in a share link, which browsers
             never send to a server. Session passwords in a form we can read.
-            Your vault&rsquo;s recovery key. The contents of your files and
+            Your vault password, recovery key, passkey secret or unwrapped
+            vault key. The contents of your files and
             projects.
           </p>
           <p>

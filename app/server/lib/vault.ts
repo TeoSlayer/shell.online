@@ -16,6 +16,12 @@ const BASE64URL = /^[A-Za-z0-9_-]+$/;
 const PUBLIC_KEY_LENGTH = 87;
 /* Nonce, a 32-byte vault key, and the GCM tag. */
 const RECOVERY_WRAP_BYTES = 12 + 32 + 16;
+const KEYRING_PREFIX = "v2.";
+const KEYRING_MAX_BYTES = 16 * 1024;
+const PASSWORD_SALT_BYTES = 16;
+const PASSWORD_ITERATIONS = 600_000;
+const PASSKEY_SALT_BYTES = 32;
+const MAX_PASSKEYS = 16;
 /* Nonce, a PKCS#8 P-256 key (about 138 bytes), and the tag, with room to spare. */
 const PRIVATE_KEY_MIN_BYTES = 12 + 64 + 16;
 const PRIVATE_KEY_MAX_BYTES = 512;
@@ -75,7 +81,7 @@ export async function readVaultInput(body: Record<string, unknown>): Promise<Vau
   if (privateLength === null || privateLength < PRIVATE_KEY_MIN_BYTES || privateLength > PRIVATE_KEY_MAX_BYTES) {
     return { ok: false, reason: "invalid encrypted private key" };
   }
-  if (typeof recoveryWrap !== "string" || decodedLength(recoveryWrap) !== RECOVERY_WRAP_BYTES) {
+  if (!isUnlockBundle(recoveryWrap)) {
     return { ok: false, reason: "invalid recovery wrap" };
   }
 
@@ -93,6 +99,54 @@ export async function readVaultInput(body: Record<string, unknown>): Promise<Vau
       replaceVersion: replace as number | undefined,
     },
   };
+}
+
+function isUnlockBundle(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (!value.startsWith(KEYRING_PREFIX)) return decodedLength(value) === RECOVERY_WRAP_BYTES;
+  const length = decodedLength(value.slice(KEYRING_PREFIX.length));
+  if (length === null || length < RECOVERY_WRAP_BYTES || length > KEYRING_MAX_BYTES) return false;
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(fromBase64Url(value.slice(KEYRING_PREFIX.length))),
+    ) as Record<string, unknown>;
+    if (parsed.version !== 2 || typeof parsed.recovery !== "string" ||
+        decodedLength(parsed.recovery) !== RECOVERY_WRAP_BYTES) return false;
+    if (parsed.password !== undefined) {
+      if (!parsed.password || typeof parsed.password !== "object") return false;
+      const method = parsed.password as Record<string, unknown>;
+      if (typeof method.salt !== "string" || decodedLength(method.salt) !== PASSWORD_SALT_BYTES ||
+          method.iterations !== PASSWORD_ITERATIONS || typeof method.wrap !== "string" ||
+          decodedLength(method.wrap) !== RECOVERY_WRAP_BYTES) return false;
+    }
+    if (parsed.passkeys !== undefined) {
+      if (!Array.isArray(parsed.passkeys) || parsed.passkeys.length > MAX_PASSKEYS) return false;
+      if (parsed.passkeys.some((entry: unknown) => {
+        if (!entry || typeof entry !== "object") return true;
+        const method = entry as Record<string, unknown>;
+        return typeof method.id !== "string" || method.id.length < 8 || method.id.length > 1_024 ||
+          decodedLength(method.id) === null || typeof method.salt !== "string" ||
+          decodedLength(method.salt) !== PASSKEY_SALT_BYTES || typeof method.wrap !== "string" ||
+          decodedLength(method.wrap) !== RECOVERY_WRAP_BYTES || typeof method.label !== "string" ||
+          method.label.length > 80;
+      })) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function readVaultWrapUpdate(body: Record<string, unknown>):
+  | { ok: true; recoveryWrap: string; version: number }
+  | { ok: false; reason: string } {
+  const recoveryWrap = body.recovery_wrap;
+  const version = body.version;
+  if (!isUnlockBundle(recoveryWrap)) return { ok: false, reason: "invalid recovery wrap" };
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
+    return { ok: false, reason: "invalid vault version" };
+  }
+  return { ok: true, recoveryWrap, version };
 }
 
 /** What a browser is told about its own vault: everything, since none of it is readable without the recovery key. */

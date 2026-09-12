@@ -24,9 +24,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.12.2 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.13.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.12.2" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.13.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -45,7 +45,7 @@ For monitoring without browser input:
 
 shell --read-only --json -- your-command --its-arguments
 
-Every normal share is end-to-end encrypted automatically. When SHELL_ONLINE_E2EE_PASSWORD is unset, the CLI generates a cryptographically random eight-character base64url browser password. For sensitive or long-lived sessions, set a longer unique password before starting shell:
+Every normal share is end-to-end encrypted automatically. When SHELL_ONLINE_E2EE_PASSWORD is unset, the CLI generates a cryptographically random ten-character Base64URL browser password. For sensitive or long-lived sessions, set a longer unique password before starting shell:
 
 SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell --json -- your-command --its-arguments
 
@@ -82,7 +82,7 @@ ROS 1 and ROS 2 processes need no plugin: source the ROS environment, then run `
 
 Native shares run in the background by default. Re-run `shell --persistent <state-file> <command>` with the same private state file to recover the same URL and password after a process or machine restart. Docker combines the same identity with `restart: unless-stopped` for automatic recovery.
 
-The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated eight-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
+The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated ten-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
 
 ## Accounts, machines, and organizations
 

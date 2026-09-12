@@ -15,7 +15,6 @@ import { Session } from "./routes/Session";
 import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
 import { VaultProvider } from "./vault/VaultProvider";
-import { VaultGate } from "./vault/VaultGate";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 
 export default function App() {
@@ -62,9 +61,7 @@ export default function App() {
             path="/sessions/:sessionId"
             element={
               <RequireAuth>
-                <VaultGate>
-                  <Session />
-                </VaultGate>
+                <Session />
               </RequireAuth>
             }
           />
@@ -101,9 +98,7 @@ export default function App() {
             path="/sessions"
             element={
               <RequireAuth>
-                <VaultGate>
-                  <Workspace />
-                </VaultGate>
+                <Workspace />
               </RequireAuth>
             }
           />

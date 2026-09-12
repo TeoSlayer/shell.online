@@ -8,6 +8,7 @@ import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
 import { shouldOpenSurface } from "../lib/surface-navigation";
+import { sessionEnded, sessionStateLabel } from "../lib/session-liveness";
 
 /**
  * The same sessions as three columns, one per thing you can do with them.
@@ -76,9 +77,9 @@ function Card({
 
       <p className="board-card-meta">
         {session.host}
-        {session.closedAt
-          ? ` · ran ${ago(session.startedAt, session.closedAt)}`
-          : ` · up ${ago(session.startedAt, now)}`}
+        {sessionEnded(session)
+          ? ` · ${sessionStateLabel(session).toLowerCase()} after ${ago(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? now)}`
+          : ` · ${sessionStateLabel(session).toLowerCase()} · open ${ago(session.startedAt, now)}`}
       </p>
 
       <div className="board-card-foot">
@@ -88,7 +89,7 @@ function Card({
           * change it, so the answer to "who should pick this up" was only
           * reachable by switching back to the table.
           */}
-        {!session.closedAt && canHandOff(session, you) ? (
+        {!sessionEnded(session) && canHandOff(session, you) ? (
           <MultiPersonPicker
             people={members}
             values={assigneeIds(session)}
@@ -103,7 +104,7 @@ function Card({
           * board could show a session that was yours to stop and give you no
           * way to stop it.
           */}
-        {canStop(session, you) && (
+        {!sessionEnded(session) && canStop(session, you) && (
           <button
             type="button"
             className="session-action"
@@ -157,7 +158,7 @@ export function SessionBoard({
     {
       key: "read",
       title: "Read",
-      hint: "Running, watch only",
+      hint: "Available to watch",
       sessions: liveRead,
     },
     {

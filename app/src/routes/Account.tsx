@@ -19,6 +19,7 @@ export function Account() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -38,6 +39,17 @@ export function Account() {
       setError(authErrorMessage(caught));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setError("");
+    setSigningOut(true);
+    try {
+      await signOutUser();
+    } catch (caught) {
+      setError(authErrorMessage(caught));
+      setSigningOut(false);
     }
   }
 
@@ -131,7 +143,13 @@ export function Account() {
             Reset vault
           </Button>
         )}
-        <Button type="button" variant="ghost" onClick={() => void signOutUser()}>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => void handleSignOut()}
+          busy={signingOut}
+          busyLabel="Signing out"
+        >
           <SignOut size={15} />
           Sign out
         </Button>

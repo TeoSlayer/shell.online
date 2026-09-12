@@ -87,7 +87,7 @@ func TestPasswordDerivationCompatibilityVector(t *testing.T) {
 	}
 }
 
-func TestGeneratedBrowserPasswordIsEightCharacterBase64URL(t *testing.T) {
+func TestGeneratedBrowserPasswordIsTenCharacterBase64URL(t *testing.T) {
 	password, err := GenerateBrowserPassword()
 	if err != nil {
 		t.Fatal(err)

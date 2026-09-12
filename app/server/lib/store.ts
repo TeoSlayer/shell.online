@@ -139,6 +139,8 @@ export interface Store {
    * believe they won, and a reset cannot overwrite a reset it has not seen.
    */
   putAccountKey(key: AccountKey, expectedVersion?: number): Promise<boolean>;
+  /** Replaces only the encrypted unlock methods; the account key and version stay stable. */
+  updateAccountKeyWrap(uid: string, expectedVersion: number, recoveryWrap: string, updatedAt: number): Promise<boolean>;
 
   /* ---- Account deletion ---- */
   /**

@@ -1,4 +1,5 @@
 import type { SessionRecord } from "../lib/api";
+import { sessionEnded } from "../lib/session-liveness";
 
 export interface Tab {
   id: string;
@@ -34,7 +35,7 @@ export function sessionToOpen(
   requestedId: string | null,
 ): SessionRecord | null {
   if (!requestedId) return null;
-  return sessions.find((session) => session.id === requestedId && !session.closedAt) ?? null;
+  return sessions.find((session) => session.id === requestedId && !sessionEnded(session)) ?? null;
 }
 
 export type TabAction =

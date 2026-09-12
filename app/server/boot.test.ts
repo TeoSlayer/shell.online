@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createServer } from "node:net";
 
 /**
  * The process itself: configuration refused at boot, the three things it
@@ -87,22 +88,29 @@ function clientDirectory(): string {
  * A port per test, since these bind for real and a listener is not always
  * released the instant the process that held it goes away.
  */
-let nextPort = 8791;
-function claimPort(): { port: string; base: string } {
-  const port = String(nextPort++);
+async function claimPort(): Promise<{ port: string; base: string }> {
+  const probe = createServer();
+  await new Promise<void>((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", resolve);
+  });
+  const address = probe.address();
+  if (!address || typeof address === "string") throw new Error("could not reserve a test port");
+  const port = String(address.port);
+  await new Promise<void>((resolve, reject) => probe.close((error) => error ? reject(error) : resolve()));
   return { port, base: `http://127.0.0.1:${port}` };
 }
 
 describe("booting the service", () => {
   it("refuses to start without a project whose tokens it can verify", async () => {
-    const { port: PORT } = claimPort();
+    const { port: PORT } = await claimPort();
     const started = start({ PORT, FIREBASE_PROJECT_ID: "", VITE_FIREBASE_PROJECT_ID: "" });
     expect(await exited(started.child)).toBe(1);
     expect(started.output()).toContain("FIREBASE_PROJECT_ID");
   }, 30_000);
 
   it("refuses the file store in production rather than running on it", async () => {
-    const { port: PORT } = claimPort();
+    const { port: PORT } = await claimPort();
     const started = start({
       PORT,
       NODE_ENV: "production",
@@ -114,7 +122,7 @@ describe("booting the service", () => {
   }, 30_000);
 
   it("serves the client, the API and a health check from one port", async () => {
-    const { port: PORT, base: BASE } = claimPort();
+    const { port: PORT, base: BASE } = await claimPort();
     const root = clientDirectory();
     const started = start({
       PORT,
@@ -145,7 +153,7 @@ describe("booting the service", () => {
    * leaves a container answering nothing while every probe calls it healthy.
    */
   it("fails loudly when its port is taken", async () => {
-    const { port: PORT, base: BASE } = claimPort();
+    const { port: PORT, base: BASE } = await claimPort();
     const environment = {
       PORT,
       FIREBASE_PROJECT_ID: "test-firebase-project",
@@ -162,7 +170,7 @@ describe("booting the service", () => {
   }, 40_000);
 
   it("stops serving on SIGTERM and exits cleanly", async () => {
-    const { port: PORT, base: BASE } = claimPort();
+    const { port: PORT, base: BASE } = await claimPort();
     const started = start({
       PORT,
       FIREBASE_PROJECT_ID: "test-firebase-project",

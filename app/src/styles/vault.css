@@ -382,6 +382,27 @@
   gap: 12px;
 }
 
+.vault-unlock-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.vault-unlock-methods .btn {
+  width: auto;
+}
+
+.vault-access {
+  border-top: 1px solid var(--line);
+  margin-top: 1.25rem;
+  padding-top: 0.25rem;
+}
+
+.vault-access .vault-form {
+  max-width: 34rem;
+}
+
 .vault-panel-unlock .consent-mark {
   display: none;
 }

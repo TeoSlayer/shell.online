@@ -4,6 +4,48 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.13.0] — 2026-09-12
+
+### Added
+
+- An optional personal session vault that unlocks with a normal password, a
+  supported WebAuthn PRF passkey, or the existing recovery key. Vault material
+  remains encrypted in the browser and is never shared at team scope.
+- Relay-backed session status in the accounts app, distinguishing online,
+  starting, offline, finished, unavailable, and temporarily unknown sessions.
+- Guided CLI help for the foreground agent, background daemon, and installed
+  machine service, plus safer confirmation before an interactive `kill --all`.
+
+### Changed
+
+- Generated browser passwords are now ten Base64URL characters (60 random
+  bits). The CLI still prints every password and says whether an encrypted copy
+  was saved to the signed-in account's optional vault.
+- Session filters, tables, boards, detail pages, vault counts, and remembered
+  tabs use current relay state instead of treating every unclosed database row
+  as online.
+- Search and assignee pickers support arrow keys, Home, End, Enter, Escape, and
+  reliable focus return. Sign-out and other asynchronous actions expose their
+  in-progress state immediately.
+
+### Fixed
+
+- Clear browser input queued during encryption or backpressure when another
+  collaborator takes the typing lock, preventing delayed input from leaking
+  into their turn.
+- Allocate real ephemeral ports in service boot tests so an unrelated local
+  development server cannot make the suite fail.
+
+### Security
+
+- Vault unlock-method updates require a recent sign-in and compare-and-swap
+  the current vault version without replacing the account encryption key.
+- Bound and validate password KDF parameters, passkey counts, credential IDs,
+  salts, labels, and ciphertext envelopes before the browser processes them.
+- Relay liveness checks accept only valid session IDs, use only the configured
+  relay origin, and are bounded by timeouts, caching, in-flight deduplication,
+  and per-isolate request budgets.
+
 ## [0.12.2] — 2026-09-12
 
 ### Added

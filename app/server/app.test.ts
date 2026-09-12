@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, beforeAll } from "vitest";
+import { beforeEach, describe, expect, it, beforeAll, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import { exportJWK, generateKeyPair, SignJWT, type KeyObject } from "jose";
 import { createApp } from "./app";
@@ -244,6 +244,51 @@ describe("session registry", () => {
     /* The list now carries who else is in the organization. */
     expect(listed.body.members).toHaveLength(1);
     expect(listed.body.you.role).toBe("owner");
+  });
+
+  it("projects the relay's authoritative state into session lists and details", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const one = vi.fn(async () => ({ relayStatus: "disconnected" as const, relayCheckedAt: 123 }));
+    const many = vi.fn(async () => new Map([
+      [session.id, { relayStatus: "disconnected" as const, relayCheckedAt: 123 }],
+    ]));
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      sessionLiveness: { one, many },
+    });
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+
+    expect(listed.body.sessions[0]).toMatchObject({ relayStatus: "disconnected", relayCheckedAt: 123 });
+    expect(detail.body.session).toMatchObject({ relayStatus: "disconnected", relayCheckedAt: 123 });
+    expect(many).toHaveBeenCalledTimes(1);
+    expect(one).toHaveBeenCalledWith(session.id);
+  });
+
+  it("does not query relay liveness after the CLI has reported an exit", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    await call("PATCH", `/api/sessions/${session.id}`, {
+      auth: tokens.access_token,
+      body: { exit_code: 0 },
+    });
+    const one = vi.fn();
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      sessionLiveness: { one, many: vi.fn(async () => new Map()) },
+    });
+
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+
+    expect(detail.body.session.closedAt).toEqual(expect.any(Number));
+    expect(detail.body.session.relayStatus).toBeUndefined();
+    expect(one).not.toHaveBeenCalled();
   });
 
   it("refuses registration without a CLI token", async () => {
@@ -1811,7 +1856,6 @@ describe("guarding the service itself", () => {
     expect(result.headers["X-Content-Type-Options"]).toBe("nosniff");
     expect(result.headers["X-Frame-Options"]).toBe("DENY");
     expect(result.headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
-    expect(result.headers["Content-Security-Policy"]).toContain("https://apis.google.com");
   });
 
   it("refuses a flood of credential attempts and says when to come back", async () => {
@@ -1994,6 +2038,41 @@ describe("session vault", () => {
       recoveryWrap: body.recovery_wrap,
       version: 1,
     });
+  });
+
+  it("updates unlock methods without replacing the account key", async () => {
+    const { body } = await vaultBody();
+    await call("POST", "/api/vault", { auth: await idToken(), body });
+    const passwordVault = await createVault("uid-1", "a deliberately long vault password");
+
+    const updated = await call("PATCH", "/api/vault", {
+      auth: await freshSignIn(),
+      body: { recovery_wrap: passwordVault.bundle.recoveryWrap, version: 1 },
+    });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.vault).toMatchObject({
+      publicKey: body.public_key,
+      encryptedPrivateKey: body.encrypted_private_key,
+      recoveryWrap: passwordVault.bundle.recoveryWrap,
+      version: 1,
+    });
+  });
+
+  it("requires a recent sign-in and the current version to change unlock methods", async () => {
+    const { body } = await vaultBody();
+    await call("POST", "/api/vault", { auth: await idToken(), body });
+    const next = await createVault("uid-1", "another deliberately long password");
+    const staleAuth = await call("PATCH", "/api/vault", {
+      auth: await idToken({ auth_time: Math.floor(Date.now() / 1000) - 3600 }),
+      body: { recovery_wrap: next.bundle.recoveryWrap, version: 1 },
+    });
+    expect(staleAuth).toMatchObject({ status: 403, body: { reauthenticate: true } });
+    const staleVersion = await call("PATCH", "/api/vault", {
+      auth: await freshSignIn(),
+      body: { recovery_wrap: next.bundle.recoveryWrap, version: 9 },
+    });
+    expect(staleVersion.status).toBe(409);
   });
 
   it("will not overwrite a vault by setting one up again", async () => {

@@ -351,12 +351,12 @@ export function Terms() {
             <div>
               <dt>Session vault</dt>
               <dd>
-                Your vault&rsquo;s public key, your vault&rsquo;s private key
-                encrypted under a vault key, and that vault key wrapped under
-                your recovery key; and the session passwords saved to your vault
-                or shared with you, each sealed to it. We never receive the
-                recovery key or anything that opens these records, and we cannot
-                recover your vault if you lose your recovery key.
+                If you enable your optional personal vault: its public key, its
+                private key encrypted under a random vault key, encrypted
+                wrappers for the unlock methods you configure, and session
+                passwords sealed to the vault. We never receive your vault
+                password, recovery key, passkey secret or unwrapped vault key.
+                The vault belongs to your account, not to the team.
               </dd>
             </div>
             <div>

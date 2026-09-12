@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -336,12 +337,19 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 			closes,
 			access,
 			truncateText(session.Command, 48),
-			session.ShareURL,
+			truncateShareURL(session.ShareURL),
 			storedPasswordLabel(session.Password),
 		)
 	}
 	_ = table.Flush()
+	fmt.Fprintln(stdout, "Long URLs and full credentials: shell list --json")
 	return 0
+}
+
+// truncateShareURL keeps the human table usable without removing anything
+// from the JSON form, which is the stable interface for scripts and agents.
+func truncateShareURL(shareURL string) string {
+	return truncateText(shareURL, 36)
 }
 
 func compactSessionList(writer io.Writer) bool {
@@ -541,6 +549,12 @@ func runSessionKill(arguments []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 	}
+	if all && interactiveKillAll(os.Stdin) {
+		if !confirmKillAll(os.Stdin, stderr, len(targets)) {
+			fmt.Fprintln(stderr, "shell: cancelled; no sessions stopped")
+			return 0
+		}
+	}
 
 	failed := false
 	for _, session := range targets {
@@ -555,6 +569,33 @@ func runSessionKill(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// interactiveKillAll only prompts for a human attached to a terminal. Pipes,
+// cron jobs, and agents retain the historical non-interactive behavior.
+func interactiveKillAll(input *os.File) bool {
+	return input != nil && term.IsTerminal(int(input.Fd()))
+}
+
+func confirmKillAll(input io.Reader, output io.Writer, count int) bool {
+	fmt.Fprintf(output, "This will stop %d active shell.online session%s. Continue? [y/N] ", count, pluralSuffix(count))
+	answer, err := bufio.NewReader(input).ReadString('\n')
+	if err != nil && strings.TrimSpace(answer) == "" {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+func pluralSuffix(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // parseSessionKillArguments deliberately does not use flag.FlagSet. Session IDs

@@ -54,6 +54,21 @@ describe("a vault the service is handed", () => {
     expect(await readVaultInput({ ...body, public_key: undefined })).toMatchObject({ ok: false });
   });
 
+  it("refuses malformed or computationally abusive unlock keyrings", async () => {
+    const body = await browserVault();
+    const keyring = (value: unknown) => `v2.${encode(new TextEncoder().encode(JSON.stringify(value)))}`;
+    const recovery = encode(new Uint8Array(60));
+    expect(await readVaultInput({ ...body, recovery_wrap: keyring({ version: 2, recovery }) }))
+      .toMatchObject({ ok: true });
+    for (const recovery_wrap of [
+      keyring({ version: 2, recovery: "short" }),
+      keyring({ version: 2, recovery, password: { salt: encode(new Uint8Array(16)), iterations: 2 ** 31, wrap: recovery } }),
+      keyring({ version: 2, recovery, passkeys: [{ id: "not base64!", salt: encode(new Uint8Array(32)), wrap: recovery, label: "key" }] }),
+    ]) {
+      expect(await readVaultInput({ ...body, recovery_wrap })).toMatchObject({ ok: false });
+    }
+  });
+
   it("refuses a replace_version that is not a version", async () => {
     const body = await browserVault();
     for (const replace_version of [0, -1, 1.5, "1", null]) {
