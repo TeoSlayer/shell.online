@@ -19,6 +19,8 @@ both. Shares are interactive by default and end-to-end encrypted.
 
 Then
   shell list                       See active shares and uptime
+  shell password <ID>              Print an active share's password locally
+  shell password rotate <ID>       Revoke it and make a fresh password
   shell attach <ID>                Rejoin locally; browser access stays live
   Press Ctrl-X, then D to detach   Leave the process running
   shell kill <ID>                  Safely stop the process and close its link
@@ -35,7 +37,7 @@ Common options
   --persistent <state-file>        Keep one encrypted URL across restarts
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|attach|list|kill|login|e2ee|docker|platforms> for a
+Use shell help <start|attach|list|password|kill|login|e2ee|docker|platforms> for a
 guided topic, or shell help reference for every command, flag, and environment variable.
 `)
 }
@@ -81,9 +83,9 @@ E2EE notes
   Every normal share is encrypted automatically. shell generates and prints an
   eight-character browser password unless SHELL_ONLINE_E2EE_PASSWORD is set.
   The URL contains only a random salt; key derivation happens in the CLI and browser.
-  Lost passwords cannot be recovered. Persistent sessions store their password,
-  host credential, and decryption key in an owner-only state file so the same URL
-  can reconnect after a restart.
+  shell password <ID> prints an active session's password from its owner-only
+  local record. An unlocked account vault can recover passwords that were sealed
+  to it. If neither copy exists, E2EE deliberately has no recovery backdoor.
 `)
 	case "attach":
 		fmt.Fprint(stdout, `Attach locally
@@ -174,9 +176,8 @@ SHELL_ONLINE_CONFIG to keep them somewhere else.
   shell list --json
 
 The table shows each session ID, access mode, uptime, closing rule, command, share
-URL, browser password, and whether the relay is online, reconnecting, expired, or
-temporarily unknown. The owner-only local record retains the generated password so
-an active share can be sent again without creating a replacement.
+URL, whether a password is stored, and whether the relay is online, reconnecting,
+expired, or temporarily unknown. Run shell password <ID> to reveal one deliberately.
 Use an ID or an unambiguous prefix with shell attach or shell kill.
 `)
 	case "kill", "stop":
@@ -187,6 +188,22 @@ Use an ID or an unambiguous prefix with shell attach or shell kill.
 
 Stopping a session terminates its wrapped process and makes the browser link offline.
 You do not need to stop completed work: the share closes automatically when its task exits.
+`)
+	case "password", "credentials":
+		fmt.Fprint(stdout, `Session passwords
+
+  shell password <ID>
+      Print the password of an active locally managed session.
+
+  shell password rotate <ID>
+      Generate a fresh password and URL salt without restarting the process.
+      The host activates the fresh cipher before the relay disconnects existing
+      browser viewers, so old-key input is rejected immediately. The owner's
+      account vault is updated, and teammate copies are removed until shared again.
+
+Set SHELL_ONLINE_E2EE_PASSWORD for the rotate command to choose the replacement.
+Persistent sessions update their owner-only state file, so restarts retain the
+new credentials. Rotation cannot erase terminal output somebody already saw.
 `)
 	case "e2ee", "encryption", "privacy":
 		fmt.Fprint(stdout, `End-to-end encryption
@@ -216,10 +233,9 @@ The official GHCR image runs a persistent E2EE shell against shell.online. Mount
 container restarts. First launch generates and prints an eight-character password;
 SHELL_ONLINE_E2EE_PASSWORD can set a longer one before the state is created.
 
-Changing the password for an existing state volume is refused because its URL salt
-and encryption key are already bound to the original password. Create a new state
-volume to rotate the password and receive a new link. The image is a hosted-service
-client, not a self-hosted relay.
+Run `+"`shell password rotate <ID>`"+` inside the container to rotate a live
+session without changing its stable path. The saved salt, key, and password are
+updated together. The image is a hosted-service client, not a self-hosted relay.
 `)
 	case "platforms", "platform", "ros", "windows":
 		fmt.Fprint(stdout, `Platforms
@@ -254,7 +270,7 @@ process. The Docker image combines it with a restart policy for automatic recove
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, kill, e2ee, docker, platforms, reference")
+		fmt.Fprintln(stderr, "Available topics: start, attach, list, password, kill, e2ee, docker, platforms, reference")
 		return 2
 	}
 	return 0
@@ -269,7 +285,9 @@ SYNOPSIS
   shell attach <session-id-or-prefix>
   shell kill <session-id-or-prefix>
   shell kill --all
-  shell help [start|attach|list|kill|e2ee|docker|platforms|reference]
+  shell password <session-id-or-prefix>
+  shell password rotate <session-id-or-prefix>
+  shell help [start|attach|list|password|kill|e2ee|docker|platforms|reference]
 
 START AND SHARE
   shell [command] [arguments...]
@@ -313,7 +331,7 @@ START OPTIONS
 SESSION COMMANDS
   shell list
       List local processes with uptime, closing rule, access mode, command,
-      share URL, browser password, and independently checked relay status. Relay values shown in
+      share URL, whether a password is stored, and independently checked relay status. Relay values shown in
       the table are online, starting, reconnecting, expired, and unknown.
   shell list --json
       Emit the same sessions as a JSON array on stdout. relay_status contains
@@ -328,6 +346,13 @@ SESSION COMMANDS
       Stop one wrapped process and close its browser session.
   shell kill --all
       Stop every locally managed shell.online process.
+  shell password <session-id-or-prefix>
+      Recover an active session password from its owner-only local record.
+  shell password rotate <session-id-or-prefix>
+      Change the host cipher, disconnect current viewers, update persistent and
+      local state, then atomically replace the account URL and owner's sealed
+      vault copy. Old credentials cannot decrypt later frames; teammate copies
+      must be shared again.
   shell help [topic]
       Print guided help. Topic aliases include run/share, ps, stop, and cli.
 

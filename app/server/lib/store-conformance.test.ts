@@ -425,6 +425,32 @@ for (const implementation of implementations) {
         expect(shares.find((share) => share.uid === "uid-1")?.sealed).toBe("one");
       });
 
+      it("rotates the public salt and sealed copies as one owner-scoped generation", async () => {
+        await store.upsertSession(session({ shareUrl: "https://shell.online/s/s1#salt=old" }));
+        await store.putKeyShares("org_1", "s1", [
+          { uid: "uid-1", senderPublicKey: "pk1", sealed: "old-owner" },
+          { uid: "uid-2", senderPublicKey: "pk1", sealed: "old-member" },
+        ]);
+        expect(await store.rotateSessionCredentials(
+          "org_1",
+          "s1",
+          "uid-2",
+          "https://shell.online/s/s1#salt=forbidden",
+          [],
+        )).toBeNull();
+        const rotated = await store.rotateSessionCredentials(
+          "org_1",
+          "s1",
+          "uid-1",
+          "https://shell.online/s/s1#salt=new",
+          [{ uid: "uid-1", senderPublicKey: "pk2", sealed: "new-owner" }],
+        );
+        expect(rotated?.shareUrl).toBe("https://shell.online/s/s1#salt=new");
+        expect(rotated?.keyShares).toEqual([
+          { uid: "uid-1", senderPublicKey: "pk2", sealed: "new-owner" },
+        ]);
+      });
+
       it("removes a session's row and reports whether there was one", async () => {
         await store.upsertSession(session());
         expect(await store.deleteSession("org_1", "s1")).toBe(true);
@@ -655,11 +681,20 @@ for (const implementation of implementations) {
 
       it("changes a role and removes a member", async () => {
         await store.putMembership(membership());
+        await store.putMembership(membership({ uid: "uid-2", role: "member" }));
+        await store.upsertSession(session());
+        await store.putKeyShares("org_1", "s1", [
+          { uid: "uid-1", senderPublicKey: "owner-key", sealed: "for-owner" },
+          { uid: "uid-2", senderPublicKey: "owner-key", sealed: "for-member" },
+        ]);
         expect(await store.setRole("org_1", "uid-1", "admin")).toBe(true);
         expect((await store.membershipOf("uid-1"))?.role).toBe("admin");
-        expect(await store.removeMember("org_1", "uid-1")).toBe(true);
-        expect(await store.removeMember("org_1", "uid-1")).toBe(false);
-        expect(await store.membershipOf("uid-1")).toBeNull();
+        expect(await store.removeMember("org_1", "uid-2")).toBe(true);
+        expect(await store.removeMember("org_1", "uid-2")).toBe(false);
+        expect(await store.membershipOf("uid-2")).toBeNull();
+        expect((await store.sessionInOrg("org_1", "s1"))?.keyShares).toEqual([
+          { uid: "uid-1", senderPublicKey: "owner-key", sealed: "for-owner" },
+        ]);
       });
     });
 

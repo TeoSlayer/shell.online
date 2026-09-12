@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -19,21 +20,25 @@ import (
 	"time"
 
 	"golang.org/x/term"
+	"shell.online/internal/e2ee"
 )
 
 var localSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 
 type localSessionRecord struct {
-	ID         string     `json:"id"`
-	ShareURL   string     `json:"share_url"`
-	ReadOnly   bool       `json:"read_only"`
-	Encrypted  bool       `json:"encrypted,omitempty"`
-	Password   string     `json:"e2ee_password,omitempty"`
-	Persistent bool       `json:"persistent,omitempty"`
-	Command    string     `json:"command"`
-	PID        int        `json:"pid"`
-	StartedAt  time.Time  `json:"started_at"`
-	ClosesAt   *time.Time `json:"closes_at,omitempty"`
+	ID         string `json:"id"`
+	ShareURL   string `json:"share_url"`
+	ReadOnly   bool   `json:"read_only"`
+	Encrypted  bool   `json:"encrypted,omitempty"`
+	Password   string `json:"e2ee_password,omitempty"`
+	Persistent bool   `json:"persistent,omitempty"`
+	// PersistentState is owner-only local metadata. It lets a live password
+	// rotation update the durable identity before changing the in-memory key.
+	PersistentState string     `json:"persistent_state,omitempty"`
+	Command         string     `json:"command"`
+	PID             int        `json:"pid"`
+	StartedAt       time.Time  `json:"started_at"`
+	ClosesAt        *time.Time `json:"closes_at,omitempty"`
 }
 
 type localSessionControl interface {
@@ -45,6 +50,8 @@ type localSessionControl interface {
 		onInput func(),
 		onAttachChange func(bool),
 	)
+	BindPasswordRotation(func(string) (string, error))
+	UpdateCredentials(string, string) error
 	PublishOutput([]byte)
 	Close() error
 }
@@ -59,6 +66,32 @@ type listedSession struct {
 	UptimeSeconds   int64  `json:"uptime_seconds"`
 	ClosesInSeconds *int64 `json:"closes_in_seconds,omitempty"`
 	RelayStatus     string `json:"relay_status"`
+}
+
+// MarshalJSON deliberately omits PersistentState. The list JSON is an
+// operator API and includes the requested browser password, but the path to a
+// local durable identity is private implementation metadata.
+func (session listedSession) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		ID              string     `json:"id"`
+		ShareURL        string     `json:"share_url"`
+		ReadOnly        bool       `json:"read_only"`
+		Encrypted       bool       `json:"encrypted,omitempty"`
+		Password        string     `json:"e2ee_password,omitempty"`
+		Persistent      bool       `json:"persistent,omitempty"`
+		Command         string     `json:"command"`
+		PID             int        `json:"pid"`
+		StartedAt       time.Time  `json:"started_at"`
+		ClosesAt        *time.Time `json:"closes_at,omitempty"`
+		UptimeSeconds   int64      `json:"uptime_seconds"`
+		ClosesInSeconds *int64     `json:"closes_in_seconds,omitempty"`
+		RelayStatus     string     `json:"relay_status"`
+	}{
+		ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
+		Encrypted: session.Encrypted, Password: session.Password, Persistent: session.Persistent,
+		Command: session.Command, PID: session.PID, StartedAt: session.StartedAt, ClosesAt: session.ClosesAt,
+		UptimeSeconds: session.UptimeSeconds, ClosesInSeconds: session.ClosesInSeconds, RelayStatus: session.RelayStatus,
+	})
 }
 
 type relaySessionStatus string
@@ -93,9 +126,85 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runSessionAttach(arguments[1:], stdout, stderr), true
 	case "kill", "stop":
 		return runSessionKill(arguments[1:], stdout, stderr), true
+	case "password":
+		return runSessionPassword(arguments[1:], stdout, stderr), true
 	default:
 		return 0, false
 	}
+}
+
+func runSessionPassword(arguments []string, stdout, stderr io.Writer) int {
+	rotate := false
+	if len(arguments) > 0 && arguments[0] == "rotate" {
+		rotate = true
+		arguments = arguments[1:]
+	}
+	if len(arguments) != 1 {
+		fmt.Fprintln(stderr, "Usage: shell password <session-id-or-prefix>")
+		fmt.Fprintln(stderr, "       shell password rotate <session-id-or-prefix>")
+		return 2
+	}
+	session, err := findLocalSession(arguments[0])
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
+	}
+	if !session.Encrypted || session.Password == "" {
+		fmt.Fprintln(stderr, "shell: this session has no browser password")
+		return 1
+	}
+	if !rotate {
+		fmt.Fprintln(stdout, session.Password)
+		return 0
+	}
+	password := os.Getenv("SHELL_ONLINE_E2EE_PASSWORD")
+	if password == "" {
+		password, err = e2ee.GenerateBrowserPassword()
+	} else {
+		err = e2ee.ValidateBrowserPassword(password)
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: generate password: %v\n", err)
+		return 1
+	}
+	response, err := sendLocalControl(session.ID, "rotate "+base64.RawURLEncoding.EncodeToString([]byte(password)))
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: rotate password: %v\n", err)
+		return 1
+	}
+	if !response.OK {
+		fmt.Fprintf(stderr, "shell: rotate password: %s\n", response.Error)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Link: %s\nPassword: %s\n", response.ShareURL, response.Password)
+	fmt.Fprintln(stdout, "Existing viewers were disconnected. Share the new link and password.")
+	return 0
+}
+
+func findLocalSession(query string) (localSessionRecord, error) {
+	if len(query) < 6 {
+		return localSessionRecord{}, fmt.Errorf("session prefix must contain at least 6 characters")
+	}
+	sessions, err := loadActiveLocalSessions()
+	if err != nil {
+		return localSessionRecord{}, fmt.Errorf("list sessions: %w", err)
+	}
+	var matches []localSessionRecord
+	for _, session := range sessions {
+		if session.ID == query {
+			return session, nil
+		}
+		if strings.HasPrefix(session.ID, query) {
+			matches = append(matches, session)
+		}
+	}
+	if len(matches) == 0 {
+		return localSessionRecord{}, fmt.Errorf("no active session matches %q", query)
+	}
+	if len(matches) > 1 {
+		return localSessionRecord{}, fmt.Errorf("session prefix %q is ambiguous", query)
+	}
+	return matches[0], nil
 }
 
 func runSessionAttach(arguments []string, stdout, stderr io.Writer) int {
@@ -228,7 +337,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 			access,
 			truncateText(session.Command, 48),
 			session.ShareURL,
-			session.Password,
+			storedPasswordLabel(session.Password),
 		)
 	}
 	_ = table.Flush()
@@ -274,11 +383,18 @@ func printCompactSessionList(
 		fmt.Fprintf(writer, "  Closes    %s\n", closes)
 		fmt.Fprintf(writer, "  Link      %s\n", session.ShareURL)
 		if session.Password != "" {
-			fmt.Fprintf(writer, "  Password  %s\n", session.Password)
+			fmt.Fprintf(writer, "  Password  stored · shell password %s\n", shortSessionID(session.ID))
 		}
 		fmt.Fprintf(writer, "  Rejoin    shell attach %s\n", shortSessionID(session.ID))
 		fmt.Fprintf(writer, "  Stop      shell kill %s\n", shortSessionID(session.ID))
 	}
+}
+
+func storedPasswordLabel(password string) string {
+	if password == "" {
+		return "—"
+	}
+	return "stored"
 }
 
 func resolveRelayStatuses(sessions []localSessionRecord) map[string]relaySessionStatus {

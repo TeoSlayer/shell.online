@@ -1,7 +1,8 @@
 import { shareSessionKeys, type Member, type SessionRecord } from "../lib/api";
-import { addToAudience, cachedPassword } from "../lib/session-passwords";
+import { addToAudience, verifiedPasswordFor } from "../lib/session-passwords";
 import { keyTrust, trustKey } from "../lib/known-keys";
 import type { useVault } from "./VaultProvider";
+import { isVaultShare } from "../lib/vault-crypto";
 
 type Vault = Pick<ReturnType<typeof useVault>, "openShare" | "sealTo">;
 
@@ -18,13 +19,13 @@ type Vault = Pick<ReturnType<typeof useVault>, "openShare" | "sealTo">;
 export async function shareWith(
   vault: Vault,
   owner: string,
-  session: Pick<SessionRecord, "id" | "keyShare">,
+  session: Pick<SessionRecord, "id" | "shareUrl" | "keyShare">,
   recipients: Member[],
 ): Promise<string[]> {
-  /* A proven password before a vault copy nobody can vouch for; see TerminalPane. */
-  const cached = cachedPassword(session.id);
-  const password =
-    (cached?.verified ? cached.password : null) ?? (await vault.openShare(session.id, session.keyShare));
+  const vaultPassword = await vault.openShare(session.id, session.keyShare);
+  const password = isVaultShare(session.keyShare?.sealed)
+    ? vaultPassword
+    : verifiedPasswordFor(session.id, session.shareUrl) ?? vaultPassword;
   if (!password) return [];
 
   const eligible = recipients.filter(

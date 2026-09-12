@@ -198,16 +198,17 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		closesAt = &deadline
 	}
 	control, controlError := startLocalSession(localSessionRecord{
-		ID:         session.ID,
-		ShareURL:   session.ShareURL,
-		ReadOnly:   session.ReadOnly,
-		Encrypted:  session.Encrypted,
-		Password:   password,
-		Persistent: session.Persistent,
-		Command:    displayCommand(launch.DisplayArguments),
-		PID:        os.Getpid(),
-		StartedAt:  processStartedAt,
-		ClosesAt:   closesAt,
+		ID:              session.ID,
+		ShareURL:        session.ShareURL,
+		ReadOnly:        session.ReadOnly,
+		Encrypted:       session.Encrypted,
+		Password:        password,
+		Persistent:      session.Persistent,
+		PersistentState: *persistentState,
+		Command:         displayCommand(launch.DisplayArguments),
+		PID:             os.Getpid(),
+		StartedAt:       processStartedAt,
+		ClosesAt:        closesAt,
 	})
 	if controlError != nil {
 		if isBackgroundChild() {
@@ -229,16 +230,17 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	// Publish to the linked account, if this machine has one. Nothing below is
 	// fatal: sharing a terminal must not depend on the accounts service.
 	link := openSessionLink(signalContext, stderr)
+	publishedSession := account.SessionInput{
+		ID:         session.ID,
+		ShareURL:   session.ShareURL,
+		Command:    displayCommand(launch.DisplayArguments),
+		ReadOnly:   session.ReadOnly,
+		Encrypted:  session.Encrypted,
+		Persistent: session.Persistent,
+		StartedAt:  processStartedAt.UnixMilli(),
+	}
 	announceSession := func() {
-		link.Register(signalContext, account.SessionInput{
-			ID:         session.ID,
-			ShareURL:   session.ShareURL,
-			Command:    displayCommand(launch.DisplayArguments),
-			ReadOnly:   session.ReadOnly,
-			Encrypted:  session.Encrypted,
-			Persistent: session.Persistent,
-			StartedAt:  processStartedAt.UnixMilli(),
-		}, password)
+		link.Register(signalContext, publishedSession, password)
 		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
 				OK:         true,
@@ -299,6 +301,17 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		onConnected,
 		onStarted,
 		control,
+		password,
+		*persistentState,
+		func(shareURL, rotatedPassword string) {
+			if link == nil {
+				return
+			}
+			rotated := publishedSession
+			rotated.ShareURL = shareURL
+			rotated.CredentialRotation = true
+			link.Register(context.Background(), rotated, rotatedPassword)
+		},
 	)
 	// The share is over once the process is; mark it closed in the account.
 	link.Close(&exitCode)

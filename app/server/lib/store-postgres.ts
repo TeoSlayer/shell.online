@@ -857,6 +857,54 @@ export class PostgresStore implements Store {
     return true;
   }
 
+  async rotateSessionCredentials(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    shareUrl: string,
+    shares: SessionKeyShare[],
+  ): Promise<SessionRecord | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query<Row>(
+        `SELECT * FROM sessions
+         WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 AND encrypted = true
+         FOR UPDATE`,
+        [orgId, sessionId, ownerUid],
+      );
+      const row = found.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      const sessionUid = row.uid as string;
+      await client.query(
+        "UPDATE sessions SET share_url = $4 WHERE org_id = $1 AND id = $2 AND uid = $3",
+        [orgId, sessionId, sessionUid, shareUrl],
+      );
+      await client.query(
+        "DELETE FROM session_key_shares WHERE session_uid = $1 AND session_id = $2",
+        [sessionUid, sessionId],
+      );
+      for (const share of shares) {
+        await client.query(
+          `INSERT INTO session_key_shares
+             (session_uid, session_id, uid, sender_public_key, sealed)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [sessionUid, sessionId, share.uid, share.senderPublicKey, share.sealed],
+        );
+      }
+      await client.query("COMMIT");
+      return toSession({ ...row, share_url: shareUrl }, shares);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   /* ---- Session vault ---- */
 
   async accountKey(uid: string): Promise<AccountKey | null> {
@@ -1159,11 +1207,30 @@ export class PostgresStore implements Store {
   }
 
   async removeMember(orgId: string, uid: string): Promise<boolean> {
-    const result = await this.pool.query(
-      "DELETE FROM memberships WHERE org_id = $1 AND uid = $2",
-      [orgId, uid],
-    );
-    return (result.rowCount ?? 0) > 0;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        "DELETE FROM memberships WHERE org_id = $1 AND uid = $2",
+        [orgId, uid],
+      );
+      if ((result.rowCount ?? 0) > 0) {
+        await client.query(
+          `DELETE FROM session_key_shares AS keys
+           USING sessions
+           WHERE keys.session_uid = sessions.uid AND keys.session_id = sessions.id
+             AND sessions.org_id = $1 AND keys.uid = $2`,
+          [orgId, uid],
+        );
+      }
+      await client.query("COMMIT");
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async setRole(orgId: string, uid: string, role: Role): Promise<boolean> {

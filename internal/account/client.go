@@ -206,6 +206,9 @@ type SessionInput struct {
 	Persistent bool   `json:"persistent"`
 	Host       string `json:"host"`
 	StartedAt  int64  `json:"started_at"`
+	// CredentialRotation tells the account registry to replace every old
+	// sealed copy atomically. The new owner copy remains opaque to it.
+	CredentialRotation bool `json:"credential_rotation,omitempty"`
 	// OwnerShare is the session password sealed to the account's vault key,
 	// so any of the person's browsers can open the session later. Absent when
 	// the session has no password or the account has no vault.

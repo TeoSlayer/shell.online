@@ -252,6 +252,21 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  async rotateSessionCredentials(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    shareUrl: string,
+    shares: SessionKeyShare[],
+  ): Promise<SessionRecord | null> {
+    const session = await this.sessionInOrg(orgId, sessionId);
+    if (!session || (session.ownerUid ?? session.uid) !== ownerUid || !session.encrypted) return null;
+    session.shareUrl = shareUrl;
+    session.keyShares = [...shares];
+    this.flush();
+    return session;
+  }
+
   async accountKey(uid: string): Promise<AccountKey | null> {
     const found = this.data.accountKeys.find((entry) => entry.uid === uid);
     return found ? { ...found } : null;
@@ -573,6 +588,11 @@ export class MemoryStore implements Store {
       (entry) => !(entry.orgId === orgId && entry.uid === uid),
     );
     if (this.data.memberships.length === before) return false;
+    for (const session of this.data.sessions) {
+      if (session.orgId === orgId && session.keyShares) {
+        session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
+      }
+    }
     this.flush();
     return true;
   }

@@ -69,6 +69,8 @@ shell --auto-close 5m <command>           # set an earlier deadline
 shell --persistent <file> <command>       # reuse a URL and password
 
 shell list                                # list local sessions (adapts to terminal width)
+shell password <id>                       # retrieve an active password locally
+shell password rotate <id>                # revoke it without restarting the process
 shell attach <id>                         # attach locally
 shell kill <id>                           # stop a session
 ```
@@ -87,6 +89,10 @@ Anyone with both the URL and password can open a share. Interactive shares can
 type with the permissions of the wrapped process; use `--read-only` when viewers
 should only watch. See the [security model](https://shell.online/security/) and
 [the security policy](.github/SECURITY.md).
+
+Active passwords remain recoverable on their owner machine; account-linked
+passwords are also sealed into the user's E2EE vault. Without either owner-held
+copy there is intentionally no service-side recovery key.
 
 ## Accounts and containers
 

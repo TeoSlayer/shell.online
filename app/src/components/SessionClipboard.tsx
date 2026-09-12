@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
 import type { Member, SessionRecord } from "../lib/api";
-import { passwordFor } from "../lib/session-passwords";
+import { verifiedPasswordFor } from "../lib/session-passwords";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
 import { useVault } from "../vault/VaultProvider";
+import { isVaultShare } from "../lib/vault-crypto";
 
 /**
  * The one place a session can be copied from.
@@ -29,7 +30,10 @@ async function readPassword(
   session: SessionRecord,
   openShare: (sessionId: string, share: SessionRecord["keyShare"]) => Promise<string | null>,
 ): Promise<string | null> {
-  return passwordFor(session.id) ?? openShare(session.id, session.keyShare);
+  /* A vault share is the current credential generation. A locally verified
+   * cache may be from before rotation and is only a fallback for legacy rows. */
+  if (isVaultShare(session.keyShare?.sealed)) return openShare(session.id, session.keyShare);
+  return verifiedPasswordFor(session.id, session.shareUrl) ?? openShare(session.id, session.keyShare);
 }
 
 export function SessionClipboard({

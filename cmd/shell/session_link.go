@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"shell.online/internal/account"
@@ -51,6 +52,7 @@ func sessionNameFromEnvironment() string {
 // It is nil whenever this machine is not signed in, so every method is safe to
 // call unconditionally from the launch path.
 type sessionLink struct {
+	mu          sync.Mutex
 	client      *account.Client
 	accessToken string
 	sessionID   string
@@ -113,6 +115,11 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 	if link == nil {
 		return
 	}
+	/* Live rotation is handled by the local control goroutine, while process
+	 * exit is handled by the main goroutine. Keep their account writes ordered
+	 * so a close cannot race a replacement vault share. */
+	link.mu.Lock()
+	defer link.mu.Unlock()
 	if password != "" {
 		input.OwnerShare = link.vaultShare(ctx, input.ID, password)
 	}
@@ -203,7 +210,12 @@ func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password str
 // already cancelled by the time a session ends, so inheriting it would abort
 // this call before it left the machine.
 func (link *sessionLink) Close(exitCode *int) {
-	if link == nil || link.sessionID == "" {
+	if link == nil {
+		return
+	}
+	link.mu.Lock()
+	defer link.mu.Unlock()
+	if link.sessionID == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), linkTimeout)

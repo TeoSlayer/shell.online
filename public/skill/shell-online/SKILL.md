@@ -76,6 +76,8 @@ shell --auto-close 5m -- python train.py
 
 When asked for progress, use `shell list --json` first. Report the process label, elapsed time, and current status, then repeat the existing complete `share_url` and `e2ee_password` when useful. Do not create a new session merely to refresh its link.
 
+When asked to recover access to an active local share, use `shell password <ID>`; do not scrape state files. When asked to revoke existing credentials without stopping the task, use `shell password rotate <ID>`. Rotation disconnects current viewers and prints a new salted link and password. Send only the new pair, say that previous credentials no longer decrypt later frames, and note that teammates must be shared the rotated password again. Set `SHELL_ONLINE_E2EE_PASSWORD` on the rotate command only when the operator supplied the replacement explicitly.
+
 ## Persistent and Docker sessions
 
 Use `--persistent <state-file>` only when the operator explicitly needs one stable URL across process or machine restarts. The owner-only file stores the share identity, host credential, browser password, and decryption key. Re-run with the same path to restore the URL and password; do not copy its contents into chat. On Windows this uses the same native background and local management path as ordinary shares.

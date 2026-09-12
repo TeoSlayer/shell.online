@@ -3,12 +3,31 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestListedSessionJSONKeepsPasswordButNotPrivateStatePath(t *testing.T) {
+	encoded, err := json.Marshal(listedSession{localSessionRecord: localSessionRecord{
+		ID:              "abcdefghijklmnopqrstuvwxyzABCDEF",
+		Password:        "secret-password",
+		PersistentState: "/private/state.json",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(encoded)
+	if !strings.Contains(got, `"e2ee_password":"secret-password"`) {
+		t.Fatalf("JSON omitted the explicitly requested password: %s", got)
+	}
+	if strings.Contains(got, "persistent_state") || strings.Contains(got, "/private/state.json") {
+		t.Fatalf("JSON exposed the owner-only persistent state path: %s", got)
+	}
+}
 
 func TestCompactSessionListKeepsEveryRecoveryAction(t *testing.T) {
 	now := time.Date(2026, time.September, 11, 12, 0, 0, 0, time.UTC)
@@ -37,7 +56,7 @@ func TestCompactSessionListKeepsEveryRecoveryAction(t *testing.T) {
 		"online · 2h14m · view only · E2EE · stable link",
 		"Closes    in 5m, or when the task exits",
 		"Link      " + record.ShareURL,
-		"Password  Ab3dE7-_",
+		"Password  stored · shell password abcdefghij",
 		"Rejoin    shell attach abcdefghij",
 		"Stop      shell kill abcdefghij",
 	} {

@@ -2086,6 +2086,40 @@ describe("session vault", () => {
     expect(listed.body.sessions[0].keyShare).toMatchObject(share);
   });
 
+  it("replaces stale vault copies when the CLI rotates an active password", async () => {
+    const tokens = await login();
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    const { made, body } = await vaultBody();
+    await call("POST", "/api/vault", { auth: await idToken(), body });
+    const oldShare = await sealToAccount(made.bundle.publicKey, session.id, "uid-1", "old-pass");
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...session, owner_share: { sender_public_key: oldShare.senderPublicKey, sealed: oldShare.sealed } },
+    });
+    await call("PUT", `/api/sessions/${session.id}/keys`, {
+      auth: await idToken(),
+      body: { shares: [{ uid: "uid-2", sender_public_key: "old-sender", sealed: "old-copy" }] },
+    });
+
+    const freshShare = await sealToAccount(made.bundle.publicKey, session.id, "uid-1", "new-pass");
+    const rotated = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: {
+        ...session,
+        share_url: `${session.share_url.slice(0, -22)}BBBBBBBBBBBBBBBBBBBBBB`,
+        credential_rotation: true,
+        owner_share: { sender_public_key: freshShare.senderPublicKey, sealed: freshShare.sealed },
+      },
+    });
+    expect(rotated.status).toBe(201);
+    const owner = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(owner.body.sessions[0].keyShare).toMatchObject(freshShare);
+    const other = await call("GET", "/api/sessions", { auth: colleague });
+    expect(other.body.sessions[0].keyShare).toBeUndefined();
+  });
+
   it("still registers a session whose sealed copy is not shaped like one", async () => {
     const tokens = await login();
     const registered = await call("POST", "/api/sessions", {

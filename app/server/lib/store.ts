@@ -121,6 +121,14 @@ export interface Store {
    */
   deleteSession(orgId: string, id: string): Promise<boolean>;
   putKeyShares(orgId: string, sessionId: string, shares: SessionKeyShare[]): Promise<boolean>;
+  /** Changes the public salt and every sealed copy as one credential generation. */
+  rotateSessionCredentials(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    shareUrl: string,
+    shares: SessionKeyShare[],
+  ): Promise<SessionRecord | null>;
 
   /* ---- Session vault ---- */
   accountKey(uid: string): Promise<AccountKey | null>;

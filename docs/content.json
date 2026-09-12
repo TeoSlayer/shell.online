@@ -165,7 +165,7 @@
         ],
         [
           "Limits, recovery, and opt-out",
-          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. A lost password cannot be recovered. Anyone with both the complete salted URL and password can decrypt. The legacy --e2ee flag is redundant; --no-e2ee deliberately disables payload E2EE and is visibly labeled."
+          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. Active passwords can be retrieved on their owner machine with shell password <ID>; account-linked passwords are also sealed to the user's vault. If both owner-held copies are lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
         ]
       ]
     },
@@ -245,15 +245,33 @@
         ],
         [
           "List sessions",
-          "List locally managed processes and independently check the relay. Wide terminals use a dense table; terminals narrower than 132 columns use one session card with the same status, URL, password, rejoin, and stop information. The owner-only record retains the generated browser password so access can be shared again without replacing the session. States are online, starting, reconnecting, expired, and unknown; unknown means the check was inconclusive, not that the link died.",
+          "List locally managed processes and independently check the relay. Wide terminals use a dense table; narrow terminals use one readable card. Human output says whether a password is stored without printing every secret; shell password <ID> reveals one deliberately. JSON retains e2ee_password for explicit agent workflows. States are online, starting, reconnecting, expired, and unknown.",
           [
             [
               "shell list",
-              "Print ID, uptime, relay, closing rule, access, command, URL, and password in a width-aware table or card layout."
+              "Print ID, uptime, relay, closing rule, access, command, URL, and stored-password status in a width-aware table or card layout."
             ],
             [
               "shell list --json",
               "Print a JSON array on stdout with e2ee_password and raw relay_status values: connected, waiting, disconnected, expired, or unknown."
+            ]
+          ]
+        ],
+        [
+          "Manage passwords",
+          "Retrieve an active password from its owner-only local record, or rotate credentials without restarting the wrapped process. Rotation disconnects current viewers, updates persistent state and the owner's sealed vault copy, and removes stale teammate copies until the new password is shared again.",
+          [
+            [
+              "shell password <ID>",
+              "Print the current browser password locally."
+            ],
+            [
+              "shell password rotate <ID>",
+              "Generate a new password and URL salt, invalidate the old cipher generation, and keep the same process running."
+            ],
+            [
+              "SHELL_ONLINE_E2EE_PASSWORD=<new> shell password rotate <ID>",
+              "Choose the replacement instead of generating eight random base64url characters."
             ]
           ]
         ],
@@ -593,7 +611,7 @@
         ],
         [
           "Password continuity",
-          "Set a longer SHELL_ONLINE_E2EE_PASSWORD only before first launch if desired. Restarts reuse the saved password. A conflicting configured password is refused; create a new state volume to rotate both password and URL."
+          "Set a longer SHELL_ONLINE_E2EE_PASSWORD before first launch if desired. Restarts reuse the saved password. While the container is running, shell password rotate <ID> changes the password, salt, and key without restarting the terminal; pass SHELL_ONLINE_E2EE_PASSWORD to that command when you want to choose the replacement."
         ],
         [
           "Restart behavior",

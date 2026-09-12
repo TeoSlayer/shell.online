@@ -11,6 +11,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   Cloudflare account or credentials.
 - A versioned self-hosting documentation page and a release image at
   `ghcr.io/teoslayer/shell.online-relay` for amd64 and arm64.
+- `shell password <ID>` retrieves an active session password from the local
+  owner-only record. `shell password rotate <ID>` changes credentials without
+  restarting the process and persists the new generation for stable sessions.
 
 ### Changed
 
@@ -21,6 +24,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 - Keep `--auto-close today` valid throughout the final second of the local
   day, rather than expiring at the instant that second begins.
+
+### Security
+
+- Password rotation switches the host cipher before disconnecting existing
+  viewers, atomically replaces the owner's sealed account-vault copy, and
+  removes stale teammate copies. The relay receives neither old nor new
+  plaintext credentials.
+- A verified browser cache can no longer overwrite a newer vault generation.
+  Vault credentials are tried first and replace stale local cache entries only
+  after successfully opening a live encrypted frame.
+- Removing a team member now deletes every session-password copy sealed to
+  that account. Owners must still rotate active sessions to revoke passwords a
+  former member may already have seen.
 
 ## [0.12.1] — 2026-09-12
 

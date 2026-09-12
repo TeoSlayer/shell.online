@@ -41,6 +41,8 @@ import {
   forget,
   rememberFor,
   rememberForOrigin,
+  passwordToSeedVault,
+  verifiedPasswordFor,
 } from "../lib/session-passwords";
 import { useKeyboardInset } from "../terminal/keyboard-inset";
 import { elapsed } from "../lib/time";
@@ -200,8 +202,13 @@ export function Workspace() {
   const load = useCallback(async () => {
     try {
       const result = await fetchSessions();
+      /* The service's current generation is authoritative. Rotation clears
+       * old recipients, so an in-memory "already shared" set must clear too. */
+      for (const session of result.sessions) {
+        sharedWith.current.set(session.id, new Set(session.sharedWith ?? []));
+      }
       /* A session that came from this browser inherits the password it chose. */
-      for (const session of result.sessions) adoptOrigin(session.origin, session.id);
+      for (const session of result.sessions) adoptOrigin(session.origin, session.id, session.shareUrl);
       /*
        * A machine has to poll, launch and publish before a session exists, so
        * the row arrives some seconds after the request. Saying "it will turn
@@ -434,9 +441,11 @@ export function Workspace() {
      * safe to repeat: it compares with what the vault holds and writes only
      * when that is missing or known to be wrong. Sources, best first:
      *
-     * - a password cached here and known to be right, because this browser
-     *   chose it or it opened the session. It replaces a vault copy that
-     *   differs, since a session has one password and this one is proven;
+     * - the vault copy, when present. A locally verified password can be from
+     *   the credential generation before a live rotation and therefore must
+     *   never overwrite a newer vault copy merely because it worked once;
+     * - a password cached here and proven against this exact salted URL seeds
+     *   an empty vault;
      * - a copy a colleague sealed to this browser's key before the vault. The
      *   service holds it in the slot the vault copy takes, so keeping it is
      *   moving it;
@@ -449,12 +458,16 @@ export function Workspace() {
      */
     async function keepOwnCopy(session: SessionRecord): Promise<boolean> {
       const share = session.keyShare;
-      const inVault = isVaultShare(share?.sealed) ? await vault.openShare(session.id, share) : null;
+      const hasVaultShare = isVaultShare(share?.sealed);
+      const inVault = hasVaultShare ? await vault.openShare(session.id, share) : null;
       const cached = cachedPassword(session.id);
-      if (cached?.verified) {
-        return cached.password === inVault || vault.keep(session.id, cached.password);
-      }
       if (inVault) return true;
+      /* A v2 share is authoritative even when this browser cannot open it.
+       * Only a password that opens a live frame may replace that generation;
+       * TerminalPane performs that proof-bound write. */
+      if (hasVaultShare) return false;
+      const seed = passwordToSeedVault(session.id, false, session.shareUrl);
+      if (seed) return vault.keep(session.id, seed);
       const legacyShare = share && !isVaultShare(share.sealed) ? await vault.openShare(session.id, share) : null;
       const candidate = legacyShare ?? (cached?.legacy ? cached.password : null);
       if (candidate) return vault.keep(session.id, candidate);
@@ -467,7 +480,7 @@ export function Workspace() {
       const pending = session.origin ? pendingShares.current.get(session.origin) : undefined;
       if (pending) {
         pendingShares.current.delete(session.origin!);
-        rememberFor(session.id, pending);
+        rememberFor(session.id, pending, session.shareUrl);
       }
 
       /*
@@ -479,7 +492,6 @@ export function Workspace() {
       }
 
       if (session.closedAt) continue;
-      const cached = cachedPassword(session.id);
 
       /* Only the owner shares with colleagues. */
       if (!me || session.ownerUid !== me.uid) continue;
@@ -498,9 +510,10 @@ export function Workspace() {
         done: sharedWith.current.get(session.id),
       });
       if (missing.length === 0) continue;
-      /* A proven password before a vault copy nobody can vouch for; see TerminalPane. */
-      const password =
-        (cached?.verified ? cached.password : null) ?? (await vault.openShare(session.id, session.keyShare));
+      const vaultPassword = await vault.openShare(session.id, session.keyShare);
+      const password = isVaultShare(session.keyShare?.sealed)
+        ? vaultPassword
+        : verifiedPasswordFor(session.id, session.shareUrl) ?? vaultPassword;
       if (!password) continue;
 
       const done = sharedWith.current.get(session.id) ?? new Set<string>();

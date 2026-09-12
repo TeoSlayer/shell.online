@@ -4,11 +4,12 @@ import { Avatar } from "./Avatar";
 import { Button } from "./Button";
 import { PersonPicker } from "./PersonPicker";
 import { shareSessionKeys, type Member, type SessionRecord } from "../lib/api";
-import { addToAudience, audienceFor, passwordFor } from "../lib/session-passwords";
+import { addToAudience, audienceFor, verifiedPasswordFor } from "../lib/session-passwords";
 import { keyTrust, trustKey } from "../lib/known-keys";
 import { displayName } from "../lib/people";
 import { assigneeIds } from "../lib/session-view";
 import { useVault } from "../vault/VaultProvider";
+import { isVaultShare } from "../lib/vault-crypto";
 
 /**
  * Who else can open this session.
@@ -45,7 +46,10 @@ export function SessionAudience({
   useEffect(() => {
     let live = true;
     void (async () => {
-      const opened = passwordFor(session.id) ?? (await vault.openShare(session.id, session.keyShare));
+      const opened = isVaultShare(session.keyShare?.sealed)
+        ? await vault.openShare(session.id, session.keyShare)
+        : verifiedPasswordFor(session.id, session.shareUrl) ??
+          (await vault.openShare(session.id, session.keyShare));
       if (live) setPassword(opened);
     })();
     return () => {

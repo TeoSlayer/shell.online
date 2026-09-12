@@ -940,6 +940,33 @@ export function createApp(options: AppOptions) {
         if (!token) return send(response, 401, { error: "not signed in" });
         const body = (await readBody(request)) as Record<string, unknown>;
         const membership = await store.membershipOf(token.uid);
+        const rotation = body.credential_rotation === true;
+        const previous = rotation && membership
+          ? await store.sessionInOrg(membership.orgId, String(body.id ?? ""))
+          : null;
+        if (rotation && (!previous || (previous.ownerUid ?? previous.uid) !== token.uid)) {
+          return send(response, 404, { error: "no such owned session to rotate" });
+        }
+        if (rotation) {
+          const nextURL = String(body.share_url ?? "");
+          if (
+            !previous?.encrypted || body.encrypted !== true ||
+            nextURL === previous.shareUrl || !/#salt=[A-Za-z0-9_-]{22}$/.test(nextURL)
+          ) {
+            return send(response, 400, { error: "invalid credential rotation" });
+          }
+          const ownerShare = await readOwnerShare(body.owner_share);
+          const shares = ownerShare ? [{ uid: token.uid, ...ownerShare }] : [];
+          const rotated = await store.rotateSessionCredentials(
+            membership!.orgId,
+            previous!.id,
+            token.uid,
+            nextURL,
+            shares,
+          );
+          if (!rotated) return send(response, 404, { error: "no such owned session to rotate" });
+          return send(response, 201, { session: sessionForApi(rotated) });
+        }
         const result = await registerSession(store, token.uid, {
           id: String(body.id ?? ""),
           shareUrl: String(body.share_url ?? ""),

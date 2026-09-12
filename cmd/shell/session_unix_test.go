@@ -11,14 +11,87 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"shell.online/internal/api"
+	"shell.online/internal/e2ee"
 	"shell.online/internal/protocol"
 	"shell.online/internal/ringbuffer"
 )
+
+func TestPasswordCommandRetrievesAndRotatesAnActiveSession(t *testing.T) {
+	runtimeDir, err := os.MkdirTemp("/tmp", "shell-pw-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(runtimeDir) })
+	t.Setenv("SHELL_ONLINE_RUNTIME_DIR", runtimeDir)
+	id := strings.Repeat("p", 32)
+	control, err := startLocalSession(localSessionRecord{
+		ID: id, ShareURL: "https://shell.online/s/" + id + "#salt=old",
+		Encrypted: true, Password: "old-pass", Command: "top", PID: 1234, StartedAt: time.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer control.Close()
+	control.BindPasswordRotation(func(password string) (string, error) {
+		url := "https://shell.online/s/" + id + "#salt=new"
+		if err := control.UpdateCredentials(url, password); err != nil {
+			return "", err
+		}
+		return url, nil
+	})
+
+	var out, warnings strings.Builder
+	if code := runSessionPassword([]string{id[:10]}, &out, &warnings); code != 0 || out.String() != "old-pass\n" {
+		t.Fatalf("retrieve code=%d out=%q err=%q", code, out.String(), warnings.String())
+	}
+	t.Setenv("SHELL_ONLINE_E2EE_PASSWORD", "new-pass")
+	out.Reset()
+	warnings.Reset()
+	if code := runSessionPassword([]string{"rotate", id[:10]}, &out, &warnings); code != 0 {
+		t.Fatalf("rotate code=%d out=%q err=%q", code, out.String(), warnings.String())
+	}
+	if !strings.Contains(out.String(), "Password: new-pass") || !strings.Contains(out.String(), "#salt=new") {
+		t.Fatalf("rotation output = %q", out.String())
+	}
+	loaded, err := loadActiveLocalSessions()
+	if err != nil || len(loaded) != 1 || loaded[0].Password != "new-pass" {
+		t.Fatalf("rotated local record = %+v, %v", loaded, err)
+	}
+}
+
+func TestSessionCipherRotationRejectsOldGeneration(t *testing.T) {
+	oldCipher, _, err := e2ee.Generate("old-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newCipher, _, err := e2ee.Generate("new-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotating := newSessionCipher(oldCipher)
+	oldFrame, err := rotating.Seal([]byte{protocol.Output, 'a'})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotating.Rotate(newCipher)
+	if _, err := rotating.Open(oldFrame); err == nil {
+		t.Fatal("old generation opened after rotation")
+	}
+	newFrame, err := rotating.Seal([]byte{protocol.Output, 'b'})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := rotating.Open(newFrame)
+	if err != nil || string(opened) != string([]byte{protocol.Output, 'b'}) {
+		t.Fatalf("new generation = %v, %v", opened, err)
+	}
+}
 
 func TestSharedProcessCancelsHangingRelayDialBeforeAnnouncing(t *testing.T) {
 	requestStarted := make(chan struct{})
@@ -41,6 +114,9 @@ func TestSharedProcessCancelsHangingRelayDialBeforeAnnouncing(t *testing.T) {
 			io.Discard,
 			func() { announced <- struct{}{} },
 			nil,
+			nil,
+			"",
+			"",
 			nil,
 		)
 		result <- err

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"shell.online/internal/e2ee"
 )
 
 type managedLocalSession struct {
@@ -21,18 +24,43 @@ type managedLocalSession struct {
 	stopOnce       sync.Once
 	close          sync.Once
 	terminalMu     sync.Mutex
+	rotationMu     sync.Mutex
 	terminalInput  io.Writer
 	terminalOutput localTerminalOutput
 	onLocalInput   func()
 	onAttachChange func(bool)
+	onRotate       func(string) (string, error)
 	attached       net.Conn
 }
 
 type localControlResponse struct {
-	OK    bool   `json:"ok"`
-	ID    string `json:"id,omitempty"`
-	PID   int    `json:"pid,omitempty"`
-	Error string `json:"error,omitempty"`
+	OK       bool   `json:"ok"`
+	ID       string `json:"id,omitempty"`
+	PID      int    `json:"pid,omitempty"`
+	ShareURL string `json:"share_url,omitempty"`
+	Password string `json:"password,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+func (session *managedLocalSession) BindPasswordRotation(rotate func(string) (string, error)) {
+	session.terminalMu.Lock()
+	session.onRotate = rotate
+	session.terminalMu.Unlock()
+}
+
+func (session *managedLocalSession) UpdateCredentials(shareURL, password string) error {
+	session.terminalMu.Lock()
+	defer session.terminalMu.Unlock()
+	previousURL, previousPassword := session.record.ShareURL, session.record.Password
+	session.record.ShareURL, session.record.Password = shareURL, password
+	directory, err := localSessionDirectory()
+	if err == nil {
+		err = writeLocalSessionRecord(directory, session.record)
+	}
+	if err != nil {
+		session.record.ShareURL, session.record.Password = previousURL, previousPassword
+	}
+	return err
 }
 
 func startLocalSession(record localSessionRecord) (localSessionControl, error) {
@@ -141,7 +169,7 @@ func (session *managedLocalSession) serve() {
 func (session *managedLocalSession) handleConnection(connection net.Conn) {
 	defer connection.Close()
 	_ = connection.SetDeadline(time.Now().Add(time.Second))
-	request, err := bufio.NewReader(io.LimitReader(connection, 64)).ReadString('\n')
+	request, err := bufio.NewReader(io.LimitReader(connection, 2048)).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return
 	}
@@ -160,6 +188,31 @@ func (session *managedLocalSession) handleConnection(connection net.Conn) {
 	case len(fields) == 3 && fields[0] == "resize":
 		// Accepted for compatibility with older attach clients, but ignored.
 		// The shared PTY grid is deliberately immutable.
+	case len(fields) == 2 && fields[0] == "rotate":
+		encoded, decodeErr := base64.RawURLEncoding.DecodeString(fields[1])
+		if decodeErr != nil || e2ee.ValidateBrowserPassword(string(encoded)) != nil {
+			response.OK = false
+			response.Error = "invalid password"
+			break
+		}
+		session.terminalMu.Lock()
+		rotate := session.onRotate
+		session.terminalMu.Unlock()
+		if rotate == nil {
+			response.OK = false
+			response.Error = "password rotation is not ready"
+			break
+		}
+		session.rotationMu.Lock()
+		shareURL, rotateErr := rotate(string(encoded))
+		session.rotationMu.Unlock()
+		if rotateErr != nil {
+			response.OK = false
+			response.Error = rotateErr.Error()
+			break
+		}
+		response.ShareURL = shareURL
+		response.Password = string(encoded)
 	default:
 		response.OK = false
 		response.Error = "unknown command"

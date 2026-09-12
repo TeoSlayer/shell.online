@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -43,6 +44,43 @@ type sharedTerminalProcess interface {
 	Finish() error
 }
 
+// sessionCipher allows one active session to change credentials without
+// changing its relay identity or PTY. Every frame takes the read lock; a
+// rotation therefore has a single boundary after which no old-key frame can
+// be emitted or accepted.
+type sessionCipher struct {
+	mu    sync.RWMutex
+	value *e2ee.Cipher
+}
+
+func newSessionCipher(value *e2ee.Cipher) *sessionCipher { return &sessionCipher{value: value} }
+
+func (cipher *sessionCipher) Seal(frame []byte) ([]byte, error) {
+	cipher.mu.RLock()
+	defer cipher.mu.RUnlock()
+	if cipher.value == nil {
+		return frame, nil
+	}
+	return cipher.value.SealFrame(frame)
+}
+
+func (cipher *sessionCipher) Open(frame []byte) ([]byte, error) {
+	cipher.mu.RLock()
+	defer cipher.mu.RUnlock()
+	if cipher.value == nil {
+		return frame, nil
+	}
+	return cipher.value.OpenFrame(frame)
+}
+
+func (cipher *sessionCipher) Rotate(value *e2ee.Cipher) *e2ee.Cipher {
+	cipher.mu.Lock()
+	previous := cipher.value
+	cipher.value = value
+	cipher.mu.Unlock()
+	return previous
+}
+
 func runSharedProcess(
 	ctx context.Context,
 	session api.Session,
@@ -53,6 +91,9 @@ func runSharedProcess(
 	onConnected func(),
 	onStarted func(),
 	control localSessionControl,
+	currentPassword string,
+	persistentStatePath string,
+	onPasswordRotated func(string, string),
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
@@ -92,11 +133,14 @@ func runSharedProcess(
 	}
 
 	outputRing := ringbuffer.New(snapshotBytes)
+	frameCipher := newSessionCipher(session.Cipher)
+	rotationAcknowledged := make(chan struct{}, 1)
+	var supportsRotation atomic.Bool
 
 	if terminal := os.Stdin; term.IsTerminal(int(terminal.Fd())) {
 		previousState, rawError := term.MakeRaw(int(terminal.Fd()))
 		if rawError != nil {
-			sendFinalState(connection, outputRing, session.Cipher, 1, nil)
+			sendFinalState(connection, outputRing, frameCipher, 1, nil)
 			return 1, fmt.Errorf("enter raw terminal mode: %w", rawError)
 		}
 		defer func() { _ = term.Restore(int(terminal.Fd()), previousState) }()
@@ -104,7 +148,7 @@ func runSharedProcess(
 
 	ptmx, err := startTerminalProcess(commandArguments, terminalEnvironment(commandEnvironment))
 	if err != nil {
-		sendFinalState(connection, outputRing, session.Cipher, 1, nil)
+		sendFinalState(connection, outputRing, frameCipher, 1, nil)
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
 	}
 	defer ptmx.Close()
@@ -137,12 +181,70 @@ func runSharedProcess(
 			notifyLocalTyping,
 			notifyAttachChange,
 		)
+		control.BindPasswordRotation(func(password string) (string, error) {
+			if !session.Encrypted || !supportsRotation.Load() {
+				return "", fmt.Errorf("the connected relay does not support live password rotation")
+			}
+			fresh, fragment, key, generateErr := e2ee.GenerateMaterial(password)
+			if generateErr != nil {
+				return "", generateErr
+			}
+			shareURL := strings.SplitN(session.ShareURL, "#", 2)[0] + fragment
+			oldShareURL, oldPassword := session.ShareURL, currentPassword
+			var previousCipher *e2ee.Cipher
+			var previousPersistent *persistentSessionState
+			if persistentStatePath != "" {
+				state, readErr := readPersistentState(persistentStatePath)
+				if readErr != nil {
+					return "", fmt.Errorf("read persistent state: %w", readErr)
+				}
+				previousPersistent = &state
+				state.Fragment = fragment
+				state.EncryptionKey = base64.RawURLEncoding.EncodeToString(key)
+				state.BrowserPassword = password
+				if writeErr := writePersistentState(persistentStatePath, state); writeErr != nil {
+					return "", fmt.Errorf("write persistent state: %w", writeErr)
+				}
+			}
+			rollback := func() {
+				frameCipher.Rotate(previousCipher)
+				_ = control.UpdateCredentials(oldShareURL, oldPassword)
+				if previousPersistent != nil {
+					_ = writePersistentState(persistentStatePath, *previousPersistent)
+				}
+			}
+			if updateErr := control.UpdateCredentials(shareURL, password); updateErr != nil {
+				if previousPersistent != nil {
+					_ = writePersistentState(persistentStatePath, *previousPersistent)
+				}
+				return "", fmt.Errorf("store new password: %w", updateErr)
+			}
+			/* Reject old-key input before asking the relay to disconnect its
+			 * holders. This removes the acknowledgement-window race. */
+			previousCipher = frameCipher.Rotate(fresh)
+			if sendErr := connection.Send(relay.TextMessage, []byte(`{"type":"credentials_rotate"}`)); sendErr != nil {
+				rollback()
+				return "", fmt.Errorf("notify relay: %w", sendErr)
+			}
+			select {
+			case <-rotationAcknowledged:
+			case <-time.After(3 * time.Second):
+				rollback()
+				return "", fmt.Errorf("relay did not acknowledge password rotation")
+			}
+			session.ShareURL = shareURL
+			currentPassword = password
+			if onPasswordRotated != nil {
+				onPasswordRotated(shareURL, password)
+			}
+			return shareURL, nil
+		})
 	}
 
 	outputChunks := make(chan []byte, 64)
 	var outputDirty atomic.Bool
 	batchDone := make(chan struct{})
-	go batchOutput(relayContext, connection, outputChunks, outputRing, session.Cipher, &outputDirty, batchDone)
+	go batchOutput(relayContext, connection, outputChunks, outputRing, frameCipher, &outputDirty, batchDone)
 
 	readDone := make(chan struct{})
 	go func() {
@@ -179,7 +281,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, outputRing, session.Cipher, exitAcknowledged)
+		err := readRelay(connection, ptmx, outputRing, frameCipher, exitAcknowledged, rotationAcknowledged, &supportsRotation)
 		select {
 		case <-sharingFinished:
 			return
@@ -212,7 +314,7 @@ func runSharedProcess(
 	close(sharingFinished)
 
 	exitCode := processExitCode(waitError)
-	sendFinalState(connection, outputRing, session.Cipher, exitCode, exitAcknowledged)
+	sendFinalState(connection, outputRing, frameCipher, exitCode, exitAcknowledged)
 
 	if waitError != nil {
 		var exitError *exec.ExitError
@@ -256,7 +358,7 @@ func waitForProcess(ctx context.Context, command sharedTerminalProcess, result <
 func sendFinalState(
 	connection *relay.Connection,
 	output *ringbuffer.Buffer,
-	frameCipher *e2ee.Cipher,
+	frameCipher *sessionCipher,
 	exitCode int,
 	exitAcknowledged <-chan struct{},
 ) {
@@ -295,7 +397,7 @@ func batchOutput(
 	connection *relay.Connection,
 	chunks <-chan []byte,
 	output *ringbuffer.Buffer,
-	frameCipher *e2ee.Cipher,
+	frameCipher *sessionCipher,
 	dirty *atomic.Bool,
 	done chan<- struct{},
 ) {
@@ -374,8 +476,10 @@ func readRelay(
 	connection *relay.Connection,
 	ptmx sharedTerminalProcess,
 	output *ringbuffer.Buffer,
-	frameCipher *e2ee.Cipher,
+	frameCipher *sessionCipher,
 	exitAcknowledged chan<- struct{},
+	rotationAcknowledged chan<- struct{},
+	supportsRotation *atomic.Bool,
 ) error {
 	for {
 		messageType, message, err := connection.Read()
@@ -385,10 +489,11 @@ func readRelay(
 
 		if messageType == relay.TextMessage {
 			var event struct {
-				Type     string `json:"type"`
-				ViewerID uint32 `json:"viewerId"`
-				Cols     uint16 `json:"cols"`
-				Rows     uint16 `json:"rows"`
+				Type               string `json:"type"`
+				ViewerID           uint32 `json:"viewerId"`
+				Cols               uint16 `json:"cols"`
+				Rows               uint16 `json:"rows"`
+				CredentialRotation bool   `json:"credentialRotation"`
 			}
 			if json.Unmarshal(message, &event) != nil {
 				continue
@@ -396,6 +501,16 @@ func readRelay(
 			if event.Type == "exit_ack" {
 				select {
 				case exitAcknowledged <- struct{}{}:
+				default:
+				}
+				continue
+			}
+			if event.CredentialRotation {
+				supportsRotation.Store(true)
+			}
+			if event.Type == "credentials_rotate_ack" {
+				select {
+				case rotationAcknowledged <- struct{}{}:
 				default:
 				}
 				continue
@@ -423,11 +538,9 @@ func readRelay(
 		if len(message) == 0 {
 			continue
 		}
-		if frameCipher != nil {
-			message, err = frameCipher.OpenFrame(message)
-			if err != nil {
-				continue
-			}
+		message, err = frameCipher.Open(message)
+		if err != nil {
+			continue
 		}
 		switch message[0] {
 		case protocol.Input:
@@ -464,11 +577,8 @@ func viewerInputPayload(frame []byte) []byte {
 	return nil
 }
 
-func sealFrame(frameCipher *e2ee.Cipher, frame []byte) ([]byte, error) {
-	if frameCipher == nil {
-		return frame, nil
-	}
-	return frameCipher.SealFrame(frame)
+func sealFrame(frameCipher *sessionCipher, frame []byte) ([]byte, error) {
+	return frameCipher.Seal(frame)
 }
 
 type terminalGrid struct {
