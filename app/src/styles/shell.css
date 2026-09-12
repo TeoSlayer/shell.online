@@ -496,7 +496,9 @@
   }
 
   .account-pop {
+    top: calc(100% + 8px);
     right: 0;
+    bottom: auto;
     left: auto;
     width: 232px;
   }

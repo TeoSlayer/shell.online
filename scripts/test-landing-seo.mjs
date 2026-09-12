@@ -145,6 +145,8 @@ for (const guide of ["platforms", "mobile", "reliability", "security", "e2ee", "
 for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d"]) {
   check(docsSource.includes(guarantee), `Versioned documentation guarantee is missing: ${guarantee}`);
 }
+check(docsSource.includes("terminal_size control messages"), "E2EE docs must disclose plaintext terminal-size control metadata");
+check(!docsSource.includes("snapshots, resizes, and latency probes are authenticated ciphertext"), "E2EE docs must not claim relay-controlled resizes are ciphertext");
 check(readme.includes("end-to-end encrypted by default"), "README default E2EE summary is missing");
 check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");

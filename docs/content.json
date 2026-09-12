@@ -161,7 +161,7 @@
         ],
         [
           "Protected and visible data",
-          "Terminal input, output, snapshots, resizes, and latency probes are authenticated ciphertext. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, and lifecycle metadata."
+          "Terminal input, output, snapshots, and latency probes are authenticated ciphertext. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, lifecycle metadata, and the terminal grid dimensions carried by plaintext terminal_size control messages. The relay selects that shared grid so desktop and mobile viewers render one deterministic PTY size."
         ],
         [
           "Limits, recovery, and opt-out",
