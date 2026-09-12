@@ -1419,26 +1419,26 @@ export class PostgresStore implements Store {
     );
   }
 
-  async notificationsFor(uid: string, limit = 100): Promise<Notification[]> {
+  async notificationsFor(orgId: string, uid: string, limit = 100): Promise<Notification[]> {
     const rows = await this.rows(
-      'SELECT * FROM notifications WHERE uid = $1 ORDER BY at DESC, id COLLATE "C" DESC LIMIT $2',
-      [uid, limit],
+      'SELECT * FROM notifications WHERE org_id = $1 AND uid = $2 ORDER BY at DESC, id COLLATE "C" DESC LIMIT $3',
+      [orgId, uid, limit],
     );
     return rows.map(toNotification);
   }
 
-  async markNotificationRead(uid: string, id: string, now = Date.now()): Promise<boolean> {
+  async markNotificationRead(orgId: string, uid: string, id: string, now = Date.now()): Promise<boolean> {
     const result = await this.pool.query(
-      "UPDATE notifications SET read_at = $3 WHERE id = $2 AND uid = $1 AND read_at IS NULL",
-      [uid, id, now],
+      "UPDATE notifications SET read_at = $4 WHERE org_id = $1 AND uid = $2 AND id = $3 AND read_at IS NULL",
+      [orgId, uid, id, now],
     );
     return (result.rowCount ?? 0) > 0;
   }
 
-  async markAllNotificationsRead(uid: string, now = Date.now()): Promise<number> {
+  async markAllNotificationsRead(orgId: string, uid: string, now = Date.now()): Promise<number> {
     const result = await this.pool.query(
-      "UPDATE notifications SET read_at = $2 WHERE uid = $1 AND read_at IS NULL",
-      [uid, now],
+      "UPDATE notifications SET read_at = $3 WHERE org_id = $1 AND uid = $2 AND read_at IS NULL",
+      [orgId, uid, now],
     );
     return result.rowCount ?? 0;
   }

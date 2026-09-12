@@ -800,7 +800,8 @@ for (const implementation of implementations) {
         await store.putNotification(notification());
         await store.putNotification(notification({ id: "ntf_2", at: 3000 }));
         await store.putNotification(notification({ id: "ntf_3", uid: "uid-3" }));
-        expect((await store.notificationsFor("uid-2")).map((entry) => entry.id)).toEqual([
+        await store.putNotification(notification({ id: "ntf_old_team", orgId: "org_2", at: 4000 }));
+        expect((await store.notificationsFor("org_1", "uid-2")).map((entry) => entry.id)).toEqual([
           "ntf_2",
           "ntf_1",
         ]);
@@ -810,23 +811,27 @@ for (const implementation of implementations) {
         for (const id of ["ntf_b", "ntf_c", "ntf_a"]) {
           await store.putNotification(notification({ id, at: 1000 }));
         }
-        const ids = (await store.notificationsFor("uid-2")).map((entry) => entry.id);
+        const ids = (await store.notificationsFor("org_1", "uid-2")).map((entry) => entry.id);
         expect(ids).toEqual(["ntf_c", "ntf_b", "ntf_a"]);
       });
 
       it("marks one as read, once, and only for its owner", async () => {
         await store.putNotification(notification());
-        expect(await store.markNotificationRead("uid-3", "ntf_1", 5000)).toBe(false);
-        expect(await store.markNotificationRead("uid-2", "ntf_1", 5000)).toBe(true);
-        expect(await store.markNotificationRead("uid-2", "ntf_1", 5001)).toBe(false);
-        expect((await store.notificationsFor("uid-2"))[0].readAt).toBe(5000);
+        await store.putNotification(notification({ id: "ntf_other_team", orgId: "org_2" }));
+        expect(await store.markNotificationRead("org_1", "uid-3", "ntf_1", 5000)).toBe(false);
+        expect(await store.markNotificationRead("org_1", "uid-2", "ntf_other_team", 5000)).toBe(false);
+        expect(await store.markNotificationRead("org_1", "uid-2", "ntf_1", 5000)).toBe(true);
+        expect(await store.markNotificationRead("org_1", "uid-2", "ntf_1", 5001)).toBe(false);
+        expect((await store.notificationsFor("org_1", "uid-2"))[0].readAt).toBe(5000);
       });
 
       it("counts what marking everything read actually changed", async () => {
         await store.putNotification(notification());
         await store.putNotification(notification({ id: "ntf_2", readAt: 100 }));
-        expect(await store.markAllNotificationsRead("uid-2", 5000)).toBe(1);
-        expect(await store.markAllNotificationsRead("uid-2", 5000)).toBe(0);
+        await store.putNotification(notification({ id: "ntf_other_team", orgId: "org_2" }));
+        expect(await store.markAllNotificationsRead("org_1", "uid-2", 5000)).toBe(1);
+        expect(await store.markAllNotificationsRead("org_1", "uid-2", 5000)).toBe(0);
+        expect((await store.notificationsFor("org_2", "uid-2"))[0].readAt).toBeUndefined();
       });
     });
 
@@ -962,8 +967,8 @@ for (const implementation of implementations) {
         expect(await store.listSessions("uid-1")).toEqual([]);
         expect(await store.accountKey("uid-1")).toBeNull();
         expect(await store.comments("org_1", "s2")).toEqual([]);
-        expect(await store.notificationsFor("uid-1")).toEqual([]);
-        expect(await store.notificationsFor("uid-2")).toEqual([]);
+        expect(await store.notificationsFor("org_1", "uid-1")).toEqual([]);
+        expect(await store.notificationsFor("org_1", "uid-2")).toEqual([]);
 
         const kept = (await store.listOrgSessions("org_1")).find((entry) => entry.id === "s2");
         expect(kept?.assigneeUids).toEqual(["uid-3"]);

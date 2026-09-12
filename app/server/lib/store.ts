@@ -215,9 +215,9 @@ export interface Store {
   putComment(comment: Comment): Promise<void>;
   comments(orgId: string, sessionId: string): Promise<Comment[]>;
   putNotification(notification: Notification): Promise<void>;
-  notificationsFor(uid: string, limit?: number): Promise<Notification[]>;
-  markNotificationRead(uid: string, id: string, now?: number): Promise<boolean>;
-  markAllNotificationsRead(uid: string, now?: number): Promise<number>;
+  notificationsFor(orgId: string, uid: string, limit?: number): Promise<Notification[]>;
+  markNotificationRead(orgId: string, uid: string, id: string, now?: number): Promise<boolean>;
+  markAllNotificationsRead(orgId: string, uid: string, now?: number): Promise<number>;
 
   /* ---- Housekeeping ---- */
   purgeExpired(now?: number): Promise<void>;

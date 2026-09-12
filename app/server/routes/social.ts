@@ -129,7 +129,7 @@ export async function inbox(
   unreadAssignments: number;
   members: Awaited<ReturnType<Store["members"]>>;
 }> {
-  const notifications = await store.notificationsFor(membership.uid);
+  const notifications = await store.notificationsFor(membership.orgId, membership.uid);
   return {
     members: await store.members(membership.orgId),
     notifications,

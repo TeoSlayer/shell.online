@@ -1353,9 +1353,9 @@ export function createApp(options: AppOptions) {
         if (!membership) return send(response, 401, { error: "sign in first" });
         const body = (await readBody(request)) as Record<string, unknown>;
         if (typeof body.id === "string") {
-          await store.markNotificationRead(membership.uid, body.id);
+          await store.markNotificationRead(membership.orgId, membership.uid, body.id);
         } else {
-          await store.markAllNotificationsRead(membership.uid);
+          await store.markAllNotificationsRead(membership.orgId, membership.uid);
         }
         return send(response, 200, await inbox(store, membership));
       }

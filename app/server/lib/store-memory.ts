@@ -745,16 +745,16 @@ export class MemoryStore implements Store {
     this.flush();
   }
 
-  async notificationsFor(uid: string, limit = 100): Promise<Notification[]> {
+  async notificationsFor(orgId: string, uid: string, limit = 100): Promise<Notification[]> {
     return this.data.notifications
-      .filter((entry) => entry.uid === uid)
+      .filter((entry) => entry.orgId === orgId && entry.uid === uid)
       .sort(byTime((entry) => entry.at, (entry) => entry.id, true))
       .slice(0, limit);
   }
 
-  async markNotificationRead(uid: string, id: string, now = Date.now()): Promise<boolean> {
+  async markNotificationRead(orgId: string, uid: string, id: string, now = Date.now()): Promise<boolean> {
     const notification = this.data.notifications.find(
-      (entry) => entry.id === id && entry.uid === uid,
+      (entry) => entry.orgId === orgId && entry.id === id && entry.uid === uid,
     );
     if (!notification || notification.readAt) return false;
     notification.readAt = now;
@@ -762,10 +762,10 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async markAllNotificationsRead(uid: string, now = Date.now()): Promise<number> {
+  async markAllNotificationsRead(orgId: string, uid: string, now = Date.now()): Promise<number> {
     let count = 0;
     for (const notification of this.data.notifications) {
-      if (notification.uid === uid && !notification.readAt) {
+      if (notification.orgId === orgId && notification.uid === uid && !notification.readAt) {
         notification.readAt = now;
         count += 1;
       }

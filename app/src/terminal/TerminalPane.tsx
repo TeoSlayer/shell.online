@@ -99,6 +99,7 @@ export function TerminalPane({
    * the terminal and dropping its socket and scrollback on every handoff.
    */
   const canTypeRef = useRef(canType);
+  canTypeRef.current = canType;
 
   /*
    * Only the visible pane measures itself. A hidden one is still laid out, so
