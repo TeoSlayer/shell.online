@@ -1,5 +1,6 @@
-import { Terminal, type ITheme } from "@xterm/xterm";
+import type { ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import "./vendor/refstream/v0.1.0-alpha.2/refstream.css";
 import {
   decodeLatencyProbe,
   encodeFrame,
@@ -19,6 +20,12 @@ import {
   readGitHubSummaryStarCount,
 } from "../shared/github";
 import { TerminalWriteQueue } from "./terminal-writes";
+import {
+  createTerminal,
+  readTerminalRenderer,
+  writeTerminalRenderer,
+  type TerminalRenderer,
+} from "./terminal-renderer";
 import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
@@ -586,6 +593,7 @@ function renderTerminal(sessionId: string): void {
   let followsSystemTheme = true;
   let colorMode: TerminalColorMode = systemTheme.matches ? "light" : "dark";
   let terminalZoomPercent = 100;
+  const terminalRenderer = readTerminalRenderer();
   try {
     const stored = localStorage.getItem("shell-online-terminal-theme");
     if (stored === "dark" || stored === "light") {
@@ -680,6 +688,14 @@ function renderTerminal(sessionId: string): void {
                   <button type="button" data-theme="dark">Dark</button>
                 </div>
               </section>
+              <section class="settings-card renderer-card" aria-labelledby="renderer-label">
+                <div class="settings-card-heading"><label id="renderer-label" for="terminal-renderer">Renderer</label></div>
+                <select id="terminal-renderer" aria-describedby="renderer-description">
+                  <option value="xterm">xterm.js</option>
+                  <option value="refstream">Refstream</option>
+                </select>
+                <span id="renderer-description">Changing renderer reopens this view.</span>
+              </section>
             </div>
             <section class="latency-card" aria-labelledby="latency-title">
               <div class="latency-heading">
@@ -751,6 +767,7 @@ function renderTerminal(sessionId: string): void {
   const themeButton = requiredElement<HTMLButtonElement>("theme-toggle");
   const zoomInput = requiredElement<HTMLInputElement>("terminal-zoom");
   const zoomValue = requiredElement<HTMLOutputElement>("zoom-value");
+  const rendererSelect = requiredElement<HTMLSelectElement>("terminal-renderer");
   const themeOptionButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("#theme-options [data-theme]"),
   );
@@ -769,12 +786,18 @@ function renderTerminal(sessionId: string): void {
   const compactSessionQuery = window.matchMedia("(max-width: 760px), (pointer: coarse)");
   const compactPresenceQuery = window.matchMedia("(max-width: 480px)");
 
-  const terminal = new Terminal({
+  rendererSelect.value = terminalRenderer;
+  rendererSelect.addEventListener("change", () => {
+    const next: TerminalRenderer = rendererSelect.value === "refstream" ? "refstream" : "xterm";
+    if (next === terminalRenderer) return;
+    writeTerminalRenderer(next);
+    window.location.reload();
+  });
+
+  const terminal = createTerminal(terminalRenderer, {
     cursorBlink: !compactSessionQuery.matches,
     cursorStyle: "block",
     cursorInactiveStyle: "outline",
-    customGlyphs: true,
-    rescaleOverlappingGlyphs: true,
     fontFamily: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
     fontSize: 14,
     fontWeight: "400",
@@ -782,17 +805,22 @@ function renderTerminal(sessionId: string): void {
     lineHeight: 1.18,
     letterSpacing: 0,
     scrollback: compactSessionQuery.matches ? 3_000 : 10_000,
-    minimumContrastRatio: 4.5,
     drawBoldTextInBrightColors: true,
     macOptionIsMeta: true,
-    rightClickSelectsWord: true,
     scrollOnUserInput: true,
-    allowTransparency: false,
     theme: terminalThemes[colorMode],
+  }, {
+    customGlyphs: true,
+    rescaleOverlappingGlyphs: true,
+    minimumContrastRatio: 4.5,
+    rightClickSelectsWord: true,
+    allowTransparency: false,
   });
   const measureCell = cellMeasurer(terminal.options.fontFamily ?? "monospace");
   terminal.open(terminalElement);
-  const helperTextarea = terminalElement.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+  const helperTextarea = terminalElement.querySelector<HTMLTextAreaElement>(
+    ".xterm-helper-textarea, .shell-terminal-input",
+  );
   if (helperTextarea) {
     helperTextarea.autocapitalize = "off";
     helperTextarea.autocomplete = "off";

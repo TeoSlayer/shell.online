@@ -1274,6 +1274,38 @@ a {
   gap: 10px;
 }
 
+.settings-card.renderer-card {
+  display: grid;
+  min-height: 72px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+}
+
+.renderer-card .settings-card-heading {
+  margin: 0;
+}
+
+.renderer-card select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 34px 0 11px;
+  border: 1px solid #2d3543;
+  border-radius: 10px;
+  background: #10151e;
+  color: #e0e8f7;
+  cursor: pointer;
+  font: 520 11px/1 "Uncut Sans", sans-serif;
+}
+
+.renderer-card > span {
+  grid-column: 2;
+  margin-top: -7px;
+  color: #69758a;
+  font-size: 8px;
+}
+
 .settings-card,
 .latency-card {
   min-width: 0;
@@ -1366,6 +1398,7 @@ a {
 .settings-close:focus-visible,
 .theme-options button:focus-visible,
 .settings-copy:focus-visible,
+.renderer-card select:focus-visible,
 .zoom-card input:focus-visible {
   outline: 2px solid #7897d4;
   outline-offset: 2px;
@@ -1554,6 +1587,15 @@ a {
   font-variant-ligatures: none;
 }
 
+.terminal > .shell-terminal {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.terminal .shell-terminal-input {
+  font-size: 16px !important;
+}
+
 .terminal .xterm-screen canvas {
   image-rendering: auto;
 }
@@ -1740,6 +1782,16 @@ a {
 .session-page.theme-light .theme-options {
   border-color: #dce1ea;
   background: #eef1f6;
+}
+
+.session-page.theme-light .renderer-card select {
+  border-color: #dce1ea;
+  background: #eef1f6;
+  color: #2e3b53;
+}
+
+.session-page.theme-light .renderer-card > span {
+  color: #798399;
 }
 
 .session-page.theme-light .theme-options button {
@@ -2212,6 +2264,15 @@ a {
     border-radius: 12px;
   }
 
+  .settings-card.renderer-card {
+    min-height: 62px;
+    grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+  }
+
+  .renderer-card select {
+    min-height: 40px;
+  }
+
   .settings-card-heading {
     margin-bottom: 8px;
   }
@@ -2381,6 +2442,18 @@ a {
   .settings-card {
     min-height: 62px;
     padding: 6px 9px 5px;
+  }
+
+  .settings-card.renderer-card {
+    min-height: 46px;
+  }
+
+  .renderer-card select {
+    min-height: 30px;
+  }
+
+  .renderer-card > span {
+    display: none;
   }
 
   .settings-card-heading {

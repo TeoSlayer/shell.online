@@ -76,6 +76,10 @@
           "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. On phones, identity and controls occupy separate header rows so status never collides with E2EE, presence, or appearance controls. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths. Browser Ctrl-D warns on its first press and sends EOF only when deliberately repeated within three seconds."
         ],
         [
+          "Choose the renderer",
+          "Terminal controls include a persisted renderer dropdown for xterm.js or Refstream. xterm.js remains the default. Switching reopens only the browser view; the process, encryption, permissions, fixed session grid, and relay connection model do not change."
+        ],
+        [
           "Large paste, bounded",
           "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."
         ]
