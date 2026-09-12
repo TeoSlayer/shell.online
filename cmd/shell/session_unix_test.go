@@ -177,6 +177,21 @@ func TestTerminalProcessRoundTripsInputAndResize(t *testing.T) {
 	}
 }
 
+func TestTerminalProcessRejectsDimensionsThatWouldWrap(t *testing.T) {
+	process := &unixTerminalProcess{}
+	for _, size := range [][2]int{{0, 24}, {80, 0}, {65_536, 24}, {80, 65_536}} {
+		if err := process.Resize(size[0], size[1]); err == nil {
+			t.Fatalf("Resize(%d, %d) accepted a size outside uint16", size[0], size[1])
+		}
+	}
+}
+
+func TestWaitForTerminalInputRejectsInvalidDescriptor(t *testing.T) {
+	if _, err := waitForTerminalInput(-1, time.Millisecond); err == nil {
+		t.Fatal("negative file descriptor was accepted")
+	}
+}
+
 type capturedInput struct {
 	values chan []byte
 }

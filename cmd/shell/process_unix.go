@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -37,6 +38,9 @@ func (process *unixTerminalProcess) Wait() error          { return process.comma
 func (process *unixTerminalProcess) Process() *os.Process { return process.command.Process }
 func (process *unixTerminalProcess) Finish() error        { return nil }
 func (process *unixTerminalProcess) Resize(cols, rows int) error {
+	if cols < 1 || cols > 65_535 || rows < 1 || rows > 65_535 {
+		return fmt.Errorf("terminal size %dx%d is outside the PTY range", cols, rows)
+	}
 	return pty.Setsize(process.terminal, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
 }
 
