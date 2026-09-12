@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -44,8 +45,23 @@ const callbackPage = `<!doctype html>
 func writePage(writer http.ResponseWriter, status int, title, heading, body string) {
 	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 	writer.Header().Set("Cache-Control", "no-store")
+	writer.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("X-Frame-Options", "DENY")
 	writer.WriteHeader(status)
-	fmt.Fprintf(writer, callbackPage, title, heading, body)
+	/*
+		The authorization server can return its description through the callback
+		query string. This loopback page is HTML, so every value is escaped even
+		though the normal headings are constants. Otherwise a crafted callback URL
+		could execute markup in the browser that is completing `shell login`.
+	*/
+	fmt.Fprintf(
+		writer,
+		callbackPage,
+		html.EscapeString(title),
+		html.EscapeString(heading),
+		html.EscapeString(body),
+	)
 }
 
 // signedInPath is where a linked browser is sent once the CLI has its code.

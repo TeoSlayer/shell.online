@@ -104,7 +104,11 @@ check(application?.sameAs === "https://github.com/TeoSlayer/shell.online", "Sour
 check(application?.image === "https://shell.online/social-card.png", "Application image is missing from schema");
 check(application?.screenshot === "https://shell.online/screenshots/codex-working-mobile.png", "Application screenshot is missing from schema");
 check(landingSource.includes("Developed by"), "Visible Pilot Protocol attribution is missing");
-check(landingSource.includes("https://pilotprotocol.network/"), "Visible Pilot Protocol link is missing");
+check(
+  /const PILOT_PROTOCOL_URL = ["']https:\/\/pilotprotocol\.network\/["']/.test(landingSource) &&
+    landingSource.includes('href="${PILOT_PROTOCOL_URL}"'),
+  "Visible Pilot Protocol link is missing",
+);
 check(landingSource.includes("shell --read-only python train.py"), "Visible read-only example is missing");
 check(landingSource.includes("v${RELEASE_VERSION} · SHA-256"), "Visible release integrity link is missing");
 check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");

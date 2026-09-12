@@ -88,6 +88,27 @@ func TestCallbackHandlerReportsAnAuthorizationError(t *testing.T) {
 	}
 }
 
+func TestCallbackHandlerEscapesAuthorizationErrors(t *testing.T) {
+	results := make(chan callbackResult, 1)
+	handler := newCallbackHandler("state-123", "", results)
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, callbackRequest(
+		"error=access_denied&error_description="+url.QueryEscape(`<img src=x onerror="alert(1)">`)))
+
+	<-results
+	body := recorder.Body.String()
+	if strings.Contains(body, "<img") || strings.Contains(body, "onerror=\"") {
+		t.Fatalf("page rendered callback markup: %s", body)
+	}
+	if !strings.Contains(body, "&lt;img") {
+		t.Fatalf("page did not render the escaped description: %s", body)
+	}
+	if policy := recorder.Header().Get("Content-Security-Policy"); !strings.Contains(policy, "default-src 'none'") {
+		t.Fatalf("callback page has no restrictive CSP: %q", policy)
+	}
+}
+
 func TestCallbackHandlerRejectsAMissingCode(t *testing.T) {
 	results := make(chan callbackResult, 1)
 	handler := newCallbackHandler("state-123", "", results)
