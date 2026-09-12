@@ -5,6 +5,7 @@ RUN npm ci
 COPY index.html tsconfig.web.json vite.config.ts ./
 COPY web ./web
 COPY shared ./shared
+COPY docs ./docs
 COPY public ./public
 COPY standalone/server.ts ./standalone/server.ts
 RUN npm run build:standalone
