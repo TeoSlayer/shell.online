@@ -9,6 +9,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - A persisted terminal renderer dropdown in public shares and signed-in
   session tabs. xterm.js remains the default; Refstream can be selected without
   changing the process, relay protocol, encryption, or session permissions.
+- Refstream mode now mounts its terminal-native find, command inspection,
+  retained-output download, eight themes, text sizing, and back-to-live tools
+  in both public shares and signed-in sessions.
 
 ## [0.13.0] — 2026-09-12
 

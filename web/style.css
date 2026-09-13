@@ -1551,6 +1551,33 @@ a {
   background: #0b0d12;
 }
 
+.refstream-toolbar {
+  position: absolute;
+  z-index: 6;
+  top: 18px;
+  right: 20px;
+}
+
+.refstream-toolbar:empty {
+  display: none;
+}
+
+.refstream-toolbar .terminal-tools {
+  padding: 3px;
+  border: 1px solid var(--terminal-ui-line, #343c4b);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--terminal-ui-surface, #171b23) 92%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 760px) {
+  .refstream-toolbar {
+    top: 8px;
+    right: 8px;
+  }
+}
+
 .terminal-input-warning {
   position: absolute;
   z-index: 4;

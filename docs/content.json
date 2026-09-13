@@ -77,7 +77,7 @@
         ],
         [
           "Choose the renderer",
-          "Terminal controls include a persisted renderer dropdown for xterm.js or Refstream. xterm.js remains the default. Switching reopens only the browser view; the process, encryption, permissions, fixed session grid, and relay connection model do not change."
+          "Terminal controls include a persisted renderer dropdown for xterm.js or Refstream. xterm.js remains the default. Refstream mode adds find, command inspection when the process emits shell markers, retained-output download, built-in themes, text sizing, and a back-to-live shortcut. Switching reopens only the browser view; the process, encryption, permissions, fixed session grid, and relay connection model do not change."
         ],
         [
           "Large paste, bounded",

@@ -1,6 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import "./vendor/refstream/v0.1.0-alpha.2/refstream.css";
+import "./vendor/refstream/v0.1.0-alpha.2/ui.css";
 import {
   decodeLatencyProbe,
   encodeFrame,
@@ -26,6 +27,7 @@ import {
   writeTerminalRenderer,
   type TerminalRenderer,
 } from "./terminal-renderer";
+import { attachRefstreamTools } from "./refstream-tools";
 import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
@@ -638,6 +640,7 @@ function renderTerminal(sessionId: string): void {
         </div>
       </header>
       <div id="terminal-wrap" class="terminal-wrap">
+        <div id="refstream-toolbar" class="refstream-toolbar" aria-label="Refstream terminal tools"></div>
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
         <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
@@ -739,6 +742,7 @@ function renderTerminal(sessionId: string): void {
 
   const terminalElement = requiredElement("terminal");
   const terminalWrap = requiredElement("terminal-wrap");
+  const refstreamToolbar = requiredElement("refstream-toolbar");
   const terminalInputWarning = requiredElement("terminal-input-warning");
   const mobileKeyButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("#mobile-terminal-keys [data-terminal-key]"),
@@ -1696,6 +1700,23 @@ function renderTerminal(sessionId: string): void {
     applyTerminalZoom(Number(zoomInput.value), true);
   });
 
+  let refstreamTools: { dispose(): void } | null = null;
+  let refstreamToolsDisposed = false;
+  void attachRefstreamTools(terminalRenderer, {
+    terminal,
+    toolbar: refstreamToolbar,
+    overlay: terminalWrap,
+    frame: terminalWrap,
+    isActive: () => !stopped,
+    onFontSizeChange: (size) => {
+      applyTerminalZoom((size / 14) * 100, true);
+    },
+    exportFilename: `${sessionId}-terminal-output.txt`,
+  }).then((tools) => {
+    if (refstreamToolsDisposed) tools?.dispose();
+    else refstreamTools = tools;
+  });
+
   for (const button of themeOptionButtons) {
     button.addEventListener("click", () => {
       const preference = button.dataset.theme;
@@ -1777,6 +1798,7 @@ function renderTerminal(sessionId: string): void {
       y: touch.clientY,
     }));
   terminalWrap.addEventListener("touchstart", (event) => {
+    if (event.target instanceof Element && event.target.closest("[data-terminal-ui]")) return;
     const touches = readTouches(event.touches);
     touchLineScroller.reset();
     touchScroll.start(touches);
@@ -1819,6 +1841,8 @@ function renderTerminal(sessionId: string): void {
   compactPresenceQuery.addEventListener("change", renderPresence);
   window.addEventListener("beforeunload", () => {
     stopped = true;
+    refstreamToolsDisposed = true;
+    refstreamTools?.dispose();
     window.clearTimeout(retryTimer);
     window.clearTimeout(presenceTimer);
     window.clearTimeout(copyResetTimer);

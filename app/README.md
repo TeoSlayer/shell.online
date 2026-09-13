@@ -88,7 +88,7 @@ The full relay and app setup is documented in [the self-hosting guide](../docs/s
 - `src/` — React client
 - `server/` — API, stores, and migrations
 - `worker/` — Cloudflare Worker adapter
-- `src/terminal/` — relay protocol, E2EE, and selectable xterm.js/Refstream rendering
+- `src/terminal/` — relay protocol, E2EE, and selectable xterm.js/Refstream rendering; Refstream mode includes its local find, command, export, theme, sizing, and back-to-live tools
 - `scripts/` — build and deployment checks
 
 `npm run check:protocol` verifies that the app's terminal protocol files match
