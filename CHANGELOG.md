@@ -4,6 +4,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.14.1] — 2026-09-13
+
+### Changed
+
+- Updated terminal, platform, and standalone-relay runtime dependencies after
+  their complete Windows, QEMU, container, and race-test matrices passed.
+- Expanded the agent skill and machine-readable documentation with explicit
+  file-root, encryption, Refstream, and scoped agent-invitation guidance.
+- Kept all CodeQL phases on one version and grouped their future Dependabot
+  updates so partial upgrades cannot break the analysis workflow.
+
 ## [0.14.0] — 2026-09-13
 
 ### Added
