@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@xterm/xterm": "^6.0.0",
-    "ws": "^8.18.3"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260905.1",
