@@ -6,6 +6,7 @@ import {
 import { Terminal as RefstreamTerminal } from "./vendor/refstream/v0.1.0-alpha.2/refstream.js";
 
 export type TerminalRenderer = "xterm" | "refstream";
+export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
 export interface TerminalSurface {
@@ -43,9 +44,9 @@ export function readTerminalRenderer(): TerminalRenderer {
   try {
     return localStorage.getItem(TERMINAL_RENDERER_STORAGE_KEY) === "refstream"
       ? "refstream"
-      : "xterm";
+      : DEFAULT_TERMINAL_RENDERER;
   } catch {
-    return "xterm";
+    return DEFAULT_TERMINAL_RENDERER;
   }
 }
 

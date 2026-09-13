@@ -696,7 +696,7 @@ export function Workspace() {
               }}
             >
               <option value="xterm">xterm.js</option>
-              <option value="refstream">Refstream</option>
+              <option value="refstream">Refstream (alpha)</option>
             </select>
           </label>
         </div>

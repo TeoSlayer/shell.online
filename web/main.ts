@@ -695,7 +695,7 @@ function renderTerminal(sessionId: string): void {
                 <div class="settings-card-heading"><label id="renderer-label" for="terminal-renderer">Renderer</label></div>
                 <select id="terminal-renderer" aria-describedby="renderer-description">
                   <option value="xterm">xterm.js</option>
-                  <option value="refstream">Refstream</option>
+                  <option value="refstream">Refstream (alpha)</option>
                 </select>
                 <span id="renderer-description">Changing renderer reopens this view.</span>
               </section>

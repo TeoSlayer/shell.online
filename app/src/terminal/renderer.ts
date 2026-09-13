@@ -6,6 +6,7 @@ import {
 import { Terminal as RefstreamTerminal } from "../../../web/vendor/refstream/v0.1.0-alpha.2/refstream.js";
 
 export type TerminalRenderer = "xterm" | "refstream";
+export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
 export interface TerminalSurface {
@@ -30,9 +31,11 @@ const STORAGE_KEY = "shell-online-terminal-renderer";
 
 export function readTerminalRenderer(): TerminalRenderer {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "refstream" ? "refstream" : "xterm";
+    return localStorage.getItem(STORAGE_KEY) === "refstream"
+      ? "refstream"
+      : DEFAULT_TERMINAL_RENDERER;
   } catch {
-    return "xterm";
+    return DEFAULT_TERMINAL_RENDERER;
   }
 }
 

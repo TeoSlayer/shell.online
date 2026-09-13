@@ -7,7 +7,7 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 ### Added
 
 - A persisted terminal renderer dropdown in public shares and signed-in
-  session tabs. xterm.js remains the default; Refstream can be selected without
+  session tabs. xterm.js is the default; Refstream (alpha) can be selected without
   changing the process, relay protocol, encryption, or session permissions.
 - Refstream mode now mounts its terminal-native find, command inspection,
   retained-output download, eight themes, text sizing, and back-to-live tools
