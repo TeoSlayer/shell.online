@@ -45,6 +45,18 @@ For monitoring without browser input:
 
 shell --read-only --json -- your-command --its-arguments
 
+File access is disabled by default. Enable only the directory the operator has
+asked to expose:
+
+shell --files --json -- your-command --its-arguments
+shell --files-root ./artifacts --json -- your-command --its-arguments
+
+--files uses the process working directory; --files-root selects another root.
+The browser shows no Files control until the host opts in. Listings and file
+contents are requested on demand over the existing E2EE WebSocket. The CLI
+rejects parent traversal, non-regular files, and symlink escapes. File access
+cannot be combined with --no-e2ee.
+
 Every normal share is end-to-end encrypted automatically. When SHELL_ONLINE_E2EE_PASSWORD is unset, the CLI generates a cryptographically random ten-character Base64URL browser password. For sensitive or long-lived sessions, set a longer unique password before starting shell:
 
 SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell --json -- your-command --its-arguments
@@ -55,13 +67,19 @@ For deliberate compatibility or debugging only, `shell --no-e2ee <command>` disa
 
 The first stderr line is a JSON event:
 
-{"type":"session","session_id":"...","share_url":"https://shell.online/s/...#salt=...","e2ee_password":"Ab3dE7-_","read_only":false,"encrypted":true,"background":true,...}
+{"type":"session","session_id":"...","share_url":"https://shell.online/s/...#salt=...","e2ee_password":"Ab3dE7-_xY","read_only":false,"encrypted":true,"background":true,...}
 
 Send the complete share_url, including its fragment, and e2ee_password to the human operator through the agent's normal communication channel. For sensitive work, use separate operator-approved channels when possible. If the operator explicitly requested --no-e2ee, the event has encrypted=false and no e2ee_password; disclose that Cloudflare is then inside the content trust boundary. Prefer --read-only when the operator only needs to monitor progress. Read-only is fixed at session creation and enforced by the Worker.
 
 Inside Claude Code, use `shell --json -- claude` to hand off the current conversation. shell.online detects CLAUDE_CODE_SESSION_ID and starts `claude --resume <current-session> --fork-session` inside the shared process. The new process keeps the conversation history and workspace; the original Claude process remains open, and new messages do not synchronize between them. Report this as a conversation fork, not as adoption of the original PID.
 
 Use `shell` with no command to share a fresh default shell. Use `shell --foreground command` to mirror output and accept input locally as well as in the browser.
+
+xterm.js is the default browser renderer. Refstream (alpha) can be selected in
+the terminal settings without restarting the process. Its Connect agent flow
+creates a revocable invitation scoped to this one session. Read access permits
+terminal read, search, and wait; control additionally permits text, commands,
+and key signals such as Ctrl-C. File access remains a separate host opt-in.
 
 Manage local sessions:
 

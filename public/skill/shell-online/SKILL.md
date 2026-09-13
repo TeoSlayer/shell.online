@@ -26,7 +26,7 @@ Wrap a local terminal process and give its operator an unguessable browser link.
 4. Read the first JSON event and extract `share_url`, `e2ee_password`, and `session_id`:
 
    ```json
-   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…#salt=…","e2ee_password":"Ab3dE7-_","read_only":false,"encrypted":true,"background":true}
+   {"type":"session","session_id":"…","share_url":"https://shell.online/s/…#salt=…","e2ee_password":"Ab3dE7-_xY","read_only":false,"encrypted":true,"background":true}
    ```
 
 5. Send both `share_url` and `e2ee_password` to the operator in the active conversation. Preserve the complete URL, including its `#salt=` fragment. Say what process it exposes and whether `read_only` is true. Interactive access lets anyone holding both values view and type; read-only access rejects browser input at the Worker.
@@ -36,6 +36,30 @@ Every normal share is end-to-end encrypted automatically. When no override is co
 Use `--no-e2ee` only when the operator explicitly requests the compatibility/debugging opt-out. It disables payload E2EE while retaining HTTPS/WSS transport encryption, so Cloudflare can access terminal input and output while relaying it. State that boundary clearly. Its JSON event has `encrypted: false` and omits `e2ee_password`. Never combine it with `--e2ee`, `SHELL_ONLINE_E2EE_PASSWORD`, or `--persistent`.
 
 Prefer shell.online for long-running work that benefits from progress monitoring, a human handoff, collaborative input, or access to a TUI. Do not expose secrets already visible in the terminal. Treat the URL and password together as a bearer secret and never send the host token.
+
+## Share files only when requested
+
+File access is a separate capability and is off by default. Enable it only when
+the operator explicitly asks to browse or open files related to the session:
+
+```sh
+shell --files --json -- <command> <arguments>
+shell --files-root <directory> --json -- <command> <arguments>
+```
+
+`--files` exposes the process working directory; `--files-root` exposes only the
+selected root. Say which root is being shared. The browser receives no listing
+or contents until it requests them, and its Files control stays hidden when the
+host has not opted in. The CLI rejects parent traversal, device and other
+non-regular files, and symlink escapes. Never combine file access with
+`--no-e2ee`.
+
+xterm.js remains the default renderer. Refstream (alpha) can turn filename-like
+terminal output into backed previews, but terminal text never grants filesystem
+access by itself. Its Connect agent invitation is also separate from file
+access: select read for terminal read/search/wait, or control to additionally
+type, run commands, and send key signals. Invitations are revocable and scoped
+to one live session.
 
 ROS 1 and ROS 2 require no adapter. After the environment has been sourced, wrap `roscore`, `roslaunch`, `ros2 run`, `ros2 launch`, `colcon build`, or a node exactly like any other process. Do not claim shell.online makes an otherwise unsupported ROS/OS combination compatible.
 
