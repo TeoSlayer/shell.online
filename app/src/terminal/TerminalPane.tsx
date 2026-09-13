@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.2/refstream.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.2/ui.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
@@ -16,6 +17,7 @@ import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
+import { attachRefstreamTools } from "../../../web/refstream-tools";
 
 export interface TerminalPaneProps {
   shareUrl: string;
@@ -87,6 +89,7 @@ export function TerminalPane({
   const attempt = useRef<Attempt | null>(null);
   const pending = useRef<Attempt[]>([]);
   const mount = useRef<HTMLDivElement>(null);
+  const toolsMount = useRef<HTMLDivElement>(null);
   const terminal = useRef<TerminalSurface | null>(null);
   const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
   const connection = useRef<TerminalConnection | null>(null);
@@ -119,6 +122,8 @@ export function TerminalPane({
    * the matter is how large to draw it.
    */
   const grid = useRef<TerminalGrid>(DESKTOP_TERMINAL_GRID);
+  const fontScale = useRef(1);
+  const fittedFontSize = useRef(BASE_FONT_SIZE);
 
   /**
    * Draws the whole session grid as large as this pane allows, then pins the
@@ -145,7 +150,9 @@ export function TerminalPane({
         pixelRatio: window.devicePixelRatio,
         maxLineHeight: BASE_LINE_HEIGHT,
       });
-      if (term.options.fontSize !== fitted.fontSize) term.options.fontSize = fitted.fontSize;
+      fittedFontSize.current = fitted.fontSize;
+      const scaledFontSize = Math.max(6, Math.min(32, fitted.fontSize * fontScale.current));
+      if (term.options.fontSize !== scaledFontSize) term.options.fontSize = scaledFontSize;
       if (term.options.lineHeight !== fitted.lineHeight) {
         term.options.lineHeight = fitted.lineHeight;
       }
@@ -175,11 +182,14 @@ export function TerminalPane({
 
   useEffect(() => {
     const node = mount.current;
-    if (!node) return;
+    const toolsNode = toolsMount.current;
+    if (!node || !toolsNode) return;
     tried.current = new Set();
 
     /* A pane reused for another session starts from the default again. */
     grid.current = DESKTOP_TERMINAL_GRID;
+    fontScale.current = 1;
+    fittedFontSize.current = BASE_FONT_SIZE;
 
     const resolved = resolveSessionSocket(
       shareUrl,
@@ -208,6 +218,27 @@ export function TerminalPane({
     term.open(node);
     terminal.current = term;
     measure.current = cellMeasurer(FONT_FAMILY);
+
+    const pane = node.closest<HTMLElement>(".pane");
+    let rendererTools: { dispose(): void } | null = null;
+    let rendererToolsDisposed = false;
+    if (pane) {
+      void attachRefstreamTools(renderer, {
+        terminal: term,
+        toolbar: toolsNode,
+        overlay: pane,
+        frame: pane,
+        isActive: () => activeRef.current,
+        onFontSizeChange: (size) => {
+          fontScale.current = size / Math.max(fittedFontSize.current, 1);
+          refit();
+        },
+        exportFilename: "shell-online-terminal-output.txt",
+      }).then((tools) => {
+        if (rendererToolsDisposed) tools?.dispose();
+        else rendererTools = tools;
+      });
+    }
 
     const connected = new TerminalConnection({
       url: target.url,
@@ -366,6 +397,8 @@ export function TerminalPane({
     const frame = requestAnimationFrame(refit);
 
     return () => {
+      rendererToolsDisposed = true;
+      rendererTools?.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       typed.dispose();
@@ -440,6 +473,7 @@ export function TerminalPane({
 
   return (
     <div className="pane" data-active={active} aria-hidden={!active}>
+      <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
       <div className="pane-screen" ref={mount} />
 
       {locked && (

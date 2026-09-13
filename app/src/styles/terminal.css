@@ -191,6 +191,30 @@ button.tab {
   justify-content: center;
 }
 
+.pane-refstream-toolbar {
+  position: absolute;
+  z-index: 6;
+  top: 10px;
+  right: 12px;
+}
+
+.pane-refstream-toolbar:empty {
+  display: none;
+}
+
+.pane-refstream-toolbar .terminal-tools {
+  padding: 3px;
+  border: 1px solid var(--terminal-ui-line, #343c4b);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--terminal-ui-surface, #171b23) 92%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  backdrop-filter: blur(12px);
+}
+
+.pane-refstream-toolbar:not(:empty) ~ .pane-banner {
+  top: 58px;
+}
+
 /* The emulator sizes itself; it must not be shrunk to the flex line. */
 .pane-screen > .xterm,
 .pane-screen > .shell-terminal {
