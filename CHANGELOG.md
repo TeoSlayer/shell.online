@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.14.0] — 2026-09-13
+
 ### Added
 
 - Opt-in, rooted file access over the existing encrypted session WebSocket.
