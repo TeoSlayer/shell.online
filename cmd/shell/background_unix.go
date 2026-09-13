@@ -136,6 +136,9 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 		if result.Handoff != "" {
 			event["handoff"] = result.Handoff
 		}
+		if result.Files != "" {
+			event["files"] = result.Files
+		}
 		encoded, _ := json.Marshal(event)
 		fmt.Fprintf(stderr, "%s\n", encoded)
 		return 0

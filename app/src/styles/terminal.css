@@ -191,11 +191,15 @@ button.tab {
   justify-content: center;
 }
 
-.pane-refstream-toolbar {
+.pane-tools {
   position: absolute;
-  z-index: 6;
+  z-index: 7;
   top: 10px;
   right: 12px;
+  display: flex;
+  max-width: calc(100% - 24px);
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .pane-refstream-toolbar:empty {
@@ -211,8 +215,17 @@ button.tab {
   backdrop-filter: blur(12px);
 }
 
-.pane-refstream-toolbar:not(:empty) ~ .pane-banner {
+.pane-tools:has(.pane-refstream-toolbar:not(:empty), .pane-files-toolbar:not(:empty)) ~ .pane-banner {
   top: 58px;
+}
+
+@media (max-width: 640px) {
+  .pane-tools {
+    top: 6px;
+    right: 6px;
+    max-width: calc(100% - 12px);
+    gap: 5px;
+  }
 }
 
 /* The emulator sizes itself; it must not be shrunk to the flex line. */

@@ -136,3 +136,36 @@ func TestTargetedSnapshotSurvivesRelayHeaderRemoval(t *testing.T) {
 		t.Fatalf("opened snapshot = %x", opened)
 	}
 }
+
+func TestTargetedFileFramesSurviveRelayRouting(t *testing.T) {
+	key := bytes.Repeat([]byte{8}, KeyBytes)
+	cipher, err := New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response := append([]byte{0x0b, 0, 0, 0, 42}, []byte("file bytes")...)
+	sealedResponse, err := cipher.SealFrame(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(sealedResponse[:5], response[:5]) {
+		t.Fatal("file response routing header changed")
+	}
+	relayedResponse := append([]byte{0x0b}, sealedResponse[5:]...)
+	openedResponse, err := cipher.OpenFrame(relayedResponse)
+	if err != nil || !bytes.Equal(openedResponse, append([]byte{0x0b}, []byte("file bytes")...)) {
+		t.Fatalf("opened response = %x, err %v", openedResponse, err)
+	}
+
+	request, err := cipher.SealFrame(append([]byte{0x0a}, []byte("request")...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetedRequest := append([]byte{0x0a, 0, 0, 0, 42}, request[1:]...)
+	openedRequest, err := cipher.OpenFrame(targetedRequest)
+	wantRequest := append([]byte{0x0a, 0, 0, 0, 42}, []byte("request")...)
+	if err != nil || !bytes.Equal(openedRequest, wantRequest) {
+		t.Fatalf("opened request = %x, err %v", openedRequest, err)
+	}
+}

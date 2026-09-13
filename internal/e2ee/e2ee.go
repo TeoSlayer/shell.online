@@ -123,8 +123,10 @@ func (c *Cipher) sealFrameWithNonce(frame, nonce []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid E2EE nonce")
 	}
 	headerBytes := 1
-	// Targeted host snapshots keep the viewer id visible to the relay.
-	if frame[0] == 0x03 && len(frame) >= 5 {
+	// Targeted host snapshots and file responses keep the viewer id visible to
+	// the relay. File requests gain the same prefix at the relay before the CLI
+	// opens them, so OpenFrame mirrors this rule below.
+	if (frame[0] == 0x03 || frame[0] == 0x0b) && len(frame) >= 5 {
 		headerBytes = 5
 	}
 	result := make([]byte, headerBytes+1+NonceBytes, headerBytes+1+NonceBytes+len(frame)-headerBytes+c.aead.Overhead())
@@ -136,19 +138,25 @@ func (c *Cipher) sealFrameWithNonce(frame, nonce []byte) ([]byte, error) {
 }
 
 func (c *Cipher) OpenFrame(frame []byte) ([]byte, error) {
-	if len(frame) < 1+1+NonceBytes+c.aead.Overhead() {
+	headerBytes := 1
+	// The relay inserts a clear viewer id into file requests. It is routing
+	// metadata only; the request and its path remain encrypted.
+	if len(frame) >= 5 && frame[0] == 0x0a {
+		headerBytes = 5
+	}
+	if len(frame) < headerBytes+1+NonceBytes+c.aead.Overhead() {
 		return nil, fmt.Errorf("truncated E2EE frame")
 	}
-	if frame[1] != EnvelopeVersion {
+	if frame[headerBytes] != EnvelopeVersion {
 		return nil, fmt.Errorf("unsupported E2EE envelope version")
 	}
-	nonce := frame[2 : 2+NonceBytes]
-	plaintext, err := c.aead.Open(nil, nonce, frame[2+NonceBytes:], frame[:1])
+	nonce := frame[headerBytes+1 : headerBytes+1+NonceBytes]
+	plaintext, err := c.aead.Open(nil, nonce, frame[headerBytes+1+NonceBytes:], frame[:1])
 	if err != nil {
 		return nil, fmt.Errorf("authenticate E2EE frame: %w", err)
 	}
-	result := make([]byte, 1+len(plaintext))
-	result[0] = frame[0]
-	copy(result[1:], plaintext)
+	result := make([]byte, headerBytes+len(plaintext))
+	copy(result, frame[:headerBytes])
+	copy(result[headerBytes:], plaintext)
 	return result, nil
 }

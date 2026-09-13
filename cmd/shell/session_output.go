@@ -41,6 +41,9 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 		privacy = "transport encryption only"
 	}
 	fmt.Fprintf(writer, "  %s %s · %s\n", label("Access"), access, styleSessionText(color, "38;5;114", privacy))
+	if result.Files != "" {
+		fmt.Fprintf(writer, "  %s %s\n", label("Files"), value(result.Files+" · on demand"))
+	}
 
 	sessionLabel := shortSessionID(result.ID)
 	if background {

@@ -28,6 +28,8 @@ export interface ConnectionEvents {
    * joins or leaves.
    */
   onGrid(grid: TerminalGrid): void;
+  /** Decrypted optional file-service frames, kept out of terminal output. */
+  onFileFrame?(frame: Uint8Array): void;
   /**
    * The key opened its first frame. Until then a password is only a guess, so
    * this is the moment it can be kept as the right one.
@@ -132,6 +134,11 @@ export class TerminalConnection {
     if (this.readOnly) return;
     const bytes = new TextEncoder().encode(data);
     void this.transmit(encodeFrame(Opcode.Input, bytes));
+  }
+
+  /** Send a non-terminal frame such as an opted-in file request. */
+  sendFrame(frame: Uint8Array<ArrayBuffer>): void {
+    void this.transmit(frame);
   }
 
   close(): void {
@@ -260,6 +267,8 @@ export class TerminalConnection {
       this.options.events.onData(frame.subarray(1), true);
     } else if (opcode === Opcode.Output) {
       this.options.events.onData(frame.subarray(1), false);
+    } else if (opcode === Opcode.FileResponse) {
+      this.options.events.onFileFrame?.(frame);
     }
   }
 

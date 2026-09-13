@@ -94,6 +94,7 @@ func runSharedProcess(
 	currentPassword string,
 	persistentStatePath string,
 	onPasswordRotated func(string, string),
+	fileService *sharedFileService,
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
@@ -281,7 +282,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, outputRing, frameCipher, exitAcknowledged, rotationAcknowledged, &supportsRotation)
+		err := readRelay(connection, ptmx, outputRing, frameCipher, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
 		select {
 		case <-sharingFinished:
 			return
@@ -480,6 +481,7 @@ func readRelay(
 	exitAcknowledged chan<- struct{},
 	rotationAcknowledged chan<- struct{},
 	supportsRotation *atomic.Bool,
+	fileService *sharedFileService,
 ) error {
 	for {
 		messageType, message, err := connection.Read()
@@ -560,6 +562,8 @@ func readRelay(
 					_ = connection.Send(relay.BinaryMessage, sealed)
 				}
 			}
+		case protocol.FileRequest:
+			fileService.handle(connection, frameCipher, message)
 		}
 	}
 }

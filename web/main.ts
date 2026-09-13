@@ -28,6 +28,8 @@ import {
   type TerminalRenderer,
 } from "./terminal-renderer";
 import { attachRefstreamTools } from "./refstream-tools";
+import { RelayFileClient } from "./relay-files";
+import { mountRelayFileBrowser } from "./relay-files-ui";
 import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
@@ -59,6 +61,7 @@ import {
   type TouchSample,
 } from "./touch-scroll";
 import "./style.css";
+import "./relay-files.css";
 import "./landing.css";
 
 const app = document.querySelector<HTMLElement>("#app");
@@ -622,6 +625,7 @@ function renderTerminal(sessionId: string): void {
         </div>
         <div class="session-actions">
           <div id="presence" class="presence" aria-label="No collaborators connected"></div>
+          <div id="relay-files-tools" class="relay-files-tools"></div>
           <button id="theme-toggle" class="theme-button" type="button">
             <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
               <circle cx="12" cy="12" r="3.25"></circle>
@@ -763,6 +767,7 @@ function renderTerminal(sessionId: string): void {
   const copyButton = requiredElement<HTMLButtonElement>("settings-copy-link");
   const settingsButton = requiredElement<HTMLButtonElement>("settings-open");
   const settingsDialog = requiredElement<HTMLDialogElement>("terminal-settings");
+  const relayFilesTools = requiredElement("relay-files-tools");
   const encryptionGate = requiredElement("encryption-gate");
   const encryptionForm = requiredElement<HTMLFormElement>("encryption-form");
   const encryptionPassword = requiredElement<HTMLInputElement>("encryption-password");
@@ -901,6 +906,10 @@ function renderTerminal(sessionId: string): void {
       current.send(frameCipher ? await frameCipher.seal(frame) : new Uint8Array(frame));
     }).catch(() => undefined);
   };
+
+  const fileClient = new RelayFileClient(sendBinaryFrame);
+  if (terminalRenderer === "refstream") terminal.options.fileLinks = fileClient.fileLinks;
+  const fileBrowser = mountRelayFileBrowser(fileClient, relayFilesTools, terminalWrap);
 
   const showEncryptionGate = (message: string, allowPassword: boolean): void => {
     waitingForEncryptionKey = true;
@@ -1377,6 +1386,7 @@ function renderTerminal(sessionId: string): void {
     socket.addEventListener("open", () => {
       terminalInput.flush();
       scheduleFit();
+      fileClient.probe();
       if (!waitingForCapacity && !compactSessionQuery.matches && !readOnly) terminal.focus();
     });
 
@@ -1401,6 +1411,7 @@ function renderTerminal(sessionId: string): void {
           }
         }
         if (frame.byteLength === 0) return;
+        if (fileClient.handle(frame)) return;
         if (receiveLatencyResponse(frame)) return;
         if (isSnapshotOpcode(frame[0])) {
           terminalWrites.enqueue(frame.subarray(1), true);
@@ -1418,6 +1429,7 @@ function renderTerminal(sessionId: string): void {
 
     socket.addEventListener("close", (event) => {
       socket = null;
+      fileClient.reset();
       terminalInput.clear();
       stopLatencyProbe();
       selfViewerId = null;
@@ -1843,6 +1855,8 @@ function renderTerminal(sessionId: string): void {
     stopped = true;
     refstreamToolsDisposed = true;
     refstreamTools?.dispose();
+    fileClient.dispose();
+    fileBrowser.dispose();
     window.clearTimeout(retryTimer);
     window.clearTimeout(presenceTimer);
     window.clearTimeout(copyResetTimer);

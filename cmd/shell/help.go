@@ -11,6 +11,7 @@ func printShellHelp(writer io.Writer) {
 Start
   shell <command>                  Share it in the background
   shell --read-only <command>      Share it while browser input is blocked
+  shell --files <command>          Add on-demand files from this directory
   shell                            Share a fresh shell
   shell claude                     Share a fork of this conversation
 
@@ -41,9 +42,11 @@ Common options
   --read-only                      View only
   --foreground                     Stay attached locally
   --persistent <state-file>        Keep one encrypted URL across restarts
+  --files                          Opt in the working directory for file access
+  --files-root <directory>         Opt in a different directory
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|attach|list|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
+Use shell help <start|files|attach|list|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
 guided topic, or shell help reference for every command, flag, and environment variable.
 `)
 }
@@ -54,7 +57,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|attach|list|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|files|attach|list|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
 		return 2
 	}
 
@@ -79,6 +82,8 @@ Examples
   shell npm run dev
   shell --foreground htop
   shell --auto-close 5m pytest -x
+  shell --files claude
+  shell --files-root ./artifacts python train.py
 
 When Claude Code runs "shell claude" through its Bash tool, shell detects the current
 conversation and starts a shareable fork with its history. The original Claude process
@@ -92,6 +97,28 @@ E2EE notes
   shell password <ID> prints an active session's password from its owner-only
   local record. An unlocked account vault can recover passwords that were sealed
   to it. If neither copy exists, E2EE deliberately has no recovery backdoor.
+`)
+	case "files":
+		fmt.Fprint(stdout, `Share files on demand
+
+  shell --files <command>
+  shell --files-root <directory> <command>
+
+File access is off by default. --files scopes it to the command's working
+directory; --files-root chooses another root. Only regular files beneath that
+root can be opened. Parent traversal, device files, and symlink escapes are
+rejected by the CLI.
+
+The browser receives no directory listing or file contents until it asks. When
+enabled, a Files control appears in both xterm.js and Refstream views. Refstream
+also turns filename-like terminal output into backed previews; terminal text is
+never treated as filesystem authority. Read-only terminal links may read files
+that were deliberately opted in, but they still cannot type into the process.
+
+Files use the session's existing authenticated, end-to-end encrypted WebSocket.
+The relay routes request IDs and encrypted frame sizes, not paths or contents.
+Transfers are bounded and pull-driven so a slow viewer cannot block the PTY.
+File sharing therefore cannot be combined with --no-e2ee.
 `)
 	case "attach":
 		fmt.Fprint(stdout, `Attach locally
@@ -344,6 +371,11 @@ START OPTIONS
       Reuse a stable session identity, password, and URL. The owner-only state
       file contains host credentials, the browser password, and decryption material.
       Re-run with the same file after a process or machine restart to restore the link.
+  --files
+      Opt in regular files under the process working directory. The browser
+      discovers and reads them only on demand; nothing is shared by default.
+  --files-root <directory>
+      Opt in a different root. Parent traversal and symlink escapes are rejected.
   --foreground
       Mirror and control the process in the launching terminal instead of
       returning immediately.

@@ -14,6 +14,7 @@ describe("session access enforcement", () => {
     for (const readOnly of [false, true]) {
       expect(viewerFrameAction(Opcode.Resize, readOnly)).toBe("resize");
       expect(viewerFrameAction(Opcode.Ping, readOnly)).toBe("ping");
+      expect(viewerFrameAction(Opcode.FileRequest, readOnly)).toBe("file-request");
     }
     expect(viewerFrameAction(255, true)).toBe("invalid");
   });

@@ -67,6 +67,8 @@ shell --read-only <command>               # disable browser input
 shell --foreground <command>              # also show it locally
 shell --auto-close 5m <command>           # set an earlier deadline
 shell --persistent <file> <command>       # reuse a URL and password
+shell --files <command>                   # opt in working-directory files
+shell --files-root <dir> <command>        # opt in a different file root
 
 shell list                                # list local sessions (adapts to terminal width)
 shell password <id>                       # retrieve an active password locally
@@ -77,6 +79,19 @@ shell kill <id>                           # stop a session
 
 Press `Ctrl-X`, then `D`, to detach from an attached session. See
 [`shell help reference`](https://shell.online/cli/) for every command and option.
+
+File sharing is disabled unless `--files` or `--files-root` is present. Once
+enabled, browsers can browse that root and open referenced files on demand.
+Paths and contents use the session's E2EE WebSocket; the CLI rejects traversal,
+non-regular files, and symlink escapes. File flags cannot be combined with
+`--no-e2ee`. Refstream (alpha) adds inline backed-file
+previews, while the Files panel works with either renderer.
+
+Refstream (alpha) also provides a scoped **Connect agent** invitation. An agent
+can read, search, and wait for terminal output; with explicit control permission
+it can type, run commands, and send key combinations such as Ctrl-C. Disconnecting
+the agent does not stop the terminal. Files remain unavailable unless the host
+separately started the share with `--files` or `--files-root`.
 
 ## Security
 

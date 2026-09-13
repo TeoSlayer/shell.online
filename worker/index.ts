@@ -1168,6 +1168,24 @@ export class TerminalSession extends DurableObject<Env> {
         this.broadcastBinary(frame, "viewer");
         return;
 
+      case Opcode.FileResponse: {
+        if (frame.byteLength < 6 || frame.byteLength > MAX_LIVE_FRAME_BYTES + 5 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
+          safeClose(socket, 4009, "file response frame too large");
+          return;
+        }
+        const targetId = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(1);
+        const target = this.state
+          .getWebSockets("viewer")
+          .find((candidate) => readAttachment(candidate)?.id === targetId);
+        if (target) {
+          const outbound = new Uint8Array(frame.byteLength - 4);
+          outbound[0] = Opcode.FileResponse;
+          outbound.set(frame.subarray(5), 1);
+          safeSend(target, outbound);
+        }
+        return;
+      }
+
       default:
         safeClose(socket, 4002, "host opcode not allowed");
     }
@@ -1206,6 +1224,22 @@ export class TerminalSession extends DurableObject<Env> {
       this.broadcastTerminalGrid();
       this.broadcastBinary(frame, "host");
       this.recordCollaborationStarted(attachment);
+      return;
+    }
+
+    if (action === "file-request") {
+      if (frame.byteLength < 2 || frame.byteLength > MAX_LIVE_FRAME_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
+        safeClose(socket, 4009, "file request frame too large");
+        return;
+      }
+      // Attach the authenticated viewer id outside the encrypted body. The
+      // CLI echoes it in FileResponse so the relay can route file bytes only
+      // to the requester; paths and contents remain opaque to this worker.
+      const targeted = new Uint8Array(frame.byteLength + 4);
+      targeted[0] = Opcode.FileRequest;
+      new DataView(targeted.buffer).setUint32(1, attachment.id);
+      targeted.set(frame.subarray(1), 5);
+      this.broadcastBinary(targeted, "host");
       return;
     }
 

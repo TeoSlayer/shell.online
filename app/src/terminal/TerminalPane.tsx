@@ -18,6 +18,9 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
+import { RelayFileClient } from "../../../web/relay-files";
+import { mountRelayFileBrowser } from "../../../web/relay-files-ui";
+import "../../../web/relay-files.css";
 
 export interface TerminalPaneProps {
   shareUrl: string;
@@ -90,6 +93,7 @@ export function TerminalPane({
   const pending = useRef<Attempt[]>([]);
   const mount = useRef<HTMLDivElement>(null);
   const toolsMount = useRef<HTMLDivElement>(null);
+  const filesMount = useRef<HTMLDivElement>(null);
   const terminal = useRef<TerminalSurface | null>(null);
   const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
   const connection = useRef<TerminalConnection | null>(null);
@@ -183,7 +187,8 @@ export function TerminalPane({
   useEffect(() => {
     const node = mount.current;
     const toolsNode = toolsMount.current;
-    if (!node || !toolsNode) return;
+    const filesNode = filesMount.current;
+    if (!node || !toolsNode || !filesNode) return;
     tried.current = new Set();
 
     /* A pane reused for another session starts from the default again. */
@@ -219,7 +224,12 @@ export function TerminalPane({
     terminal.current = term;
     measure.current = cellMeasurer(FONT_FAMILY);
 
+    let connected: TerminalConnection;
+    const fileClient = new RelayFileClient((frame) => connected.sendFrame(frame));
+    if (renderer === "refstream") term.options.fileLinks = fileClient.fileLinks;
+
     const pane = node.closest<HTMLElement>(".pane");
+    const fileBrowser = pane ? mountRelayFileBrowser(fileClient, filesNode, pane) : null;
     let rendererTools: { dispose(): void } | null = null;
     let rendererToolsDisposed = false;
     if (pane) {
@@ -240,7 +250,7 @@ export function TerminalPane({
       });
     }
 
-    const connected = new TerminalConnection({
+    connected = new TerminalConnection({
       url: target.url,
       fragment: encryptionFragment(shareUrl),
       events: {
@@ -267,6 +277,7 @@ export function TerminalPane({
             }
           }
           setStatus(next);
+          if (next === "connected") fileClient.probe();
           setDetail(shown ?? "");
           if (next === "needs-password") setUnlocking(false);
         },
@@ -292,6 +303,7 @@ export function TerminalPane({
           if (reset) term.reset();
           term.write(bytes);
         },
+        onFileFrame: (frame) => { fileClient.handle(frame); },
         onReadOnly: (value) => {
           setReadOnly(value);
           term.options.disableStdin = value || !canTypeRef.current;
@@ -404,6 +416,8 @@ export function TerminalPane({
       typed.dispose();
       sink?.close();
       connected.close();
+      fileClient.dispose();
+      fileBrowser?.dispose();
       term.dispose();
       terminal.current = null;
       measure.current = null;
@@ -473,7 +487,10 @@ export function TerminalPane({
 
   return (
     <div className="pane" data-active={active} aria-hidden={!active}>
-      <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
+      <div className="pane-tools">
+        <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
+        <div ref={filesMount} className="pane-files-toolbar" aria-label="Shared files" />
+      </div>
       <div className="pane-screen" ref={mount} />
 
       {locked && (

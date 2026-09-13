@@ -6,6 +6,14 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Opt-in, rooted file access over the existing encrypted session WebSocket.
+  Browsers can open a scoped file tree on demand, and Refstream mode turns
+  filename-like terminal output into backed previews without granting access
+  outside the CLI-selected root.
+- A Refstream agent-connect surface with separately selectable read or control
+  permission. Agents can read, search, wait, type, execute, and send terminal
+  key combinations through a revocable, one-session invitation.
+
 - A persisted terminal renderer dropdown in public shares and signed-in
   session tabs. xterm.js is the default; Refstream (alpha) can be selected without
   changing the process, relay protocol, encryption, or session permissions.

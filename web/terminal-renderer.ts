@@ -18,6 +18,8 @@ export interface TerminalSurface {
     lineHeight?: number;
     theme?: ITerminalOptions["theme"];
     disableStdin?: boolean;
+    /** Refstream's optional backed-file resolver. Ignored by xterm.js. */
+    fileLinks?: unknown;
   };
   readonly buffer: { readonly active: { readonly type: "normal" | "alternate" } };
   readonly modes: { readonly mouseTrackingMode: string };

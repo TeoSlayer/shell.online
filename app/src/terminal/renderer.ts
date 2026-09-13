@@ -16,6 +16,7 @@ export interface TerminalSurface {
     fontSize?: number;
     lineHeight?: number;
     disableStdin?: boolean;
+    fileLinks?: unknown;
   };
   open(element: HTMLElement): void;
   write(data: string | Uint8Array, callback?: () => void): void;

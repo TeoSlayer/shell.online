@@ -16,6 +16,10 @@ export const enum Opcode {
   Pong = 0x07,
   BroadcastSnapshot = 0x08,
   ConfirmedEOF = 0x09,
+  /** Encrypted, relay-targeted request from one viewer to the CLI file service. */
+  FileRequest = 0x0a,
+  /** Encrypted, relay-targeted response from the CLI file service to one viewer. */
+  FileResponse = 0x0b,
 }
 
 export const MAX_INPUT_CHUNK = 16 * 1024;

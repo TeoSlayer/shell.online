@@ -129,7 +129,11 @@
         ],
         [
           "Read-only is server-enforced",
-          "With --read-only, ordinary browser input and confirmed EOF are rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session."
+          "With --read-only, ordinary browser input and confirmed EOF are rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
+        ],
+        [
+          "Files are off unless the CLI opts in",
+          "--files scopes on-demand access to the process working directory; --files-root chooses another root. The browser receives no listing or bytes until it asks. Requests and contents use the terminal's E2EE WebSocket, the CLI revalidates every path, and filesystem-rooted opens reject traversal and symlink escapes. Refstream filename detection only creates a backed reference; terminal output alone never grants access outside the opted-in root."
         ],
         [
           "Cloudflare relays ciphertext by default",
@@ -226,6 +230,14 @@
               "Reuse one stable encrypted identity, password, and URL."
             ],
             [
+              "--files",
+              "Opt in regular files under the session working directory. Browsers list and read them only on demand. Requires E2EE."
+            ],
+            [
+              "--files-root <directory>",
+              "Opt in a different root. Parent traversal, non-regular files, and symlink escapes are rejected by the CLI."
+            ],
+            [
               "--foreground",
               "Mirror and control the process in the launching terminal."
             ],
@@ -248,6 +260,24 @@
             [
               "-h, --help",
               "Print guided top-level help."
+            ]
+          ]
+        ],
+        [
+          "Agent connect (Refstream alpha)",
+          "Switch the browser renderer to Refstream (alpha), then choose Connect agent. The copied invitation grants one agent access to only this live terminal and can be revoked without stopping the process. File access is independent and stays unavailable unless the host used --files or --files-root.",
+          [
+            [
+              "Read terminal",
+              "Read current output, search retained rows, inspect command boundaries, and wait for changes."
+            ],
+            [
+              "Read and control",
+              "Also type text, execute a command against a recent terminal sequence, and send key combinations such as Ctrl-C."
+            ],
+            [
+              "Disconnect",
+              "Revoke the agent invitation or active connection without closing the share or local task."
             ]
           ]
         ],

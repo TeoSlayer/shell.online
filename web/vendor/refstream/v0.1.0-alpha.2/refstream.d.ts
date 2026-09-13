@@ -42,6 +42,7 @@ export interface TerminalOptions {
   cursorStyle?: "block" | "underline" | "bar";
   cursorInactiveStyle?: "outline" | "block" | "bar" | "underline" | "none";
   disableStdin?: boolean;
+  fileLinks?: unknown;
   drawBoldTextInBrightColors?: boolean;
   macOptionIsMeta?: boolean;
   scrollOnUserInput?: boolean;

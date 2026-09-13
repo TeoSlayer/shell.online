@@ -90,6 +90,28 @@ describe("standalone relay", () => {
     expect(JSON.parse(await denied as string)).toEqual({ type: "access_denied", reason: "read_only" });
   });
 
+  test("targets opted-in file requests and responses to one viewer", async () => {
+    const { base, ws } = await start();
+    const session = await create(base, true);
+    const host = await open(`${ws}/api/sessions/${session.session_id}/ws`, { headers: { Authorization: `Bearer ${session.host_token}` } });
+    const viewer = await open(`${ws}/api/sessions/${session.session_id}/ws`, { headers: { Origin: "http://127.0.0.1" } });
+    const other = await open(`${ws}/api/sessions/${session.session_id}/ws`, { headers: { Origin: "http://127.0.0.1" } });
+    cleanup.push(() => { host.terminate(); viewer.terminate(); other.terminate(); });
+
+    const request = message(host, (value) => Buffer.isBuffer(value) && value[0] === Opcode.FileRequest);
+    viewer.send(Buffer.from([Opcode.FileRequest, 0xaa, 0xbb]));
+    const targeted = await request as Buffer;
+    expect(targeted.subarray(5)).toEqual(Buffer.from([0xaa, 0xbb]));
+
+    let leaked = false;
+    other.on("message", (value: Buffer) => { if (value[0] === Opcode.FileResponse) leaked = true; });
+    const response = message(viewer, (value) => Buffer.isBuffer(value) && value[0] === Opcode.FileResponse);
+    host.send(Buffer.concat([Buffer.from([Opcode.FileResponse]), targeted.subarray(1, 5), Buffer.from([0xcc])]));
+    expect(await response).toEqual(Buffer.from([Opcode.FileResponse, 0xcc]));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(leaked).toBe(false);
+  });
+
   test("routes E2EE envelopes byte-for-byte and rejects a false host token", async () => {
     const { base, ws } = await start();
     const session = await create(base, false, true);

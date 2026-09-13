@@ -71,6 +71,8 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	e2eeFlag := flags.Bool("e2ee", false, "compatibility flag; E2EE is enabled by default")
 	noE2EE := flags.Bool("no-e2ee", false, "disable payload E2EE and rely on transport encryption only")
 	persistentState := flags.String("persistent", "", "reuse a stable encrypted session identity from this state file")
+	shareFiles := flags.Bool("files", false, "share files under the session working directory on demand")
+	filesRoot := flags.String("files-root", "", "share files under this directory on demand (implies --files)")
 	autoClose := newAutoCloseFlag()
 	flags.Var(autoClose, "auto-close", "close on task exit, or earlier at a duration/date (for example 5m, 2h, tomorrow 09:00)")
 	flags.Usage = func() {
@@ -104,6 +106,10 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 	if !encrypted && *persistentState != "" {
 		fmt.Fprintln(stderr, "shell: --persistent cannot be used with --no-e2ee")
+		return 2
+	}
+	if !encrypted && (*shareFiles || *filesRoot != "") {
+		fmt.Fprintln(stderr, "shell: --files and --files-root require end-to-end encryption")
 		return 2
 	}
 	if password != "" {
@@ -141,6 +147,15 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 	launch := prepareCommandLaunch(command, os.Environ(), !*foreground)
 	command = launch.Arguments
+	fileService, err := openSharedFileService(*shareFiles, *filesRoot)
+	if err != nil {
+		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
+	}
+	if fileService != nil {
+		defer fileService.Close()
+	}
 
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGHUP)
 	defer stopSignals()
@@ -240,6 +255,10 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		StartedAt:  processStartedAt.UnixMilli(),
 	}
 	announceSession := func() {
+		sharedFilesRoot := ""
+		if fileService != nil {
+			sharedFilesRoot = fileService.display
+		}
 		vault := link.Register(signalContext, publishedSession, password)
 		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
@@ -251,6 +270,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				Password:   password,
 				Vault:      vault,
 				Persistent: session.Persistent,
+				Files:      sharedFilesRoot,
 				ExpiresAt:  session.ExpiresAt,
 				ClosesAt:   closesAt,
 				Handoff:    launch.Handoff,
@@ -277,6 +297,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				event["auto_close"] = "deadline"
 				event["closes_at"] = closesAt.Format(time.RFC3339)
 			}
+			if sharedFilesRoot != "" {
+				event["files"] = sharedFilesRoot
+			}
 			encoded, _ := json.Marshal(event)
 			fmt.Fprintf(stderr, "%s\n", encoded)
 			return
@@ -284,7 +307,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		printSessionCard(stderr, backgroundLaunchResult{
 			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
 			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
-			Vault:     vault,
+			Vault: vault, Files: sharedFilesRoot,
 			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,
 		}, false)
 	}
@@ -315,6 +338,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			rotated.CredentialRotation = true
 			_ = link.Register(context.Background(), rotated, rotatedPassword)
 		},
+		fileService,
 	)
 	// The share is over once the process is; mark it closed in the account.
 	link.Close(&exitCode)

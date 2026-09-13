@@ -118,6 +118,7 @@ func TestSharedProcessCancelsHangingRelayDialBeforeAnnouncing(t *testing.T) {
 			"",
 			"",
 			nil,
+			nil,
 		)
 		result <- err
 	}()

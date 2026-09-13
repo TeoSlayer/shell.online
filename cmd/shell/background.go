@@ -25,6 +25,7 @@ type backgroundLaunchResult struct {
 	Password   string     `json:"e2ee_password,omitempty"`
 	Vault      string     `json:"vault,omitempty"`
 	Persistent bool       `json:"persistent,omitempty"`
+	Files      string     `json:"files,omitempty"`
 	ExpiresAt  time.Time  `json:"expires_at,omitempty"`
 	ClosesAt   *time.Time `json:"closes_at,omitempty"`
 	Handoff    string     `json:"handoff,omitempty"`

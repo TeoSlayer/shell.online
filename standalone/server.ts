@@ -295,6 +295,13 @@ class SessionRelay {
       case Opcode.Pong:
         if (frame.length !== (this.meta.encrypted ? 34 : 5)) return close(socket, 4002, "invalid latency response");
         return this.broadcastBinary(frame, "viewer");
+      case Opcode.FileResponse: {
+        if (frame.length < 6 || frame.length > MAX_LIVE_FRAME + 5 + (this.meta.encrypted ? ENCRYPTION_OVERHEAD : 0)) return close(socket, 4009, "file response frame too large");
+        const targetId = frame.readUInt32BE(1);
+        const target = [...this.viewers.entries()].find(([, viewer]) => viewer.id === targetId)?.[0];
+        if (target) send(target, Buffer.concat([Buffer.from([Opcode.FileResponse]), frame.subarray(5)]));
+        return;
+      }
       default:
         return close(socket, 4002, "host opcode not allowed");
     }
@@ -314,6 +321,14 @@ class SessionRelay {
       if (!this.claimInputLease(attachment)) return;
       this.broadcastGrid();
       return this.broadcastBinary(frame, "host");
+    }
+    if (action === "file-request") {
+      if (frame.length < 2 || frame.length > MAX_LIVE_FRAME + 1 + (this.meta.encrypted ? ENCRYPTION_OVERHEAD : 0)) return close(socket, 4009, "file request frame too large");
+      const targeted = Buffer.allocUnsafe(frame.length + 4);
+      targeted[0] = Opcode.FileRequest;
+      targeted.writeUInt32BE(attachment.id, 1);
+      frame.copy(targeted, 5, 1);
+      return this.broadcastBinary(targeted, "host");
     }
     if (action === "resize") {
       if (this.meta.encrypted) {
