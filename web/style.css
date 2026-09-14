@@ -1566,15 +1566,36 @@ a {
   padding: 3px;
   border: 1px solid var(--terminal-ui-line, #343c4b);
   border-radius: 9px;
-  background: color-mix(in srgb, var(--terminal-ui-surface, #171b23) 92%, transparent);
+  background: var(--terminal-ui-surface, #171b23);
   box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
-  backdrop-filter: blur(12px);
+}
+
+.refstream-alpha-notice {
+  position: absolute;
+  z-index: 5;
+  right: 20px;
+  bottom: 16px;
+  max-width: min(420px, calc(100% - 40px));
+  padding: 8px 11px;
+  border: 1px solid #4a5362;
+  border-radius: 8px;
+  background: #171d27;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 24%);
+  color: #b7c0cf;
+  font: 520 10px/1.45 "Uncut Sans", sans-serif;
+  pointer-events: none;
 }
 
 @media (max-width: 760px) {
   .refstream-toolbar {
     top: 8px;
     right: 8px;
+  }
+
+  .refstream-alpha-notice {
+    right: 8px;
+    bottom: 8px;
+    max-width: calc(100% - 16px);
   }
 }
 

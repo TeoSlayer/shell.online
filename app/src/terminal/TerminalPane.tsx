@@ -57,6 +57,15 @@ const THEME = {
   selectionBackground: "#3a3f33",
 };
 
+/* Refstream paints its own surface, so it needs an opaque theme rather than xterm's clear canvas. */
+const REFSTREAM_THEME = {
+  ...THEME,
+  background: "#1d201b",
+  foreground: "#edf0e7",
+  cursor: "#d4ff72",
+  selectionBackground: "#3b472f",
+};
+
 const FONT_FAMILY = 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace';
 
 /* Only until the first fit, which is one frame later. Nothing else reads it. */
@@ -219,7 +228,7 @@ export function TerminalPane({
       cursorBlink: true,
       convertEol: false,
       scrollback: 5000,
-      theme: THEME,
+      theme: renderer === "refstream" ? REFSTREAM_THEME : THEME,
     });
     term.open(node);
     terminal.current = term;
@@ -487,7 +496,7 @@ export function TerminalPane({
   const locked = status === "needs-password";
 
   return (
-    <div className="pane" data-active={active} aria-hidden={!active}>
+    <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
       <div className="pane-tools">
         <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
         <div ref={filesMount} className="pane-files-toolbar" aria-label="Shared files" />

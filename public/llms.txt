@@ -75,7 +75,7 @@ Inside Claude Code, use `shell --json -- claude` to hand off the current convers
 
 Use `shell` with no command to share a fresh default shell. Use `shell --foreground command` to mirror output and accept input locally as well as in the browser.
 
-xterm.js is the default browser renderer. Refstream (alpha) can be selected in
+xterm.js is the default browser renderer. Refstream (unstable alpha) can be selected in
 the terminal settings without restarting the process. Its Connect agent flow
 creates a revocable invitation scoped to this one session. Read access permits
 terminal read, search, and wait; control additionally permits text, commands,

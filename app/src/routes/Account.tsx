@@ -118,8 +118,6 @@ export function Account() {
         </section>
       )}
 
-      {deleting && <DeleteAccount onCancel={() => setDeleting(false)} />}
-
       {/*
         Sign out lives here as well as in the sidebar. On a phone the sidebar
         becomes a bar of destinations with no room for the account row, and
@@ -153,13 +151,24 @@ export function Account() {
           <SignOut size={15} />
           Sign out
         </Button>
-        {!deleting && (
-          <Button type="button" variant="ghost" onClick={() => setDeleting(true)}>
+      </div>
+
+      {deleting ? (
+        <DeleteAccount onCancel={() => setDeleting(false)} />
+      ) : (
+        <section className="account-danger-zone" aria-labelledby="delete-account-title">
+          <div>
+            <h2 id="delete-account-title">Delete account</h2>
+            <p>
+              Permanently remove your account, linked machines, sessions and vault data.
+            </p>
+          </div>
+          <Button type="button" variant="danger" onClick={() => setDeleting(true)}>
             <Trash size={15} />
             Delete account
           </Button>
-        )}
-      </div>
+        </section>
+      )}
     </AppShell>
   );
 }

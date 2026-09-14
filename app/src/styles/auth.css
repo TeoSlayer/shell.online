@@ -544,6 +544,40 @@
   min-width: 168px;
 }
 
+.account-danger-zone {
+  display: flex;
+  max-width: 760px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--line));
+  border-radius: var(--radius-panel);
+  margin-top: 28px;
+  background: color-mix(in srgb, var(--danger-wash) 62%, var(--white));
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.account-danger-zone h2 {
+  margin: 0 0 5px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 580;
+}
+
+.account-danger-zone p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.account-danger-zone .btn {
+  width: auto;
+  min-width: 154px;
+  flex: none;
+}
+
 .account-delete {
   margin-top: 28px;
 }
@@ -584,6 +618,18 @@
 .account-delete-actions .btn {
   width: auto;
   min-width: 168px;
+}
+
+@media (max-width: 640px) {
+  .account-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .account-danger-zone .btn {
+    width: 100%;
+  }
 }
 
 /* ---------------------------------------------------------------

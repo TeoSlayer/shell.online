@@ -84,7 +84,7 @@ File sharing is disabled unless `--files` or `--files-root` is present. Once
 enabled, browsers can browse that root and open referenced files on demand.
 Paths and contents use the session's E2EE WebSocket; the CLI rejects traversal,
 non-regular files, and symlink escapes. File flags cannot be combined with
-`--no-e2ee`. Refstream (alpha) adds inline backed-file
+`--no-e2ee`. Refstream (unstable alpha) adds inline backed-file
 previews, while the Files panel works with either renderer.
 
 Refstream (alpha) also provides a scoped **Connect agent** invitation. An agent

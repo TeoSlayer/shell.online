@@ -599,6 +599,7 @@ function renderTerminal(sessionId: string): void {
   let colorMode: TerminalColorMode = systemTheme.matches ? "light" : "dark";
   let terminalZoomPercent = 100;
   const terminalRenderer = readTerminalRenderer();
+  let showRefstreamNotice = false;
   try {
     const stored = localStorage.getItem("shell-online-terminal-theme");
     if (stored === "dark" || stored === "light") {
@@ -608,6 +609,10 @@ function renderTerminal(sessionId: string): void {
     const storedZoom = Number(localStorage.getItem("shell-online-terminal-zoom"));
     if (Number.isFinite(storedZoom) && storedZoom >= 50 && storedZoom <= 150) {
       terminalZoomPercent = Math.round(storedZoom / 5) * 5;
+    }
+    if (terminalRenderer === "refstream" && sessionStorage.getItem("shell-online-refstream-notice") === "1") {
+      showRefstreamNotice = true;
+      sessionStorage.removeItem("shell-online-refstream-notice");
     }
   } catch {
     // Storage may be disabled; system theme and default zoom still work.
@@ -646,6 +651,7 @@ function renderTerminal(sessionId: string): void {
       <div id="terminal-wrap" class="terminal-wrap">
         <div id="refstream-toolbar" class="refstream-toolbar" aria-label="Refstream terminal tools"></div>
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
+        ${showRefstreamNotice ? '<div id="refstream-alpha-notice" class="refstream-alpha-notice" role="status">Refstream is an experimental alpha renderer and may still be unstable.</div>' : ""}
         <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
       <nav id="mobile-terminal-keys" class="mobile-terminal-keys" aria-label="Terminal navigation keys">
@@ -699,9 +705,9 @@ function renderTerminal(sessionId: string): void {
                 <div class="settings-card-heading"><label id="renderer-label" for="terminal-renderer">Renderer</label></div>
                 <select id="terminal-renderer" aria-describedby="renderer-description">
                   <option value="xterm">xterm.js</option>
-                  <option value="refstream">Refstream (alpha)</option>
+                  <option value="refstream">Refstream (unstable alpha)</option>
                 </select>
-                <span id="renderer-description">Changing renderer reopens this view.</span>
+                <span id="renderer-description">Refstream is experimental and may be unstable. Changing renderer reopens this view.</span>
               </section>
             </div>
             <section class="latency-card" aria-labelledby="latency-title">
@@ -800,8 +806,20 @@ function renderTerminal(sessionId: string): void {
     const next: TerminalRenderer = rendererSelect.value === "refstream" ? "refstream" : "xterm";
     if (next === terminalRenderer) return;
     writeTerminalRenderer(next);
+    if (next === "refstream") {
+      try {
+        sessionStorage.setItem("shell-online-refstream-notice", "1");
+      } catch {
+        // The option label still identifies Refstream as an unstable alpha.
+      }
+    }
     window.location.reload();
   });
+
+  const refstreamNotice = document.querySelector<HTMLElement>("#refstream-alpha-notice");
+  if (refstreamNotice) {
+    window.setTimeout(() => refstreamNotice.remove(), 6_000);
+  }
 
   const terminal = createTerminal(terminalRenderer, {
     cursorBlink: !compactSessionQuery.matches,

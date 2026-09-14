@@ -56,6 +56,20 @@
   outline-offset: 2px;
 }
 
+.renderer-warning {
+  display: flex;
+  min-height: 32px;
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-radius: var(--radius-control);
+  margin: -10px 0 12px;
+  background: var(--blue-wash);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.4;
+  align-items: center;
+}
+
 .tab {
   position: relative;
   display: inline-flex;
@@ -210,9 +224,37 @@ button.tab {
   padding: 3px;
   border: 1px solid var(--terminal-ui-line, #343c4b);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--terminal-ui-surface, #171b23) 92%, transparent);
+  background: var(--terminal-ui-surface, #171b23);
   box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
-  backdrop-filter: blur(12px);
+}
+
+/*
+ * Refstream ships neutral translucent defaults because it can be embedded on
+ * any page. The app is always a dark terminal surface, so make every layer
+ * opaque and use the app's terminal palette instead of letting page colors
+ * bleed through the controls and text.
+ */
+.pane[data-renderer="refstream"] {
+  --terminal-ui-bg: #10130f;
+  --terminal-ui-surface: #181d17;
+  --terminal-ui-line: #343c30;
+  --terminal-ui-hover: #272e24;
+  --terminal-ui-fg: #edf0e7;
+  --terminal-ui-muted: #9ca695;
+  --terminal-ui-accent: #d4ff72;
+  --terminal-ui-selection: #3b472f;
+  --terminal-ui-font: var(--sans);
+}
+
+.pane[data-renderer="refstream"] .shell-terminal,
+.pane[data-renderer="refstream"] .terminal-tools,
+.pane[data-renderer="refstream"] .terminal-explorer,
+.pane[data-renderer="refstream"] .terminal-menu {
+  opacity: 1;
+}
+
+.pane[data-renderer="refstream"] .shell-terminal {
+  background: var(--terminal);
 }
 
 .pane-tools:has(.pane-refstream-toolbar:not(:empty), .pane-files-toolbar:not(:empty)) ~ .pane-banner {

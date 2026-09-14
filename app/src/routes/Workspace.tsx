@@ -696,10 +696,16 @@ export function Workspace() {
               }}
             >
               <option value="xterm">xterm.js</option>
-              <option value="refstream">Refstream (alpha)</option>
+              <option value="refstream">Refstream (unstable alpha)</option>
             </select>
           </label>
         </div>
+      )}
+
+      {state.tabs.length > 0 && terminalRenderer === "refstream" && (
+        <p className="renderer-warning" role="status">
+          Refstream is an experimental alpha renderer. Some TUIs and interactions may still be unstable.
+        </p>
       )}
 
       {/*

@@ -89,7 +89,7 @@ The full relay and app setup is documented in [the self-hosting guide](../docs/s
 - `server/` — API, stores, and migrations
 - `worker/` — Cloudflare Worker adapter
 - `src/terminal/` — relay protocol, E2EE, opt-in file browsing, and selectable
-  rendering; xterm.js is the default, while Refstream (alpha) adds backed file
+  rendering; xterm.js is the default, while Refstream (unstable alpha) adds backed file
   references and revocable read/control agent invitations alongside its local
   find, command, export, theme, sizing, and back-to-live tools. Its agent
   connection and retained task state survive panel changes and reconnects; a

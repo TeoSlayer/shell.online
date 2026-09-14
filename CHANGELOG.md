@@ -4,6 +4,13 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- Made account deletion a visible danger-zone action while keeping the existing
+  reauthentication and typed-email confirmation safeguards.
+- Marked Refstream clearly as an unstable alpha when selected and replaced its
+  translucent app chrome with an opaque terminal-native palette.
+
 ## [0.15.0] — 2026-09-14
 
 ### Added
