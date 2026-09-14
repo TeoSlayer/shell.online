@@ -24,9 +24,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.14.1 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.15.0 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.14.1" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.15.0" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -79,7 +79,12 @@ xterm.js is the default browser renderer. Refstream (alpha) can be selected in
 the terminal settings without restarting the process. Its Connect agent flow
 creates a revocable invitation scoped to this one session. Read access permits
 terminal read, search, and wait; control additionally permits text, commands,
-and key signals such as Ctrl-C. File access remains a separate host opt-in.
+and key signals such as Ctrl-C. Keep the returned connector session open and
+reuse its task IDs for follow-ups; status, partial output, and collected answers
+survive panel changes and reconnects. The browser saves a reload snapshot only
+inside the current tab for at most four hours. Recovery still requires the local
+shell process to be running, and the relay stores no terminal output. File access
+remains a separate host opt-in.
 
 Manage local sessions:
 

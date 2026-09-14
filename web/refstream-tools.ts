@@ -1,4 +1,6 @@
-import { attachTerminalTools, type TerminalTools } from "./vendor/refstream/v0.1.0-alpha.2/ui.js";
+import { getTerminalSession } from "./vendor/refstream/v0.1.0-alpha.4/refstream.js";
+import { attachTerminalTools, type TerminalTools } from "./vendor/refstream/v0.1.0-alpha.4/ui.js";
+import { bindRefstreamSessionPersistence } from "./refstream-session";
 
 const REFSTREAM_THEMES = [
   "shell",
@@ -13,6 +15,8 @@ const REFSTREAM_THEMES = [
 
 export interface RefstreamToolsOptions {
   terminal: unknown;
+  /** Stable share identity used only to restore this tab after a reload. */
+  sessionKey: string;
   toolbar: HTMLElement;
   overlay: HTMLElement;
   frame?: HTMLElement;
@@ -33,8 +37,12 @@ export function attachRefstreamTools(
 ): Promise<TerminalTools | null> {
   if (renderer !== "refstream") return Promise.resolve(null);
 
+  const session = getTerminalSession(options.terminal);
+  const persistence = bindRefstreamSessionPersistence(session, options.sessionKey);
+
   return attachTerminalTools({
     terminal: options.terminal,
+    session,
     engine: "native",
     toolbar: options.toolbar,
     overlay: options.overlay,
@@ -49,7 +57,7 @@ export function attachRefstreamTools(
       explore: {
         tabs: ["commands", "agent"],
         initialTab: "commands",
-        title: "Commands",
+        title: "Terminal tools",
       },
       labels: {
         explore: "Commands",
@@ -65,5 +73,19 @@ export function attachRefstreamTools(
       exportFilename: options.exportFilename ?? "shell-online-output.txt",
       backToLive: true,
     },
+  }).then((tools) => {
+    let disposed = false;
+    return {
+      ...tools,
+      dispose() {
+        if (disposed) return;
+        disposed = true;
+        persistence.dispose();
+        tools.dispose();
+      },
+    };
+  }, (error: unknown) => {
+    persistence.dispose();
+    throw error;
   });
 }

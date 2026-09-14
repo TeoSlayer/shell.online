@@ -72,7 +72,7 @@
 .terminal-tools > button[data-ui-action="agent"]::before { content: ""; width: 5px; height: 5px; flex: none; border: 1px solid currentColor; border-radius: 50%; }
 .terminal-tools > button[data-agent-phase="waiting"]::before, .terminal-tools > button[data-agent-phase="connected"]::before { background: currentColor; }
 .terminal-tools > button[data-ui-action="agent"] > span { display: inline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.terminal-tools > button[data-ui-action="stopAgent"] { width: 32px; padding: 0; justify-content: center; font-size: 22px; }
+.terminal-tools > button[data-ui-action="stopAgent"] { width: auto; white-space: nowrap; }
 .terminal-search:focus-within { border-color: var(--terminal-ui-accent); }
 @media (max-width: 760px) {
   .terminal-tools button { min-width: 36px; height: 36px; padding: 0 8px; justify-content: center; }
@@ -186,3 +186,7 @@
 .terminal-explorer [data-copy-invitation]:disabled { opacity: .65; cursor: default; }
 .terminal-explorer [data-agent-expiry] { display: block; color: var(--terminal-ui-muted); margin-top: 3px; font-size: 11px; }
 .terminal-explorer [data-agent-expiry][hidden] { display: none; }
+.terminal-agent-task { margin-block-start: 14px; padding-block-start: 12px; border-block-start: 1px solid var(--terminal-ui-line); }
+.terminal-agent-task > p { margin: 0 0 6px; }
+.terminal-agent-task summary { cursor: pointer; padding-block: 8px; }
+.terminal-agent-task pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; max-height: 240px; overflow: auto; }

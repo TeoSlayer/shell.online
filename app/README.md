@@ -91,7 +91,9 @@ The full relay and app setup is documented in [the self-hosting guide](../docs/s
 - `src/terminal/` — relay protocol, E2EE, opt-in file browsing, and selectable
   rendering; xterm.js is the default, while Refstream (alpha) adds backed file
   references and revocable read/control agent invitations alongside its local
-  find, command, export, theme, sizing, and back-to-live tools
+  find, command, export, theme, sizing, and back-to-live tools. Its agent
+  connection and retained task state survive panel changes and reconnects; a
+  tab-local snapshot supports reload recovery while the shell process remains live
 - `scripts/` — build and deployment checks
 
 `npm run check:protocol` verifies that the app's terminal protocol files match

@@ -88,10 +88,13 @@ non-regular files, and symlink escapes. File flags cannot be combined with
 previews, while the Files panel works with either renderer.
 
 Refstream (alpha) also provides a scoped **Connect agent** invitation. An agent
-can read, search, and wait for terminal output; with explicit control permission
-it can type, run commands, and send key combinations such as Ctrl-C. Disconnecting
-the agent does not stop the terminal. Files remain unavailable unless the host
-separately started the share with `--files` or `--files-root`.
+connects once, then can read, wait, and follow up without pairing again; control
+permission also allows terminal input and Ctrl-C. Task IDs, progress, and answers
+survive panel changes and reconnection. Reload recovery is kept only in that
+browser tab for up to four hours and still requires the local process to be
+running. Revoking access is immediate and does not stop the terminal. Files stay
+unavailable unless the host separately used `--files` or `--files-root`.
+See the [agent handoff protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.4/docs/agents.md).
 
 ## Security
 

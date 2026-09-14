@@ -1,7 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import "./vendor/refstream/v0.1.0-alpha.2/refstream.css";
-import "./vendor/refstream/v0.1.0-alpha.2/ui.css";
+import "./vendor/refstream/v0.1.0-alpha.4/refstream.css";
+import "./vendor/refstream/v0.1.0-alpha.4/ui.css";
 import {
   decodeLatencyProbe,
   encodeFrame,
@@ -1716,6 +1716,7 @@ function renderTerminal(sessionId: string): void {
   let refstreamToolsDisposed = false;
   void attachRefstreamTools(terminalRenderer, {
     terminal,
+    sessionKey: sessionId,
     toolbar: refstreamToolbar,
     overlay: terminalWrap,
     frame: terminalWrap,

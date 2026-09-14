@@ -50,6 +50,21 @@ export interface TerminalOptions {
   fontWeightBold?: string | number;
 }
 
+export interface SessionSnapshot {
+  version: 1;
+  sequence: number;
+  terminal: unknown;
+  commands: unknown[];
+  executionPending?: boolean;
+  sessionId?: string;
+  tasks?: unknown[];
+  retiredTaskIds?: string[];
+  input?: {
+    revision: number;
+    owner: "none" | "local" | "agent" | "unknown";
+  };
+}
+
 export class Terminal {
   constructor(options?: TerminalOptions);
   readonly cols: number;
@@ -75,3 +90,15 @@ export class Terminal {
   onBinary(listener: (data: string) => void): Disposable;
   onTitleChange(listener: (title: string) => void): Disposable;
 }
+
+export class TerminalSession {
+  readonly signal: AbortSignal;
+  readonly id: string;
+  readonly sequence: number;
+  onChange(listener: (sequence: number) => void): Disposable;
+  snapshot(): SessionSnapshot;
+  restore(snapshot: SessionSnapshot): void;
+  dispose(): void;
+}
+
+export function getTerminalSession(terminal: unknown): TerminalSession;

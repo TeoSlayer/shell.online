@@ -4,6 +4,23 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.15.0] — 2026-09-14
+
+### Added
+
+- Reusable Refstream agent connections. A connected agent can keep its handle
+  for follow-ups, while task IDs, progress, and collected answers survive panel
+  changes and reconnects.
+- Tab-local Refstream session recovery for page reloads. Snapshots expire after
+  four hours, disappear when the tab closes, and never go to the relay.
+
+### Changed
+
+- Updated the optional Refstream renderer to `v0.1.0-alpha.4` from its verified
+  browser release. xterm.js remains the default.
+- Clarified the lifetime, revocation, process-continuity, and privacy boundaries
+  of agent handoffs in the README, website, app guide, and agent documentation.
+
 ## [0.14.1] — 2026-09-13
 
 ### Changed

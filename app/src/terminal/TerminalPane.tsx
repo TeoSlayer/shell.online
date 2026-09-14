@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
-import "../../../web/vendor/refstream/v0.1.0-alpha.2/refstream.css";
-import "../../../web/vendor/refstream/v0.1.0-alpha.2/ui.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.4/refstream.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.4/ui.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
@@ -207,6 +207,7 @@ export function TerminalPane({
       return;
     }
     const target = resolved.target;
+    const sessionId = sessionIdFromShareUrl(shareUrl);
 
     const term = createTerminal(renderer, {
       fontFamily: FONT_FAMILY,
@@ -235,6 +236,7 @@ export function TerminalPane({
     if (pane) {
       void attachRefstreamTools(renderer, {
         terminal: term,
+        sessionKey: sessionId ?? shareUrl,
         toolbar: toolsNode,
         overlay: pane,
         frame: pane,
@@ -352,7 +354,6 @@ export function TerminalPane({
     });
     term.options.disableStdin = !canTypeRef.current;
 
-    const sessionId = sessionIdFromShareUrl(shareUrl);
     attempt.current = null;
     pending.current = [];
 

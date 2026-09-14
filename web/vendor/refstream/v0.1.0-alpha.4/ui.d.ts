@@ -1,3 +1,5 @@
+import type { TerminalSession } from "./refstream.js";
+
 export type TerminalTool = "search" | "export" | "engine" | "explore" | "agent" | "theme" | "fontSize" | "menu";
 export type TerminalExploreView = "commands" | "read" | "replay" | "agent";
 export type TerminalThemeName = "shell" | "midnight" | "ocean" | "amethyst" | "ember" | "arctic" | "paper" | "sand";
@@ -25,6 +27,7 @@ export interface TerminalToolsOptions {
   toolbar: HTMLElement;
   overlay: HTMLElement;
   frame?: HTMLElement;
+  session?: TerminalSession;
   ui?: TerminalUiOptions;
   onThemeChange?: (theme: unknown) => void;
   onFontSizeChange?: (size: number) => void;
@@ -32,6 +35,7 @@ export interface TerminalToolsOptions {
 }
 
 export interface TerminalTools {
+  readonly session?: TerminalSession;
   openSearch(): void;
   openExplore(view?: string): void;
   openMenu(): void;
