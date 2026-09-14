@@ -275,6 +275,15 @@
   margin: auto;
 }
 
+/* Keep rendered labels at the exact size Mermaid used to measure them. The
+   surrounding documentation article gives paragraphs a larger font, and that
+   otherwise leaks into Mermaid's foreignObject labels after layout. */
+.knowledge-diagram-canvas foreignObject p {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .knowledge-diagram-canvas .node rect,
 .knowledge-diagram-canvas .node polygon,
 .knowledge-diagram-canvas .node circle {

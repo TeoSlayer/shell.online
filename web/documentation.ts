@@ -111,6 +111,11 @@ async function renderDocumentationDiagrams(): Promise<void> {
   const figures = Array.from(document.querySelectorAll<HTMLElement>(".knowledge-diagram"));
   if (figures.length === 0) return;
 
+  // Mermaid measures labels before it draws their nodes. Waiting here prevents
+  // a fallback font from producing boxes that are too narrow once web fonts
+  // finish loading, which otherwise clips the final characters on slower
+  // browsers and mobile connections.
+  await document.fonts?.ready;
   const { default: mermaid } = await import("mermaid");
   mermaid.initialize({
     startOnLoad: false,
@@ -130,10 +135,17 @@ async function renderDocumentationDiagrams(): Promise<void> {
       tertiaryBorderColor: "#cbd6e2",
       lineColor: "#697386",
       edgeLabelBackground: "#ffffff",
-      fontFamily: "Uncut Sans, system-ui, sans-serif",
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
       fontSize: "14px",
     },
-    flowchart: { curve: "basis", htmlLabels: false, useMaxWidth: true },
+    flowchart: {
+      curve: "basis",
+      htmlLabels: false,
+      useMaxWidth: true,
+      padding: 18,
+      nodeSpacing: 34,
+      rankSpacing: 42,
+    },
   });
 
   const compact = window.matchMedia("(max-width: 720px)");

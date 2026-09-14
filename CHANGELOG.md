@@ -6,6 +6,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Changed
 
+- Prevented Mermaid labels from being clipped by waiting for fonts before
+  layout and reserving consistent padding around every diagram node.
 - Added responsive Mermaid diagrams to the principal documentation guides;
   desktop uses wide flows while phones receive compact top-to-bottom layouts.
 - Added proper inner spacing to the landing page's live phone captures and made

@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, documentationHtml, landingSource, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
+const [indexHtml, documentationHtml, landingSource, landingStyles, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
   readSource("web/documentation.html"),
   readSource("web/main.ts"),
+  readSource("web/landing.css"),
   readSource("web/documentation.ts"),
   readSource("shared/documentation.ts"),
   readSource("vite.config.ts"),
@@ -159,6 +160,9 @@ for (const page of ["docs", "app", "cli", "platforms", "mobile", "refstream", "r
 }
 check(documentationRenderer.includes('import documentationSource from "../docs/content.json"'), "Website must render from the repository documentation source");
 check(documentationRenderer.includes('import("mermaid")'), "Documentation diagrams must load Mermaid only on documentation pages");
+check(documentationRenderer.includes("await document.fonts?.ready"), "Documentation diagrams must wait for fonts before measuring labels");
+check(documentationRenderer.includes("padding: 18"), "Documentation diagrams must leave enough room around labels");
+check(landingStyles.includes(".knowledge-diagram-canvas foreignObject p"), "Mermaid labels must retain their measured font size inside documentation sections");
 const diagramPages = Object.values(docsContent.pages).filter((page) => Array.isArray(page.diagrams));
 check(diagramPages.length >= 7, "The knowledge base should contain responsive diagrams across its principal guides");
 for (const page of diagramPages) {
