@@ -83,6 +83,14 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * A password, unlike the four-letter key confirm the base width fits, needs
+ * room to be typed and checked: twice as wide, still short of the card edge.
+ */
+.vault-input[type="password"] {
+  width: 16ch;
+}
+
 .vault-input:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
