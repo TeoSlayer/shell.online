@@ -4,6 +4,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- Redrew the landing page phone frame with a titanium-style band, Dynamic
+  Island, iOS status bar, physical side buttons and a home indicator.
+
 ## [0.15.1] — 2026-09-14
 
 ### Changed

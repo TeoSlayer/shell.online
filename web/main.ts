@@ -203,7 +203,21 @@ function renderLanding(): void {
             <div class="demo-aura" aria-hidden="true"></div>
             <figure class="real-phone-demo">
               <div class="phone-device">
+                <span class="phone-btn phone-btn-action" aria-hidden="true"></span>
+                <span class="phone-btn phone-btn-vol-up" aria-hidden="true"></span>
+                <span class="phone-btn phone-btn-vol-down" aria-hidden="true"></span>
+                <span class="phone-btn phone-btn-power" aria-hidden="true"></span>
+                <div class="phone-bezel">
                 <div class="hero-phone-screen">
+                  <div class="phone-status" aria-hidden="true">
+                    <span>9:41</span>
+                    <span class="phone-island"></span>
+                    <span>
+                      <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+                      <svg width="17" height="12" viewBox="0 0 18 13" fill="none" stroke="currentcolor" stroke-width="1.6" stroke-linecap="round"><path d="M1.58 5.58A10.5 10.5 0 0 1 16.42 5.58"/><path d="M3.84 7.84A7.3 7.3 0 0 1 14.16 7.84"/><path d="M6.1 10.1A4.1 4.1 0 0 1 11.9 10.1"/><circle cx="9" cy="11.6" r="1.3" fill="currentcolor" stroke="none"/></svg>
+                      <svg width="27" height="12" viewBox="0 0 27 12"><rect x=".5" y=".5" width="23" height="11" rx="3" fill="none" stroke="currentcolor" stroke-opacity=".4"/><rect x="2" y="2" width="20" height="8" rx="1.8"/><path d="M25 4v4a2 2 0 0 0 0-4Z" fill-opacity=".4"/></svg>
+                    </span>
+                  </div>
                   <div class="hero-phone-head">
                     <strong>shell.online</strong>
                     <span class="hero-phone-latency"><i></i> 22 ms</span>
@@ -225,6 +239,8 @@ function renderLanding(): void {
                   <div class="hero-phone-keys" aria-hidden="true">
                     <span>esc</span><span>tab</span><span>←</span><span>↑</span><span>↓</span><span>→</span><span>enter</span><span>ctrl-c</span>
                   </div>
+                  <span class="phone-home" aria-hidden="true"></span>
+                </div>
                 </div>
               </div>
               <figcaption><span><i></i> Interactive in any browser</span><strong>Claude Code · live via shell.online</strong></figcaption>
