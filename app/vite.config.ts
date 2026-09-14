@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { BROWSER_SECURITY_HEADERS } from "./server/lib/browser-headers.ts";
@@ -12,6 +13,18 @@ import { BROWSER_SECURITY_HEADERS } from "./server/lib/browser-headers.ts";
  * Whatever serves the production build must send the same header.
  */
 const authHeaders = BROWSER_SECURITY_HEADERS;
+
+/*
+ * The product version, from the repository's package.json rather than this
+ * package's, which is 0.0.0 on purpose. Stamped into the bundle so a piece of
+ * feedback can say which build it came from; the commit is added when the
+ * build runs somewhere that knows it.
+ */
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+  version: string;
+};
+const commit = process.env.GITHUB_SHA?.slice(0, 7);
+const appVersion = commit ? `${version}+${commit}` : version;
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -31,6 +44,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    define: { __SHELL_ONLINE_VERSION__: JSON.stringify(appVersion) },
     server: {
       headers: authHeaders,
       /*

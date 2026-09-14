@@ -89,6 +89,10 @@ async function main(): Promise<void> {
       await copy(`notification ${notification.id}`, () => target.putNotification(notification));
     }
 
+    for (const feedback of await source.feedback(Number.MAX_SAFE_INTEGER)) {
+      await copy(`feedback ${feedback.id}`, () => target.putFeedback(feedback));
+    }
+
     console.log(`import: ${copied} records copied from ${file}, ${skipped} already present`);
   } finally {
     await target.close();

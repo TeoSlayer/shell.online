@@ -2526,3 +2526,58 @@ describe("team audit key", () => {
     });
   });
 });
+
+describe("feedback", () => {
+  const message = {
+    kind: "problem",
+    body: "The gate never opened.",
+    surface: "session-gate",
+    route: "/sessions?open=s1#k3y",
+    app_version: "0.15.1",
+    can_reply: true,
+    context: { host: "laptop", status: "ended" },
+  };
+
+  it("keeps a message with who sent it and where from", async () => {
+    const posted = await call("POST", "/api/feedback", { auth: await idToken(), body: message });
+    expect(posted.status).toBe(201);
+    expect(posted.body.feedback.id).toMatch(/^fbk_/);
+    const [kept] = await store.feedback();
+    expect(kept).toMatchObject({
+      uid: "uid-1",
+      email: "ana@example.com",
+      kind: "problem",
+      body: "The gate never opened.",
+      surface: "session-gate",
+      route: "/sessions",
+      appVersion: "0.15.1",
+      canReply: true,
+      context: { host: "laptop", status: "ended" },
+    });
+    expect(kept.orgId).toBeTruthy();
+  });
+
+  it("refuses without a signed-in user", async () => {
+    const posted = await call("POST", "/api/feedback", { body: message });
+    expect(posted.status).toBe(401);
+    expect(await store.feedback()).toEqual([]);
+  });
+
+  it("refuses an empty message", async () => {
+    const posted = await call("POST", "/api/feedback", { auth: await idToken(), body: { ...message, body: "  " } });
+    expect(posted.status).toBe(400);
+    expect(posted.body.error).toBe("write something first");
+  });
+
+  it("stops a flood from one person", async () => {
+    for (let index = 0; index < 5; index += 1) {
+      expect((await call("POST", "/api/feedback", { auth: await idToken(), body: message })).status).toBe(201);
+    }
+    const sixth = await call("POST", "/api/feedback", { auth: await idToken(), body: message });
+    expect(sixth.status).toBe(429);
+    expect(Number(sixth.headers["Retry-After"])).toBeGreaterThan(0);
+    /* Another person is not the flood. */
+    const other = await call("POST", "/api/feedback", { auth: await idToken({ sub: "uid-2", email: "bo@example.com" }), body: message });
+    expect(other.status).toBe(201);
+  });
+});

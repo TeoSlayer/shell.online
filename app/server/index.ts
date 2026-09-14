@@ -49,6 +49,7 @@ const server = createAccountsServer({
   webOrigin: config.webOrigin,
   trustProxy: config.trustProxy,
   mailer: createMailer(config.mail),
+  feedbackTo: config.feedbackTo,
   serveClient: config.clientDir ? staticFiles(config.clientDir) : undefined,
   relay: forward ?? undefined,
   sessionLiveness: config.relayUrl ? relaySessionLiveness(config.relayUrl) : undefined,

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
-  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check, Warning,
+  Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check, Warning, ChatCircleDots,
 } from "@phosphor-icons/react";
 import { Inbox } from "./Inbox";
 import { Avatar } from "./Avatar";
 import { Wordmark } from "./Wordmark";
 import { useAuth } from "../auth/AuthProvider";
+import { useFeedback } from "../feedback/context";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
 
 const NAV = [
@@ -52,6 +53,7 @@ function AccountMenu() {
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const feedback = useFeedback();
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +98,18 @@ function AccountMenu() {
             <User size={16} />
             Account
           </Link>
+          {/* Always one click away, from the rail and from the phone's top bar alike. */}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              feedback.open({ surface: "account-menu" });
+            }}
+          >
+            <ChatCircleDots size={16} />
+            Send feedback
+          </button>
           <button
             type="button"
             role="menuitem"

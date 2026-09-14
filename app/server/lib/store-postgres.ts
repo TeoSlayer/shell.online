@@ -20,6 +20,7 @@ import type {
   CliToken,
   Comment,
   Device,
+  Feedback,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -313,6 +314,24 @@ function toNotification(row: Row): Notification {
     at: row.at,
     readAt: row.read_at,
   }) as unknown as Notification;
+}
+
+function toFeedback(row: Row): Feedback {
+  return {
+    id: row.id as string,
+    uid: row.uid as string,
+    email: row.email as string,
+    ...(row.org_id ? { orgId: row.org_id as string } : {}),
+    kind: row.kind as Feedback["kind"],
+    body: row.body as string,
+    surface: row.surface as string,
+    route: row.route as string,
+    appVersion: row.app_version as string,
+    userAgent: row.user_agent as string,
+    canReply: row.can_reply as boolean,
+    context: (row.context ?? {}) as Record<string, string>,
+    at: row.at as number,
+  };
 }
 
 /**
@@ -992,6 +1011,11 @@ export class PostgresStore implements Store {
         uid,
         DELETED_ACTOR_EMAIL,
       ]);
+      /* The words stay, as a message to the service; who sent them does not. */
+      await client.query("UPDATE feedback SET uid = '', email = $2, can_reply = FALSE WHERE uid = $1", [
+        uid,
+        DELETED_ACTOR_EMAIL,
+      ]);
       await client.query(
         `INSERT INTO deleted_accounts (uid, deleted_at) VALUES ($1, $2)
          ON CONFLICT (uid) DO UPDATE SET deleted_at = EXCLUDED.deleted_at`,
@@ -1517,6 +1541,38 @@ export class PostgresStore implements Store {
       [orgId, uid, now],
     );
     return result.rowCount ?? 0;
+  }
+
+  /* ---- Feedback ---- */
+
+  async putFeedback(feedback: Feedback): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO feedback (id, uid, email, org_id, kind, body, surface, route, app_version, user_agent, can_reply, context, at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        feedback.id,
+        feedback.uid,
+        feedback.email,
+        feedback.orgId ?? null,
+        feedback.kind,
+        feedback.body,
+        feedback.surface,
+        feedback.route,
+        feedback.appVersion,
+        feedback.userAgent,
+        feedback.canReply,
+        JSON.stringify(feedback.context),
+        feedback.at,
+      ],
+    );
+  }
+
+  async feedback(limit = 100): Promise<Feedback[]> {
+    const rows = await this.rows(
+      'SELECT * FROM feedback ORDER BY at DESC, id COLLATE "C" DESC LIMIT $1',
+      [limit],
+    );
+    return rows.map(toFeedback);
   }
 
   /* ---- Housekeeping ---- */

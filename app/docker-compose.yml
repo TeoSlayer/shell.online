@@ -45,6 +45,8 @@ services:
       # Only true behind a proxy that rewrites X-Forwarded-For; believing it
       # otherwise lets any caller pick a new address per request.
       TRUST_PROXY: ${TRUST_PROXY:-0}
+      # Where feedback sent from the app is forwarded. Empty keeps it in the database only.
+      FEEDBACK_TO: ${FEEDBACK_TO:-}
     ports:
       - "${PORT:-8080}:8080"
     restart: unless-stopped

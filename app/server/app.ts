@@ -44,6 +44,7 @@ import {
 import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/audit";
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
+import { submitFeedback } from "./routes/feedback";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
 
@@ -70,6 +71,11 @@ export interface AppOptions {
    * an invite whose link is perfectly good.
    */
   mailer?: Mailer;
+  /**
+   * Where feedback sent from the app is forwarded. Absent keeps it in the
+   * store only, which is still the record; the mail is for whoever reads it.
+   */
+  feedbackTo?: string;
   /**
    * Serves the built client for anything that is not an API route. Present
    * only in a deployment that serves the app and the API together; in
@@ -121,6 +127,12 @@ const CREDENTIAL_ROUTES = new Set([
 ]);
 const CREDENTIAL_BUCKET = { burst: 12, perSecond: 0.2 };
 const GENERAL_BUCKET = { burst: 240, perSecond: 40 };
+/*
+ * Feedback, per person rather than per address. The form is one click from
+ * most screens, and a stuck key or a script must not fill the inbox it
+ * forwards to. Five, then one more every twelve minutes.
+ */
+const FEEDBACK_BUCKET = { burst: 5, perSecond: 5 / 3600 };
 
 /*
  * This service answers JSON to a known origin and serves no markup of its own,
@@ -307,6 +319,7 @@ export function createApp(options: AppOptions) {
   const webOrigin = options.webOrigin ?? allowedOrigins[0] ?? "";
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
+  const feedbackLimit = rateLimiter(FEEDBACK_BUCKET);
 
   async function sessionsForMember(membership: Membership, sessions: SessionRecord[]) {
     const states = options.sessionLiveness
@@ -1422,6 +1435,29 @@ export function createApp(options: AppOptions) {
         const result = await addComment(store, membership, commentRoute[1], String(body.body ?? ""));
         if (!result.ok) return send(response, result.status, { error: result.error });
         return send(response, 201, { comment: result.value });
+      }
+
+      /* ---- Feedback ---- */
+
+      if (route === "POST /api/feedback") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const allowance = feedbackLimit.take(membership.uid);
+        if (!allowance.ok) {
+          response.setHeader("Retry-After", String(Math.ceil(allowance.retryAfterMs / 1000)));
+          return send(response, 429, { error: "That is plenty for now. Try again in a little while." });
+        }
+        const result = await submitFeedback(
+          store,
+          mailer,
+          membership,
+          await readBody(request),
+          String(request.headers["user-agent"] ?? ""),
+          options.feedbackTo,
+          log,
+        );
+        if (!result.ok) return send(response, result.status, { error: result.error });
+        return send(response, 201, { feedback: { id: result.value.id, at: result.value.at } });
       }
 
       /* ---- Inbox ---- */

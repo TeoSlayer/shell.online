@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
+import { ChatCircleDots, SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { DeleteAccount } from "../components/DeleteAccount";
 import { Button } from "../components/Button";
@@ -11,11 +11,13 @@ import { authErrorMessage } from "../lib/auth-errors";
 import { useVault } from "../vault/VaultProvider";
 import { VaultSetup } from "../vault/VaultGate";
 import { VaultPanel } from "../vault/VaultPanel";
+import { useFeedback } from "../feedback/context";
 
 export function Account() {
   usePageTitle("Account");
   const { user, resendVerification, signOutUser } = useAuth();
   const vault = useVault();
+  const feedback = useFeedback();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -141,6 +143,10 @@ export function Account() {
             Reset vault
           </Button>
         )}
+        <Button type="button" variant="ghost" onClick={() => feedback.open({ surface: "account" })}>
+          <ChatCircleDots size={15} />
+          Send feedback
+        </Button>
         <Button
           type="button"
           variant="ghost"

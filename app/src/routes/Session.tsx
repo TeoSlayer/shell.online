@@ -12,6 +12,7 @@ import { Avatar, PeopleChip, PersonChip } from "../components/Avatar";
 import { MultiPersonPicker } from "../components/PersonPicker";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import { Booting } from "../components/Booting";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SessionAudience } from "../components/SessionAudience";
@@ -103,16 +104,21 @@ export function Session() {
         <div className="sessions-alert sessions-error">
           <Alert tone="error">
             <span>{error}</span>
-            <button
-              type="button"
-              className="inline-retry"
-              onClick={() => {
-                setError("");
-                void load();
-              }}
-            >
-              Retry
-            </button>
+            <span className="alert-actions">
+              <button
+                type="button"
+                className="inline-retry"
+                onClick={() => {
+                  setError("");
+                  void load();
+                }}
+              >
+                Retry
+              </button>
+              <FeedbackLink surface="session-error" kind="problem" context={{ error }}>
+                Report
+              </FeedbackLink>
+            </span>
           </Alert>
         </div>
         <p className="page-dek">

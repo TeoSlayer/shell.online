@@ -18,6 +18,7 @@ import type {
   CliToken,
   Comment,
   Device,
+  Feedback,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -65,6 +66,7 @@ interface Shape {
   audit: AuditEvent[];
   comments: Comment[];
   notifications: Notification[];
+  feedback: Feedback[];
   accountKeys: AccountKey[];
   deletedAccounts: { uid: string; deletedAt: number }[];
   teamKeys: TeamKey[];
@@ -74,7 +76,7 @@ interface Shape {
 const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
-  comments: [], notifications: [], accountKeys: [], deletedAccounts: [],
+  comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
   teamKeys: [], teamKeyShares: [],
 };
 
@@ -138,6 +140,7 @@ export class MemoryStore implements Store {
         audit: parsed.audit ?? [],
         comments: parsed.comments ?? [],
         notifications: parsed.notifications ?? [],
+        feedback: parsed.feedback ?? [],
         accountKeys: parsed.accountKeys ?? [],
         deletedAccounts: parsed.deletedAccounts ?? [],
         teamKeys: parsed.teamKeys ?? [],
@@ -340,6 +343,13 @@ export class MemoryStore implements Store {
     );
     for (const event of data.audit) {
       if (event.actorUid === uid) event.actorEmail = DELETED_ACTOR_EMAIL;
+    }
+    /* The words stay, as a message to the service; who sent them does not. */
+    for (const entry of data.feedback) {
+      if (entry.uid !== uid) continue;
+      entry.uid = "";
+      entry.email = DELETED_ACTOR_EMAIL;
+      entry.canReply = false;
     }
     data.deletedAccounts = [
       ...data.deletedAccounts.filter((entry) => entry.uid !== uid),
@@ -835,6 +845,19 @@ export class MemoryStore implements Store {
 
   async organizationsForImport(): Promise<Organization[]> {
     return this.data.organizations;
+  }
+
+  /* ---- Feedback ---- */
+
+  async putFeedback(feedback: Feedback): Promise<void> {
+    this.data.feedback.push(feedback);
+    this.flush();
+  }
+
+  async feedback(limit = 100): Promise<Feedback[]> {
+    return [...this.data.feedback]
+      .sort(byTime((entry) => entry.at, (entry) => entry.id, true))
+      .slice(0, limit);
   }
 
   async tokensForImport(): Promise<CliToken[]> {

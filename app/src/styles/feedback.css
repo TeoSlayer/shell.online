@@ -1,0 +1,224 @@
+/* The feedback sheet, and the line that opens it from wherever something might have gone wrong. */
+
+.feedback-link {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  align-items: center;
+  gap: 6px;
+  transition: color 160ms var(--ease);
+}
+
+.feedback-link span {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.feedback-link:hover {
+  color: var(--ink);
+}
+
+.feedback-link:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.feedback-link svg {
+  flex: none;
+}
+
+/* Under a sheet's buttons, on the left, so the primary action keeps the right edge. */
+.sheet-foot {
+  display: flex;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Beside "Retry" in an error notice: the two things a person can do about it. */
+.alert-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Under a full-page gate's card, centred like the card. */
+.feedback-gate {
+  margin: 14px 0 0;
+  text-align: center;
+}
+
+.pane-gate-card .feedback-link,
+.sessions-empty-foot,
+.account-delete .feedback-link {
+  margin-top: 16px;
+}
+
+.signed-in .feedback-link {
+  margin-top: 2px;
+}
+
+/* ---- The sheet ---- */
+
+.feedback-sheet {
+  width: min(520px, 100%);
+  margin-top: 6vh;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-form .sheet-field {
+  margin-bottom: 0;
+}
+
+.feedback-form .alert {
+  margin-bottom: 0;
+}
+
+.feedback-form .sheet-actions {
+  margin-top: 4px;
+}
+
+.feedback-prompt {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.feedback-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-kind {
+  padding: 8px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font: 500 13px var(--sans);
+  transition: background 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease);
+}
+
+.feedback-kind:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+
+.feedback-kind[aria-checked="true"] {
+  border-color: var(--terminal);
+  background: var(--terminal);
+  color: var(--terminal-ink);
+}
+
+.feedback-kind:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.feedback-text {
+  width: 100%;
+  min-height: 124px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--white);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.55;
+  resize: vertical;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+
+.feedback-text:focus {
+  border-color: var(--blue);
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+/* What goes with the message, listed as it is sent rather than summarised. */
+.feedback-attached {
+  display: grid;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  gap: 4px;
+}
+
+.feedback-attached div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 10px;
+}
+
+.feedback-attached dt {
+  color: var(--muted);
+  font-weight: 540;
+  text-transform: capitalize;
+}
+
+.feedback-attached dd {
+  margin: 0;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.feedback-attached code {
+  font-family: var(--mono);
+  font-size: 0.95em;
+}
+
+.feedback-privacy {
+  margin: 0;
+}
+
+.feedback-reply {
+  display: flex;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 13.5px;
+  line-height: 1.5;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.feedback-reply input {
+  margin: 3px 0 0;
+  accent-color: var(--blue);
+}
+
+.feedback-reply b {
+  color: var(--ink);
+  font-weight: 560;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .feedback-attached div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

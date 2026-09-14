@@ -13,3 +13,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/* Stamped by vite.config.ts; absent under vitest, which is why the type admits it. */
+declare const __SHELL_ONLINE_VERSION__: string | undefined;

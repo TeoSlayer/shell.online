@@ -41,6 +41,7 @@ The client reads `VITE_FIREBASE_*` at build time. The server uses:
 | `RELAY_URL` | Relay proxied through `/relay/*` |
 | `MAIL_API_KEY`, `MAIL_FROM` | Optional invitation email |
 | `MAIL_PROVIDER`, `MAIL_API_URL` | Optional non-SendGrid JSON provider |
+| `FEEDBACK_TO` | Optional address that feedback sent from the app is forwarded to |
 | `TRUST_PROXY` | Set to `1` only behind a trusted proxy |
 
 See [`.env.example`](.env.example) for the complete development configuration.
@@ -78,6 +79,8 @@ npx wrangler deploy --config wrangler.deploy.jsonc
 ```
 
 Set `MAIL_API_KEY` with `wrangler secret put` if invitation email is enabled.
+Set `FEEDBACK_TO` as a Worker variable to have feedback sent from the app
+forwarded by email; without it, feedback is kept in the `feedback` table only.
 Keep Hyperdrive query caching disabled because the app depends on read-after-write
 consistency.
 

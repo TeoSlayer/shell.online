@@ -28,6 +28,7 @@
     "WEB_ORIGIN": "https://app.shell.online",
     "RELAY_URL": "https://shell.online",
     "MAIL_PROVIDER": "sendgrid",
-    "MAIL_FROM": "__MAIL_FROM__"
+    "MAIL_FROM": "__MAIL_FROM__",
+    "FEEDBACK_TO": "founders@pilotprotocol.network"
   }
 }

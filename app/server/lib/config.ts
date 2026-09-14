@@ -45,6 +45,11 @@ export interface Config {
    * so an unconfigured deployment still creates a perfectly good invite.
    */
   mail: { provider?: "sendgrid" | "json"; apiUrl?: string; apiKey?: string; from?: string };
+  /**
+   * Where feedback sent from the app is forwarded by email. Absent keeps it
+   * in the database only, which is still the record.
+   */
+  feedbackTo?: string;
 }
 
 export class ConfigError extends Error {}
@@ -169,5 +174,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
       apiKey: env.MAIL_API_KEY?.trim() || undefined,
       from: env.MAIL_FROM?.trim() || undefined,
     },
+    feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
   };
 }

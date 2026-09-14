@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { X, Warning } from "@phosphor-icons/react";
 import { Button } from "./Button";
 import { Alert } from "./Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import {
   SESSION_KINDS,
   sessionName,
@@ -320,6 +321,28 @@ export function NewSessionModal({
                 No linked machine is available. Run <code>shell login</code> on one.
               </p>
             )}
+
+            {/*
+              * Under the buttons, where somebody who could not start a session
+              * ends up. The facts a report needs most go with it: what was being
+              * started, on which machine, whether it was reachable, and what the
+              * form said if it refused.
+              */}
+            <div className="sheet-foot">
+              <FeedbackLink
+                surface="new-session"
+                prompt="Starting a session should be one click. If it was not, say what got in the way."
+                context={{
+                  kind: kind.id,
+                  machine: chosenMachine?.label,
+                  machine_reachable: chosenMachine ? String(machineReady) : undefined,
+                  machines: String(devices.length),
+                  error: error || undefined,
+                }}
+              >
+                Something off with starting a session? Tell us
+              </FeedbackLink>
+            </div>
           </form>
         </div>
       </div>

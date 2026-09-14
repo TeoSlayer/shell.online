@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle } from "@phosphor-icons/react";
 import { Button } from "./Button";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 
 interface SignedInModalProps {
   onClose(): void;
@@ -59,6 +60,13 @@ export function SignedInModal({ onClose }: SignedInModalProps) {
           <Button ref={dismiss} type="button" onClick={onClose}>
             Done
           </Button>
+          {/* The first thing a new machine's owner sees; the first place to hear about it. */}
+          <FeedbackLink
+            surface="signed-in"
+            prompt="You just linked a terminal. If anything on the way here was confusing, say what."
+          >
+            Anything confusing about linking? Tell us
+          </FeedbackLink>
         </div>
       </div>
     </div>,

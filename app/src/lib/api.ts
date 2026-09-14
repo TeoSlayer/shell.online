@@ -1,4 +1,5 @@
 import { auth } from "./firebase";
+import type { FeedbackPayload } from "./feedback";
 
 export { machineOnline } from "./agent";
 
@@ -207,6 +208,14 @@ export function markNotifications(id?: string) {
   return request<Inbox>("/api/notifications/read", {
     method: "POST",
     body: JSON.stringify(id ? { id } : {}),
+  });
+}
+
+/** A message from the feedback sheet. The service keeps it and may forward it. */
+export function sendFeedback(input: FeedbackPayload) {
+  return request<{ feedback: { id: string; at: number } }>("/api/feedback", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

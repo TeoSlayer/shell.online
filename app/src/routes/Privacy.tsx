@@ -70,7 +70,7 @@ export function Privacy() {
         <div className="terms-masthead">
           <h1>Privacy Policy</h1>
           <p className="terms-updated">
-            Effective: 11 September 2026 · Last updated: 11 September 2026
+            Effective: 11 September 2026 · Last updated: 14 September 2026
           </p>
           <p className="terms-lede">
             This policy explains what personal data <b>Vulture Labs, Inc.</b>{" "}
@@ -163,6 +163,15 @@ export function Privacy() {
               <dt>Collaboration</dt>
               <dd>
                 Comments, @mentions, notifications, assignments and handoffs.
+              </dd>
+            </div>
+            <div>
+              <dt>Feedback you send</dt>
+              <dd>
+                What you write in the app&rsquo;s feedback form, which kind
+                you marked it as, the page and control it was sent from, the
+                app version and browser name, and whether you agreed to a
+                reply. Nothing from a terminal is attached.
               </dd>
             </div>
             <div>
@@ -276,7 +285,8 @@ export function Privacy() {
             that resets your password. SendGrid sends team invitations. An
             invitation contains the inviter&rsquo;s name, the team&rsquo;s name
             and a link to join, with click and open tracking turned off. We
-            send no marketing email.
+            send no marketing email. If you send feedback from the app and tick
+            the box, we may write back to you about it, and only about it.
           </p>
         </Section>
 
@@ -351,6 +361,10 @@ export function Privacy() {
               as long as the team exists.
             </li>
             <li>
+              Feedback you send stays with us, with your identity removed once
+              you delete your account.
+            </li>
+            <li>
               When an account is deleted, its user identifier alone is kept for
               two hours, so a browser still signed in to it cannot bring it
               back.
@@ -382,6 +396,10 @@ export function Privacy() {
               are deleted;
             </li>
             <li>your vault, comments and notifications are deleted;</li>
+            <li>
+              feedback you sent is kept, no longer linked to your account or
+              email address;
+            </li>
             <li>if nobody else is in your team, the team and everything in it is deleted;</li>
             <li>
               if others are, what you typed into sessions stays in the

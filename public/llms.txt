@@ -145,6 +145,14 @@ Signing up creates an organization; an invite link joins an existing one.
 Everyone in an organization can see every member's sessions. A session has an
 owner and an assignee, and the owner can hand it off.
 
+The web app has a feedback form. Send feedback is in the account menu and on
+the Account page, and a Tell us link sits where something can go wrong: the
+new session form, the session password gate, a session that has ended, error
+notices, the empty sessions list, the vault screens, and the delete account
+form. A message carries the page it came from, the app version, the browser
+name, and a few facts that screen attaches, all shown before sending. Terminal
+contents, share links, and passwords are never attached.
+
 ## Sessions started from the browser
 
 `shell login` asks once whether the signed-in browser may start sessions on

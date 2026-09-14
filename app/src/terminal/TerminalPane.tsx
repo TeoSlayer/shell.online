@@ -16,6 +16,7 @@ import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
 import { RelayFileClient } from "../../../web/relay-files";
@@ -547,6 +548,14 @@ export function TerminalPane({
             <Button type="submit" busy={unlocking} busyLabel="Decrypting">
               Decrypt terminal
             </Button>
+            {/* The password never goes with it; whether a saved one failed does. */}
+            <FeedbackLink
+              surface="session-gate"
+              kind="problem"
+              context={{ host, saved_password_failed: detail ? "yes" : undefined }}
+            >
+              Stuck here? Tell us
+            </FeedbackLink>
           </form>
         </div>
       )}
@@ -567,6 +576,9 @@ export function TerminalPane({
                   ? "The process exited and its link closed."
                   : "It may have expired, or the link may be wrong.")}
             </p>
+            <FeedbackLink surface="session-ended" context={{ status, detail: detail || undefined }}>
+              Not what you expected? Tell us
+            </FeedbackLink>
           </div>
         </div>
       )}

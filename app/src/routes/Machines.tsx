@@ -3,6 +3,7 @@ import { Desktop, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { AppShell, LinkHint } from "../components/AppShell";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import { fetchDevices, revokeDevice, type Device } from "../lib/api";
 import { machineOnline } from "../lib/agent";
 import { usePageTitle } from "../lib/page-title";
@@ -112,17 +113,22 @@ export function Machines() {
         <div className="sessions-alert sessions-error">
           <Alert tone="error">
             <span>{error}</span>
-            <button
-              type="button"
-              className="inline-retry"
-              onClick={() => {
-                setError("");
-                setDevices(null);
-                void load();
-              }}
-            >
-              Retry
-            </button>
+            <span className="alert-actions">
+              <button
+                type="button"
+                className="inline-retry"
+                onClick={() => {
+                  setError("");
+                  setDevices(null);
+                  void load();
+                }}
+              >
+                Retry
+              </button>
+              <FeedbackLink surface="machines-error" kind="problem" context={{ error }}>
+                Report
+              </FeedbackLink>
+            </span>
           </Alert>
         </div>
       )}

@@ -38,6 +38,8 @@ export interface Env {
   MAIL_FROM?: string;
   /** Secret, set with `wrangler secret put`. */
   MAIL_API_KEY?: string;
+  /** Where in-app feedback is forwarded. Absent keeps it in the database only. */
+  FEEDBACK_TO?: string;
 }
 
 interface ExecutionContext {
@@ -133,6 +135,7 @@ function routerFor(env: Env): NodeHandler {
       apiKey: env.MAIL_API_KEY,
       from: env.MAIL_FROM,
     }),
+    feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     log: (message, error) => console.error(message, error),
     sessionLiveness: liveness,
   }));

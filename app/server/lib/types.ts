@@ -169,6 +169,33 @@ export interface Notification {
   readAt?: number;
 }
 
+/**
+ * Something a person told us from inside the app.
+ *
+ * Kept as it was sent, with where in the app it was written, so a report can
+ * be read without asking the reporter which screen they meant. Nothing from a
+ * terminal is in it: the app never has the plaintext, and the form says so.
+ */
+export interface Feedback {
+  id: string;
+  uid: string;
+  email: string;
+  orgId?: string;
+  kind: "problem" | "idea" | "question";
+  body: string;
+  /** Which control opened the form: "new-session", "session-gate", and so on. */
+  surface: string;
+  /** The app route it was sent from, path only. */
+  route: string;
+  appVersion: string;
+  userAgent: string;
+  /** Whether the sender is happy to be written to about it. */
+  canReply: boolean;
+  /** A few facts the surface attached, such as the kind of session being started. */
+  context: Record<string, string>;
+  at: number;
+}
+
 export interface SessionRecord {
   id: string;
   uid: string;

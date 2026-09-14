@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import { PostgresStore } from "./store-postgres";
 import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./store";
-import type { AgentCommand, AuditEvent, CliToken, Notification, SessionRecord } from "./types";
+import type { AgentCommand, AuditEvent, CliToken, Feedback, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
 /**
@@ -127,7 +127,27 @@ function notification(overrides: Partial<Notification> = {}): Notification {
 
 type Implementation = { name: string; open: () => Promise<Store>; reset: (store: Store) => Promise<void> };
 
+function feedback(overrides: Partial<Feedback> = {}): Feedback {
+  return {
+    id: "fbk_1",
+    uid: "uid-1",
+    email: "ana@example.com",
+    orgId: "org_1",
+    kind: "problem",
+    body: "The gate did not open",
+    surface: "session-gate",
+    route: "/sessions",
+    appVersion: "0.15.1",
+    userAgent: "Chrome 129 on macOS",
+    canReply: true,
+    context: { host: "laptop" },
+    at: 1000,
+    ...overrides,
+  };
+}
+
 const TABLES = [
+  "feedback",
   "deleted_accounts",
   "account_keys",
   "session_key_shares",
@@ -870,6 +890,22 @@ for (const implementation of implementations) {
       });
     });
 
+    describe("feedback", () => {
+      it("keeps a message with where it came from, newest first", async () => {
+        await store.putFeedback(feedback());
+        await store.putFeedback(feedback({ id: "fbk_2", kind: "idea", at: 3000, context: {} }));
+        const listed = await store.feedback();
+        expect(listed.map((entry) => entry.id)).toEqual(["fbk_2", "fbk_1"]);
+        expect(listed[1]).toEqual(feedback());
+        expect(await store.feedback(1)).toHaveLength(1);
+      });
+
+      it("orders messages sent in the same millisecond the same way every time", async () => {
+        for (const id of ["fbk_b", "fbk_c", "fbk_a"]) await store.putFeedback(feedback({ id }));
+        expect((await store.feedback()).map((entry) => entry.id)).toEqual(["fbk_c", "fbk_b", "fbk_a"]);
+      });
+    });
+
     describe("claiming an organization on first sight", () => {
       /*
        * Signing in fires several requests at once. On a new account none of
@@ -991,6 +1027,8 @@ for (const implementation of implementations) {
         });
         await store.putNotification(notification());
         await store.putNotification(notification({ id: "ntf_2", uid: "uid-1", actorUid: "uid-2" }));
+        await store.putFeedback(feedback());
+        await store.putFeedback(feedback({ id: "fbk_bo", uid: "uid-2", email: "bo@example.com" }));
 
         await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: false, successorUid: "uid-3" }, 5000);
 
@@ -1004,6 +1042,12 @@ for (const implementation of implementations) {
         expect(await store.comments("org_1", "s2")).toEqual([]);
         expect(await store.notificationsFor("org_1", "uid-1")).toEqual([]);
         expect(await store.notificationsFor("org_1", "uid-2")).toEqual([]);
+
+        /* Feedback is a message to the service: the words stay, the sender does not. */
+        const messages = await store.feedback();
+        const anas = messages.find((entry) => entry.id === "fbk_1");
+        expect(anas).toMatchObject({ uid: "", email: DELETED_ACTOR_EMAIL, canReply: false, body: "The gate did not open" });
+        expect(messages.find((entry) => entry.id === "fbk_bo")).toMatchObject({ uid: "uid-2", email: "bo@example.com" });
 
         const kept = (await store.listOrgSessions("org_1")).find((entry) => entry.id === "s2");
         expect(kept?.assigneeUids).toEqual(["uid-3"]);

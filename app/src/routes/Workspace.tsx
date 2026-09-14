@@ -13,6 +13,7 @@ import { SignedInModal } from "../components/SignedInModal";
 import { AppShell } from "../components/AppShell";
 import { useAuth } from "../auth/AuthProvider";
 import { Alert } from "../components/Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { EMPTY, reduce, sessionToOpen, tabFor } from "../terminal/tabs";
 import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
@@ -760,17 +761,22 @@ export function Workspace() {
           <div className="sessions-alert sessions-error">
             <Alert tone="error">
               <span>{error}</span>
-              <button
-                type="button"
-                className="inline-retry"
-                onClick={() => {
-                  setError("");
-                  setSessions(null);
-                  void load();
-                }}
-              >
-                Retry
-              </button>
+              <span className="alert-actions">
+                <button
+                  type="button"
+                  className="inline-retry"
+                  onClick={() => {
+                    setError("");
+                    setSessions(null);
+                    void load();
+                  }}
+                >
+                  Retry
+                </button>
+                <FeedbackLink surface="sessions-error" kind="problem" context={{ error }}>
+                  Report
+                </FeedbackLink>
+              </span>
             </Alert>
           </div>
         )}
@@ -800,6 +806,15 @@ export function Workspace() {
                 tab you can type into.
               </li>
             </ol>
+            {/* The first run is where most people are lost, and silently. */}
+            <div className="sessions-empty-foot">
+              <FeedbackLink
+                surface="first-run"
+                prompt="If a step above did not work on your machine, say which one and what it printed."
+              >
+                Stuck on a step? Tell us
+              </FeedbackLink>
+            </div>
           </div>
         ) : (
           <>

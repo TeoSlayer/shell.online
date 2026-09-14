@@ -1,3 +1,5 @@
+import type { Feedback } from "./types";
+
 /**
  * Sending an invitation by email.
  *
@@ -321,4 +323,68 @@ export function invitationMessage(invitation: Invitation, now = Date.now()): Mes
   ].join("\n");
 
   return { to: invitation.to, subject, html, text };
+}
+
+/* ---- Feedback, forwarded to whoever reads it ---- */
+
+const KIND_WORD: Record<Feedback["kind"], string> = {
+  problem: "Problem",
+  idea: "Idea",
+  question: "Question",
+};
+
+/** The first line of a message, short enough for a subject. */
+function summarize(body: string, limit = 60): string {
+  const flat = body.replace(/\s+/g, " ").trim();
+  return flat.length > limit ? `${flat.slice(0, limit).trimEnd()}…` : flat;
+}
+
+/**
+ * One message per piece of feedback, as plain as a forwarded note.
+ *
+ * Everything in it was typed by the sender or attached by their browser, so
+ * all of it is escaped. The reply address is in the body rather than in a
+ * Reply-To header: the sender chose whether to be written back to, and a
+ * header the mail client acts on by itself would make that choice for them.
+ */
+export function feedbackMessage(feedback: Feedback, to: string): Message {
+  const kind = KIND_WORD[feedback.kind];
+  const subject = `[shell.online feedback] ${kind}: ${summarize(feedback.body)}`;
+  const reply = feedback.canReply
+    ? `${feedback.email} said it is fine to reply.`
+    : `${feedback.email} asked not to be written to about this.`;
+  const facts: [string, string][] = [
+    ["From", reply],
+    ["Where", `${feedback.surface} on ${feedback.route || "/"}`],
+    ["App", `${feedback.appVersion || "unknown"} · ${feedback.userAgent || "unknown browser"}`],
+    ["Sent", new Date(feedback.at).toISOString()],
+    ...Object.entries(feedback.context).map(([key, value]): [string, string] => [key, value]),
+    ["Id", feedback.id],
+  ];
+
+  const text = [
+    `${kind} from ${feedback.email}`,
+    "",
+    feedback.body,
+    "",
+    ...facts.map(([key, value]) => `${key}: ${value}`),
+  ].join("\n");
+
+  const rows = facts
+    .map(
+      ([key, value]) =>
+        `<tr><td style="padding:3px 14px 3px 0;color:${MUTED};white-space:nowrap;vertical-align:top;">${escape(key)}</td><td style="padding:3px 0;color:${QUIET};">${escape(value)}</td></tr>`,
+    )
+    .join("");
+  const html = `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${escape(subject)}</title></head>
+<body style="margin:0;padding:24px 16px;background:${PAPER};color:${INK};font-family:${FONT};">
+  <p style="margin:0 0 12px;font-size:13px;color:${MUTED};">${escape(kind)} sent from the shell.online app</p>
+  <pre style="margin:0 0 18px;padding:16px 18px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;font-family:${FONT};font-size:15px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;color:${INK};">${escape(feedback.body)}</pre>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="font-size:13px;line-height:1.5;">${rows}</table>
+</body>
+</html>`;
+
+  return { to, subject, html, text };
 }

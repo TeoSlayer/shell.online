@@ -4,6 +4,7 @@ import { FirebaseError } from "firebase/app";
 import { Button } from "./Button";
 import { Field } from "./Field";
 import { Alert } from "./Alert";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 import { useAuth } from "../auth/AuthProvider";
 import { fetchOrg, type OrgView } from "../lib/api";
 import { authErrorMessage } from "../lib/auth-errors";
@@ -127,6 +128,16 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
           </Button>
         </div>
       </form>
+      {/* The one moment a reason is on the tip of the tongue. */}
+      <p className="account-delete-note">
+        <FeedbackLink
+          surface="delete-account"
+          kind="idea"
+          prompt="Before you go: what would have made shell.online worth keeping?"
+        >
+          Tell us why you are leaving
+        </FeedbackLink>
+      </p>
     </section>
   );
 }

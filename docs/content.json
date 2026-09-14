@@ -133,6 +133,10 @@
           "A stale app row cannot keep a dead share online: relay reconciliation moves unreachable sessions out of the live state, and a known task exit marks them Finished. Failed list loads preserve the current view and can be retried. If a password is not in your personal vault, retrieve it from the machine with shell password <ID>; the service has no decryption backdoor."
         ],
         [
+          "Send feedback",
+          "Send feedback sits in the account menu and on the Account page, and a Tell us link sits where something can go wrong: under the new session form, the session password gate, a session that has ended, error notices, the empty sessions list, the vault screens, and the delete account form. A message carries the page it came from, the app version, the browser name, and a few facts that screen attaches, all shown before you send. Terminal contents, share links, and passwords are never attached. The service keeps each message and forwards it to the team by email; deleting your account keeps the words and removes who sent them."
+        ],
+        [
           "Authentication and hosting",
           "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/."
         ]

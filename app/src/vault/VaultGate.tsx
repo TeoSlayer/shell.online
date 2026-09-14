@@ -7,6 +7,7 @@ import { Booting } from "../components/Booting";
 import { useAuth } from "../auth/AuthProvider";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
 import { useVault, type PreparedVault } from "./VaultProvider";
+import { FeedbackLink } from "../feedback/FeedbackLink";
 
 /**
  * Compatibility gate for routes that explicitly require an open vault.
@@ -19,7 +20,7 @@ export function VaultGate({ children }: { children: ReactNode }) {
   if (vault.status === "loading") return <Booting label="Opening your vault" />;
   if (vault.status === "error") {
     return (
-      <VaultFrame>
+      <VaultFrame surface="vault-error">
         <span className="consent-mark" aria-hidden="true">
           <Warning size={22} />
         </span>
@@ -35,19 +36,19 @@ export function VaultGate({ children }: { children: ReactNode }) {
   }
   if (vault.status === "setup") {
     return (
-      <VaultFrame>
+      <VaultFrame surface="vault-setup">
         <VaultSetup reset={false} />
       </VaultFrame>
     );
   }
   return (
-    <VaultFrame>
+    <VaultFrame surface="vault-unlock">
       <VaultUnlock />
     </VaultFrame>
   );
 }
 
-function VaultFrame({ children }: { children: ReactNode }) {
+function VaultFrame({ surface, children }: { surface: string; children: ReactNode }) {
   const { user, signOutUser } = useAuth();
   return (
     <main className="consent">
@@ -62,6 +63,10 @@ function VaultFrame({ children }: { children: ReactNode }) {
         </span>
       </header>
       <section className="consent-card vault-card rise rise-1">{children}</section>
+      {/* A gate is where people get stuck, and where they are least able to say so. */}
+      <p className="feedback-gate">
+        <FeedbackLink surface={surface}>Stuck here? Tell us</FeedbackLink>
+      </p>
     </main>
   );
 }

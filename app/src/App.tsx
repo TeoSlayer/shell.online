@@ -16,6 +16,7 @@ import { Audit } from "./routes/Audit";
 import { CliAuthorize } from "./routes/CliAuthorize";
 import { VaultProvider } from "./vault/VaultProvider";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
+import { FeedbackProvider } from "./feedback/FeedbackProvider";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
       <AuthProvider>
         <VaultProvider>
         <TeamKeyProvider>
+        <FeedbackProvider>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route
@@ -109,6 +111,7 @@ export default function App() {
           <Route path="/cli/authorize" element={<CliAuthorize />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+        </FeedbackProvider>
         </TeamKeyProvider>
         </VaultProvider>
       </AuthProvider>

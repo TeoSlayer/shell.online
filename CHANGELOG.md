@@ -4,6 +4,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A feedback form inside the web app. It opens from the account menu and the
+  Account page, and from the moments where something can go wrong: starting a
+  session, the session password gate, a session that ended, the vault setup
+  and unlock screens, error notices, the empty sessions list, and the delete
+  account form. Messages are kept by the service and, with `FEEDBACK_TO`
+  set, forwarded by email. Nothing from a terminal is attached.
+
 ### Changed
 
 - Prevented Mermaid labels from being clipped by waiting for fonts before

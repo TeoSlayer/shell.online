@@ -7,6 +7,7 @@ import type {
   CliToken,
   Comment,
   Device,
+  Feedback,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -228,6 +229,14 @@ export interface Store {
   notificationsFor(orgId: string, uid: string, limit?: number): Promise<Notification[]>;
   markNotificationRead(orgId: string, uid: string, id: string, now?: number): Promise<boolean>;
   markAllNotificationsRead(orgId: string, uid: string, now?: number): Promise<number>;
+
+  /* ---- Feedback ---- */
+  putFeedback(feedback: Feedback): Promise<void>;
+  /**
+   * Newest first. For an operator's export and for tests; the app never lists
+   * it. Deleting an account keeps its messages and clears who sent them.
+   */
+  feedback(limit?: number): Promise<Feedback[]>;
 
   /* ---- Housekeeping ---- */
   purgeExpired(now?: number): Promise<void>;
