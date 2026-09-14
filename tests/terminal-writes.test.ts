@@ -48,6 +48,18 @@ describe("mobile terminal write queue", () => {
     expect(terminal.writes).toEqual([[1, 2, 3, 4], [5, 6]]);
   });
 
+  it("completes a snapshot only after its final render job", () => {
+    const terminal = new FakeTerminal();
+    const queue = new TerminalWriteQueue(terminal, 4);
+    let completed = 0;
+
+    queue.enqueue(new Uint8Array([1, 2, 3, 4, 5]), true, () => { completed += 1; });
+    terminal.completeNext();
+    expect(completed).toBe(0);
+    terminal.completeNext();
+    expect(completed).toBe(1);
+  });
+
   it("drops stale queued output when a fresh snapshot arrives", () => {
     const terminal = new FakeTerminal();
     const queue = new TerminalWriteQueue(terminal, 8);

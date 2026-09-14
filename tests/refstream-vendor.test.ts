@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const vendor = join(root, "web/vendor/refstream/v0.1.0-alpha.4");
+const vendor = join(root, "web/vendor/refstream/v0.1.0-alpha.5");
 
 interface Manifest {
   version: string;
@@ -16,10 +16,10 @@ interface Manifest {
 }
 
 describe("vendored Refstream browser release", () => {
-  it("matches every file in the signed alpha.4 release manifest", async () => {
+  it("matches every file in the signed alpha.5 release manifest", async () => {
     const manifest = JSON.parse(await readFile(join(vendor, "manifest.json"), "utf8")) as Manifest;
-    expect(manifest.version).toBe("0.1.0-alpha.4");
-    expect(manifest.gitRevision).toBe("44dd17cf69e067b859b9ab09ba988088beaa4fd6");
+    expect(manifest.version).toBe("0.1.0-alpha.5");
+    expect(manifest.gitRevision).toBe("131a71335f05344f3018c43a76ffbe7376493a34");
 
     for (const [name, expected] of Object.entries(manifest.files)) {
       const contents = await readFile(join(vendor, name));

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { bindRefstreamSessionPersistence } from "../web/refstream-session";
-import type { SessionSnapshot } from "../web/vendor/refstream/v0.1.0-alpha.4/refstream.js";
+import type { SessionSnapshot } from "../web/vendor/refstream/v0.1.0-alpha.5/refstream.js";
 
 function snapshot(sequence: number): SessionSnapshot {
   return { version: 1, sequence, terminal: {}, commands: [] };

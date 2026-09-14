@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
-import "../../../web/vendor/refstream/v0.1.0-alpha.4/refstream.css";
-import "../../../web/vendor/refstream/v0.1.0-alpha.4/ui.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.css";
+import "../../../web/vendor/refstream/v0.1.0-alpha.5/ui.css";
 import { TerminalConnection, type ConnectionStatus } from "./connection";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
@@ -261,6 +261,8 @@ export function TerminalPane({
       });
     }
 
+    let snapshotGeneration = 0;
+    let rendererInputSuppressed = false;
     connected = new TerminalConnection({
       url: target.url,
       fragment: encryptionFragment(shareUrl),
@@ -311,8 +313,16 @@ export function TerminalPane({
           if (worked.source !== "vault") void keepIfMissing(sessionId, worked.password);
         },
         onData: (bytes, reset) => {
-          if (reset) term.reset();
-          term.write(bytes);
+          if (!reset) {
+            term.write(bytes);
+            return;
+          }
+          const generation = ++snapshotGeneration;
+          rendererInputSuppressed = true;
+          term.reset();
+          term.write(bytes, () => {
+            if (generation === snapshotGeneration) rendererInputSuppressed = false;
+          });
         },
         onFileFrame: (frame) => { fileClient.handle(frame); },
         onReadOnly: (value) => {
@@ -357,7 +367,7 @@ export function TerminalPane({
       : null;
 
     const typed = term.onData((data) => {
-      if (!canTypeRef.current) return;
+      if (!canTypeRef.current || rendererInputSuppressed) return;
       connected.send(data);
       sink?.observe(data);
     });

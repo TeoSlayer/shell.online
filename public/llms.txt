@@ -24,9 +24,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.15.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.15.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.15.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.15.1" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -98,6 +98,8 @@ shell kill --all
 `shell help` prints a guided lifecycle; `shell help attach` explains local takeover and detaching.
 
 `shell attach` opens the existing PTY locally. Its terminal title keeps a Ctrl-X D to detach reminder visible even when a full-screen TUI redraws the terminal. Press Ctrl-X, release it, then press D to detach without stopping it (Ctrl-] remains a legacy alternative); the wrapper intercepts the sequence before the child process receives it. Input and output remain mirrored to browser viewers. Anonymous presence and a brief per-typist input lease prevent remote keystrokes from interleaving.
+
+Full-screen and nested terminals are supported. Snapshot restoration suppresses replies to historical terminal queries, so a joining or reconnecting browser cannot inject old capability responses into tmux, Herdr, mosh, or another live TUI.
 
 Sessions close immediately when their task exits. `--auto-close 5m` or an absolute/local date adds an earlier deadline; supported duration units are ms, s, m, h, d, w, mo, and y.
 

@@ -80,6 +80,11 @@ shell kill <id>                           # stop a session
 Press `Ctrl-X`, then `D`, to detach from an attached session. See
 [`shell help reference`](https://shell.online/cli/) for every command and option.
 
+Full-screen and nested terminals are supported. Release checks exercise tmux,
+Herdr, and mosh-style redraw, input, split-pane, and reconnect behavior; a
+restored browser snapshot cannot answer historical terminal queries into the
+live process.
+
 File sharing is disabled unless `--files` or `--files-root` is present. Once
 enabled, browsers can browse that root and open referenced files on demand.
 Paths and contents use the session's E2EE WebSocket; the CLI rejects traversal,
@@ -94,7 +99,7 @@ survive panel changes and reconnection. Reload recovery is kept only in that
 browser tab for up to four hours and still requires the local process to be
 running. Revoking access is immediate and does not stop the terminal. Files stay
 unavailable unless the host separately used `--files` or `--files-root`.
-See the [agent handoff protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.4/docs/agents.md).
+See the [agent handoff protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md).
 
 ## Security
 

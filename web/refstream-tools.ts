@@ -1,5 +1,5 @@
-import { getTerminalSession } from "./vendor/refstream/v0.1.0-alpha.4/refstream.js";
-import { attachTerminalTools, type TerminalTools } from "./vendor/refstream/v0.1.0-alpha.4/ui.js";
+import { getTerminalSession } from "./vendor/refstream/v0.1.0-alpha.5/refstream.js";
+import { attachTerminalTools, type TerminalTools } from "./vendor/refstream/v0.1.0-alpha.5/ui.js";
 import { bindRefstreamSessionPersistence } from "./refstream-session";
 
 const REFSTREAM_THEMES = [

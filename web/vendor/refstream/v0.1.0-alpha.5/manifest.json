@@ -1,15 +1,23 @@
 {
   "name": "refstream.js",
-  "version": "0.1.0-alpha.4",
-  "gitRevision": "44dd17cf69e067b859b9ab09ba988088beaa4fd6",
+  "version": "0.1.0-alpha.5",
+  "gitRevision": "131a71335f05344f3018c43a76ffbe7376493a34",
   "files": {
     "LICENSE": {
       "bytes": 1069,
       "sha256": "2ab20cbcda4e5a4834517659fce49689858499803cdbd5631b85c455152d5483"
     },
     "README.txt": {
-      "bytes": 364,
-      "sha256": "7e71d1a33224b7bc17c7e1654f83119d3efbd2cb33001072e93e9f6f1d6adcc6"
+      "bytes": 960,
+      "sha256": "15cad093717130be27269f128463ac02eae5cf7bb66186dd00894dd3e833d5d2"
+    },
+    "chunks/chunk-T4VT5WZN.js": {
+      "bytes": 138341,
+      "sha256": "c6070b1b51537e842bb7d1f01e731c42a5566279c137ec4ad60ec5366e343de1"
+    },
+    "chunks/chunk-T4VT5WZN.js.map": {
+      "bytes": 417917,
+      "sha256": "48d4ad6a236b52eea77d26e16ec8502759c0b0385238adc4c7b451824faf4998"
     },
     "chunks/chunk-TPO6MD2X.js": {
       "bytes": 4096,
@@ -19,25 +27,17 @@
       "bytes": 18507,
       "sha256": "541d74321530648220bdf966eac17e0242da300ca3fd91d0de03e22793f563f8"
     },
-    "chunks/chunk-WUTGNNWJ.js": {
-      "bytes": 132525,
-      "sha256": "edb59fad500d9b4cff6e74dbf94972f6699f209b72f82f144ee9c9ca255aba42"
+    "chunks/ui-session-TEGIUDTF.js": {
+      "bytes": 25304,
+      "sha256": "f2a136382bad3e037969ec37f455b94714e72b8d59dda2a2b08fa8adc61b5c53"
     },
-    "chunks/chunk-WUTGNNWJ.js.map": {
-      "bytes": 402555,
-      "sha256": "c7c186bd69c8c9836601a23c5e9693ac9846cc55c55be39bc0de78dc01088752"
-    },
-    "chunks/ui-session-NLP6MUUJ.js": {
-      "bytes": 23426,
-      "sha256": "8979dbfbb9f838dc74c2b483434e1082ed9c2f94422d75e8ba20ec66ad33e6a8"
-    },
-    "chunks/ui-session-NLP6MUUJ.js.map": {
-      "bytes": 61178,
-      "sha256": "e53ab78b538da32f27ad8a8ebf2ad9aee22a5dc54f6c39b1614e1e45be22e517"
+    "chunks/ui-session-TEGIUDTF.js.map": {
+      "bytes": 65334,
+      "sha256": "c8bd651c00914ec61c663505919ee260f723863f294f794e590875cdb723ce91"
     },
     "docs/agents.md": {
-      "bytes": 8094,
-      "sha256": "4d52697c0abb08b61fbacce9dd084ea541000e2d55febe6d0b56ed92fa51d417"
+      "bytes": 12816,
+      "sha256": "109dce130d8a4d4255aed7809131f079df8817fffe54c2fa0e92f08c2e858cf9"
     },
     "files.global.js": {
       "bytes": 24548,
@@ -60,16 +60,16 @@
       "sha256": "459622548f5a3575b187046a5f49a4976490f8d8ac4f35f3e0af77bc0c52dba6"
     },
     "refstream.global.js": {
-      "bytes": 137320,
-      "sha256": "a825f3d7671807d8f7960998e39b1dfa2979a26431460ff8a66b15f1285b1b29"
+      "bytes": 143136,
+      "sha256": "e1328fa65de83a8dbd28e85cbf3a60abc44cd7817472596692b7b49a4514d55b"
     },
     "refstream.global.js.map": {
-      "bytes": 423702,
-      "sha256": "a4c532fef142a54cd27969fb1ffc5ba95e224777be205754e9455932a5b19d81"
+      "bytes": 439226,
+      "sha256": "cb9d1800770e5af53db99c05f091d58900880ada2ffd848c0c5ea1fb3b26d4e4"
     },
     "refstream.js": {
       "bytes": 826,
-      "sha256": "101d242c728a9ab55c670fb6e3b6cd5b6c1fcb4b204df5898e2361c2de5f59da"
+      "sha256": "8cd73b50ba8b071f30718d9c438f5dd3daa250b44baa41d9e275c5dd847da930"
     },
     "refstream.js.map": {
       "bytes": 93,
@@ -81,7 +81,7 @@
     },
     "ui.js": {
       "bytes": 9548,
-      "sha256": "d84edb724beb4d89ec3ef8e59778daae066f45504b64726e316436e2beb6f16c"
+      "sha256": "7e981ae6d34bce34e63ed0014d475f567f2e440bf97d69d880266ae2793d6eb6"
     },
     "ui.js.map": {
       "bytes": 31463,

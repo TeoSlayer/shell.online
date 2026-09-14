@@ -6,6 +6,7 @@ export interface TerminalWriteTarget {
 interface PendingTerminalWrite {
   data: Uint8Array;
   reset: boolean;
+  complete?: () => void;
 }
 
 export class TerminalWriteQueue {
@@ -20,7 +21,7 @@ export class TerminalWriteQueue {
     private readonly maximumPendingBytes = 1024 * 1024,
   ) {}
 
-  enqueue(data: Uint8Array, reset = false): boolean {
+  enqueue(data: Uint8Array, reset = false, complete?: () => void): boolean {
     if (reset) {
       this.pending.length = 0;
       this.pendingBytes = 0;
@@ -33,13 +34,14 @@ export class TerminalWriteQueue {
     }
 
     if (data.byteLength === 0) {
-      this.pending.push({ data: new Uint8Array(), reset });
+      this.pending.push({ data: new Uint8Array(), reset, complete });
     } else {
       for (let offset = 0; offset < data.byteLength; offset += this.maximumBatchBytes) {
         const end = Math.min(data.byteLength, offset + this.maximumBatchBytes);
         this.pending.push({
           data: new Uint8Array(data.subarray(offset, end)),
           reset: reset && offset === 0,
+          complete: end === data.byteLength ? complete : undefined,
         });
         this.pendingBytes += end - offset;
       }
@@ -57,6 +59,7 @@ export class TerminalWriteQueue {
     if (first.reset) this.target.reset();
 
     const chunks = [first.data];
+    const completions: Array<() => void> = first.complete ? [first.complete] : [];
     let byteLength = first.data.byteLength;
     while (
       this.pending.length > 0 &&
@@ -66,6 +69,7 @@ export class TerminalWriteQueue {
       const next = this.pending.shift()!;
       this.pendingBytes -= next.data.byteLength;
       chunks.push(next.data);
+      if (next.complete) completions.push(next.complete);
       byteLength += next.data.byteLength;
     }
 
@@ -81,6 +85,7 @@ export class TerminalWriteQueue {
 
     this.writing = true;
     this.target.write(output, () => {
+      for (const complete of completions) complete();
       this.writing = false;
       this.flush();
     });

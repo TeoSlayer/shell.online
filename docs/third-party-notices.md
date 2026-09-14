@@ -18,8 +18,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ## Refstream.js — MIT
 
 Copyright (c) 2026 Calin Teodor. The MIT license above applies. The vendored
-browser build is v0.1.0-alpha.4; its complete license and provenance are in
-[`web/vendor/refstream/v0.1.0-alpha.4/`](../web/vendor/refstream/v0.1.0-alpha.4/).
+browser build is v0.1.0-alpha.5; its complete license and provenance are in
+[`web/vendor/refstream/v0.1.0-alpha.5/`](../web/vendor/refstream/v0.1.0-alpha.5/).
 
 ## ws — MIT
 

@@ -4,12 +4,18 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.15.1] — 2026-09-14
+
 ### Changed
 
 - Made account deletion a visible danger-zone action while keeping the existing
   reauthentication and typed-email confirmation safeguards.
 - Marked Refstream clearly as an unstable alpha when selected and replaced its
   translucent app chrome with an opaque terminal-native palette.
+- Prevented historical terminal capability queries in a restored snapshot from
+  being answered into the live process, which could corrupt tmux input.
+- Updated the optional Refstream renderer to `v0.1.0-alpha.5` from its verified
+  browser release. xterm.js remains the default.
 
 ## [0.15.0] — 2026-09-14
 

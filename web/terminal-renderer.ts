@@ -3,7 +3,7 @@ import {
   type ITerminalInitOnlyOptions,
   type ITerminalOptions,
 } from "@xterm/xterm";
-import { Terminal as RefstreamTerminal } from "./vendor/refstream/v0.1.0-alpha.4/refstream.js";
+import { Terminal as RefstreamTerminal } from "./vendor/refstream/v0.1.0-alpha.5/refstream.js";
 
 export type TerminalRenderer = "xterm" | "refstream";
 export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";

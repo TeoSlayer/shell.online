@@ -1,5 +1,5 @@
 {
-  "version": "0.15.0",
+  "version": "0.15.1",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -102,6 +102,10 @@
         [
           "Screen recovery",
           "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."
+        ],
+        [
+          "Nested terminals and multiplexers",
+          "Snapshot restoration suppresses replies to historical terminal queries, so joining or reconnecting cannot inject capability responses into the live PTY. tmux, Herdr, and mosh-style input, redraw, split-pane, and second-viewer flows are exercised as compatibility checks."
         ],
         [
           "Backpressure by design",
@@ -645,7 +649,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.15.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.15.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

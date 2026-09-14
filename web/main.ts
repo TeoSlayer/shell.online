@@ -1,7 +1,7 @@
 import type { ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import "./vendor/refstream/v0.1.0-alpha.4/refstream.css";
-import "./vendor/refstream/v0.1.0-alpha.4/ui.css";
+import "./vendor/refstream/v0.1.0-alpha.5/refstream.css";
+import "./vendor/refstream/v0.1.0-alpha.5/ui.css";
 import {
   decodeLatencyProbe,
   encodeFrame,
@@ -892,6 +892,8 @@ function renderTerminal(sessionId: string): void {
   let presenceTimer: number | undefined;
   let readOnly = false;
   let snapshotRequestPending = false;
+  let terminalSnapshotGeneration = 0;
+  let rendererInputSuppressed = false;
   const terminalInput = new TerminalInputQueue(() => socket);
   const destructiveInput = new DestructiveInputGuard();
   let destructiveInputTimer: number | undefined;
@@ -1432,7 +1434,11 @@ function renderTerminal(sessionId: string): void {
         if (fileClient.handle(frame)) return;
         if (receiveLatencyResponse(frame)) return;
         if (isSnapshotOpcode(frame[0])) {
-          terminalWrites.enqueue(frame.subarray(1), true);
+          const generation = ++terminalSnapshotGeneration;
+          rendererInputSuppressed = true;
+          terminalWrites.enqueue(frame.subarray(1), true, () => {
+            if (generation === terminalSnapshotGeneration) rendererInputSuppressed = false;
+          });
           snapshotRequestPending = false;
         } else if (frame[0] === Opcode.Output) {
           if (!terminalWrites.enqueue(frame.subarray(1)) && !snapshotRequestPending) {
@@ -1612,6 +1618,10 @@ function renderTerminal(sessionId: string): void {
   });
 
   const sendTerminalData = (bytes: Uint8Array): void => {
+    // A raw terminal snapshot can contain old device-attribute queries from a
+    // TUI startup. Replaying it must not answer those queries into the live
+    // PTY after the application has already moved on.
+    if (rendererInputSuppressed) return;
     if (bytes.byteLength === 1 && bytes[0] === 4) {
       confirmEOF();
       return;

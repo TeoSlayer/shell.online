@@ -1,7 +1,7 @@
 import type {
   SessionSnapshot,
   TerminalSession,
-} from "./vendor/refstream/v0.1.0-alpha.4/refstream.js";
+} from "./vendor/refstream/v0.1.0-alpha.5/refstream.js";
 
 const SNAPSHOT_VERSION = 1;
 const MAX_SNAPSHOT_AGE_MS = 4 * 60 * 60 * 1_000;

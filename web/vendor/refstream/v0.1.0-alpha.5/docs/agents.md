@@ -122,15 +122,91 @@ cleared automatically. Prefer `ask` to separate typing and Enter calls.
 For an unmarked application composer, `ask` requires `confirmEmptyInput: true`
 unless the host has explicitly reported an empty composer. That assertion is for
 an agent that inspected and verified the composer is empty. It cannot override a
-detected local draft. When the agent cannot verify emptiness, it must wait.
+reported draft or protected local activity. When the agent cannot verify emptiness, it must wait.
 Multiline messages require the application's bracketed-paste mode.
 
-After clearing a draft in a generic application, the browser owner can use
-**I've cleared my draft** in the Agent panel. This acknowledges input readiness
-without sending or deleting any text. A host integration can instead call
-`session.confirmInputEmpty(session.input.revision)` from its actual empty-composer
-callback. Further input or output invalidates that assertion. Neither method is
-available to the visiting agent through the relay.
+An observed keystroke can move a cursor, accept a suggestion or edit a draft. It
+does not prove which happened. Reads distinguish `input.state` (`empty`,
+`occupied`, `unknown`), `input.content` and `input.protected`. Unverified local
+activity stays protected, without claiming the application contains a draft.
+`input.screen` adds a bounded cursor-line excerpt and color/dim runs, labeled
+`display_only`. A gray line or text after the cursor is evidence to inspect,
+never permission to type. Unknown does not mean "ask the owner to clear text."
+
+For an unintegrated TUI, the owner can inspect the actual composer and choose
+**I've checked: input is empty**. This calls
+`session.confirmInputEmpty(session.input.revision)` without sending or deleting
+text. Further input or output invalidates that one-time acknowledgement, which
+reads as `verifiedBy: "owner"`. It cannot override a host-reported draft. A real
+application integration uses the semantic reports below instead. Neither
+reporting method is available to a visiting agent through the relay.
+
+## Application and composer state
+
+Hosts can report the actual application state to the library. This is an
+integration API, not a terminal screen classifier. It requires a fresh sequence
+and rejects unknown fields, including composer values or raw hook payloads.
+
+```js
+// Inside the host's synchronous application-state callback:
+const sequence = session.sequence; // Capture before observing the application.
+const composer = editor.value.length > 0 ? 'draft'
+  : editor.suggestion ? 'suggestion'
+  : editor.placeholder ? 'placeholder' : 'empty';
+session.reportApplicationState({ status: 'ready', composer }, sequence);
+
+// Application lifecycle callbacks, associated with the actual current handoff:
+session.reportApplicationState({ status: 'authentication_required', taskId }, session.sequence);
+session.reportApplicationState({ status: 'working', taskId }, session.sequence);
+session.reportApplicationState({ status: 'answer_ready', taskId }, session.sequence);
+// Only after the requested answer has actually arrived:
+session.completeTask(taskId, finalAnswer);
+```
+
+Read the application's **real editor model**, not `terminal.textarea.value`.
+The terminal textarea is a keyboard/IME sink, not the TUI's composer. Any typed
+prefix counts as `draft`, even when an inline suggestion follows it. No composer
+text is included in a report. Only report `placeholder` or `suggestion` when the
+editable value is empty; both read as `input.state: "empty"`, `verifiedBy: "host"`.
+They need no clearance button or `confirmEmptyInput` assertion.
+Reports never grant agent ownership of a draft. A composer report arriving
+between paste and Enter stops submission if it changes ownership, preserving
+the task for inspection instead of retrying it. Hosts with synchronous editor
+callbacks should observe state after the atomic input operation finishes.
+
+A reported composer survives ordinary output/redraws. All terminal input and
+IME composition invalidate it, as do reset, restore and a buffer change. The
+integration must report every application/composer/context change and report
+`{ status: 'unknown', composer: 'unknown' }` when it detaches. Apply backend
+events in order and associate them with the correct process and task. For an
+asynchronous observation, retain the sequence captured **before** the observation;
+a rejected stale report needs a fresh observation, not a newly stamped sequence.
+
+`read().application` supplies `status`, `source`, `revision` and optional `taskId`.
+The default status is `unknown`; it is never inferred from output or silence.
+
+| Application status | Agent behavior |
+| --- | --- |
+| `authentication_required` | Keep the connection; the owner signs in through the application. Agent writes pause. |
+| `working` | Wait for progress; agent writes pause. |
+| `answer_ready` | Retrieve the response for the associated task. It has not necessarily been collected or verified complete. |
+| `input_required` | Inspect the current dialog; let the owner respond. New prompts are blocked. |
+| `ready` | Inspect input readiness before a new request. |
+| `unknown` | Inspect available evidence; do not invent an input or completion state. |
+
+Meaningful reports wake `wait_task`, including composer recovery. Authentication
+returns `next: "authenticate"`; an associated answer-ready report returns
+`next: "inspect"` until an actual answer is retained. Reports never complete a
+task by themselves. New asks clear previous lifecycle observations, and snapshots
+do not restore live input authorization or application-state claims.
+
+For Claude Code, documented hooks such as `UserPromptSubmit`, `Stop` and
+`StopFailure` can inform a **host-owned** lifecycle adapter. They do not provide
+the live editable composer value; a stop event also does not prove the requested
+work was done. Do not forward raw hook payloads, transcripts or credentials to
+the relay. Map only supported states through your existing trusted host
+integration. The library does not install hooks or automatically identify every
+Claude screen. See [Claude Code hooks](https://code.claude.com/docs/en/hooks).
 
 ## Persistence and privacy boundaries
 
