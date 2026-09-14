@@ -4,6 +4,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Widened the vault password fields on the vault setup, unlock, and Account
+  pages to twice their previous width, so a password is no longer typed into a
+  box sized for the four-letter recovery-key confirmation.
+
 ### Changed
 
 - Prevented Mermaid labels from being clipped by waiting for fonts before
