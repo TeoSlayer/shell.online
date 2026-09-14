@@ -73,9 +73,3 @@ Objects, Rate Limiting, Analytics Engine, and static assets.
 Accounts are optional and do not participate in terminal transport. The app in
 `app/` uses Firebase Authentication and PostgreSQL in the current release; its
 local Docker deployment is documented in [`app/README.md`](../app/README.md).
-
-Keycloak is reserved for an optional self-hosted authentication adapter. It is
-not implemented in this release and is not configured or deployed on
-`app.shell.online`. A future contribution must keep its settings in the
-self-hosted deployment path rather than changing the hosted production identity
-provider.

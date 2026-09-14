@@ -55,6 +55,15 @@
           "Optional personal vault",
           "The CLI always prints and locally retains an active session's password. After shell login, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 2,
+          "title": "One command, one live path",
+          "caption": "The process and PTY stay on the machine; browsers receive an encrypted, collaborative view through the relay.",
+          "desktop": "flowchart LR\n  A[Your command] --> B[Local PTY]\n  B -->|encrypted output| C[Relay]\n  C --> D[Browser]\n  D -->|encrypted input| C\n  C --> B",
+          "mobile": "flowchart TD\n  A[Your command] --> B[Local PTY]\n  B -->|encrypted output| C[Relay]\n  C --> D[Browser]\n  D -. encrypted input .-> C\n  C -. input .-> B"
+        }
       ]
     },
     "app": {
@@ -125,8 +134,17 @@
         ],
         [
           "Authentication and hosting",
-          "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/. Keycloak is reserved for a future self-hosted authentication adapter and is not configured, enabled, or deployed on app.shell.online in this release."
+          "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 1,
+          "title": "Link once, keep the terminal boundary",
+          "caption": "The app coordinates identity and metadata. Terminal traffic continues through the independent encrypted relay path.",
+          "desktop": "flowchart LR\n  A[shell login] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]",
+          "mobile": "flowchart TD\n  A[shell login] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]"
+        }
       ]
     },
     "mobile": {
@@ -159,6 +177,15 @@
           "Large paste, bounded",
           "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 1,
+          "title": "A deterministic shared grid",
+          "caption": "The relay selects one PTY grid for every viewer. Each browser fits that grid locally without fighting over dimensions.",
+          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 24 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
+          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 24]\n  B --> D[Fit in each browser]\n  C --> D"
+        }
       ]
     },
     "refstream": {
@@ -249,6 +276,22 @@
             ]
           ]
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 2,
+          "title": "Renderer boundary",
+          "caption": "Refstream replaces the browser renderer only. shell.online retains transport, permissions, sizing, encryption, and process control.",
+          "desktop": "flowchart LR\n  A[Local process] --> B[shell.online PTY]\n  B --> C[E2EE relay]\n  C --> D{Browser renderer}\n  D --> E[xterm default]\n  D --> F[Refstream alpha]",
+          "mobile": "flowchart TD\n  A[Local process] --> B[shell.online PTY]\n  B --> C[E2EE relay]\n  C --> D{Browser renderer}\n  D --> E[xterm default]\n  D --> F[Refstream alpha]"
+        },
+        {
+          "after": 4,
+          "title": "Scoped agent handoff",
+          "caption": "A single-use invitation creates a reusable connector session. Revocation ends access without stopping the terminal.",
+          "desktop": "flowchart LR\n  A[Private invitation] --> B[Agent connector]\n  B --> C[Stable session ID]\n  C --> D[Read or control task]\n  D --> E[Collect result]\n  C --> F[Revoke]",
+          "mobile": "flowchart TD\n  A[Private invitation] --> B[Agent connector]\n  B --> C[Stable session ID]\n  C --> D[Read or control task]\n  D --> E[Collect result]\n  C --> F[Revoke]"
+        }
       ]
     },
     "reliability": {
@@ -281,6 +324,15 @@
           "Explicit lifecycle",
           "The URL prints only after a short startup usability handshake. If the task has already exited, shell reports its status without printing a dead link or attach/kill instructions. shell list distinguishes local process liveness from relay status; shell attach rejoins locally and shell kill stops the process. Ordinary shares and server state disappear when the task exits."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 2,
+          "title": "Reconnect without touching the process",
+          "caption": "A browser or network failure affects the view only. The local process continues and a bounded snapshot restores the screen.",
+          "desktop": "flowchart LR\n  A[Local process] --> B[Bounded replay]\n  B --> C[Relay]\n  C --> D[Browser]\n  D -. disconnect .-> E[Reconnect]\n  E -->|authoritative snapshot| D",
+          "mobile": "flowchart TD\n  A[Local process] --> B[Bounded replay]\n  B --> C[Relay]\n  C --> D[Browser]\n  D -. disconnect .-> E[Reconnect]\n  E -->|snapshot| D"
+        }
       ]
     },
     "security": {
@@ -317,6 +369,15 @@
           "Browser-started passwords stay sealed",
           "When a session is started from the web app, the browser picks its password and seals it to that one machine using an ephemeral ECDH P-256 key the machine published. The accounts service relays an envelope it cannot open, and a session password is sealed once per organization member so colleagues can open the session without the service reading it."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 4,
+          "title": "Where plaintext ends",
+          "caption": "Password derivation and terminal encryption happen on-device. The relay handles ciphertext plus the documented connection metadata.",
+          "desktop": "flowchart LR\n  A[Password and URL salt] --> B[Local key derivation]\n  B --> C[AES-256-GCM]\n  C -->|ciphertext| D[Cloudflare relay]\n  D -->|ciphertext| E[Browser decrypts]",
+          "mobile": "flowchart TD\n  A[Password and URL salt] --> B[Local key derivation]\n  B --> C[AES-256-GCM]\n  C -->|ciphertext| D[Cloudflare relay]\n  D -->|ciphertext| E[Browser decrypts]"
+        }
       ]
     },
     "e2ee": {
@@ -799,12 +860,21 @@
         ],
         [
           "Optional accounts app",
-          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and currently uses Firebase Authentication plus PostgreSQL. Keycloak is reserved for a future self-hosted adapter; it is not implemented in this release and must not be copied into the app.shell.online production configuration."
+          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and currently uses Firebase Authentication plus PostgreSQL."
         ],
         [
           "Cloudflare deployment remains available",
           "wrangler.example.jsonc is still the supported global edge deployment. The standalone server is the portable path for one host; it does not include the optional accounts app or hosted analytics dashboard."
         ]
+      ],
+      "diagrams": [
+        {
+          "after": 1,
+          "title": "Portable single-node relay",
+          "caption": "Caddy terminates HTTPS, the standalone relay coordinates live sockets, and local disk retains metadata—not terminal contents.",
+          "desktop": "flowchart LR\n  A[CLI on your machine] -->|WSS ciphertext| B[Caddy TLS]\n  B --> C[Standalone relay]\n  C -->|WSS ciphertext| D[Browser]\n  C --> E[(Local metadata volume)]",
+          "mobile": "flowchart TD\n  A[CLI on your machine] -->|WSS ciphertext| B[Caddy TLS]\n  B --> C[Standalone relay]\n  C -->|WSS ciphertext| D[Browser]\n  C --> E[(Local metadata volume)]"
+        }
       ]
     },
     "docker": {

@@ -6,13 +6,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Changed
 
+- Added responsive Mermaid diagrams to the principal documentation guides;
+  desktop uses wide flows while phones receive compact top-to-bottom layouts.
+- Added proper inner spacing to the landing page's live phone captures and made
+  every Homebrew, standalone, and source-build command readable on mobile.
 - Redrew the landing page phone frame with a titanium-style band, Dynamic
   Island, iOS status bar, physical side buttons and a home indicator.
 - Added versioned Web app and Refstream alpha documentation pages, including
   machine linking, session state, personal-vault scope, renderer boundaries,
   persistent agent handoffs, backed files, and alpha fallback behavior.
-- Kept Keycloak outside the hosted production configuration and documented it
-  only as a future self-hosted authentication adapter.
 
 ## [0.15.1] — 2026-09-14
 

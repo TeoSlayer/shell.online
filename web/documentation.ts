@@ -80,7 +80,7 @@ export async function renderDocumentation(
           <p class="assurance-intro">${escapeText(page.intro)}</p>
           ${documentationCommand(kind)}
           <div class="knowledge-sections">
-            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>${String(index + 1).padStart(2, "0")}</span><h2>${escapeText(title)}</h2><p>${escapeText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeText(term)}</code></dt><dd>${escapeText(description)}</dd></div>`).join("")}</dl>` : ""}</section>`).join("")}
+            ${page.cards.map(([title, copy, entries], index) => `<section id="section-${index + 1}"><span>${String(index + 1).padStart(2, "0")}</span><h2>${escapeText(title)}</h2><p>${escapeText(copy)}</p>${entries ? `<dl class="knowledge-reference-list">${entries.map(([term, description]) => `<div><dt><code>${escapeText(term)}</code></dt><dd>${escapeText(description)}</dd></div>`).join("")}</dl>` : ""}${documentationDiagrams(page, index + 1)}</section>`).join("")}
           </div>
           <nav class="knowledge-next" aria-label="Continue reading"><span>Continue reading</span><a href="${docsLink(nextKind)}">${escapeText(nextLabel)} →</a></nav>
         </article>
@@ -94,6 +94,76 @@ export async function renderDocumentation(
     </section>`;
 
   wireDocumentationControls(kind, route.version, content);
+  void renderDocumentationDiagrams();
+}
+
+function documentationDiagrams(page: DocumentationPage, after: number): string {
+  return (page.diagrams ?? [])
+    .filter((diagram) => diagram.after === after)
+    .map((diagram) => `<figure class="knowledge-diagram" data-mermaid-desktop="${escapeText(diagram.desktop)}" data-mermaid-mobile="${escapeText(diagram.mobile)}">
+      <figcaption><strong>${escapeText(diagram.title)}</strong><span>${escapeText(diagram.caption)}</span></figcaption>
+      <div class="knowledge-diagram-canvas" role="img" aria-label="${escapeText(diagram.title)}" aria-busy="true"><span>Rendering diagram…</span></div>
+    </figure>`)
+    .join("");
+}
+
+async function renderDocumentationDiagrams(): Promise<void> {
+  const figures = Array.from(document.querySelectorAll<HTMLElement>(".knowledge-diagram"));
+  if (figures.length === 0) return;
+
+  const { default: mermaid } = await import("mermaid");
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    suppressErrorRendering: true,
+    theme: "base",
+    themeVariables: {
+      background: "#ffffff",
+      primaryColor: "#f0efff",
+      primaryTextColor: "#0a2540",
+      primaryBorderColor: "#8e88ff",
+      secondaryColor: "#ecf7ff",
+      secondaryTextColor: "#0a2540",
+      secondaryBorderColor: "#80bfff",
+      tertiaryColor: "#f6f9fc",
+      tertiaryTextColor: "#425466",
+      tertiaryBorderColor: "#cbd6e2",
+      lineColor: "#697386",
+      edgeLabelBackground: "#ffffff",
+      fontFamily: "Uncut Sans, system-ui, sans-serif",
+      fontSize: "14px",
+    },
+    flowchart: { curve: "basis", htmlLabels: false, useMaxWidth: true },
+  });
+
+  const compact = window.matchMedia("(max-width: 720px)");
+  let renderGeneration = 0;
+  const renderAll = async (): Promise<void> => {
+    const generation = ++renderGeneration;
+    const layout = compact.matches ? "mobile" : "desktop";
+    for (const [index, figure] of figures.entries()) {
+      if (generation !== renderGeneration) return;
+      if (figure.dataset.renderedLayout === layout) continue;
+      const canvas = figure.querySelector<HTMLElement>(".knowledge-diagram-canvas");
+      const source = layout === "mobile" ? figure.dataset.mermaidMobile : figure.dataset.mermaidDesktop;
+      if (!canvas || !source) continue;
+      canvas.setAttribute("aria-busy", "true");
+      try {
+        const id = `docs-mermaid-${generation}-${index}`;
+        const { svg, bindFunctions } = await mermaid.render(id, source);
+        if (generation !== renderGeneration) return;
+        canvas.innerHTML = svg;
+        bindFunctions?.(canvas);
+        figure.dataset.renderedLayout = layout;
+      } catch {
+        canvas.innerHTML = "<span>Diagram unavailable.</span>";
+      } finally {
+        canvas.setAttribute("aria-busy", "false");
+      }
+    }
+  };
+  compact.addEventListener("change", () => { void renderAll(); });
+  await renderAll();
 }
 
 async function loadDocumentationContent(version: string): Promise<DocumentationContent | null> {

@@ -98,8 +98,7 @@ https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md.
 
 The optional account app is documented at https://shell.online/app/. A vault is
 personal rather than team-wide, and machine remote-start permission is explicit.
-The hosted app uses Firebase Authentication. Keycloak is not enabled in this
-release and is reserved for a future self-hosted adapter.
+The hosted app uses Firebase Authentication.
 
 Manage local sessions:
 

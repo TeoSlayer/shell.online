@@ -58,4 +58,31 @@ describe("documentation routes", () => {
     expect(isDocumentationContent(historicalContent, "0.6.0")).toBe(true);
     expect(isDocumentationContent(historicalContent, "0.7.0")).toBe(false);
   });
+
+  it("validates optional responsive Mermaid diagrams", () => {
+    const withDiagram: DocumentationContent = {
+      ...historicalContent,
+      pages: {
+        ...historicalContent.pages,
+        docs: {
+          ...historicalContent.pages.docs!,
+          diagrams: [{
+            after: 1,
+            title: "Transport",
+            caption: "A compact flow.",
+            desktop: "flowchart LR\nA --> B",
+            mobile: "flowchart TD\nA --> B",
+          }],
+        },
+      },
+    };
+    expect(isDocumentationContent(withDiagram, "0.6.0")).toBe(true);
+    expect(isDocumentationContent({
+      ...withDiagram,
+      pages: {
+        ...withDiagram.pages,
+        docs: { ...withDiagram.pages.docs!, diagrams: [{ ...withDiagram.pages.docs!.diagrams![0], after: 0 }] },
+      },
+    }, "0.6.0")).toBe(false);
+  });
 });

@@ -158,6 +158,15 @@ for (const page of ["docs", "app", "cli", "platforms", "mobile", "refstream", "r
   check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);
 }
 check(documentationRenderer.includes('import documentationSource from "../docs/content.json"'), "Website must render from the repository documentation source");
+check(documentationRenderer.includes('import("mermaid")'), "Documentation diagrams must load Mermaid only on documentation pages");
+const diagramPages = Object.values(docsContent.pages).filter((page) => Array.isArray(page.diagrams));
+check(diagramPages.length >= 7, "The knowledge base should contain responsive diagrams across its principal guides");
+for (const page of diagramPages) {
+  for (const diagram of page.diagrams) {
+    check(diagram.desktop.startsWith("flowchart LR"), `${diagram.title} needs a desktop Mermaid layout`);
+    check(diagram.mobile.startsWith("flowchart TD"), `${diagram.title} needs a mobile Mermaid layout`);
+  }
+}
 check(documentationRenderer.includes("resolveAvailableDocumentationKind"), "Historical docs must fall back when a page did not exist yet");
 check(documentationRoutes.includes("VERSIONED_DOCUMENTATION_ROUTE"), "Versioned documentation routing is missing");
 check(viteSource.includes('documentation: resolve(import.meta.dirname, "web/documentation.html")'), "Vite must use one documentation entry point");

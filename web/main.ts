@@ -369,7 +369,7 @@ function renderLanding(): void {
               <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
               <h3>Let Brew build and manage it.</h3>
               <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
-                <code><span>brew tap teoslayer/shell-online …</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
+                <code><span>brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
                 <span data-copy-label aria-live="polite">Copy setup</span>
               </button>
               <ul>
@@ -396,7 +396,7 @@ function renderLanding(): void {
               <div class="install-path-meta"><span>Source</span><strong>Go 1.26.8</strong></div>
               <h3>Build it yourself. Run it anywhere.</h3>
               <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
-                <code><span>git clone … shell.online.git</span><span>go build -o ./shell ./cmd/shell</span></code>
+                <code><span>git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git</span><span>cd shell.online</span><span>go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell</span></code>
                 <span data-copy-label aria-live="polite">Copy build</span>
               </button>
               <ul>

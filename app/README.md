@@ -9,10 +9,6 @@ sessions. The CLI and relay work without it.
 Requirements: Node.js 22, npm, Firebase Authentication, and PostgreSQL for
 database-backed tests.
 
-The hosted service uses Firebase Authentication. Keycloak is not enabled in the
-current release; any future Keycloak adapter is self-hosting-only and must not be
-added to the `app.shell.online` production configuration.
-
 ```sh
 cp .env.example .env.local
 npm ci

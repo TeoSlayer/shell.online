@@ -223,6 +223,64 @@
 .knowledge-reference-list dt code { color: #4f46e5; font: 600 12px/1.55 ui-monospace, monospace; overflow-wrap: anywhere; }
 .knowledge-reference-list dd { color: #425466; font-size: 13px; line-height: 1.55; }
 
+.knowledge-diagram {
+  overflow: hidden;
+  margin: 26px 0 0;
+  border: 1px solid #d8dee8;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fff 0%, #f8faff 100%);
+  box-shadow: 0 10px 30px rgb(50 50 93 / 7%);
+}
+
+.knowledge-diagram figcaption {
+  display: grid;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid #e6ebf1;
+  gap: 4px;
+}
+
+.knowledge-diagram figcaption strong {
+  color: #0a2540;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.knowledge-diagram figcaption span {
+  color: #697386;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.knowledge-diagram-canvas {
+  display: grid;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 180px;
+  overflow: auto hidden;
+  padding: 22px 18px 24px;
+  place-items: center;
+  scrollbar-width: thin;
+}
+
+.knowledge-diagram-canvas > span {
+  color: #8792a2;
+  font-size: 12px;
+}
+
+.knowledge-diagram-canvas svg {
+  display: block;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: auto;
+}
+
+.knowledge-diagram-canvas .node rect,
+.knowledge-diagram-canvas .node polygon,
+.knowledge-diagram-canvas .node circle {
+  filter: drop-shadow(0 4px 7px rgb(50 50 93 / 8%));
+}
+
 .knowledge-note { margin: 38px 0; padding: 20px 22px; border: 1px solid #d9d6ff; border-radius: 8px; background: #f7f5ff; }
 .knowledge-note strong { color: #4f46e5; font-size: 13px; }
 .knowledge-note p { margin: 7px 0 0; color: #425466; font-size: 14px; line-height: 1.6; }
@@ -282,6 +340,9 @@
   .knowledge-sections section { padding: 29px 0 32px; }
   .knowledge-sections h2 { font-size: 21px; }
   .knowledge-reference-list > div { grid-template-columns: 1fr; gap: 6px; }
+  .knowledge-diagram { margin-top: 22px; border-radius: 10px; }
+  .knowledge-diagram figcaption { padding: 14px 15px 12px; }
+  .knowledge-diagram-canvas { min-height: 220px; padding: 15px 6px 18px; }
   .knowledge-next { align-items: flex-start; flex-direction: column; gap: 13px; }
 }
 
@@ -1422,21 +1483,28 @@
 }
 
 .method-command code {
+  display: grid;
   min-width: 0;
-  overflow: hidden;
   color: #f4f5ed;
   font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   font-size: 9px;
-  line-height: 1.45;
+  line-height: 1.5;
   text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  gap: 5px;
 }
 
 .method-command code span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: start;
+  gap: 3px;
+}
+
+.method-command code span::before {
+  color: #c8ff4d;
+  content: "$";
+  user-select: none;
 }
 
 .method-command > span {
@@ -2719,14 +2787,18 @@
 }
 
 .phone-proof-screen {
-  padding: 7px 7px 0;
+  margin: 10px 10px 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 25px 25px 10px 10px;
+  background: #0c0f14;
 }
 
 .demo-proof figure img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 27px 27px 0 0;
+  border-radius: 24px 24px 8px 8px;
   background: #0c0f14;
 }
 
@@ -3032,6 +3104,25 @@
     min-height: 340px;
   }
 
+  .method-command {
+    min-height: 0;
+    padding: 12px;
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 12px;
+  }
+
+  .method-command code {
+    width: 100%;
+    font-size: 10px;
+    line-height: 1.55;
+    gap: 7px;
+  }
+
+  .method-command > span {
+    justify-self: start;
+  }
+
   .demo-proof {
     padding: 100px 0 90px;
   }
@@ -3042,7 +3133,7 @@
 
   .demo-proof-grid {
     grid-template-columns: repeat(2, minmax(120px, 230px));
-    gap: 12px;
+    gap: 18px;
   }
 
   .demo-proof figcaption {
@@ -3346,17 +3437,19 @@
     padding: 22px;
   }
 
-  .method-command code {
-    font-size: 8px;
-  }
+  .method-command code { font-size: 9.5px; }
 
   .demo-proof-grid {
     grid-template-columns: 1fr;
   }
 
   .phone-proof {
-    width: min(255px, 78%);
+    width: min(300px, 100%);
     justify-self: center;
+  }
+
+  .phone-proof-screen {
+    margin: 9px 9px 0;
   }
 }
 

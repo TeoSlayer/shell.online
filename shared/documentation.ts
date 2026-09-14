@@ -24,6 +24,15 @@ export interface DocumentationPage {
     socialDescription: string;
   };
   cards: [string, string, [string, string][]?][];
+  diagrams?: DocumentationDiagram[];
+}
+
+export interface DocumentationDiagram {
+  after: number;
+  title: string;
+  caption: string;
+  desktop: string;
+  mobile: string;
 }
 
 export interface DocumentationContent {
@@ -146,11 +155,20 @@ export function isDocumentationContent(
     if (page === undefined) return true;
     if (typeof page !== "object" || page === null) return false;
     const fields = page as Record<string, unknown>;
-    return typeof fields.eyebrow === "string" && typeof fields.title === "string" &&
-      typeof fields.intro === "string" && Array.isArray(fields.cards) &&
-      fields.cards.every((card) => Array.isArray(card) && (card.length === 2 || card.length === 3) &&
-        typeof card[0] === "string" && typeof card[1] === "string" &&
-        (card[2] === undefined || (Array.isArray(card[2]) && card[2].every((entry) =>
-          Array.isArray(entry) && entry.length === 2 && entry.every((item) => typeof item === "string")))));
+    const cardsAreValid = Array.isArray(fields.cards) && fields.cards.every((card) =>
+      Array.isArray(card) && (card.length === 2 || card.length === 3) &&
+      typeof card[0] === "string" && typeof card[1] === "string" &&
+      (card[2] === undefined || (Array.isArray(card[2]) && card[2].every((entry) =>
+        Array.isArray(entry) && entry.length === 2 && entry.every((item) => typeof item === "string")))));
+    if (typeof fields.eyebrow !== "string" || typeof fields.title !== "string" ||
+        typeof fields.intro !== "string" || !cardsAreValid) return false;
+    if (fields.diagrams === undefined) return true;
+    return Array.isArray(fields.diagrams) && fields.diagrams.every((diagram) => {
+      if (typeof diagram !== "object" || diagram === null) return false;
+      const diagramFields = diagram as Record<string, unknown>;
+      return Number.isInteger(diagramFields.after) && Number(diagramFields.after) > 0 &&
+        typeof diagramFields.title === "string" && typeof diagramFields.caption === "string" &&
+        typeof diagramFields.desktop === "string" && typeof diagramFields.mobile === "string";
+    });
   });
 }
