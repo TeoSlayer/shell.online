@@ -1,8 +1,8 @@
 class ShellOnline < Formula
   desc "Turn any terminal process into an interactive or read-only browser link"
   homepage "https://shell.online"
-  url "https://github.com/TeoSlayer/shell.online/archive/refs/tags/v0.15.0.tar.gz"
-  sha256 "58582ee0100d27c069740a799a32aa56918e442939c853f8db4aee2634238e88"
+  url "https://github.com/TeoSlayer/shell.online/archive/refs/tags/v0.15.1.tar.gz"
+  sha256 "c480e2565af4ad752222680a19af3cb2ccbe05cb6ede07c6eb72a404220c3aff"
   license "MIT"
 
   depends_on "go" => :build
