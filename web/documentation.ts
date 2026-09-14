@@ -130,6 +130,10 @@ function documentationLink(
 function documentationCommand(kind: DocumentationKind): string {
   if (kind === "docs") return `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
 <span>$</span> shell --read-only python train.py</code></pre>`;
+  if (kind === "app") return `<pre class="knowledge-command"><code><span>$</span> shell login
+<span>$</span> shell daemon status</code></pre>`;
+  if (kind === "refstream") return `<pre class="knowledge-command"><code>Terminal controls → Renderer
+Refstream (unstable alpha)</code></pre>`;
   if (kind === "e2ee") return `<pre class="knowledge-command"><code><span>$</span> shell &lt;command&gt;
 <span>$</span> SHELL_ONLINE_E2EE_PASSWORD='…' shell &lt;command&gt;</code></pre>`;
   if (kind === "docker") return `<pre class="knowledge-command"><code><span>$</span> docker compose up --build -d

@@ -130,23 +130,23 @@ for (const example of [
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 10, "Sitemap should list the homepage and knowledge base");
+check((sitemap.match(/<loc>/gu) ?? []).length === 12, "Sitemap should list the homepage and knowledge base");
 check(documentationHtml.includes("__DOC_DESCRIPTION__"), "Documentation description build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_TITLE__"), "Documentation title build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_DESCRIPTION__"), "Documentation social-description build token is missing");
 check(documentationHtml.includes("__DOC_PATH__"), "Documentation canonical-path build token is missing");
 check(documentationHtml.includes('<meta name="robots" content="index, follow'), "Documentation robots directive is invalid");
-for (const path of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker", "self-hosting"]) {
+for (const path of ["docs", "app", "cli", "platforms", "mobile", "refstream", "reliability", "security", "e2ee", "docker", "self-hosting"]) {
   const seo = docsContent.pages?.[path]?.seo;
   check(typeof seo?.description === "string", `${path} SEO description is missing from versioned content`);
   check(typeof seo?.socialTitle === "string", `${path} social title is missing from versioned content`);
   check(typeof seo?.socialDescription === "string", `${path} social description is missing from versioned content`);
   check(sitemap.includes(`<loc>https://shell.online/${path}/</loc>`), `${path} is missing from sitemap`);
 }
-for (const guide of ["platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const guide of ["app", "platforms", "mobile", "refstream", "reliability", "security", "e2ee", "docker"]) {
   check(readme.includes(`https://shell.online/${guide}/`), `README ${guide} guide link is missing`);
 }
-for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d"]) {
+for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d", "Refstream v0.1.0-alpha.5", "The vault is per account, not per organization"]) {
   check(docsSource.includes(guarantee), `Versioned documentation guarantee is missing: ${guarantee}`);
 }
 check(docsSource.includes("terminal_size control messages"), "E2EE docs must disclose plaintext terminal-size control metadata");
@@ -154,7 +154,7 @@ check(!docsSource.includes("snapshots, resizes, and latency probes are authentic
 check(readme.includes("end-to-end encrypted by default"), "README default E2EE summary is missing");
 check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
 check(docsContent.version === packageMetadata.version, "Documentation version must match package version");
-for (const page of ["docs", "cli", "platforms", "mobile", "reliability", "security", "e2ee", "docker"]) {
+for (const page of ["docs", "app", "cli", "platforms", "mobile", "refstream", "reliability", "security", "e2ee", "docker"]) {
   check(Array.isArray(docsContent.pages?.[page]?.cards), `Versioned documentation page is missing: ${page}`);
 }
 check(documentationRenderer.includes('import documentationSource from "../docs/content.json"'), "Website must render from the repository documentation source");

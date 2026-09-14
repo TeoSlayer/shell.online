@@ -86,6 +86,21 @@ inside the current tab for at most four hours. Recovery still requires the local
 shell process to be running, and the relay stores no terminal output. File access
 remains a separate host opt-in.
 
+Refstream is currently v0.1.0-alpha.5. It owns only the browser terminal model
+and renderer; shell.online continues to own the PTY, E2EE transport, read-only
+policy, input lease, shared grid, and process lifecycle. Reuse the connector's
+session ID and stable task IDs for follow-ups. A task is complete only with a
+shell marker, a trusted host callback, or an explicitly labelled agent
+observation; output, silence, and redraws are not completion. Remote writes use
+a recent sequence and never override a protected local draft. See
+https://shell.online/refstream/ and the pinned upstream protocol at
+https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md.
+
+The optional account app is documented at https://shell.online/app/. A vault is
+personal rather than team-wide, and machine remote-start permission is explicit.
+The hosted app uses Firebase Authentication. Keycloak is not enabled in this
+release and is reserved for a future self-hosted adapter.
+
 Manage local sessions:
 
 shell help

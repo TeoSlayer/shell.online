@@ -1,8 +1,10 @@
 export const DOCUMENTATION_KINDS = [
   "docs",
+  "app",
   "cli",
   "platforms",
   "mobile",
+  "refstream",
   "reliability",
   "security",
   "e2ee",
@@ -42,6 +44,7 @@ export const DOCUMENTATION_NAVIGATION: readonly {
     section: "Get started",
     entries: [
       { kind: "docs", label: "Overview" },
+      { kind: "app", label: "Web app" },
       { kind: "platforms", label: "Platforms and devices" },
     ],
   },
@@ -49,6 +52,7 @@ export const DOCUMENTATION_NAVIGATION: readonly {
     section: "Terminal experience",
     entries: [
       { kind: "mobile", label: "Mobile terminals" },
+      { kind: "refstream", label: "Refstream (alpha)" },
       { kind: "reliability", label: "Reliability" },
     ],
   },

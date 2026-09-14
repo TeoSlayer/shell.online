@@ -22,7 +22,10 @@ const historicalContent: DocumentationContent = {
 describe("documentation routes", () => {
   it("resolves current and versioned routes", () => {
     expect(resolveDocumentationRoute("/cli/", "0.11.2")).toEqual({ kind: "cli", version: "0.11.2" });
+    expect(resolveDocumentationRoute("/app/", "0.11.2")).toEqual({ kind: "app", version: "0.11.2" });
+    expect(resolveDocumentationRoute("/refstream/", "0.11.2")).toEqual({ kind: "refstream", version: "0.11.2" });
     expect(resolveDocumentationRoute("/docs/v0.6.0/mobile/", "0.11.2")).toEqual({ kind: "mobile", version: "0.6.0" });
+    expect(resolveDocumentationRoute("/docs/v0.15.1/refstream/", "0.15.1")).toEqual({ kind: "refstream", version: "0.15.1" });
     expect(resolveDocumentationRoute("/docs/v0.6.0/", "0.11.2")).toEqual({ kind: "docs", version: "0.6.0" });
     expect(resolveDocumentationRoute("/docs/v0.6/mobile/", "0.11.2")).toBeNull();
   });
@@ -40,6 +43,7 @@ describe("documentation routes", () => {
 
   it("recognizes versioned document paths only", () => {
     expect(isVersionedDocumentationPath("/docs/v0.6.0/security/")).toBe(true);
+    expect(isVersionedDocumentationPath("/docs/v0.15.1/app/")).toBe(true);
     expect(isVersionedDocumentationPath("/docs/v0.6.0/")).toBe(true);
     expect(isVersionedDocumentationPath("/docs/")).toBe(false);
   });

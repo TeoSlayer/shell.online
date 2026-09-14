@@ -100,6 +100,8 @@ browser tab for up to four hours and still requires the local process to be
 running. Revoking access is immediate and does not stop the terminal. Files stay
 unavailable unless the host separately used `--files` or `--files-root`.
 See the [agent handoff protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md).
+The shell.online-specific behavior and fallback path are documented in the
+[Refstream alpha guide](https://shell.online/refstream/).
 
 ## Security
 
@@ -141,8 +143,10 @@ docker compose logs shell-online
 ## Documentation
 
 - [Quick start](https://shell.online/docs/)
+- [Web app](https://shell.online/app/)
 - [CLI reference](https://shell.online/cli/)
 - [Mobile behavior](https://shell.online/mobile/)
+- [Refstream alpha](https://shell.online/refstream/)
 - [Reliability](https://shell.online/reliability/)
 - [End-to-end encryption](https://shell.online/e2ee/)
 - [Containers](https://shell.online/docker/)

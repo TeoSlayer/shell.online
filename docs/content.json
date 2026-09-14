@@ -24,6 +24,10 @@
           "Links are interactive by default. Add --read-only before the command when viewers should monitor without being able to send terminal input."
         ],
         [
+          "Refstream alpha",
+          "xterm.js remains the default renderer. Refstream v0.1.0-alpha.5 is an optional browser setting for search, marked-command inspection, themes, output export, backed file references, and revocable agent handoffs. It changes only the browser renderer; switch back to xterm.js whenever a TUI or input path is not yet compatible."
+        ],
+        [
           "Encryption is automatic",
           "Every normal share is E2EE. shell prints a ten-character browser password with the URL; set SHELL_ONLINE_E2EE_PASSWORD to choose your own. --no-e2ee is an explicit compatibility opt-out. Use Docker when the same encrypted shell and URL should survive container restarts."
         ],
@@ -50,6 +54,78 @@
         [
           "Optional personal vault",
           "The CLI always prints and locally retains an active session's password. After shell login, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
+        ]
+      ]
+    },
+    "app": {
+      "eyebrow": "Web app",
+      "title": "One place for your machines, sessions, and team.",
+      "intro": "The optional app at app.shell.online organizes sessions from linked machines without changing how the CLI, relay, PTY, or end-to-end encryption work. The CLI and anonymous share links remain fully usable without an account.",
+      "seo": {
+        "description": "Use the optional shell.online web app to link machines, manage live sessions, collaborate with a team, and keep session passwords in a personal encrypted vault.",
+        "socialTitle": "Web app guide | shell.online",
+        "socialDescription": "Link machines, find live sessions, assign teammates, start approved processes, and use an optional personal password vault."
+      },
+      "cards": [
+        [
+          "Link a machine",
+          "Run shell login and finish the approval in your browser. The CLI returns the one-time result through a listener bound to 127.0.0.1; shell login --no-browser prints the same local approval URL instead of opening it. Linking is optional and does not change normal share behavior.",
+          [
+            [
+              "shell login",
+              "Link this machine and optionally allow browser-started sessions."
+            ],
+            [
+              "shell whoami",
+              "Show the linked account and machine identity."
+            ],
+            [
+              "shell logout",
+              "Unlink this machine and revoke its account token without stopping local shares."
+            ]
+          ]
+        ],
+        [
+          "Understand the session list",
+          "The app combines account metadata with the relay's current state. Online and Starting mean the relay can still see a live host or startup; Offline and Unavailable never imply that the process is reachable; Finished records a known task exit. Search, access groups, owners, assignees, machines, and uptime help locate a session without opening every row."
+        ],
+        [
+          "Open and organize sessions",
+          "Opening a session uses its original share URL and browser password. Session-row controls, assignee selectors, and menus are independent from the row link. Multiple terminal tabs stay mounted while you switch between them, so their sockets and scrollback remain live. Owners can assign several teammates or transfer ownership without changing the public bearer link."
+        ],
+        [
+          "Start from the browser",
+          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while shell service install is the opt-in path for a machine that should remain reachable across logins.",
+          [
+            [
+              "shell login --no-remote-start",
+              "Link the account without granting browser-start capability."
+            ],
+            [
+              "shell daemon status",
+              "Check whether this machine can accept an approved browser start."
+            ],
+            [
+              "shell service install",
+              "Install persistent machine availability deliberately; it is never implied by login."
+            ]
+          ]
+        ],
+        [
+          "Personal vault",
+          "The CLI always prints and locally retains an active session password. After shell login, it also saves an encrypted copy only when that person has enabled their optional vault. The vault is per account, not per organization; teammates do not automatically receive its passwords. Unlock it with its vault password or a supported PRF passkey, and retain the recovery key as the break-glass fallback."
+        ],
+        [
+          "Organizations and audit",
+          "An organization groups people, machines, and sessions. Roles govern administrative actions; session ownership and multiple assignees govern responsibility for individual sessions. The audit log records who did what and when. Sensitive recorded input is encrypted to the team's audit key in the browser; ordinary service metadata remains visible to the app."
+        ],
+        [
+          "Failure and recovery",
+          "A stale app row cannot keep a dead share online: relay reconciliation moves unreachable sessions out of the live state, and a known task exit marks them Finished. Failed list loads preserve the current view and can be retried. If a password is not in your personal vault, retrieve it from the machine with shell password <ID>; the service has no decryption backdoor."
+        ],
+        [
+          "Authentication and hosting",
+          "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/. Keycloak is reserved for a future self-hosted authentication adapter and is not configured, enabled, or deployed on app.shell.online in this release."
         ]
       ]
     },
@@ -82,6 +158,96 @@
         [
           "Large paste, bounded",
           "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."
+        ]
+      ]
+    },
+    "refstream": {
+      "eyebrow": "Refstream alpha",
+      "title": "An experimental terminal renderer with agent handoffs.",
+      "intro": "Refstream v0.1.0-alpha.5 is an optional browser renderer. xterm.js remains the default and the compatibility fallback; choosing Refstream changes only the local browser view, never the process, PTY, relay permissions, encryption, or shared terminal grid.",
+      "seo": {
+        "description": "Use the optional Refstream alpha renderer in shell.online for terminal search, command markers, themes, output export, backed file references, and scoped agent handoffs.",
+        "socialTitle": "Refstream alpha in shell.online",
+        "socialDescription": "What Refstream changes, how to select it, how agent handoffs work, and which alpha limitations still apply."
+      },
+      "cards": [
+        [
+          "Select it deliberately",
+          "Open Terminal controls on an anonymous share and choose Refstream (unstable alpha), or use the Renderer selector above terminal tabs in the web app. The choice is saved in that browser. Switching rebuilds the visual terminal from the current authoritative snapshot; it does not restart or resize the local process.",
+          [
+            [
+              "xterm.js",
+              "Default and recommended renderer for broad TUI compatibility."
+            ],
+            [
+              "Refstream (unstable alpha)",
+              "Optional renderer for the capabilities described on this page."
+            ]
+          ]
+        ],
+        [
+          "What Refstream owns",
+          "Refstream owns its VT parser, normal and alternate screen buffers, bounded scrollback, Unicode cells, selection, input protocols, touch handling, and virtualized browser rows. shell.online still owns the authenticated WebSocket, E2EE framing, input lease, read-only enforcement, collaboration, terminal sizing, and process lifecycle."
+        ],
+        [
+          "Tools enabled by shell.online",
+          "Refstream mode adds literal search, command inspection when OSC 133 shell markers exist, retained-output download, eight built-in themes, text sizing, and a back-to-live shortcut. Command boundaries and exit status cannot be inferred reliably from arbitrary output, so the Commands view remains empty when the process emits no markers."
+        ],
+        [
+          "Connect an agent",
+          "Connect agent creates a private, revocable invitation scoped to this terminal. Read access can inspect the screen, tasks, and changes; control access can additionally submit one complete prompt or command against a recent sequence. The connector returns a session ID that should be reused for requests, status, bounded waits, and collection instead of pairing again for every follow-up.",
+          [
+            [
+              "Invitation",
+              "Single-use, private, and short-lived; never place it in command arguments, URLs, or logs."
+            ],
+            [
+              "Read terminal",
+              "Inspect and wait without sending terminal input."
+            ],
+            [
+              "Read and control",
+              "Also submit input and supported key signals; still constrained by draft and sequence guards."
+            ],
+            [
+              "Revoke access",
+              "Disconnect immediately without sending Ctrl-C or stopping the shared process."
+            ]
+          ]
+        ],
+        [
+          "Tasks and completion",
+          "Each handoff uses a stable task ID. Retrying the same ID and prompt retrieves the existing task rather than submitting it twice. Completion requires a shell marker, a real host callback, or an explicitly labelled agent observation; output, silence, redraws, and background acknowledgements are not completion. Collecting an answer keeps the connection available for another task."
+        ],
+        [
+          "Protect local drafts",
+          "Remote writes require the expected sequence from a fresh read. Local keyboard or IME input invalidates stale ownership, and Enter requires an agent-owned draft. A generic TUI does not expose its editor model through terminal cells, so composer state remains unknown unless the owner verifies it is empty or a trusted host integration reports semantic application state. Colors and cursor placement are display evidence, never permission to type."
+        ],
+        [
+          "Backed file references",
+          "Refstream's optional file module can preview or download only paths the host explicitly registered. In shell.online, the host must first opt in with --files or --files-root; merely printing a filename never reads the disk. File authorization remains independent from agent terminal access, and traversal, symlink escape, non-regular files, ambient credentials, and automatic URL fetching stay blocked."
+        ],
+        [
+          "Persistence and privacy",
+          "Task records, answers, parser state, and retained terminal output can survive panel changes. shell.online keeps reload recovery only in the same browser tab for up to four hours; closing the tab forgets that snapshot, and recovery still requires the local PTY process to be alive. The relay stores no terminal output or browser snapshot. Treat any exported or host-saved snapshot like the terminal itself."
+        ],
+        [
+          "Alpha boundaries",
+          "Refstream is not binary-compatible with the xterm addon ecosystem and does not yet implement every private or uncommon xterm behavior. Physical-device and deployment-specific NAT or TURN behavior need separate testing. If a TUI renders or handles input incorrectly, switch back to xterm.js and report a minimal reproduction without private terminal contents.",
+          [
+            [
+              "Refstream alpha.5 release",
+              "https://github.com/TeoSlayer/refstream.js/releases/tag/v0.1.0-alpha.5"
+            ],
+            [
+              "Persistent agent protocol",
+              "https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md"
+            ],
+            [
+              "Backed files and WebRTC",
+              "https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/files.md"
+            ]
+          ]
         ]
       ]
     },
@@ -630,6 +796,10 @@
         [
           "Scale and persistence",
           "This deployment is deliberately single-node. Session metadata survives restarts in the relay-state volume and persistent clients reconnect with the same URL. Live WebSockets reconnect after a restart. Back up the volume, but do not run multiple relay replicas against one state file."
+        ],
+        [
+          "Optional accounts app",
+          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and currently uses Firebase Authentication plus PostgreSQL. Keycloak is reserved for a future self-hosted adapter; it is not implemented in this release and must not be copied into the app.shell.online production configuration."
         ],
         [
           "Cloudflare deployment remains available",

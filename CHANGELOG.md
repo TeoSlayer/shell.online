@@ -8,6 +8,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 - Redrew the landing page phone frame with a titanium-style band, Dynamic
   Island, iOS status bar, physical side buttons and a home indicator.
+- Added versioned Web app and Refstream alpha documentation pages, including
+  machine linking, session state, personal-vault scope, renderer boundaries,
+  persistent agent handoffs, backed files, and alpha fallback behavior.
+- Kept Keycloak outside the hosted production configuration and documented it
+  only as a future self-hosted authentication adapter.
 
 ## [0.15.1] — 2026-09-14
 
