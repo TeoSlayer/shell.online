@@ -153,6 +153,18 @@ export function evaluate({ artifacts, fetched, samples = DEFAULT_SAMPLES, sha256
   return { ok: checks.every((check) => check.ok), version, checks, binaries };
 }
 
+/*
+ * A Markdown table cell. Backslashes are escaped first, so a backslash already
+ * in the text cannot turn the escape on a following pipe back into a table
+ * delimiter; then pipes, then line breaks, which a cell cannot hold.
+ */
+export function tableCell(text) {
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, " ");
+}
+
 /** A Markdown report: the verdict, then one row per check. */
 export function renderReport({ origin, checkedAt, ok, version, checks }) {
   const lines = [
@@ -162,7 +174,7 @@ export function renderReport({ origin, checkedAt, ok, version, checks }) {
     "",
     "| Check | Result | Detail |",
     "|---|---|---|",
-    ...checks.map((check) => `| ${check.name} | ${check.ok ? "pass" : "**fail**"} | ${check.detail.replace(/\|/g, "\\|")} |`),
+    ...checks.map((check) => `| ${tableCell(check.name)} | ${check.ok ? "pass" : "**fail**"} | ${tableCell(check.detail)} |`),
   ];
   return `${lines.join("\n")}\n`;
 }

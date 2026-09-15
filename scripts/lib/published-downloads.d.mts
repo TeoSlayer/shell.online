@@ -46,6 +46,7 @@ export function evaluate(input: {
   samples?: readonly string[];
   sha256: (bytes: Uint8Array) => string;
 }): Verdict;
+export function tableCell(text: string): string;
 export function renderReport(input: {
   origin: string;
   checkedAt: string;

@@ -9,6 +9,7 @@ import {
   parseChecksumManifest,
   parseReleaseTargets,
   renderReport,
+  tableCell,
 } from "../scripts/lib/published-downloads.mjs";
 
 const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(Buffer.from(bytes)).digest("hex");
@@ -128,6 +129,14 @@ describe("evaluate", () => {
     bundle.fetched.files["release.json"] = { status: 200, contentType: "application/json", bytes: text(JSON.stringify({ version: "0.15.1", artifacts: { "shell-darwin-arm64": "e".repeat(64), "shell-linux-amd64": "e".repeat(64) } })) };
     const verdict = evaluate(bundle);
     expect(verdict.checks.find((check) => check.name === "release.json")?.detail).toContain("disagree with SHA256SUMS");
+  });
+});
+
+describe("tableCell", () => {
+  it("escapes backslashes before pipes, so a pipe cannot be un-escaped, and flattens line breaks", () => {
+    expect(tableCell("a|b")).toBe("a\\|b");
+    expect(tableCell("a\\|b")).toBe("a\\\\\\|b");
+    expect(tableCell("one\ntwo\r\nthree")).toBe("one two three");
   });
 });
 
