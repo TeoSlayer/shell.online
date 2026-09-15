@@ -79,7 +79,7 @@ export const userManager = new UserManager({
  * because the uid is written down, as the key that scopes this browser's
  * remembered tabs and passwords to one account.
  */
-export interface AuthUser {
+export interface SignedInUser {
   uid: string;
   email: string;
   displayName: string;
@@ -94,7 +94,7 @@ export interface AuthUser {
  * shape is what keeps the account, consent and invitation screens from caring
  * which provider is in use.
  */
-export function toAuthUser(user: OidcUser): AuthUser {
+export function toSignedInUser(user: OidcUser): SignedInUser {
   const profile = user.profile;
   return {
     uid: profile.sub,

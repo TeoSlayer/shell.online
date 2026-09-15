@@ -10,9 +10,9 @@ import {
 import {
   reauthenticate,
   startSignIn,
-  toAuthUser,
+  toSignedInUser,
   userManager,
-  type AuthUser,
+  type SignedInUser,
 } from "../lib/oidc";
 import { deleteAccountData } from "../lib/api";
 import { forgetAll, setPasswordOwner } from "../lib/session-passwords";
@@ -20,7 +20,7 @@ import { clearLocalVault } from "../lib/vault-store";
 import { forgetOpenTabs } from "../terminal/tab-store";
 
 interface AuthValue {
-  user: AuthUser | null;
+  user: SignedInUser | null;
   /* True until the stored session has been read, so guards do not flash. */
   initializing: boolean;
   /** Leaves the app for the provider; resolves only if the redirect fails. */
@@ -37,13 +37,13 @@ interface AuthValue {
 const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<SignedInUser | null>(null);
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
     let live = true;
 
-    const apply = (next: AuthUser | null) => {
+    const apply = (next: SignedInUser | null) => {
       if (!live) return;
       /* Scope any stored session password to whoever is signed in now. */
       setPasswordOwner(next?.uid ?? "");
@@ -58,14 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      */
     void userManager
       .getUser()
-      .then((found) => apply(found && !found.expired ? toAuthUser(found) : null))
+      .then((found) => apply(found && !found.expired ? toSignedInUser(found) : null))
       .catch(() => apply(null))
       .finally(() => {
         if (live) setInitializing(false);
       });
 
     const onLoaded = (next: Parameters<Parameters<typeof userManager.events.addUserLoaded>[0]>[0]) =>
-      apply(toAuthUser(next));
+      apply(toSignedInUser(next));
     const onUnloaded = () => apply(null);
     const onExpired = () => apply(null);
     const onRenewError = () => apply(null);
