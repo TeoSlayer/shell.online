@@ -168,6 +168,13 @@ See [the contribution guide](.github/CONTRIBUTING.md) before opening a pull requ
 
 ## Contributors
 
+[TeoSlayer](https://github.com/TeoSlayer) ·
+[teovl](https://github.com/teovl) ·
+[Alexgodoroja](https://github.com/Alexgodoroja) ·
+[pstayets](https://github.com/pstayets) ·
+[monperrus](https://github.com/monperrus) ·
+[artemiia](https://github.com/artemiia)
+
 [![shell.online contributors](https://contrib.rocks/image?repo=TeoSlayer/shell.online)](https://github.com/TeoSlayer/shell.online/graphs/contributors)
 
 MIT licensed. See [`LICENSE`](LICENSE).
