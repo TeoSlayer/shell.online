@@ -37,6 +37,13 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   app can add exact account counts and sign-up retention when the two are
   linked.
 - Clicks on the landing page's Sign up free and Web app links are counted.
+- The statistics dashboard reads top to bottom as a story: what is live now,
+  six headline figures each with its change against the period before, the
+  funnel, then traffic, sessions, retention and accounts, each section opening
+  with the finding in a sentence. Every figure about people leaves crawlers
+  out and says so beside the step: page views by people, the installer run by
+  curl or wget rather than read or crawled, installs completed on a person's
+  machine. The raw totals stay in the ledger.
 
 ### Fixed
 

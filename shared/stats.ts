@@ -70,6 +70,68 @@ export interface StatsUniques {
   daily: StatsUniqueDay[];
 }
 
+/**
+ * One event's requests by who made them, from the user agent. A browser is a
+ * person looking; a tool is a person's machine doing what it was told; a
+ * crawler is neither, and is kept out of every figure about people.
+ */
+export interface StatsAudience {
+  /** Desktop, tablet and phone browsers. */
+  browsers: number;
+  /** curl, wget and the shell CLI. */
+  tools: number;
+  /** Crawlers, monitors and headless browsers that say so. */
+  crawlers: number;
+  /** No user agent, or one the classifier could not place. */
+  unknown: number;
+}
+
+export interface StatsAudiences {
+  /** Landing and documentation page views. */
+  views: StatsAudience;
+  /** Requests for the install script. */
+  installer: StatsAudience;
+  /** Release binaries served. */
+  installs: StatsAudience;
+  /** Browser connections to a shared terminal. */
+  viewers: StatsAudience;
+}
+
+/**
+ * The figures the page is built on, each with the crawlers taken out, so a
+ * step of the funnel and its comparison with the period before mean the same
+ * thing. The raw event totals stay in metrics and the ledger.
+ */
+export interface StatsFigures {
+  /** Landing and documentation views from browsers: people looking. */
+  siteViews: number;
+  /** The same pages fetched by self-identified crawlers. */
+  crawlerViews: number;
+  ctaClicks: number;
+  /** Install script fetches by curl or wget: the installer actually run, not read. */
+  installerRuns: number;
+  /** Release binaries served to anything but a crawler: an install completed. */
+  installs: number;
+  sessionsStarted: number;
+  sharesOpened: number;
+  collaborations: number;
+}
+
+/** The same figures for the period of equal length before the range. */
+export interface StatsComparison {
+  rangeStart: number;
+  rangeEnd: number;
+  figures: StatsFigures;
+  /** Distinct people per surface in that period, or null when people were not counted for all of it. */
+  people: Record<UniqueSurface, number> | null;
+}
+
+/** Requests a funnel step leaves out, so the reader sees what was not counted and why. */
+export interface StatsFunnelExclusion {
+  label: string;
+  count: number;
+}
+
 export interface StatsFunnelStep {
   key: string;
   label: string;
@@ -78,6 +140,8 @@ export interface StatsFunnelStep {
   unique: number | null;
   /** What the count is, in one sentence, so nobody has to guess. */
   note: string;
+  /** What the count leaves out: crawler views, an installer read in a browser. */
+  excluded: StatsFunnelExclusion[];
   /**
    * The step this one is a share of, or null when it is its own population:
    * sessions in a range come from every install ever made, not from this
@@ -158,6 +222,10 @@ export interface StatsSnapshot {
     /** Completed installs per landing view. */
     installed: number;
   };
+  figures: StatsFigures;
+  audiences: StatsAudiences;
+  /** Null on the all-time range, or when the period before is older than collection. */
+  previous: StatsComparison | null;
   funnel: StatsFunnelStep[];
   uniques: StatsUniques;
   retention: StatsRetention;

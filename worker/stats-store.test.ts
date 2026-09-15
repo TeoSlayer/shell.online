@@ -27,6 +27,8 @@ describe("statistics live presence", () => {
       clients: [],
       live: { active_sessions: 1, active_viewers: 3 },
       collectingSince,
+      byDevice: [],
+      previous: null,
       uniques: [],
       uniqueDays: [],
       retention: [],
@@ -55,6 +57,8 @@ describe("statistics live presence", () => {
       clients: [],
       live: { active_sessions: 0, active_viewers: 0 },
       collectingSince: now - 60_000,
+      byDevice: [],
+      previous: null,
       uniques: [],
       uniqueDays: [],
       retention: [],
@@ -86,6 +90,23 @@ describe("people and the funnel", () => {
       metric("share_opened", "viewer", 6),
       metric("collaboration_started", "remote_input", 5),
     ],
+    /* The same totals by who made the requests; each event's rows add up to its summary row. */
+    byDevice: [
+      audience("page_view", "landing", "desktop", 700),
+      audience("page_view", "landing", "mobile", 60),
+      audience("page_view", "landing", "bot", 200),
+      audience("page_view", "landing", "cli", 9),
+      audience("page_view", "docs_app", "desktop", 30),
+      audience("page_view", "docs", "bot", 18),
+      audience("page_view", "unknown_path", "bot", 57),
+      audience("installer_download", "posix", "cli", 50),
+      audience("installer_download", "posix", "desktop", 4),
+      audience("installer_download", "posix", "bot", 8),
+      audience("binary_download", "darwin-arm64", "cli", 3),
+      audience("binary_download", "darwin-arm64", "bot", 1),
+      audience("viewer_connected", "viewer", "desktop", 12),
+    ],
+    previous: null,
     trend: [],
     devices: [],
     referrers: [],
@@ -126,19 +147,97 @@ describe("people and the funnel", () => {
     expect(snapshot.breakdowns.pages.map((page) => page.label)).toEqual(["landing", "unknown_path", "docs_app", "docs", "not_found"]);
   });
 
-  it("lays the funnel out from a first look to a first keystroke", () => {
+  it("tells browsers, tools and crawlers apart in every figure about people", () => {
+    const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
+    expect(snapshot.audiences.views).toEqual({ browsers: 790, tools: 9, crawlers: 218, unknown: 0 });
+    expect(snapshot.audiences.installer).toEqual({ browsers: 4, tools: 50, crawlers: 8, unknown: 0 });
+    expect(snapshot.audiences.installs).toEqual({ browsers: 0, tools: 3, crawlers: 1, unknown: 0 });
+    expect(snapshot.figures).toEqual({
+      siteViews: 790,
+      crawlerViews: 218,
+      ctaClicks: 12,
+      installerRuns: 50,
+      installs: 3,
+      sessionsStarted: 48,
+      sharesOpened: 6,
+      collaborations: 5,
+    });
+    /* The raw totals are untouched: the ledger still shows every request. */
+    expect(snapshot.metrics.landingViews + snapshot.metrics.docsViews).toBe(1017);
+    expect(snapshot.metrics.installs).toBe(62);
+  });
+
+  /*
+   * The funnel counts what a person is plausibly behind, and lists beside
+   * each step what it left out, so 969 landing views do not read as 969
+   * visitors and 62 installer fetches do not read as 62 installs attempted.
+   */
+  it("lays the funnel out from a first look to a first keystroke, crawlers beside it", () => {
     const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
     expect(snapshot.funnel.map((step) => [step.key, step.count, step.unique])).toEqual([
-      ["visited", 1017, 400],
+      ["visited", 790, 400],
       ["signup", 12, null],
-      ["installer", 62, 40],
-      ["installed", 4, null],
+      ["installer", 50, 40],
+      ["installed", 3, null],
       ["session", 48, 9],
       ["opened", 6, 5],
       ["typed", 5, null],
     ]);
+    expect(snapshot.funnel.map((step) => step.excluded)).toEqual([
+      [{ label: "by crawlers", count: 218 }, { label: "by tools", count: 9 }],
+      [],
+      [{ label: "read in a browser", count: 4 }, { label: "by crawlers", count: 8 }],
+      [{ label: "by crawlers", count: 1 }],
+      [],
+      [],
+      [],
+    ]);
     for (const step of snapshot.funnel) expect(step.note.length).toBeGreaterThan(20);
     expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, "visited", "visited", "installer", null, "session", "opened"]);
+  });
+
+  it("compares with the period before, when there is one worth comparing with", () => {
+    const previous = {
+      rangeStart: rangeStart - 7 * DAY_MS,
+      summary: [
+        metric("cta_click", "signup_hero", 6),
+        metric("session_started", "cli", 40),
+        metric("share_opened", "viewer", 4),
+        metric("collaboration_started", "remote_input", 2),
+      ],
+      byDevice: [
+        audience("page_view", "landing", "desktop", 500),
+        audience("page_view", "landing", "bot", 300),
+        audience("installer_download", "posix", "cli", 40),
+        audience("binary_download", "darwin-arm64", "cli", 2),
+      ],
+      uniques: [{ surface: "site", unique_count: 300 }, { surface: "cli", unique_count: 8 }],
+    };
+    const snapshot = buildStatsSnapshot({ ...rows, previous }, "7d", now, rangeStart);
+    expect(snapshot.previous).toEqual({
+      rangeStart: rangeStart - 7 * DAY_MS,
+      rangeEnd: rangeStart,
+      figures: {
+        siteViews: 500,
+        crawlerViews: 300,
+        ctaClicks: 6,
+        installerRuns: 40,
+        installs: 2,
+        sessionsStarted: 40,
+        sharesOpened: 4,
+        collaborations: 2,
+      },
+      people: { site: 300, cli: 8, viewer: 0, install: 0 },
+    });
+
+    /* People counted from inside the previous period: figures compare, people do not. */
+    const late = buildStatsSnapshot({ ...rows, previous, uniquesSince: dayStart(now - 10 * DAY_MS) }, "7d", now, rangeStart);
+    expect(late.previous?.figures.siteViews).toBe(500);
+    expect(late.previous?.people).toBeNull();
+
+    /* Collection began inside the previous period: an empty comparison would say everything doubled. */
+    expect(buildStatsSnapshot({ ...rows, previous, collectingSince: now - 10 * DAY_MS }, "7d", now, rangeStart).previous).toBeNull();
+    expect(buildStatsSnapshot({ ...rows, previous: null }, "all", now, now - 30 * DAY_MS).previous).toBeNull();
   });
 
   it("says when nobody is being counted", () => {
@@ -209,6 +308,15 @@ describe("retention cohorts", () => {
     expect(buildRetentionCohorts([old], now, 8)).toEqual([]);
   });
 });
+
+function audience(
+  event: string,
+  target: string,
+  device: string,
+  count: number,
+): Record<string, string | number | null> & { event: string; target: string; device: string; count: number } {
+  return { event, target, device, count };
+}
 
 function metric(
   event: string,
