@@ -2103,6 +2103,12 @@ html.stats-document #app {
   font-size: 11px;
 }
 
+.accounts-events {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--stats-border);
+}
+
 .kind-rate .breakdown-list > div > strong small {
   margin-left: 6px;
   color: #6e7a8f;

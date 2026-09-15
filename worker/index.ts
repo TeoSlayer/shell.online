@@ -510,13 +510,15 @@ async function fetchAccountStats(env: Env, range: StatsRange): Promise<StatsAcco
     });
     if (!response.ok) return { error: `accounts app answered ${response.status}` };
     const body = await response.json<unknown>();
-    return isAccountStats(body) ? body : { error: "accounts app answered in an unexpected shape" };
+    if (!isAccountStats(body)) return { error: "accounts app answered in an unexpected shape" };
+    /* An older app answers without events; the dashboard then shows none rather than nothing. */
+    return { ...body, events: isCountRecord(body.events) ? body.events : {} };
   } catch {
     return { error: "accounts app did not answer" };
   }
 }
 
-function isAccountStats(value: unknown): value is StatsAccountStats {
+function isAccountStats(value: unknown): value is Omit<StatsAccountStats, "events"> & { events?: unknown } {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return typeof candidate.total === "number" &&
@@ -524,6 +526,11 @@ function isAccountStats(value: unknown): value is StatsAccountStats {
     typeof candidate.activeInRange === "number" &&
     Array.isArray(candidate.newByDay) &&
     Array.isArray(candidate.cohorts);
+}
+
+function isCountRecord(value: unknown): value is Record<string, number> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) &&
+    Object.values(value as Record<string, unknown>).every((count) => typeof count === "number");
 }
 
 function statsPassword(env: Env): string | null {

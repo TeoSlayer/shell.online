@@ -977,6 +977,7 @@ function renderAccounts(snapshot: StatsSnapshot): string {
         </div>
         <div class="kpi-spark">${renderSparkline(accounts.newByDay.map((point) => point.count))}</div>
         <p class="cohort-empty">New accounts per day. Active means the account used the app in the range.</p>
+        ${renderAccountEvents(accounts.events)}
       </article>
       ${renderCohorts(
         "Accounts that came back",
@@ -1023,6 +1024,32 @@ function renderDonut(items: StatsBreakdownItem[]): string {
         `).join("") || "<em>No sessions have ended in this range.</em>"}
       </div>
     </div>
+  `;
+}
+
+/**
+ * What accounts did, in the order the product hopes for: link a machine,
+ * register a session, send it a command. Counts of things done, not of
+ * accounts, since the app sends no identifiers with them.
+ */
+function renderAccountEvents(events: Record<string, number>): string {
+  const order = ["machine_linked", "session_registered", "command_sent", "vault_created", "invite_created", "invite_accepted", "feedback_sent"];
+  const items = order.filter((key) => (events[key] ?? 0) > 0).map((key) => ({ label: key, value: events[key] }));
+  if (items.length === 0) {
+    return '<p class="cohort-empty">Nothing done in the app in this range yet: no machine linked, session registered, command sent, vault created, invite, or feedback.</p>';
+  }
+  const maximum = Math.max(1, ...items.map((item) => item.value));
+  return `
+    <div class="breakdown-list accounts-events">
+      ${items.map((item) => `
+        <div>
+          <span>${escapeHtml(humanize(item.label))}</span>
+          <i><b style="width:${Math.max(2, item.value / maximum * 100)}%"></b></i>
+          <strong>${integerFormatter.format(item.value)}</strong>
+        </div>
+      `).join("")}
+    </div>
+    <p class="cohort-empty">Things done, not distinct accounts: one account linking three machines counts three times.</p>
   `;
 }
 
@@ -1204,6 +1231,13 @@ function humanize(value: string): string {
     viewer_rejected: "Viewer turned away",
     input_denied: "Input refused",
     install_outcome: "Installer outcome",
+    machine_linked: "Linked a machine",
+    session_registered: "Registered a session",
+    command_sent: "Sent a command to a machine",
+    vault_created: "Created a vault",
+    invite_created: "Sent an invite",
+    invite_accepted: "Accepted an invite",
+    feedback_sent: "Sent feedback",
     ok: "Installed",
     failed: "Failed, unspecified",
     unsupported_os: "Unsupported OS",

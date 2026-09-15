@@ -149,6 +149,7 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
 const TABLES = [
   "feedback",
   "account_activity",
+  "app_events",
   "deleted_accounts",
   "account_keys",
   "session_key_shares",
@@ -940,6 +941,29 @@ for (const implementation of implementations) {
         await store.touchMembership("uid-1", noon);
         await store.purgeExpired(noon + 401 * day);
         expect((await store.accountActivity())[0].days).toEqual([]);
+      });
+    });
+
+    describe("app events", () => {
+      const day = 24 * 60 * 60_000;
+      const noon = 10 * day + 12 * 60 * 60_000;
+
+      it("counts by kind and day, sums from a day on, and says nothing about who", async () => {
+        await store.recordAppEvent("machine_linked", noon);
+        await store.recordAppEvent("machine_linked", noon + 60_000);
+        await store.recordAppEvent("command_sent", noon + day);
+        expect(await store.appEvents(0)).toEqual([
+          { event: "command_sent", count: 1 },
+          { event: "machine_linked", count: 2 },
+        ]);
+        expect(await store.appEvents(11 * day)).toEqual([{ event: "command_sent", count: 1 }]);
+        expect(await store.appEvents(12 * day)).toEqual([]);
+      });
+
+      it("forgets counts older than the memory window when purging", async () => {
+        await store.recordAppEvent("vault_created", noon);
+        await store.purgeExpired(noon + 401 * day);
+        expect(await store.appEvents(0)).toEqual([]);
       });
     });
 

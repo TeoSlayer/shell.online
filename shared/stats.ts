@@ -199,6 +199,8 @@ export interface StatsAccountStats {
   activeInRange: number;
   newByDay: { day: number; count: number }[];
   cohorts: StatsRetentionCohort[];
+  /** Things done in the app in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
+  events: Record<string, number>;
 }
 
 export type StatsAccounts = StatsAccountStats | { error: string } | null;

@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
 import type { Invite, Membership } from "./lib/orgs";
-import type { AuditEvent, SessionRecord } from "./lib/types";
+import type { AuditEvent, SessionRecord,
+  AppEvent,
+} from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
 import type { SessionLiveness, SessionLivenessSource } from "./lib/session-liveness";
 import { exchangeCode, issueCode } from "./lib/codes";
@@ -45,7 +47,7 @@ import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/aud
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
-import { accountStats, isStatsRange } from "./routes/stats";
+import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats";
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
@@ -378,6 +380,15 @@ export function createApp(options: AppOptions) {
     return membership;
   }
 
+  /*
+   * One count per thing done, never who did it, for the statistics
+   * dashboard. Counting must never change an answer, so a store that cannot
+   * count is nobody's problem here.
+   */
+  const track = (event: AppEvent): void => {
+    void store.recordAppEvent(event).catch(() => undefined);
+  };
+
   /* The CLI authenticates with an opaque access token issued by this service. */
   async function requireCli(request: IncomingMessage) {
     const check = await checkAccessToken(store, bearer(request));
@@ -483,6 +494,7 @@ export function createApp(options: AppOptions) {
           label: String(body.label ?? "shell cli").slice(0, 80),
           machineId,
         });
+        track("machine_linked");
         return send(response, 200, {
           access_token: tokens.accessToken,
           refresh_token: tokens.refreshToken,
@@ -536,6 +548,7 @@ export function createApp(options: AppOptions) {
           return send(response, 400, { error: "invalid browser public key" });
         }
         if (publicKey) await store.setMemberKey(identity.uid, publicKey);
+        if (resolved.joined && invite) track("invite_accepted");
         const described = await describeOrganization(store, resolved.membership);
         return send(response, described.status, {
           ...(described.body as Record<string, unknown>),
@@ -576,6 +589,7 @@ export function createApp(options: AppOptions) {
           const invite = (result.body as { invite?: Invite }).invite;
           if (invite) await notifyInvited(store, mailer, webOrigin, membership, invite, log);
         }
+        if (result.status < 300) track("invite_created");
         return send(response, result.status, result.body);
       }
 
@@ -916,6 +930,7 @@ export function createApp(options: AppOptions) {
           });
           if (!created) return send(response, 409, { error: "this account already has a vault" });
           const stored = await store.accountKey(identity.uid);
+          track("vault_created");
           return send(response, 201, { vault: stored ? vaultForApi(stored) : null });
         }
 
@@ -1068,6 +1083,7 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
+        track("session_registered");
         return send(response, 201, { session: sessionForApi(result.session) });
       }
 
@@ -1282,6 +1298,7 @@ export function createApp(options: AppOptions) {
             createdAt: Date.now(),
           };
           await store.putCommand(queued);
+          track("command_sent");
           return send(response, 202, { command: queued });
         }
 
@@ -1468,6 +1485,7 @@ export function createApp(options: AppOptions) {
           log,
         );
         if (!result.ok) return send(response, result.status, { error: result.error });
+        track("feedback_sent");
         return send(response, 201, { feedback: { id: result.value.id, at: result.value.at } });
       }
 
@@ -1480,8 +1498,15 @@ export function createApp(options: AppOptions) {
         const matches = presented.length === expected.length &&
           timingSafeEqual(Buffer.from(presented), Buffer.from(expected));
         if (!matches) return send(response, 401, { error: "sign in first" });
-        const range = url.searchParams.get("range");
-        return send(response, 200, accountStats(await store.accountActivity(), isStatsRange(range) ? range : "7d"));
+        const requested = url.searchParams.get("range");
+        const range = isStatsRange(requested) ? requested : "7d";
+        const now = Date.now();
+        return send(response, 200, accountStats(
+          await store.accountActivity(),
+          range,
+          now,
+          await store.appEvents(dayStart(rangeStart(range, now))),
+        ));
       }
 
       /* ---- Inbox ---- */

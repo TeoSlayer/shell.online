@@ -1,4 +1,5 @@
 import type { AccountActivity } from "../lib/store";
+import type { AppEventCount } from "../lib/types";
 
 /*
  * Account figures for the statistics dashboard on stats.shell.online.
@@ -35,6 +36,8 @@ export interface AccountStats {
   activeInRange: number;
   newByDay: { day: number; count: number }[];
   cohorts: RetentionCohort[];
+  /** Things done in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
+  events: Record<string, number>;
 }
 
 export function isStatsRange(value: unknown): value is StatsRange {
@@ -59,7 +62,12 @@ export function rangeStart(range: StatsRange, now: number): number {
   return 0;
 }
 
-export function accountStats(activity: AccountActivity[], range: StatsRange, now = Date.now()): AccountStats {
+export function accountStats(
+  activity: AccountActivity[],
+  range: StatsRange,
+  now = Date.now(),
+  events: AppEventCount[] = [],
+): AccountStats {
   const start = rangeStart(range, now);
   const startDay = dayStart(start);
   const newByDay = new Map<number, number>();
@@ -86,6 +94,7 @@ export function accountStats(activity: AccountActivity[], range: StatsRange, now
     activeInRange,
     newByDay: [...newByDay.entries()].map(([day, count]) => ({ day, count })),
     cohorts: buildRetentionCohorts(rows, now),
+    events: Object.fromEntries(events.map((entry) => [entry.event, entry.count])),
   };
 }
 

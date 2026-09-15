@@ -206,6 +206,27 @@ export interface AccountActivity {
   days: number[];
 }
 
+/**
+ * Things an account can do in the app that the statistics dashboard wants
+ * counted, without ever saying which account: linked a machine, registered
+ * a session, sent a command. Counted by day and by kind, nothing else.
+ */
+export const APP_EVENTS = [
+  "machine_linked",
+  "session_registered",
+  "command_sent",
+  "vault_created",
+  "invite_created",
+  "invite_accepted",
+  "feedback_sent",
+] as const;
+export type AppEvent = (typeof APP_EVENTS)[number];
+
+export interface AppEventCount {
+  event: AppEvent;
+  count: number;
+}
+
 export interface SessionRecord {
   id: string;
   uid: string;

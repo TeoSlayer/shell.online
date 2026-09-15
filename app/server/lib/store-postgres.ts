@@ -16,6 +16,8 @@ import {
 } from "./store";
 import type {
   AccountActivity,
+  AppEvent,
+  AppEventCount,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -1615,10 +1617,29 @@ export class PostgresStore implements Store {
     }));
   }
 
+  /* ---- App events ---- */
+
+  async recordAppEvent(event: AppEvent, now = Date.now()): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO app_events (event, day, count) VALUES ($1, $2, 1)
+       ON CONFLICT (event, day) DO UPDATE SET count = app_events.count + 1`,
+      [event, Math.floor(now / DAY_MS) * DAY_MS],
+    );
+  }
+
+  async appEvents(sinceDay: number): Promise<AppEventCount[]> {
+    const rows = await this.rows(
+      "SELECT event, SUM(count) AS count FROM app_events WHERE day >= $1 GROUP BY event ORDER BY event",
+      [sinceDay],
+    );
+    return rows.map((row) => ({ event: row.event as AppEvent, count: Number(row.count) }));
+  }
+
   /* ---- Housekeeping ---- */
 
   async purgeExpired(now = Date.now()): Promise<void> {
     await this.pool.query("DELETE FROM account_activity WHERE day < $1", [now - ACCOUNT_ACTIVITY_MEMORY_MS]);
+    await this.pool.query("DELETE FROM app_events WHERE day < $1", [now - ACCOUNT_ACTIVITY_MEMORY_MS]);
     await this.pool.query("DELETE FROM auth_codes WHERE expires_at <= $1", [now]);
     /* Finished commands are only kept long enough to be reported back. */
     await this.pool.query("DELETE FROM agent_commands WHERE done_at IS NOT NULL AND done_at < $1", [
