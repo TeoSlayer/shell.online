@@ -517,9 +517,98 @@
 
 .hero-actions {
   display: grid;
-  width: min(100%, 470px);
+  width: min(100%, 514px);
   margin-top: 34px;
   gap: 17px;
+}
+
+/*
+ * Signing up is only half of getting a terminal into the browser: sessions
+ * are created by the CLI on the machine that runs them. Numbering the two
+ * controls says so before anyone signs up and wonders where the terminal is.
+ * The marker column and its dashed rail read as one process; below 420px the
+ * markers move into the label row so the buttons keep the full width.
+ */
+.hero-steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 20px;
+}
+
+.hero-step {
+  display: grid;
+  position: relative;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-areas:
+    "marker label"
+    ". body";
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 10px;
+}
+
+.hero-step-account::before {
+  position: absolute;
+  top: 38px;
+  bottom: -16px;
+  left: 14.5px;
+  border-left: 1px dashed #bdb9ad;
+  content: "";
+}
+
+.hero-step-marker {
+  display: grid;
+  grid-area: marker;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 650;
+  place-items: center;
+}
+
+.hero-step-account .hero-step-marker {
+  border: 1px solid #b3e336;
+  background: var(--acid);
+  color: #171a13;
+}
+
+.hero-step-cli .hero-step-marker {
+  border: 1px solid #22241f;
+  background: #1d201b;
+  color: #f4f5ed;
+}
+
+.hero-step-label {
+  grid-area: label;
+  margin: 0;
+  color: #22241f;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-step-label i {
+  margin: 0 4px;
+  color: #a3a094;
+  font-style: normal;
+}
+
+.hero-step-body {
+  display: grid;
+  grid-area: body;
+  min-width: 0;
+  gap: 10px;
+}
+
+.hero-step-note {
+  margin: 0;
+  color: #555a51;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .install-command {
@@ -3006,7 +3095,7 @@
   }
 
   .hero-actions {
-    width: min(100%, 470px);
+    width: min(100%, 514px);
   }
 
   .install-command {
@@ -3396,6 +3485,32 @@
   .hero-signup {
     padding: 0 18px;
     font-size: 15px;
+  }
+
+  .hero-step {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "marker label"
+      "body body";
+    column-gap: 10px;
+  }
+
+  .hero-step-account::before {
+    display: none;
+  }
+
+  .hero-step-marker {
+    width: 24px;
+    height: 24px;
+    font-size: 11px;
+  }
+
+  .hero-step-label {
+    font-size: 11px;
+  }
+
+  .hero-step-note {
+    font-size: 13px;
   }
 
   .install-command code {
