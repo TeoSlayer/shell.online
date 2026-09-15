@@ -9,7 +9,7 @@ import {
   hasVisitorSalt,
   documentTarget,
   CTA_TARGETS,
-  INSTALL_OUTCOMES,
+  installReportOutcome,
   COPY_TARGETS,
   writeAnalytics,
   type AnalyticsContext,
@@ -671,9 +671,11 @@ async function recordInstallReport(
   if (!allowed.success) {
     return json({ error: "too many events" }, 429, { "Retry-After": "60" });
   }
-  const outcome = url.searchParams.get("outcome") ?? "";
-  if (INSTALL_OUTCOMES.has(outcome)) {
-    recordAnalytics(env, executionContext, "install_outcome", outcome, requestAnalyticsContext(request));
+  const outcome = installReportOutcome(url);
+  const context = requestAnalyticsContext(request);
+  /* A crawler that follows the report link did not install anything. */
+  if (outcome !== null && context.device !== "bot") {
+    recordAnalytics(env, executionContext, "install_outcome", outcome, context);
   }
   return new Response(null, {
     status: 204,
@@ -1071,7 +1073,8 @@ export class TerminalSession extends DurableObject<Env> {
          */
         recordAnalytics(this.env, this.state, "share_opened", this.isReadOnly() ? "viewer_read_only" : "viewer", {
           ...viewerContext,
-          value: Math.max(0, (Date.now() - this.meta.createdAt) / 1_000),
+          /* From this run's start, as session lifetimes are measured, so a resumed session does not count its idle days. */
+          value: Math.max(0, (Date.now() - (this.meta.runStartedAt ?? this.meta.createdAt)) / 1_000),
         });
       }
       await this.refreshLivePresence(true);

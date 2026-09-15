@@ -10,9 +10,11 @@ $ErrorActionPreference = "Stop"
 # went: one request carrying a single word and the binary name, nothing else,
 # so that a platform that keeps failing gets noticed and fixed. Set
 # SHELL_ONLINE_INSTALL_REPORT=0 to skip it.
+$script:reported = $false
 function Report([string]$Outcome) {
   if ($env:SHELL_ONLINE_INSTALL_REPORT -eq "0") { return }
   if ($BaseUrl -notmatch '^https?://') { return }
+  $script:reported = $true
   $platform = if ($script:artifact) { $script:artifact } else { "unknown" }
   try {
     Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "$BaseUrl/install/report?outcome=$Outcome&platform=$platform" | Out-Null
@@ -77,7 +79,8 @@ try {
   Write-Host "  shell <your-command>   Run it in the background and print its browser link"
   Write-Host "  shell help             See the guided start, share, and stop flow"
 } catch {
-  Report "failed"
+  # Fail has already reported its own reason; anything else is unspecified.
+  if (-not $script:reported) { Report "failed" }
   throw
 } finally {
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $temporaryDirectory

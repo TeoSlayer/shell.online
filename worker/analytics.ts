@@ -82,6 +82,12 @@ export const INSTALL_OUTCOMES: ReadonlySet<string> = new Set([
   "write_failed",
 ]);
 
+/** The outcome an install report carries, or null when it is not one the scripts send. */
+export function installReportOutcome(url: URL): string | null {
+  const outcome = url.searchParams.get("outcome") ?? "";
+  return INSTALL_OUTCOMES.has(outcome) ? outcome : null;
+}
+
 /** What the landing page reports when one of its sign-up links is clicked. */
 export const CTA_TARGETS: ReadonlySet<string> = new Set(["signup_nav", "signup_hero", "signup_team", "signup_footer"]);
 

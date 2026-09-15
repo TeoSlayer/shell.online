@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  audienceOf,
+  buildAudiences,
   buildRetentionCohorts,
   buildStatsSnapshot,
   DAY_MS,
   dayStart,
+  installsCompleted,
   peopleCountedSince,
   STATS_PRESENCE_LEASE_MS,
   STATS_PRESENCE_REFRESH_MS,
@@ -166,6 +169,23 @@ describe("people and the funnel", () => {
     expect(snapshot.uniques.daily.map((day) => [day.site, day.cli])).toEqual([[120, 4], [140, 0]]);
     expect(snapshot.rates.signup).toBeCloseTo(12 / 969);
     expect(snapshot.breakdowns.pages.map((page) => page.label)).toEqual(["landing", "unknown_path", "docs_app", "docs", "not_found"]);
+  });
+
+  it("folds device classes into audiences, and counts only the events the page tells apart", () => {
+    expect(["desktop", "mobile", "tablet"].map(audienceOf)).toEqual(["browsers", "browsers", "browsers"]);
+    expect(audienceOf("cli")).toBe("tools");
+    expect(audienceOf("bot")).toBe("crawlers");
+    expect(audienceOf("unknown")).toBe("unknown");
+    expect(audienceOf("something-new")).toBe("unknown");
+    expect(installsCompleted({ browsers: 1, tools: 2, crawlers: 5, unknown: 1 })).toBe(4);
+    const audiences = buildAudiences([
+      { event: "session_created", target: "cli", device: "cli", count: 9 },
+      { event: "page_view", target: "not_found", device: "bot", count: 3 },
+      { event: "page_view", target: "session", device: "mobile", count: 2 },
+      { event: "viewer_connected", target: "viewer", device: "mobile", count: 2 },
+    ]);
+    expect(audiences.views).toEqual({ browsers: 0, tools: 0, crawlers: 0, unknown: 0 });
+    expect(audiences.viewers).toEqual({ browsers: 2, tools: 0, crawlers: 0, unknown: 0 });
   });
 
   it("tells browsers, tools and crawlers apart in every figure about people", () => {

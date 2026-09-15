@@ -14,6 +14,7 @@
       "/downloads/*",
       "/install",
       "/install.ps1",
+      "/install/report",
       "/llms.txt",
       "/skill",
       "/skill/*",

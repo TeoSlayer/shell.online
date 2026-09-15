@@ -236,6 +236,8 @@ describe("session registry", () => {
     const tokens = await login();
     const created = await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
     expect(created.status).toBe(201);
+    /* Counted for the dashboard: the login linked a machine, the registration a session. */
+    expect(await store.appEvents(0)).toEqual([{ event: "machine_linked", count: 1 }, { event: "session_registered", count: 1 }]);
 
     const listed = await call("GET", "/api/sessions", { auth: await idToken() });
     expect(listed.status).toBe(200);
@@ -556,6 +558,7 @@ describe("driving a machine from the browser", () => {
       body: { device_id: deviceId, kind: "start", command: "top" },
     });
     expect(queued.status).toBe(202);
+    expect((await store.appEvents(0)).find((entry) => entry.event === "command_sent")?.count).toBe(1);
 
     const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
     expect(claimed.body.commands).toHaveLength(1);
@@ -1041,6 +1044,8 @@ describe("organizations", () => {
     expect(joined.body.joined).toBe(true);
     expect(joined.body.you.role).toBe("member");
     expect(joined.body.members).toHaveLength(2);
+    /* Both halves counted for the dashboard, with nothing about who. */
+    expect(await store.appEvents(0)).toEqual([{ event: "invite_accepted", count: 1 }, { event: "invite_created", count: 1 }]);
   });
 
   it("shows colleagues each other's sessions", async () => {
@@ -2031,6 +2036,7 @@ describe("session vault", () => {
     const { body } = await vaultBody();
     const created = await call("POST", "/api/vault", { auth: await idToken(), body });
     expect(created.status).toBe(201);
+    expect((await store.appEvents(0)).find((entry) => entry.event === "vault_created")?.count).toBe(1);
     const fetched = await call("GET", "/api/vault", { auth: await idToken() });
     expect(fetched.body.vault).toMatchObject({
       publicKey: body.public_key,
@@ -2544,6 +2550,10 @@ describe("feedback", () => {
     expect(posted.body.feedback.id).toMatch(/^fbk_/);
     /* Counted for the dashboard as a thing done, with nothing about who did it. */
     expect(await store.appEvents(0)).toEqual([{ event: "feedback_sent", count: 1 }]);
+    /* Counting must never change an answer: a store that cannot count still answers 201. */
+    vi.spyOn(store, "recordAppEvent").mockRejectedValueOnce(new Error("db down"));
+    const again = await call("POST", "/api/feedback", { auth: await idToken(), body: message });
+    expect(again.status).toBe(201);
     const [kept] = await store.feedback();
     expect(kept).toMatchObject({
       uid: "uid-1",
@@ -2607,6 +2617,12 @@ describe("account figures for the statistics dashboard", () => {
     const answer = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1, events: { machine_linked: 2, command_sent: 1 } });
+    /* Only the range's days count; the all-time range counts every day kept. */
+    await store.recordAppEvent("vault_created", Date.now() - 40 * 24 * 60 * 60_000);
+    const week = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
+    expect(week.body.events).toEqual({ machine_linked: 2, command_sent: 1 });
+    const all = await call("GET", "/api/stats/accounts?range=all", { auth: TOKEN });
+    expect(all.body.events).toEqual({ machine_linked: 2, command_sent: 1, vault_created: 1 });
     expect(answer.body.newByDay).toHaveLength(90);
     expect(answer.body.cohorts).toHaveLength(1);
     expect(answer.body.cohorts[0].size).toBe(1);

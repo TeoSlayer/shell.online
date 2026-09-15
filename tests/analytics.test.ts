@@ -7,6 +7,7 @@ import {
   classifyReferrer,
   documentTarget,
   hasVisitorSalt,
+  installReportOutcome,
   isDocumentNavigation,
   machineKey,
   normalizeAnalyticsRecord,
@@ -170,6 +171,14 @@ describe("analytics", () => {
       },
     });
     await expect(requestVisitor("a-salt-long-enough-to-count", crawler)).resolves.toBeUndefined();
+  });
+
+  it("takes an install report's outcome only from the list the scripts send", () => {
+    expect(installReportOutcome(new URL("https://shell.online/install/report?outcome=ok&platform=shell-darwin-arm64"))).toBe("ok");
+    expect(installReportOutcome(new URL("https://shell.online/install/report?outcome=checksum_mismatch"))).toBe("checksum_mismatch");
+    expect(installReportOutcome(new URL("https://shell.online/install/report?outcome=rm%20-rf"))).toBeNull();
+    expect(installReportOutcome(new URL("https://shell.online/install/report?outcome=OK"))).toBeNull();
+    expect(installReportOutcome(new URL("https://shell.online/install/report"))).toBeNull();
   });
 
   it("keys a machine by address alone, so the installer and the CLI on it are one machine", async () => {
