@@ -29,7 +29,8 @@
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
     "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.standalone.json --noEmit",
     "test:app": "npm --prefix app ci && npm --prefix app test",
-    "verify:published": "node ./scripts/verify-published.mjs"
+    "verify:published": "node ./scripts/verify-published.mjs",
+    "check:published": "node ./scripts/check-published-downloads.mjs"
   },
   "dependencies": {
     "@xterm/xterm": "^6.0.0",

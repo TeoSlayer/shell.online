@@ -164,6 +164,11 @@ go test -race ./...
 npm run test:app
 ```
 
+`npm run check:published` checks what shell.online is serving from outside: the
+two install scripts, the checksum and release manifests, and every release
+binary. The Downloads workflow runs it every half hour, runs a real install on
+macOS, Linux and Windows, and keeps one issue open while anything is missing.
+
 See [the contribution guide](.github/CONTRIBUTING.md) before opening a pull request.
 
 ## Contributors

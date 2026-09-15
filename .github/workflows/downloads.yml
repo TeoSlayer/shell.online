@@ -1,0 +1,139 @@
+name: Downloads
+
+# Every install starts with the same files: the script, the checksum manifest,
+# and a release binary. They are served as deployment assets, so a deploy that
+# forgets them breaks every install while the site itself looks fine. This
+# checks them from outside on a schedule, runs a real install on each desktop
+# platform, and keeps one issue open while anything is broken.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: Deployment to check
+        default: https://shell.online
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  published:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ORIGIN: ${{ inputs.origin || 'https://shell.online' }}
+    outputs:
+      report: ${{ steps.check.outputs.report }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - name: Check the scripts, manifests and every release binary
+        id: check
+        run: |
+          status=0
+          node scripts/check-published-downloads.mjs "$ORIGIN" --markdown downloads-report.md || status=$?
+          {
+            echo "report<<DOWNLOADS_REPORT"
+            cat downloads-report.md
+            echo "DOWNLOADS_REPORT"
+          } >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: posix
+          - os: ubuntu-latest
+            script: posix
+          - os: windows-latest
+            script: powershell
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      ORIGIN: ${{ inputs.origin || 'https://shell.online' }}
+    steps:
+      - name: Install with the documented command
+        if: matrix.script == 'posix'
+        run: |
+          export SHELL_ONLINE_INSTALL_DIR="$RUNNER_TEMP/shell-online"
+          curl -fsSL "$ORIGIN/install" | sh
+          "$SHELL_ONLINE_INSTALL_DIR/shell" --version
+      - name: Install with the documented command
+        if: matrix.script == 'powershell'
+        shell: pwsh
+        run: |
+          $env:SHELL_ONLINE_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "shell-online"
+          Invoke-RestMethod "$env:ORIGIN/install.ps1" | Invoke-Expression
+          & (Join-Path $env:SHELL_ONLINE_INSTALL_DIR "shell.exe") --version
+
+  report:
+    needs: [published, install]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      ORIGIN: ${{ inputs.origin || 'https://shell.online' }}
+      PUBLISHED: ${{ needs.published.result }}
+      INSTALL: ${{ needs.install.result }}
+      REPORT: ${{ needs.published.outputs.report }}
+    steps:
+      # One issue carries the state: opened when a check first fails, its
+      # body refreshed on every failing run, closed with a note when the
+      # checks pass again. No comment per run, so a long outage is one thread.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const failing = process.env.PUBLISHED !== "success" || process.env.INSTALL !== "success";
+            const label = "downloads";
+            const title = "Install downloads are failing";
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const now = new Date().toISOString();
+            const report = process.env.REPORT || "_The bundle check did not produce a report; see the run log._";
+            const installLine = `Real installs (macOS, Linux, Windows): **${process.env.INSTALL}**.`;
+            const body = [
+              `Checked ${process.env.ORIGIN} at ${now} from [this run](${runUrl}).`,
+              "",
+              installLine,
+              "",
+              report,
+              "",
+              "Every install starts with these files, so while any of them is missing `curl -fsSL https://shell.online/install | sh` and the PowerShell equivalent fail for everyone. Redeploying with `npm run deploy:production` rebuilds and verifies the whole bundle before it uploads.",
+              "",
+              "_Maintained by the Downloads workflow; it updates this issue every half hour and closes it when the checks pass again._",
+            ].join("\n");
+
+            const { owner, repo } = context.repo;
+            const open = (await github.rest.issues.listForRepo({ owner, repo, state: "open", labels: label, per_page: 10 })).data
+              .filter((issue) => !issue.pull_request);
+
+            if (!failing) {
+              for (const issue of open) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: `Downloads are healthy again at ${now} ([run](${runUrl})). Closing.` });
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: "closed", state_reason: "completed" });
+              }
+              return;
+            }
+
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({ owner, repo, name: label, color: "b60205", description: "Install downloads are failing on the deployment" });
+            }
+
+            if (open.length === 0) {
+              await github.rest.issues.create({ owner, repo, title, labels: [label], body });
+            } else {
+              await github.rest.issues.update({ owner, repo, issue_number: open[0].number, body });
+            }
