@@ -24,6 +24,11 @@
   ],
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
+    // The provider whose ID tokens the API accepts. A Firebase deployment
+    // sets FIREBASE_PROJECT_ID instead and leaves these two empty; the
+    // service reads whichever is filled in.
+    "OIDC_ISSUER": "__OIDC_ISSUER__",
+    "OIDC_AUDIENCE": "__OIDC_AUDIENCE__",
     "FIREBASE_PROJECT_ID": "__FIREBASE_PROJECT_ID__",
     "WEB_ORIGIN": "https://app.shell.online",
     "RELAY_URL": "https://shell.online",

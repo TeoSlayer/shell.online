@@ -2,8 +2,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth, RedirectIfAuthed } from "./auth/RequireAuth";
 import { SignIn } from "./routes/SignIn";
+import AuthCallback from "./routes/AuthCallback";
 import { SignUp } from "./routes/SignUp";
 import { ResetPassword } from "./routes/ResetPassword";
+import { oidcConfigured } from "./lib/oidc";
 import { Account } from "./routes/Account";
 import { Workspace } from "./routes/Workspace";
 import { Machines } from "./routes/Machines";
@@ -35,22 +37,19 @@ export default function App() {
               </RedirectIfAuthed>
             }
           />
-          <Route
-            path="/signup"
-            element={
-              <RedirectIfAuthed>
-                <SignUp />
-              </RedirectIfAuthed>
-            }
-          />
-          <Route
-            path="/reset"
-            element={
-              <RedirectIfAuthed>
-                <ResetPassword />
-              </RedirectIfAuthed>
-            }
-          />
+          {/*
+            * Where the provider returns people to, and the target of the
+            * hidden iframe that renews a session. Not guarded: it has to run
+            * while nobody is signed in yet, which is the whole point of it.
+            */}
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          {/*
+            * Registration and password reset happen at the provider now.
+            * The paths are kept because they have been linked and bookmarked;
+            * /login is where both of them start.
+            */}
+          <Route path="/signup" element={oidcConfigured ? <Navigate to="/login" replace /> : <SignUp />} />
+          <Route path="/reset" element={oidcConfigured ? <Navigate to="/login" replace /> : <ResetPassword />} />
           <Route
             path="/account"
             element={

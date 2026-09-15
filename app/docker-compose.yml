@@ -3,8 +3,8 @@
 #   cp .env.example .env && $EDITOR .env
 #   docker compose up --build
 #
-# The client is compiled with the Firebase values baked in, so a change to any
-# VITE_ variable needs --build rather than a restart.
+# The client is compiled with the provider's address baked in, so a change to
+# any VITE_ variable needs --build rather than a restart.
 
 services:
   postgres:
@@ -26,6 +26,8 @@ services:
     build:
       context: .
       args:
+        VITE_OIDC_ISSUER: ${VITE_OIDC_ISSUER}
+        VITE_OIDC_CLIENT_ID: ${VITE_OIDC_CLIENT_ID}
         VITE_FIREBASE_API_KEY: ${VITE_FIREBASE_API_KEY}
         VITE_FIREBASE_AUTH_DOMAIN: ${VITE_FIREBASE_AUTH_DOMAIN}
         VITE_FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
@@ -37,6 +39,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-dev}@postgres:5432/shell_online
+      OIDC_ISSUER: ${VITE_OIDC_ISSUER}
+      OIDC_AUDIENCE: ${VITE_OIDC_CLIENT_ID}
       FIREBASE_PROJECT_ID: ${VITE_FIREBASE_PROJECT_ID}
       # Where browsers reach this deployment. Used for CORS and for the links
       # the CLI is sent to, so it has to be the public URL, not the container's.

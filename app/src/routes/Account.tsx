@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { ChatCircleDots, SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
+import { ChatCircleDots, DownloadSimple, SealCheck, SignOut, Trash, Warning } from "@phosphor-icons/react";
 import { AppShell } from "../components/AppShell";
 import { DeleteAccount } from "../components/DeleteAccount";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { useAuth } from "../auth/AuthProvider";
+import { fetchDevices, fetchOrg, fetchSessions, fetchVault } from "../lib/api";
+import { assigneeIds } from "../lib/session-view";
 import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
 import { useVault } from "../vault/VaultProvider";
@@ -15,7 +17,7 @@ import { useFeedback } from "../feedback/context";
 
 export function Account() {
   usePageTitle("Account");
-  const { user, resendVerification, signOutUser } = useAuth();
+  const { mode, user, resendVerification, signOutUser } = useAuth();
   const vault = useVault();
   const feedback = useFeedback();
   const [notice, setNotice] = useState("");
@@ -24,11 +26,16 @@ export function Account() {
   const [signingOut, setSigningOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   if (!user) return null;
+  const accountUser = user;
 
-  const provider = user.providerData[0]?.providerId ?? "password";
-  const providerLabel = provider === "google.com" ? "Google" : "Email and password";
+  const provider = user.providerData?.[0]?.providerId ?? "password";
+  const oidcIssuer = import.meta.env.VITE_OIDC_ISSUER ?? "";
+  const providerLabel = mode === "oidc"
+    ? new URL(oidcIssuer).host
+    : provider === "google.com" ? "Google" : "Email and password";
 
   async function handleResend() {
     setError("");
@@ -52,6 +59,48 @@ export function Account() {
     } catch (caught) {
       setError(authErrorMessage(caught));
       setSigningOut(false);
+    }
+  }
+
+  async function handleExport() {
+    setError("");
+    setExporting(true);
+    try {
+      const [org, deviceResult, sessionResult, vaultResult] = await Promise.all([
+        fetchOrg(), fetchDevices(), fetchSessions(), fetchVault(),
+      ]);
+      const ownSessions = sessionResult.sessions.filter((session) =>
+        session.ownerUid === accountUser.uid || assigneeIds(session).includes(accountUser.uid)
+      );
+      const data = {
+        exportedAt: new Date().toISOString(),
+        account: {
+          uid: accountUser.uid,
+          email: accountUser.email,
+          name: accountUser.displayName,
+        },
+        organization: {
+          id: org.organization.id,
+          name: org.organization.name,
+          role: org.you.role,
+          joinedAt: org.you.joinedAt,
+        },
+        machines: deviceResult.devices,
+        sessions: ownSessions,
+        vault: vaultResult.vault,
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `shell-online-data-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("Your data export has downloaded.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not export your data.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -105,6 +154,17 @@ export function Account() {
       */}
       <VaultPanel />
 
+      <section className="account-data-export" aria-labelledby="download-data-title">
+        <div>
+          <h2 id="download-data-title">Download my data</h2>
+          <p>Export your account, team membership, linked machines, sessions assigned to you, and encrypted vault record as JSON.</p>
+        </div>
+        <Button type="button" variant="ghost" onClick={() => void handleExport()} busy={exporting} busyLabel="Preparing">
+          <DownloadSimple size={15} />
+          Download JSON
+        </Button>
+      </section>
+
       {resetting && (
         <section className="consent-card vault-card vault-reset">
           <VaultSetup
@@ -127,7 +187,7 @@ export function Account() {
         would strand anybody who opened the app from a home screen.
       */}
       <div className="account-actions">
-        {!user.emailVerified && (
+        {mode === "firebase" && !user.emailVerified && (
           <Button
             type="button"
             variant="ghost"

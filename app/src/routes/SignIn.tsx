@@ -8,8 +8,9 @@ import { GoogleMark } from "../components/GoogleMark";
 import { useAuth } from "../auth/AuthProvider";
 import { usePageTitle } from "../lib/page-title";
 import { authErrorMessage } from "../lib/auth-errors";
+import { oidcConfigured } from "../lib/oidc";
 
-export function SignIn() {
+function FirebaseSignIn() {
   usePageTitle("Sign in");
   const { signIn, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -142,4 +143,44 @@ export function SignIn() {
       </Button>
     </AuthShell>
   );
+}
+
+function OidcSignIn() {
+  usePageTitle("Sign in");
+  const { signInWithProvider } = useAuth();
+  const location = useLocation();
+  const destination = (location.state as { from?: string } | null)?.from ?? "/sessions";
+  const deleted = (location.state as { deleted?: boolean } | null)?.deleted === true;
+  const [formError, setFormError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function go() {
+    setFormError("");
+    setPending(true);
+    try {
+      await signInWithProvider(destination);
+    } catch (error) {
+      setFormError(authErrorMessage(error));
+      setPending(false);
+    }
+  }
+
+  return (
+    <AuthShell
+      title="Welcome back."
+      dek="Sign in to manage the sessions you have shared and the links people are watching."
+      foot="Your password, registration, and recovery stay with your identity provider."
+      legal={<>The <Link to="/terms">terms</Link> and the <Link to="/privacy">privacy policy</Link> describe what shell.online keeps and why.</>}
+    >
+      {deleted && !formError && <Alert tone="success">Your account has been deleted.</Alert>}
+      {formError && <Alert tone="error">{formError}</Alert>}
+      <Button type="button" onClick={() => void go()} busy={pending} busyLabel="Opening sign-in">
+        Continue to sign in
+      </Button>
+    </AuthShell>
+  );
+}
+
+export function SignIn() {
+  return oidcConfigured ? <OidcSignIn /> : <FirebaseSignIn />;
 }

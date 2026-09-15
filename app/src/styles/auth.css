@@ -544,6 +544,40 @@
   min-width: 168px;
 }
 
+.account-data-export {
+  display: flex;
+  max-width: 760px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  margin-top: 28px;
+  background: var(--white);
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.account-data-export h2 {
+  margin: 0 0 5px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 580;
+}
+
+.account-data-export p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.account-data-export .btn {
+  width: auto;
+  min-width: 154px;
+  flex: none;
+}
+
 .account-danger-zone {
   display: flex;
   max-width: 760px;
@@ -621,12 +655,14 @@
 }
 
 @media (max-width: 640px) {
+  .account-data-export,
   .account-danger-zone {
     align-items: stretch;
     flex-direction: column;
     gap: 16px;
   }
 
+  .account-data-export .btn,
   .account-danger-zone .btn {
     width: 100%;
   }
@@ -1517,6 +1553,56 @@
   color: var(--ink);
 }
 
+.cleanup-sessions,
+.sessions-pagination button {
+  display: inline-flex;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cleanup-sessions:hover,
+.sessions-pagination button:not(:disabled):hover {
+  border-color: var(--line-strong);
+  background: var(--white);
+  color: var(--ink);
+}
+
+.cleanup-sessions.is-confirming {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--line));
+  color: var(--danger);
+}
+
+.cleanup-sessions:disabled,
+.sessions-pagination button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.sessions-pagination {
+  display: flex;
+  margin: 22px 0 8px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sessions-pagination span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 /* ---------------------------------------------------------------
    Board
    ---------------------------------------------------------------
@@ -1715,6 +1801,18 @@
   .view-toggle {
     margin-left: auto;
     order: 1;
+  }
+
+  .cleanup-sessions {
+    order: 1;
+  }
+
+  .sessions-pagination {
+    justify-content: space-between;
+  }
+
+  .sessions-pagination span {
+    text-align: center;
   }
 
   .picker,

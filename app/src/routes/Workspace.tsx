@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { X, Trash, Terminal as TerminalIcon, List, Plus, CaretRight, MagnifyingGlass, Rows, Columns } from "@phosphor-icons/react";
+import { X, Trash, Broom, Terminal as TerminalIcon, List, Plus, CaretRight, MagnifyingGlass, Rows, Columns } from "@phosphor-icons/react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PeopleChip, PersonChip } from "../components/Avatar";
 import { MultiPersonPicker } from "../components/PersonPicker";
 import { findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
-import { assigneeIds, canEdit, canHandOff, canRemove, canStop, matches } from "../lib/session-view";
+import {
+  assigneeIds,
+  canEdit,
+  canHandOff,
+  canRemove,
+  canStop,
+  cleanupCandidates as findCleanupCandidates,
+  matches,
+} from "../lib/session-view";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
@@ -65,6 +73,7 @@ const DEVICE_POLL_MS = 5000;
 const AFTER_COMMAND_MS = 1500;
 /* How long to wait for a started session before saying so. */
 const LAUNCH_PATIENCE_MS = 45_000;
+const PAGE_SIZE = 25;
 
 const SESSION_SCOPES = [
   { value: "all", label: "All sessions", detail: "Available and finished sessions" },
@@ -174,6 +183,8 @@ export function Workspace() {
   const [view, setView] = useState<ViewMode>(readViewMode);
   const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(readTerminalRenderer);
   const [removing, setRemoving] = useState("");
+  const [cleaning, setCleaning] = useState(false);
+  const [confirmingCleanup, setConfirmingCleanup] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
   /*
@@ -181,6 +192,15 @@ export function Workspace() {
    * the confirmation lands on the page the terminal's sessions appear on.
    */
   const [search, setSearch] = useSearchParams();
+  const requestedPage = Math.max(1, Number.parseInt(search.get("page") ?? "1", 10) || 1);
+  const goToPage = useCallback((page: number) => {
+    setSearch((current) => {
+      const next = new URLSearchParams(current);
+      if (page <= 1) next.delete("page");
+      else next.set("page", String(page));
+      return next;
+    }, { replace: true });
+  }, [setSearch]);
   const [justLinked, setJustLinked] = useState(() => wasJustLinked(search));
   const loadedOnce = useRef(false);
   /* Tabs are put back once, from the first session list a reload receives. */
@@ -424,6 +444,34 @@ export function Workspace() {
     }
   }
 
+  async function handleCleanup(ended: SessionRecord[]) {
+    if (ended.length === 0) return;
+    setCleaning(true);
+    setConfirmingCleanup(false);
+    setError("");
+    setNotice("");
+    let removed = 0;
+    const failed: string[] = [];
+    /* Sequential on purpose: a large old workspace must not burst through
+       the API limiter or open dozens of database connections at once. */
+    for (const session of ended) {
+      try {
+        await deleteSession(session.id);
+        forget(session.id);
+        dispatch({ type: "close", id: session.id });
+        removed += 1;
+      } catch {
+        failed.push(session.name || session.command);
+      }
+    }
+    await load();
+    if (removed > 0) setNotice(`Removed ${removed} ended session${removed === 1 ? "" : "s"}.`);
+    if (failed.length > 0) {
+      setError(`${failed.length} session${failed.length === 1 ? "" : "s"} could not be removed. Try again.`);
+    }
+    setCleaning(false);
+  }
+
   /*
    * Seals a session's password to the colleagues it was shared with.
    *
@@ -619,9 +667,23 @@ export function Workspace() {
     if (scope === "finished") return sessionEnded(session);
     return true;
   });
-  const liveWrite = matching.filter((session) => !sessionEnded(session) && canEdit(session, you));
-  const liveRead = matching.filter((session) => !sessionEnded(session) && !canEdit(session, you));
-  const finished = matching.filter((session) => sessionEnded(session));
+  const pageCount = Math.max(1, Math.ceil(matching.length / PAGE_SIZE));
+  const page = Math.min(requestedPage, pageCount);
+  const paged = matching.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const liveWrite = paged.filter((session) => !sessionEnded(session) && canEdit(session, you));
+  const liveRead = paged.filter((session) => !sessionEnded(session) && !canEdit(session, you));
+  const finished = paged.filter((session) => sessionEnded(session));
+  const cleanupCandidates = findCleanupCandidates(sessions ?? [], you);
+
+  useEffect(() => {
+    if (requestedPage !== page) goToPage(page);
+  }, [requestedPage, page, goToPage]);
+
+  useEffect(() => {
+    if (!confirmingCleanup) return;
+    const timer = window.setTimeout(() => setConfirmingCleanup(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [confirmingCleanup]);
   const openSession = (session: SessionRecord) =>
     dispatch({ type: "open", session, canType: canEdit(session, you) });
   const showingList = state.activeId === null;
@@ -824,7 +886,7 @@ export function Workspace() {
                 <input
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => { setQuery(event.target.value); goToPage(1); }}
                   onKeyDown={(event) => {
                     if (event.key === "Escape" && query) {
                       event.preventDefault();
@@ -840,10 +902,29 @@ export function Workspace() {
                 label="Session status"
                 value={scope}
                 options={SESSION_SCOPES}
-                onChange={setScope}
+                onChange={(value) => { setScope(value); goToPage(1); }}
                 searchable={false}
                 align="right"
               />
+
+              {cleanupCandidates.length > 0 && (
+                <button
+                  type="button"
+                  className={confirmingCleanup ? "cleanup-sessions is-confirming" : "cleanup-sessions"}
+                  onClick={() => confirmingCleanup
+                    ? void handleCleanup(cleanupCandidates)
+                    : setConfirmingCleanup(true)}
+                  disabled={cleaning}
+                  title="Remove finished and unavailable sessions. Temporarily offline sessions are kept."
+                >
+                  <Broom size={15} />
+                  {cleaning
+                    ? "Cleaning up"
+                    : confirmingCleanup
+                      ? `Remove ${cleanupCandidates.length}?`
+                      : `Clean up (${cleanupCandidates.length})`}
+                </button>
+              )}
 
               <div className="view-toggle" role="group" aria-label="How to show sessions">
                 <button
@@ -878,7 +959,7 @@ export function Workspace() {
             {matching.length === 0 ? (
               <div className="sessions-empty">
                 <p>Nothing matches those filters.</p>
-                <button type="button" className="session-action" onClick={() => { setQuery(""); setScope("all"); }}>
+                <button type="button" className="session-action" onClick={() => { setQuery(""); setScope("all"); goToPage(1); }}>
                   Clear filters
                 </button>
               </div>
@@ -949,6 +1030,12 @@ export function Workspace() {
                 )}
               </>
             )}
+            <SessionPagination
+              page={page}
+              pageCount={pageCount}
+              total={matching.length}
+              onPage={goToPage}
+            />
           </>
         )}
       </div>
@@ -965,6 +1052,27 @@ export function Workspace() {
 
       {justLinked && <SignedInModal onClose={() => setJustLinked(false)} />}
     </AppShell>
+  );
+}
+
+function SessionPagination({
+  page,
+  pageCount,
+  total,
+  onPage,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  onPage: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+  return (
+    <nav className="sessions-pagination" aria-label="Session pages">
+      <button type="button" onClick={() => onPage(page - 1)} disabled={page <= 1}>Previous</button>
+      <span>Page {page} of {pageCount} · {total} sessions</span>
+      <button type="button" onClick={() => onPage(page + 1)} disabled={page >= pageCount}>Next</button>
+    </nav>
   );
 }
 

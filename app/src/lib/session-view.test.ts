@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canEdit, canRemove, canStop, matches } from "./session-view";
+import { canEdit, canRemove, canStop, cleanupCandidates, matches } from "./session-view";
 import type { Member, SessionRecord } from "./api";
 
 function session(over: Partial<SessionRecord> = {}): SessionRecord {
@@ -119,5 +119,19 @@ describe("who may remove a row, and who may stop a process", () => {
   it("needs a machine to stop anything on", () => {
     expect(canStop(session({ ownerUid: "uid-1", deviceId: undefined }), member())).toBe(false);
     expect(canStop(session({ ownerUid: "uid-1", deviceId: "dev_1" }), member())).toBe(true);
+  });
+});
+
+describe("bulk cleanup", () => {
+  it("keeps a temporarily disconnected process", () => {
+    expect(cleanupCandidates([session({ relayStatus: "disconnected" })], member())).toEqual([]);
+  });
+
+  it("includes only ended sessions the person may remove", () => {
+    const own = session({ id: "own", relayStatus: "exited" });
+    const theirs = session({ id: "theirs", ownerUid: "uid-2", relayStatus: "missing" });
+    expect(cleanupCandidates([own, theirs], member()).map((entry) => entry.id)).toEqual(["own"]);
+    expect(cleanupCandidates([own, theirs], member({ role: "admin" })).map((entry) => entry.id))
+      .toEqual(["own", "theirs"]);
   });
 });

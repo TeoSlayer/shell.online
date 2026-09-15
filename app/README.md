@@ -4,10 +4,19 @@ The optional React app behind `app.shell.online`. It provides accounts,
 organizations, linked machines, session lists, comments, and browser-started
 sessions. The CLI and relay work without it.
 
+Firebase remains the default hosted sign-in. Self-hosters can instead set an
+OpenID Connect issuer and public client id; that enables Authorization Code
+with PKCE and leaves registration, passwords and recovery with the provider.
+The two modes share the same API and account data model.
+
+The provider needs one public client, PKCE with S256, whose redirect URI is
+`<WEB_ORIGIN>/auth/callback` and whose allowed web origin is `<WEB_ORIGIN>` —
+the second is what lets the hidden iframe renew a session before it expires.
+
 ## Local development
 
-Requirements: Node.js 22, npm, Firebase Authentication, and PostgreSQL for
-database-backed tests.
+Requirements: Node.js 22, npm, one configured sign-in provider, and PostgreSQL
+for database-backed tests.
 
 ```sh
 cp .env.example .env.local
@@ -31,11 +40,18 @@ npm run test:pg
 
 ## Configuration
 
-The client reads `VITE_FIREBASE_*` at build time. The server uses:
+The client reads either the complete `VITE_FIREBASE_*` set or both
+`VITE_OIDC_ISSUER` and `VITE_OIDC_CLIENT_ID` at build time. OIDC takes
+precedence only when both values are present; partial configurations fail the
+deployment check instead of producing a broken sign-in screen.
+The server uses:
 
 | Variable | Purpose |
 |---|---|
-| `FIREBASE_PROJECT_ID` | Firebase project accepted by the API |
+| `OIDC_ISSUER` | The provider whose ID tokens are accepted; falls back to `VITE_OIDC_ISSUER` |
+| `OIDC_AUDIENCE` | The `aud` tokens must carry, normally the client id; falls back to `OIDC_CLIENT_ID` |
+| `OIDC_JWKS_URI` | Optional. Discovered from the issuer when absent |
+| `FIREBASE_PROJECT_ID` | Firebase project whose ID tokens are accepted when OIDC is not configured |
 | `DATABASE_URL` | PostgreSQL connection string; required in production |
 | `WEB_ORIGIN` | Public origin used for CORS and links |
 | `RELAY_URL` | Relay proxied through `/relay/*` |

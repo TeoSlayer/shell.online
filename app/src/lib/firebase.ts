@@ -19,12 +19,7 @@ const required = [
 ] as const;
 
 const missing = required.filter((key) => !import.meta.env[key]);
-if (missing.length > 0) {
-  throw new Error(
-    `Firebase is not configured. Missing ${missing.join(", ")}. ` +
-      "Copy .env.example to .env.local and fill it in.",
-  );
-}
+export const firebaseConfigured = missing.length === 0;
 
 const options: FirebaseOptions = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -34,16 +29,16 @@ const options: FirebaseOptions = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
 };
 
-export const firebaseApp = initializeApp(options);
+export const firebaseApp = firebaseConfigured ? initializeApp(options) : null;
 
 /*
  * initializeAuth over getAuth: it lets us pin persistence and skip the
  * reCAPTCHA/phone machinery we do not use, which keeps the bundle smaller.
  */
-export const auth = initializeAuth(firebaseApp, {
+export const auth = firebaseApp ? initializeAuth(firebaseApp, {
   persistence: browserLocalPersistence,
   popupRedirectResolver: browserPopupRedirectResolver,
-});
+}) : null;
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });

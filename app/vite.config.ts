@@ -1,18 +1,7 @@
 import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import { BROWSER_SECURITY_HEADERS } from "./server/lib/browser-headers.ts";
-
-/*
- * Cross-Origin-Opener-Policy: signInWithPopup polls window.closed on the
- * Google window. Under the default COOP the browser severs that handle and
- * logs "Cross-Origin-Opener-Policy policy would block the window.closed
- * call", so the popup never resolves cleanly. same-origin-allow-popups keeps
- * the isolation while letting the opener keep its handle.
- *
- * Whatever serves the production build must send the same header.
- */
-const authHeaders = BROWSER_SECURITY_HEADERS;
+import { browserSecurityHeaders } from "./server/lib/browser-headers.ts";
 
 /*
  * The product version, from the repository's package.json rather than this
@@ -28,6 +17,24 @@ const appVersion = commit ? `${version}+${commit}` : version;
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const oidcValues = [env.VITE_OIDC_ISSUER, env.VITE_OIDC_CLIENT_ID];
+  const firebaseValues = [
+    env.VITE_FIREBASE_API_KEY,
+    env.VITE_FIREBASE_AUTH_DOMAIN,
+    env.VITE_FIREBASE_PROJECT_ID,
+    env.VITE_FIREBASE_APP_ID,
+  ];
+  const complete = (values: Array<string | undefined>) => values.every((value) => value?.trim());
+  const partial = (values: Array<string | undefined>) => values.some((value) => value?.trim()) && !complete(values);
+  if (partial(oidcValues)) {
+    throw new Error("Set both VITE_OIDC_ISSUER and VITE_OIDC_CLIENT_ID, or neither.");
+  }
+  if (partial(firebaseValues)) {
+    throw new Error("Set the complete VITE_FIREBASE_* client configuration, or none of it.");
+  }
+  if (mode === "production" && !complete(oidcValues) && !complete(firebaseValues)) {
+    throw new Error("Configure either OpenID Connect or Firebase before a production build.");
+  }
   /*
    * Blank is absent, not a value. `??` only catches undefined, and a
    * workflow that passes an unset repository variable through supplies the
@@ -41,6 +48,14 @@ export default defineConfig(({ mode }) => {
   } catch {
     throw new Error(`VITE_RELAY_URL is not a URL: ${JSON.stringify(env.VITE_RELAY_URL)}`);
   }
+
+  /*
+   * The dev and preview servers send the same policy the production servers
+   * do, built around the same provider, so a sign-in that the policy would
+   * block fails here rather than only after a deploy. Whatever serves the
+   * production build must send these headers too.
+   */
+  const authHeaders = browserSecurityHeaders(env.VITE_OIDC_ISSUER?.trim());
 
   return {
     plugins: [react()],

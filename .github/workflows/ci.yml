@@ -164,14 +164,20 @@ jobs:
       - name: Check vendored modules have not drifted
         run: node scripts/check-protocol.mjs
         working-directory: app
-      - name: Build the client and the server bundle
+      - name: Build with Firebase (production compatibility)
         run: npm run build
         working-directory: app
         env:
-          VITE_FIREBASE_API_KEY: ci
-          VITE_FIREBASE_AUTH_DOMAIN: ci.example.com
-          VITE_FIREBASE_PROJECT_ID: ci
-          VITE_FIREBASE_APP_ID: ci
+          VITE_FIREBASE_API_KEY: ci-api-key
+          VITE_FIREBASE_AUTH_DOMAIN: ci.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: ci-project
+          VITE_FIREBASE_APP_ID: 1:1:web:ci
+      - name: Build with generic OpenID Connect
+        run: npm run build
+        working-directory: app
+        env:
+          VITE_OIDC_ISSUER: https://auth.ci.example.com/realms/ci
+          VITE_OIDC_CLIENT_ID: ci
 
   vulnerabilities:
     runs-on: ubuntu-latest

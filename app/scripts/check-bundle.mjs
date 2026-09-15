@@ -40,13 +40,20 @@ if (found.length > 0) {
 // Required Vite values must be present and non-empty in the compiled bundle.
 const REQUIRED = [
   "VITE_RELAY_URL",
-  "VITE_FIREBASE_API_KEY",
-  "VITE_FIREBASE_AUTH_DOMAIN",
-  "VITE_FIREBASE_PROJECT_ID",
-  "VITE_FIREBASE_APP_ID",
+];
+
+const AUTH_GROUPS = [
+  ["VITE_OIDC_ISSUER", "VITE_OIDC_CLIENT_ID"],
+  [
+    "VITE_FIREBASE_API_KEY",
+    "VITE_FIREBASE_AUTH_DOMAIN",
+    "VITE_FIREBASE_PROJECT_ID",
+    "VITE_FIREBASE_APP_ID",
+  ],
 ];
 
 const blank = [];
+let authFound = false;
 for await (const path of files(directory)) {
   if (!path.endsWith(".js")) continue;
   const body = await readFile(path, "utf8");
@@ -57,7 +64,16 @@ for await (const path of files(directory)) {
     if (!match) blank.push({ path, key, why: "absent" });
     else if (match[2].trim() === "") blank.push({ path, key, why: "empty" });
   }
+  for (const group of AUTH_GROUPS) {
+    const complete = group.every((key) => {
+      const match = body.match(new RegExp(`${key}\\s*:\\s*(["'\`])((?:(?!\\1).)*)\\1`, "u"));
+      return Boolean(match?.[2].trim());
+    });
+    if (complete) authFound = true;
+  }
 }
+
+if (!authFound) blank.push({ path: directory, key: "authentication", why: "neither OIDC nor Firebase is complete" });
 
 if (blank.length > 0) {
   console.error("check-bundle: required values are missing from the production build");

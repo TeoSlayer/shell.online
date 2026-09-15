@@ -1,12 +1,12 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createApp } from "../server/app";
-import { createVerifier } from "../server/lib/firebase-token";
+import { createVerifier } from "../server/lib/oidc-token";
 import { createMailer } from "../server/lib/mail";
 import type { Store } from "../server/lib/store";
 import { PostgresStore } from "../server/lib/store-postgres";
 import { callNodeHandler, type NodeHandler } from "./node-adapter";
-import { allowedOriginsFor } from "../server/lib/config";
-import { BROWSER_SECURITY_HEADERS } from "../server/lib/browser-headers";
+import { allowedOriginsFor, readIdentity, type Env as Settings } from "../server/lib/config";
+import { browserSecurityHeaders } from "../server/lib/browser-headers";
 import { relaySessionLiveness, type SessionLivenessSource } from "../server/lib/session-liveness";
 
 /**
@@ -30,7 +30,15 @@ export interface Env {
   ASSETS: { fetch(request: Request): Promise<Response> };
   /** Hyperdrive in front of Cloud SQL. Its string is local to the isolate. */
   HYPERDRIVE: { connectionString: string };
-  FIREBASE_PROJECT_ID: string;
+  /**
+   * The OpenID Connect provider whose ID tokens are accepted. OIDC_ISSUER and
+   * OIDC_AUDIENCE name it; FIREBASE_PROJECT_ID is the older shorthand for a
+   * Firebase issuer and audience, and still works.
+   */
+  OIDC_ISSUER?: string;
+  OIDC_AUDIENCE?: string;
+  OIDC_JWKS_URI?: string;
+  FIREBASE_PROJECT_ID?: string;
   WEB_ORIGIN: string;
   RELAY_URL: string;
   MAIL_PROVIDER?: string;
@@ -55,10 +63,11 @@ interface ScheduledController {
 const RELAY_PREFIX = "/relay";
 
 /*
- * The client is a single page that signs in with a popup, and
- * signInWithPopup polls window.closed on the Google window. Under the default
- * Cross-Origin-Opener-Policy the browser severs that handle and the popup
- * never resolves, so the header has to be on the document. The assets binding
+ * The client is a single page that signs in at an OpenID provider, and its
+ * policy has to name that provider and survive a popup that polls
+ * window.closed. Under the default Cross-Origin-Opener-Policy the browser
+ * severs that handle and the popup never resolves, so the headers have to be
+ * on the document rather than left to the platform. The assets binding
  * does content types, caching and the SPA fallback but has no opinion about
  * this, so it is added on the way out; server/lib/static-files.ts sends the
  * same headers, and vite.config.ts sends the popup header in development.
@@ -120,7 +129,7 @@ function routerFor(env: Env): NodeHandler {
   liveness ??= relaySessionLiveness(env.RELAY_URL);
   return (routing ??= createApp({
     store: currentStore,
-    verifyIdToken: createVerifier(env.FIREBASE_PROJECT_ID),
+    verifyIdToken: createVerifier(readIdentity(env as unknown as Settings).identity),
     /* The first entry is the web app's own origin; see readConfig. */
     allowedOrigins: allowedOriginsFor(env.WEB_ORIGIN),
     webOrigin: env.WEB_ORIGIN,
@@ -190,7 +199,8 @@ async function toRelay(request: Request, relayUrl: string): Promise<Response> {
 async function toClient(request: Request, env: Env): Promise<Response> {
   const served = await env.ASSETS.fetch(request);
   const response = new Response(served.body, served);
-  for (const [name, value] of Object.entries(BROWSER_SECURITY_HEADERS)) response.headers.set(name, value);
+  const headers = browserSecurityHeaders(env.OIDC_ISSUER);
+  for (const [name, value] of Object.entries(headers)) response.headers.set(name, value);
   return response;
 }
 

@@ -23,7 +23,7 @@ beforeAll(async () => {
   writeFileSync(join(secretDirectory, "secret.txt"), "not for the web");
   symlinkSync(join(secretDirectory, "secret.txt"), join(root, "escape.txt"));
 
-  const serve = staticFiles(root);
+  const serve = staticFiles(root, "https://auth.example.test");
   server = createServer((request, response) => {
     void serve(request, response);
   });
@@ -44,15 +44,19 @@ describe("staticFiles", () => {
     expect(await response.text()).toContain("<title>app</title>");
   });
 
-  it("lets a popup keep its opener, which Google sign-in needs", async () => {
+  it("lets a popup keep its opener, and the renewal iframe its frame", async () => {
     const response = await fetch(`${origin}/`);
     expect(response.headers.get("cross-origin-opener-policy")).toBe("same-origin-allow-popups");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    /*
+     * SAMEORIGIN, not DENY: the silent renew loads this app's own callback in
+     * a hidden iframe, and DENY would end every session at its expiry.
+     */
+    expect(response.headers.get("x-frame-options")).toBe("SAMEORIGIN");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("permissions-policy")).toBe("camera=(), microphone=(), geolocation=()");
     expect(response.headers.get("content-security-policy")).toContain("script-src 'self'");
-    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
   });
 
   it("caches fingerprinted assets forever and the document never", async () => {

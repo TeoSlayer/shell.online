@@ -56,9 +56,11 @@ jobs:
           HYPERDRIVE_ID: ${{ vars.HYPERDRIVE_ID }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
-          FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -66,22 +68,33 @@ jobs:
         run: |
           missing=
           for name in CLOUD_SQL_INSTANCE HYPERDRIVE_ID MAIL_FROM WEB_ORIGIN \
-                      FIREBASE_PROJECT_ID VITE_FIREBASE_API_KEY \
-                      VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_APP_ID \
                       CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL; do
             eval "value=\${$name}"
             if [ -z "$value" ]; then missing="$missing $name"; fi
           done
+          if { [ -n "$VITE_OIDC_ISSUER" ] || [ -n "$VITE_OIDC_CLIENT_ID" ]; } && \
+             { [ -z "$VITE_OIDC_ISSUER" ] || [ -z "$VITE_OIDC_CLIENT_ID" ]; }; then
+            missing="$missing complete VITE_OIDC_ISSUER/VITE_OIDC_CLIENT_ID pair"
+          fi
+          firebase_missing=
+          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN \
+                      VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do
+            eval "value=\${$name}"
+            if [ -z "$value" ]; then firebase_missing="$firebase_missing $name"; fi
+          done
+          if [ -z "$VITE_OIDC_ISSUER" ] && [ -n "$firebase_missing" ]; then
+            missing="$missing Firebase auth:$firebase_missing"
+          fi
           if [ -n "$missing" ]; then
             echo "Not set:$missing" >&2
-            echo "Repository variables: CLOUD_SQL_INSTANCE HYPERDRIVE_ID MAIL_FROM WEB_ORIGIN VITE_FIREBASE_*" >&2
+            echo "Repository variables: infrastructure plus either complete VITE_OIDC_* or VITE_FIREBASE_* configuration" >&2
             echo "Repository secrets:   CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL" >&2
             exit 1
           fi
 
-      # The Firebase values are compiled into the client, so they are build
-      # inputs rather than runtime configuration. They are per-environment and
-      # they are not kept in the repository, so they come from here.
+      # The provider's address and client id are compiled into the client, so
+      # they are build inputs rather than runtime configuration. They are
+      # per-environment and not kept in the repository, so they come from here.
       #
       # VITE_ACCOUNTS_URL and VITE_RELAY_URL are deliberately absent: they are
       # plain origins with nothing to protect, app/.env.production holds them,
@@ -94,6 +107,8 @@ jobs:
         run: npm run build
         working-directory: app
         env:
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
@@ -139,6 +154,10 @@ jobs:
         working-directory: app
         env:
           HYPERDRIVE_ID: ${{ vars.HYPERDRIVE_ID }}
+          OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          OIDC_AUDIENCE: ${{ vars.VITE_OIDC_CLIENT_ID }}
+          # Kept so a deployment mid-migration can still verify tokens minted
+          # by Firebase. Empty is fine whenever OIDC_ISSUER is set.
           FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
 

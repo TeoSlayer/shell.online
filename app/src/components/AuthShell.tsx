@@ -13,7 +13,12 @@ const SessionPreview = lazy(() =>
 interface AuthShellProps {
   title: string;
   dek: ReactNode;
-  headLink: { to: string; label: string };
+  /**
+   * The one link in the header. Optional: with sign-in and registration both
+   * starting from the same screen, there is no longer anywhere else to send
+   * someone from it.
+   */
+  headLink?: { to: string; label: string };
   children: ReactNode;
   foot?: ReactNode;
   legal?: ReactNode;
@@ -32,9 +37,11 @@ export function AuthShell({
       <div className="auth-side">
         <header className="auth-head">
           <Wordmark />
-          <Link className="auth-head-link" to={headLink.to}>
-            {headLink.label}
-          </Link>
+          {headLink && (
+            <Link className="auth-head-link" to={headLink.to}>
+              {headLink.label}
+            </Link>
+          )}
         </header>
 
         <div className="auth-body">

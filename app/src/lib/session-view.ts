@@ -1,4 +1,5 @@
 import type { Member, SessionRecord } from "./api";
+import { sessionEnded } from "./session-liveness";
 
 /**
  * The rules deciding what a person may do with a session, and which group it
@@ -44,6 +45,14 @@ export function canHandOff(session: SessionRecord, you: Member | null): boolean 
 export function canRemove(session: SessionRecord, you: Member | null): boolean {
   if (!you) return false;
   return session.ownerUid === you.uid || you.role === "owner" || you.role === "admin";
+}
+
+/** Bulk cleanup is deliberately narrower than "not online". */
+export function cleanupCandidates(
+  sessions: readonly SessionRecord[],
+  you: Member | null,
+): SessionRecord[] {
+  return sessions.filter((session) => sessionEnded(session) && canRemove(session, you));
 }
 
 /** Stopping controls the owner's local process, so assignment is not enough. */

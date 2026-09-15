@@ -96,7 +96,7 @@
         ],
         [
           "Understand the session list",
-          "The app combines account metadata with the relay's current state. Online and Starting mean the relay can still see a live host or startup; Offline and Unavailable never imply that the process is reachable; Finished records a known task exit. Search, access groups, owners, assignees, machines, and uptime help locate a session without opening every row."
+          "The app combines account metadata with the relay's current state. Online and Starting mean the relay can still see a live host or startup; Offline and Unavailable never imply that the process is reachable; Finished records a known task exit. Search and access filters narrow the list, the current page stays in the URL, and Clean up removes only finished or relay-confirmed unavailable sessions after confirmation. A temporary disconnect is never cleaned up."
         ],
         [
           "Open and organize sessions",
@@ -133,12 +133,16 @@
           "A stale app row cannot keep a dead share online: relay reconciliation moves unreachable sessions out of the live state, and a known task exit marks them Finished. Failed list loads preserve the current view and can be retried. If a password is not in your personal vault, retrieve it from the machine with shell password <ID>; the service has no decryption backdoor."
         ],
         [
+          "Download your data",
+          "Account has a Download my data action. It creates a local JSON export of your account, organization membership, linked machines, sessions you own or are assigned, and the encrypted vault record. It does not include other members' private account data or decrypted terminal contents."
+        ],
+        [
           "Send feedback",
           "Send feedback sits in the account menu and on the Account page, and a Tell us link sits where something can go wrong: under the new session form, the session password gate, a session that has ended, error notices, the empty sessions list, the vault screens, and the delete account form. A message carries the page it came from, the app version, the browser name, and a few facts that screen attaches, all shown before you send. Terminal contents, share links, and passwords are never attached. The service keeps each message and forwards it to the team by email; deleting your account keeps the words and removes who sent them."
         ],
         [
           "Authentication and hosting",
-          "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/."
+          "The hosted app keeps its existing Firebase email and Google sign-in. A self-hosted deployment can instead select any compatible OpenID Connect provider with Authorization Code and PKCE. OIDC activates only when both issuer and client id are configured; partial configuration is rejected during build and deployment. Both modes use the same PostgreSQL account data, and the terminal relay remains independent."
         ]
       ],
       "diagrams": [
@@ -864,7 +868,7 @@
         ],
         [
           "Optional accounts app",
-          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and currently uses Firebase Authentication plus PostgreSQL."
+          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and signs people in through any OpenID Connect provider, with PostgreSQL behind it."
         ],
         [
           "Cloudflare deployment remains available",

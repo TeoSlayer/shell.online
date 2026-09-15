@@ -13,10 +13,13 @@ RUN npm ci
 COPY . .
 # VITE_ variables are read at build time and baked into the client bundle, so
 # they arrive as build arguments rather than as container environment.
+ARG VITE_OIDC_ISSUER
+ARG VITE_OIDC_CLIENT_ID
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN
 ARG VITE_FIREBASE_PROJECT_ID
 ARG VITE_FIREBASE_APP_ID
+ARG VITE_FIREBASE_MESSAGING_SENDER_ID
 ARG VITE_ACCOUNTS_URL=""
 ARG VITE_RELAY_URL
 RUN npm run build

@@ -1,3 +1,5 @@
+import type { IssuerSettings } from "./oidc-token";
+
 /**
  * Everything the service reads from the environment, checked once at boot.
  *
@@ -10,8 +12,16 @@ export interface Config {
   port: number;
   /** Loopback in development; a container has to bind its network interface. */
   host: string;
-  /** Firebase project whose ID tokens are accepted. */
+  /** Firebase project whose ID tokens are accepted. Empty under OIDC_ISSUER. */
   projectId: string;
+  /**
+   * The issuer whose ID tokens are accepted, and how to check them.
+   *
+   * Firebase is one OpenID provider among others, so it is described the same
+   * way as any other rather than being a mode of its own: FIREBASE_PROJECT_ID
+   * is shorthand for an issuer and audience that can also be written out.
+   */
+  identity: IssuerSettings;
   /** Where the browser app is served from, for CORS and link building. */
   webOrigin: string;
   /** Postgres connection string. Absent means the file store, for development. */
@@ -60,6 +70,14 @@ export interface Config {
 export class ConfigError extends Error {}
 
 /**
+ * Where settings are read from.
+ *
+ * `process.env` on Node and the bindings object on Workers, which is not a
+ * `ProcessEnv` but is the same shape as far as anything here is concerned.
+ */
+export type Env = Record<string, string | undefined>;
+
+/**
  * Which browser origins may call the API.
  *
  * The Vite dev server runs on a different port from the service, so
@@ -102,12 +120,66 @@ export function withoutCredentials(value: string | undefined): string {
   }
 }
 
-function required(env: NodeJS.ProcessEnv, ...names: string[]): string {
+function required(env: Env, ...names: string[]): string {
   for (const name of names) {
     const value = env[name]?.trim();
     if (value) return value;
   }
   throw new ConfigError(`set ${names.join(" or ")}`);
+}
+
+const FIREBASE_ISSUER = "https://securetoken.google.com/";
+const FIREBASE_JWKS =
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
+
+/**
+ * Which identity provider signs the ID tokens this service accepts.
+ *
+ * OIDC_ISSUER wins when it is set, because naming an issuer is the more
+ * specific statement; a deployment carrying both has almost certainly just
+ * migrated and left the old variable behind.
+ *
+ * The audience has to be given separately: for Firebase it happens to equal
+ * the project id, but for everything else it is the client id, and guessing it
+ * from the issuer would accept tokens minted for a different application on
+ * the same provider.
+ */
+export function readIdentity(env: Env): { projectId: string; identity: IssuerSettings } {
+  /*
+   * The client's copy is accepted too, the way the Firebase project id was: a
+   * single-container deployment sets the VITE_ values because the client is
+   * built from the same .env, and making it repeat them for the server is how
+   * the two come to disagree about which provider is in use.
+   */
+  /* `||`, not `??`: an unset repository variable arrives as the empty string. */
+  const issuer = env.OIDC_ISSUER?.trim() || env.VITE_OIDC_ISSUER?.trim();
+  if (issuer) {
+    try {
+      new URL(issuer);
+    } catch {
+      throw new ConfigError(`OIDC_ISSUER must be a URL, got ${issuer}`);
+    }
+    const audience = required(env, "OIDC_AUDIENCE", "OIDC_CLIENT_ID", "VITE_OIDC_CLIENT_ID");
+    return {
+      projectId: "",
+      identity: {
+        /* Trailing slashes are a common paste artefact and never part of iss. */
+        issuer: issuer.replace(/\/$/, ""),
+        audience,
+        jwksUri: env.OIDC_JWKS_URI?.trim() || undefined,
+      },
+    };
+  }
+
+  const projectId = required(env, "FIREBASE_PROJECT_ID", "VITE_FIREBASE_PROJECT_ID", "OIDC_ISSUER");
+  return {
+    projectId,
+    identity: {
+      issuer: FIREBASE_ISSUER + projectId,
+      audience: projectId,
+      jwksUri: FIREBASE_JWKS,
+    },
+  };
 }
 
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -118,7 +190,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new ConfigError(`PORT must be a port number, got ${env.PORT ?? env.ACCOUNTS_PORT}`);
   }
 
-  const projectId = required(env, "FIREBASE_PROJECT_ID", "VITE_FIREBASE_PROJECT_ID");
+  const { projectId, identity } = readIdentity(env);
 
   const webOrigin = env.WEB_ORIGIN?.trim() ?? "http://localhost:5173";
   try {
@@ -166,6 +238,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port,
     host: env.HOST?.trim() ?? (production ? "0.0.0.0" : "127.0.0.1"),
     projectId,
+    identity,
     webOrigin,
     databaseUrl,
     dataFile: env.ACCOUNTS_DATA?.trim() ?? ".data/accounts.json",

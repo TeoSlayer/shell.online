@@ -16,7 +16,7 @@ import { emailMatches, successorFor } from "../lib/account-deletion";
  * who else is in it, so the roster is fetched rather than assumed.
  */
 export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
-  const { user, deleteAccount } = useAuth();
+  const { mode, user, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [org, setOrg] = useState<OrgView | null>(null);
   const [confirm, setConfirm] = useState("");
@@ -40,7 +40,8 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
 
   if (!user) return null;
 
-  const usesPassword = user.providerData.some((entry) => entry.providerId === "password");
+  const usesPassword = mode === "firebase" &&
+    Boolean(user.providerData?.some((entry) => entry.providerId === "password"));
   const teamName = org?.organization.name ?? "your team";
   const others = org ? org.members.filter((entry) => entry.uid !== user.uid) : [];
   const successor = org?.you.role === "owner" ? successorFor(org.members, user.uid) : undefined;
@@ -117,7 +118,9 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
             disabled={busy}
           />
         ) : (
-          <p className="account-delete-note">You will be asked to sign in with Google once more.</p>
+          <p className="account-delete-note">
+            You will be asked to sign in with {mode === "oidc" ? "your identity provider" : "Google"} once more.
+          </p>
         )}
         <div className="account-delete-actions">
           <Button type="submit" variant="danger" disabled={!ready} busy={busy} busyLabel="Deleting">

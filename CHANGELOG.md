@@ -4,7 +4,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- Added optional standards-based OpenID Connect sign-in using Authorization
+  Code with PKCE and provider discovery. Firebase remains the hosted default,
+  including email, Google, registration and reset flows. A deployment selects
+  OIDC only when both issuer and client id are present, and CI builds both
+  modes to prevent either from regressing. OIDC account deletion asks the
+  provider for a fresh sign-in, then removes everything shell.online holds;
+  identity-provider account management remains with that provider.
+
 ### Added
+
+- A Download my data action on Account exports the signed-in account,
+  membership, linked machines, owned or assigned sessions, and encrypted vault
+  record as a local JSON file.
+- Finished and relay-confirmed unavailable sessions can be cleaned up together
+  from the session list after a second confirmation. Transiently offline
+  sessions are kept. Filtered session results are paginated in the URL.
 
 - A feedback form inside the web app. It opens from the account menu and the
   Account page, and from the moments where something can go wrong: starting a

@@ -83,5 +83,7 @@ secrets (`npx wrangler secret put <NAME>`):
 ## Accounts app
 
 Accounts are optional and do not participate in terminal transport. The app in
-`app/` uses Firebase Authentication and PostgreSQL in the current release; its
-local Docker deployment is documented in [`app/README.md`](../app/README.md).
+`app/` can use Firebase or an OpenID Connect provider and stores its data in
+PostgreSQL. OIDC requires an issuer and public client id together; leaving both
+unset keeps the Firebase flow. Its local Docker deployment is documented in
+[`app/README.md`](../app/README.md).

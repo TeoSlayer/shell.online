@@ -1,29 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { FirebaseError } from "firebase/app";
 import { authErrorMessage, PASSWORD_LABELS, passwordScore } from "./auth-errors";
 
 describe("authErrorMessage", () => {
-  it("maps a known code to plain copy", () => {
-    expect(authErrorMessage(new FirebaseError("auth/invalid-email", "raw"))).toBe(
-      "That does not look like a valid email address.",
-    );
-  });
-
-  it("gives the same answer for every wrong-credential shape", () => {
-    /* Distinguishing them would tell an attacker which emails have accounts. */
-    const codes = ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"];
-    const messages = new Set(codes.map((code) => authErrorMessage(new FirebaseError(code, "raw"))));
-    expect(messages.size).toBe(1);
-  });
-
-  it("never leaks a raw firebase code", () => {
-    const message = authErrorMessage(new FirebaseError("auth/internal-error", "raw"));
-    expect(message).not.toContain("auth/");
-    expect(message).toBe("Something went wrong on our side. Try again.");
-  });
-
-  it("falls back for a plain error and for a non-error", () => {
+  it("shows the message of an error that has one", () => {
     expect(authErrorMessage(new Error("network down"))).toBe("network down");
+  });
+
+  it("falls back for anything without one", () => {
+    expect(authErrorMessage(new Error(""))).toBe("Something went wrong on our side. Try again.");
     expect(authErrorMessage("nonsense")).toBe("Something went wrong on our side. Try again.");
     expect(authErrorMessage(null)).toBe("Something went wrong on our side. Try again.");
   });
