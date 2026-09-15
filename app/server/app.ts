@@ -18,6 +18,7 @@ import {
   closeSession,
   listSessions,
   registerSession,
+  renameSession,
   sessionForApi,
   sessionSource,
 } from "./lib/sessions";
@@ -533,6 +534,23 @@ export function createApp(options: AppOptions) {
         });
       }
 
+      /*
+       * Every session this account has published, from any of its machines,
+       * for `shell ls`. Scoped to sessions the caller started: a colleague's
+       * sessions are theirs to list. No password copy is included.
+       */
+      if (route === "GET /api/cli/sessions") {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const sessions = await store.listSessions(token.uid);
+        const states = options.sessionLiveness
+          ? await options.sessionLiveness.many(sessions)
+          : new Map<string, SessionLiveness>();
+        return send(response, 200, {
+          sessions: sessions.map((session) => ({ ...sessionForApi(session), ...states.get(session.id) })),
+        });
+      }
+
       /* ---- Organization ---- */
 
       if (route === "GET /api/org") {
@@ -769,6 +787,37 @@ export function createApp(options: AppOptions) {
           createdAt: now,
         })));
         return send(response, 200, { shared });
+      }
+
+      /*
+       * A member replacing their own copy with one they sealed to themselves,
+       * so it stops depending on the teammate who sent it. Only a member who
+       * holds a copy of the current key can replace it, and only their own:
+       * the adding route is insert-only, and deleting first and adding after
+       * is refused, because by then the caller holds no copy.
+       */
+      if (route === "PUT /api/team-key/share") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const key = await store.teamKey(membership.orgId);
+        if (!key) return send(response, 404, { error: "this team has no audit key yet" });
+        if (body.version !== key.version) {
+          return send(response, 409, { error: "the team's audit key has changed; reload and try again" });
+        }
+        if (!isTeamKeyShare(body.sealed)) return send(response, 400, { error: "invalid key share" });
+        const replaced = await store.replaceOwnTeamKeyShare({
+          orgId: membership.orgId,
+          uid: membership.uid,
+          version: key.version,
+          senderUid: membership.uid,
+          sealed: body.sealed as string,
+          createdAt: Date.now(),
+        });
+        if (!replaced) {
+          return send(response, 403, { error: "open your own copy of the team key before replacing it" });
+        }
+        return send(response, 200, { replaced: true });
       }
 
       /*
@@ -1233,6 +1282,16 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
+        return send(response, 200, { session: sessionForMember(membership, result.session) });
+      }
+
+      const nameRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/name$/);
+      if (request.method === "PUT" && nameRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const result = await renameSession(store, membership, nameRoute[1], body.name);
+        if (!result.ok) return send(response, result.status, { error: result.error });
         return send(response, 200, { session: sessionForMember(membership, result.session) });
       }
 

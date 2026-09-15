@@ -125,6 +125,8 @@ export interface Store {
   listOrgSessions(orgId: string): Promise<SessionRecord[]>;
   sessionInOrg(orgId: string, id: string): Promise<SessionRecord | null>;
   assignSession(orgId: string, id: string, assigneeUids: string[]): Promise<SessionRecord | null>;
+  /** Sets the label a session is shown by. Undefined clears it, so the command shows instead. */
+  renameSession(orgId: string, id: string, name: string | undefined): Promise<SessionRecord | null>;
   /**
    * Removes a session's record from an organization.
    *
@@ -184,6 +186,12 @@ export interface Store {
    */
   putTeamKeyShares(shares: TeamKeyShare[]): Promise<number>;
   deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean>;
+  /**
+   * Replaces one member's own copy of the current key with one they sealed to
+   * themselves. Only an existing copy of the same version is replaced, so it
+   * cannot be used to take a copy nobody gave them. False when there is none.
+   */
+  replaceOwnTeamKeyShare(share: TeamKeyShare): Promise<boolean>;
   /** Typed input still stored as plaintext, oldest first, for a team member to seal. */
   plaintextAudit(orgId: string, limit: number): Promise<AuditEvent[]>;
   /**

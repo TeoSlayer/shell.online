@@ -336,6 +336,53 @@ describe("session registry", () => {
   });
 });
 
+describe("GET /api/cli/sessions", () => {
+  const mine = {
+    id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+    share_url: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t#salt=AAAAAAAAAAAAAAAAAAAAAA",
+    command: "npm run dev",
+    name: "web app",
+    host: "ana-mbp",
+    encrypted: true,
+  };
+
+  it("lists every session this account published, with its name", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: mine });
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...mine, id: "Zm9vYmFyYmF6cXV4cXV1eDEyMzQ1Njc4", name: undefined, command: "htop" },
+    });
+    await call("PATCH", `/api/sessions/Zm9vYmFyYmF6cXV4cXV1eDEyMzQ1Njc4`, {
+      auth: tokens.access_token,
+      body: { exit_code: 0 },
+    });
+
+    const listed = await call("GET", "/api/cli/sessions", { auth: tokens.access_token });
+    expect(listed.status).toBe(200);
+    const byId = Object.fromEntries(
+      (listed.body.sessions as { id: string; closedAt?: number }[]).map((entry) => [entry.id, entry]),
+    );
+    expect(byId[mine.id]).toMatchObject({ name: "web app", command: "npm run dev", host: "ana-mbp" });
+    expect(byId.Zm9vYmFyYmF6cXV4cXV1eDEyMzQ1Njc4).toMatchObject({ command: "htop", exitCode: 0 });
+    expect(byId.Zm9vYmFyYmF6cXV4cXV1eDEyMzQ1Njc4.closedAt).toBeTypeOf("number");
+    expect(JSON.stringify(listed.body)).not.toContain("keyShares");
+  });
+
+  it("does not list another account's sessions", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: mine });
+    const other = await login({}, "uid-2");
+    const listed = await call("GET", "/api/cli/sessions", { auth: other.access_token });
+    expect(listed.body.sessions).toEqual([]);
+  });
+
+  it("needs a machine token, not a browser sign-in", async () => {
+    expect((await call("GET", "/api/cli/sessions")).status).toBe(401);
+    expect((await call("GET", "/api/cli/sessions", { auth: await idToken() })).status).toBe(401);
+  });
+});
+
 describe("refresh", () => {
   it("issues a working access token from the refresh token", async () => {
     const tokens = await login();
@@ -1281,6 +1328,45 @@ describe("session ownership and handoff", () => {
     });
     expect(colleagueView.body.session.keyShares).toBeUndefined();
     expect(colleagueView.body.session.sharedWith).toBeUndefined();
+  });
+
+  it("lets the owner rename a session, and a blank name clear it", async () => {
+    await orgWithColleague();
+    const renamed = await call("PUT", `/api/sessions/${session.id}/name`, {
+      auth: await idToken(),
+      body: { name: "  nightly build " },
+    });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.session.name).toBe("nightly build");
+    expect(renamed.body.session.keyShares).toBeUndefined();
+
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.name).toBe("nightly build");
+
+    const cleared = await call("PUT", `/api/sessions/${session.id}/name`, {
+      auth: await idToken(),
+      body: { name: "" },
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.session.name).toBeUndefined();
+  });
+
+  it("lets an assignee rename a session, and not a colleague who is not one", async () => {
+    const { colleague } = await orgWithColleague();
+    const path = `/api/sessions/${session.id}/name`;
+    expect((await call("PUT", path, { auth: colleague, body: { name: "mine" } })).status).toBe(403);
+    await call("PUT", `/api/sessions/${session.id}/assignee`, { auth: await idToken(), body: { uids: ["uid-2"] } });
+    const renamed = await call("PUT", path, { auth: colleague, body: { name: "handed over" } });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body.session.name).toBe("handed over");
+  });
+
+  it("keeps a name given in the browser when the machine re-registers", async () => {
+    const { tokens } = await orgWithColleague();
+    await call("PUT", `/api/sessions/${session.id}/name`, { auth: await idToken(), body: { name: "renamed" } });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.name).toBe("renamed");
   });
 
   it("allows a session to be left unassigned", async () => {
@@ -2446,6 +2532,35 @@ describe("team audit key", () => {
       body: { version: 2, shares: [{ uid: "uid-2", sealed: sealedCopy() }] },
     });
     expect(stale.status).toBe(409);
+  });
+
+  /*
+   * A member re-seals the copy a teammate sent them to themselves. Deleting it
+   * first and adding it back is refused, since by then they hold nothing, and
+   * that is how every member but the key's maker kept losing their copy.
+   */
+  it("lets a member replace only their own copy, and only while they hold one", async () => {
+    const colleague = await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }, { uid: "uid-2", sealed: sealedCopy() }]);
+    const mine = sealedCopy();
+    const replaced = await call("PUT", "/api/team-key/share", { auth: colleague, body: { version: 1, sealed: mine } });
+    expect(replaced.status).toBe(200);
+    const view = (await call("GET", "/api/team-key", { auth: colleague })).body.share;
+    expect(view).toEqual({ senderUid: "uid-2", sealed: mine, version: 1 });
+    /* The owner's copy is untouched. */
+    expect((await call("GET", "/api/team-key", { auth: await idToken() })).body.share.senderUid).toBe("uid-1");
+
+    await call("DELETE", "/api/team-key/share", { auth: colleague });
+    const afterDelete = await call("PUT", "/api/team-key/share", { auth: colleague, body: { version: 1, sealed: sealedCopy() } });
+    expect(afterDelete.status).toBe(403);
+    expect((await call("GET", "/api/team-key", { auth: colleague })).body.share).toBeNull();
+  });
+
+  it("refuses a replacement for a stale version or in the wrong shape", async () => {
+    const colleague = await withColleague();
+    await makeKey([{ uid: "uid-1", sealed: sealedCopy() }, { uid: "uid-2", sealed: sealedCopy() }]);
+    expect((await call("PUT", "/api/team-key/share", { auth: colleague, body: { version: 2, sealed: sealedCopy() } })).status).toBe(409);
+    expect((await call("PUT", "/api/team-key/share", { auth: colleague, body: { version: 1, sealed: "plain" } })).status).toBe(400);
   });
 
   it("lets a member delete only their own copy", async () => {

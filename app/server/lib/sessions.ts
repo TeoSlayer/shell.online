@@ -1,3 +1,4 @@
+import type { Membership } from "./orgs";
 import type { SessionRecord, Store } from "./store";
 
 export interface SessionInput {
@@ -57,6 +58,58 @@ export function sessionForApi(session: SessionRecord) {
   return { ...safe, origin: source.origin, deviceId: source.deviceId };
 }
 
+/** The longest label kept. Longer ones are cut, not refused. */
+export const SESSION_NAME_LIMIT = 120;
+
+/**
+ * A session label as it is stored: one line, trimmed, and bounded. Blank means
+ * no name at all, so the command is shown in its place.
+ */
+export function sessionName(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  /* A newline or escape in a label would break every list it appears in. */
+  const line = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  return line ? [...line].slice(0, SESSION_NAME_LIMIT).join("") : undefined;
+}
+
+/**
+ * Naming is housekeeping, not control over the machine, so it is open to the
+ * people responsible for the session: whoever started it, whoever it is
+ * assigned to, and whoever runs the team.
+ */
+export function mayRenameSession(membership: Membership, session: SessionRecord): boolean {
+  if ((session.ownerUid ?? session.uid) === membership.uid) return true;
+  if (membership.role === "owner" || membership.role === "admin") return true;
+  const assignees = session.assigneeUids?.length
+    ? session.assigneeUids
+    : session.assigneeUid
+      ? [session.assigneeUid]
+      : [];
+  return assignees.includes(membership.uid);
+}
+
+export async function renameSession(
+  store: Store,
+  membership: Membership,
+  sessionId: string,
+  name: unknown,
+): Promise<
+  | { ok: true; session: SessionRecord }
+  | { ok: false; status: number; error: string }
+> {
+  if (name !== null && name !== undefined && typeof name !== "string") {
+    return { ok: false, status: 400, error: "a name must be text" };
+  }
+  const session = await store.sessionInOrg(membership.orgId, sessionId);
+  if (!session) return { ok: false, status: 404, error: "no such session" };
+  if (!mayRenameSession(membership, session)) {
+    return { ok: false, status: 403, error: "only the session's owner, assignees or a team admin can rename it" };
+  }
+  const updated = await store.renameSession(membership.orgId, sessionId, sessionName(name));
+  if (!updated) return { ok: false, status: 404, error: "no such session" };
+  return { ok: true, session: updated };
+}
+
 export type RegisterResult =
   | { ok: true; session: SessionRecord; isNew: boolean }
   | { ok: false; reason: string };
@@ -91,9 +144,7 @@ export async function registerSession(
     assigneeUids: [input.ownerUid ?? uid],
     shareUrl: input.shareUrl,
     command: input.command.slice(0, 300),
-    name: typeof input.name === "string" && input.name.trim()
-      ? input.name.trim().slice(0, 120)
-      : undefined,
+    name: sessionName(input.name),
     /* Reuse the existing source column so this upgrade needs no schema race. */
     origin: packSource(input.origin, input.deviceId),
     readOnly: Boolean(input.readOnly),

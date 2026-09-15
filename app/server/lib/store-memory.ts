@@ -428,6 +428,11 @@ export class MemoryStore implements Store {
         ...existing,
         ...session,
         /*
+         * A restart that names nothing keeps the name somebody gave it, in
+         * the terminal or in the browser. Only a name it does send replaces it.
+         */
+        name: session.name ?? existing.name,
+        /*
          * A persistent session re-registers on every restart, carrying the
          * owner as assignee. Letting that through would silently undo a
          * handoff, so an assignment already made stands.
@@ -487,6 +492,15 @@ export class MemoryStore implements Store {
     if (!session) return null;
     session.assigneeUids = [...new Set(assigneeUids)];
     session.assigneeUid = session.assigneeUids[0];
+    this.flush();
+    return session;
+  }
+
+  async renameSession(orgId: string, id: string, name: string | undefined): Promise<SessionRecord | null> {
+    const session = await this.sessionInOrg(orgId, id);
+    if (!session) return null;
+    if (name === undefined) delete session.name;
+    else session.name = name;
     this.flush();
     return session;
   }
@@ -731,6 +745,16 @@ export class MemoryStore implements Store {
     }
     if (written > 0) this.flush();
     return written;
+  }
+
+  async replaceOwnTeamKeyShare(share: TeamKeyShare): Promise<boolean> {
+    const index = this.data.teamKeyShares.findIndex(
+      (entry) => entry.orgId === share.orgId && entry.uid === share.uid && entry.version === share.version,
+    );
+    if (index < 0) return false;
+    this.data.teamKeyShares[index] = { ...share };
+    this.flush();
+    return true;
   }
 
   async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {

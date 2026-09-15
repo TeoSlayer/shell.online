@@ -207,6 +207,78 @@
   align-items: start;
 }
 
+.detail-title {
+  display: flex;
+  min-width: 0;
+  margin-bottom: 12px;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-name {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-name-edit {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.detail-name-edit:hover,
+.detail-name-edit:focus-visible {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+
+.detail-rename {
+  display: flex;
+  margin-bottom: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.detail-rename input {
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  outline: 0;
+  background: var(--white);
+  color: var(--ink);
+  flex: 1 1 220px;
+  font-family: var(--sans);
+  font-size: 16px;
+}
+
+.detail-rename input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.detail-rename .btn {
+  width: auto;
+  height: 44px;
+  min-width: 96px;
+}
+
 .detail-head {
   display: flex;
   padding-bottom: 16px;

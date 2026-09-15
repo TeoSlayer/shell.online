@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   PaperPlaneTilt,
+  PencilSimple,
   Stop as StopIcon,
   Terminal as TerminalIcon,
   Trash,
@@ -21,6 +22,7 @@ import {
   deleteSession,
   fetchSession,
   postComment,
+  renameSession,
   stopSession,
   type Comment,
   type Member,
@@ -29,7 +31,7 @@ import {
 import { splitMentions } from "../lib/mentions";
 import { displayName, findPerson } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
-import { assigneeIds, canRemove, canStop } from "../lib/session-view";
+import { assigneeIds, canRemove, canRename, canStop } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
 import { useVault } from "../vault/VaultProvider";
 import { shareWith } from "../vault/share-with";
@@ -77,6 +79,8 @@ export function Session() {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [working, setWorking] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState("");
   const composer = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
   const assignmentRevision = useRef(0);
@@ -174,6 +178,37 @@ export function Session() {
     }
   }
 
+  function startRename() {
+    if (!detail) return;
+    setDraftName(detail.session.name ?? "");
+    setRenaming(true);
+  }
+
+  /*
+   * Saved as typed. A blank name clears it, and the session is shown by its
+   * command again, which is what every session without one already does.
+   */
+  async function handleRename(event: FormEvent) {
+    event.preventDefault();
+    if (!detail) return;
+    const name = draftName.trim();
+    if (name === (detail.session.name ?? "")) {
+      setRenaming(false);
+      return;
+    }
+    setWorking("rename");
+    setError("");
+    try {
+      const { session: updated } = await renameSession(detail.session.id, name);
+      setDetail((current) => current ? { ...current, session: { ...current.session, name: updated.name } } : current);
+      setRenaming(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not rename that session.");
+    } finally {
+      setWorking("");
+    }
+  }
+
   async function handleComment(event: FormEvent) {
     event.preventDefault();
     const body = draft.trim();
@@ -247,6 +282,43 @@ export function Session() {
     >
       <div className="detail">
         <section className="detail-main">
+          {renaming ? (
+            <form className="detail-rename" onSubmit={handleRename}>
+              <input
+                value={draftName}
+                onChange={(event) => setDraftName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setRenaming(false);
+                }}
+                placeholder={session.command}
+                maxLength={120}
+                aria-label="Session name"
+                autoFocus
+              />
+              <Button type="submit" busy={working === "rename"} busyLabel="Saving">
+                Save
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setRenaming(false)}>
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            <div className="detail-title">
+              <h2 className="detail-name">{session.name || session.command}</h2>
+              {canRename(session, you) && (
+                <button
+                  type="button"
+                  className="detail-name-edit"
+                  onClick={startRename}
+                  aria-label="Rename session"
+                  title="Rename"
+                >
+                  <PencilSimple size={16} />
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="detail-head">
             <span className={online ? "detail-status is-live" : "detail-status"}>
               {sessionStateLabel(session)}

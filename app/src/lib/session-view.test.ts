@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canEdit, canRemove, canStop, cleanupCandidates, matches } from "./session-view";
+import { canEdit, canRemove, canRename, canStop, cleanupCandidates, matches } from "./session-view";
 import type { Member, SessionRecord } from "./api";
 
 function session(over: Partial<SessionRecord> = {}): SessionRecord {
@@ -133,5 +133,19 @@ describe("bulk cleanup", () => {
     expect(cleanupCandidates([own, theirs], member()).map((entry) => entry.id)).toEqual(["own"]);
     expect(cleanupCandidates([own, theirs], member({ role: "admin" })).map((entry) => entry.id))
       .toEqual(["own", "theirs"]);
+  });
+});
+
+describe("who may rename a session", () => {
+  it("is the owner, an assignee, or whoever runs the team", () => {
+    expect(canRename(session({ ownerUid: "uid-1" }), member())).toBe(true);
+    expect(canRename(session({ ownerUid: "uid-2", assigneeUids: ["uid-1"] }), member())).toBe(true);
+    expect(canRename(session({ ownerUid: "uid-2" }), member({ role: "admin" }))).toBe(true);
+    expect(canRename(session({ ownerUid: "uid-2" }), member({ role: "owner" }))).toBe(true);
+  });
+
+  it("is not a colleague with no part in it, or nobody at all", () => {
+    expect(canRename(session({ ownerUid: "uid-2", assigneeUids: ["uid-3"] }), member())).toBe(false);
+    expect(canRename(session(), null)).toBe(false);
   });
 });

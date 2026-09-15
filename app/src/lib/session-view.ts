@@ -38,6 +38,21 @@ export function canHandOff(session: SessionRecord, you: Member | null): boolean 
 }
 
 /*
+ * Naming a session is housekeeping, not control over the machine, so the
+ * people responsible for it may do it: whoever started it, whoever it is
+ * assigned to, and whoever runs the team. The service applies the same rule.
+ */
+export function canRename(session: SessionRecord, you: Member | null): boolean {
+  if (!you) return false;
+  return (
+    session.ownerUid === you.uid ||
+    assigneeIds(session).includes(you.uid) ||
+    you.role === "owner" ||
+    you.role === "admin"
+  );
+}
+
+/*
  * Removing the row is not stopping the process, so it is not tied to owning
  * the machine. The person whose session it is can tidy their own list, and
  * whoever runs the team can tidy anybody's.

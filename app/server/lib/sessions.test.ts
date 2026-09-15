@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import type { Store } from "./store";
-import { closeSession, listSessions, registerSession, sessionForApi, sessionSource } from "./sessions";
+import {
+  closeSession,
+  listSessions,
+  mayRenameSession,
+  registerSession,
+  renameSession,
+  sessionForApi,
+  sessionName,
+  sessionSource,
+} from "./sessions";
+import type { Membership } from "./orgs";
 
 const valid = {
   id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
@@ -108,5 +118,62 @@ describe("closeSession", () => {
 
   it("returns null for an unknown session", async () => {
     expect(await closeSession(store, "uid-1", "NOPEnopeNOPEnopeNOPEnopeNOPEnope", 0)).toBeNull();
+  });
+});
+
+describe("sessionName", () => {
+  it("trims, and treats blank as no name", () => {
+    expect(sessionName("  deploy  ")).toBe("deploy");
+    expect(sessionName("   ")).toBeUndefined();
+    expect(sessionName(undefined)).toBeUndefined();
+    expect(sessionName(42)).toBeUndefined();
+  });
+
+  it("keeps a label on one line", () => {
+    expect(sessionName("fix\nthe\tbuild\u001b[31m")).toBe("fix the build [31m");
+  });
+
+  it("cuts an over-long label without splitting a character", () => {
+    const name = sessionName("\u{1F680}".repeat(200));
+    expect([...(name ?? "")]).toHaveLength(120);
+  });
+});
+
+describe("renameSession", () => {
+  function member(over: Partial<Membership> = {}): Membership {
+    return { orgId: "org_1", uid: "uid-1", email: "ana@example.com", name: "Ana", role: "member", joinedAt: 1, ...over };
+  }
+
+  async function registered() {
+    const result = await registerSession(store, "uid-1", { ...valid, orgId: "org_1", ownerUid: "uid-1" });
+    if (!result.ok) throw new Error("expected ok");
+    return result.session;
+  }
+
+  it("lets the owner, an assignee and a team admin rename, and nobody else", async () => {
+    const session = await registered();
+    expect(mayRenameSession(member(), session)).toBe(true);
+    expect(mayRenameSession(member({ uid: "uid-2", role: "admin" }), session)).toBe(true);
+    expect(mayRenameSession(member({ uid: "uid-2" }), session)).toBe(false);
+    expect(mayRenameSession(member({ uid: "uid-2" }), { ...session, assigneeUids: ["uid-2"] })).toBe(true);
+  });
+
+  it("stores the cleaned name, and clears it when blank", async () => {
+    await registered();
+    const renamed = await renameSession(store, member(), valid.id, "  deploy  ");
+    expect(renamed).toMatchObject({ ok: true, session: { name: "deploy" } });
+    const cleared = await renameSession(store, member(), valid.id, "");
+    expect(cleared.ok && cleared.session.name).toBeUndefined();
+  });
+
+  it("refuses a colleague who is not responsible for it", async () => {
+    await registered();
+    expect(await renameSession(store, member({ uid: "uid-2" }), valid.id, "mine")).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("refuses a name that is not text, and an unknown session", async () => {
+    await registered();
+    expect(await renameSession(store, member(), valid.id, 7)).toMatchObject({ ok: false, status: 400 });
+    expect(await renameSession(store, member(), "unknownSession01", "x")).toMatchObject({ ok: false, status: 404 });
   });
 });

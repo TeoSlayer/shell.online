@@ -709,6 +709,9 @@ export class PostgresStore implements Store {
      * A persistent session re-registers on every restart, carrying the owner
      * as assignee. Letting that through would silently undo a handoff, so an
      * assignment already made stands.
+     *
+     * A restart that names nothing keeps the name somebody gave it, in the
+     * terminal or in the browser. Only a name it does send replaces it.
      */
     const row = await this.row(
       `INSERT INTO sessions
@@ -723,7 +726,7 @@ export class PostgresStore implements Store {
          share_url = EXCLUDED.share_url,
          command = EXCLUDED.command,
          origin = EXCLUDED.origin,
-         name = EXCLUDED.name,
+         name = COALESCE(EXCLUDED.name, sessions.name),
          read_only = EXCLUDED.read_only,
          encrypted = EXCLUDED.encrypted,
          persistent = EXCLUDED.persistent,
@@ -850,6 +853,18 @@ export class PostgresStore implements Store {
        WHERE org_id = $1 AND id = $2
        RETURNING *`,
       [orgId, id, assigneeUids[0] ?? null, assigneeUids],
+    );
+    return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  async renameSession(
+    orgId: string,
+    id: string,
+    name: string | undefined,
+  ): Promise<SessionRecord | null> {
+    const row = await this.row(
+      `UPDATE sessions SET name = $3 WHERE org_id = $1 AND id = $2 RETURNING *`,
+      [orgId, id, name ?? null],
     );
     return row ? (await this.hydrate([row]))[0] : null;
   }
@@ -1374,6 +1389,17 @@ export class PostgresStore implements Store {
       written += result.rowCount ?? 0;
     }
     return written;
+  }
+
+  /* One conditional update, so a copy that is not there is never created. */
+  async replaceOwnTeamKeyShare(share: TeamKeyShare): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE team_key_shares
+       SET sender_uid = $4, sealed = $5, created_at = $6
+       WHERE org_id = $1 AND uid = $2 AND version = $3`,
+      [share.orgId, share.uid, share.version, share.senderUid, share.sealed, share.createdAt],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async deleteTeamKeyShare(orgId: string, uid: string): Promise<boolean> {

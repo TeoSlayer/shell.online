@@ -399,6 +399,23 @@ for (const implementation of implementations) {
         expect((await store.sessionInOrg("org_1", "s1"))?.assigneeUid).toBe("uid-2");
       });
 
+      it("keeps a name when a re-register sends none, and takes one it does send", async () => {
+        await store.upsertSession(session({ name: "nightly build" }));
+        await store.upsertSession(session());
+        expect((await store.sessionInOrg("org_1", "s1"))?.name).toBe("nightly build");
+        await store.upsertSession(session({ name: "release build" }));
+        expect((await store.sessionInOrg("org_1", "s1"))?.name).toBe("release build");
+      });
+
+      it("renames a session, and clears the name when given none", async () => {
+        await store.upsertSession(session());
+        expect((await store.renameSession("org_1", "s1", "deploy"))?.name).toBe("deploy");
+        expect((await store.sessionInOrg("org_1", "s1"))?.name).toBe("deploy");
+        expect((await store.renameSession("org_1", "s1", undefined))?.name).toBeUndefined();
+        expect((await store.sessionInOrg("org_1", "s1"))?.name).toBeUndefined();
+        expect(await store.renameSession("org_2", "s1", "elsewhere")).toBeNull();
+      });
+
       it("keeps multiple assignees, including an intentional empty set", async () => {
         await store.upsertSession(session());
         await store.assignSession("org_1", "s1", ["uid-1", "uid-2"]);
@@ -601,6 +618,19 @@ for (const implementation of implementations) {
         expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(true);
         expect(await store.deleteTeamKeyShare("org_1", "uid-1")).toBe(false);
         expect(await store.deleteTeamKeyShare("org_2", "uid-2")).toBe(false);
+        expect((await store.teamKeyShares("org_1")).map((entry) => entry.uid)).toEqual(["uid-2"]);
+      });
+
+      it("replaces only an existing copy of the same version", async () => {
+        await store.putTeamKey({ orgId: "org_1", publicKey: "pk", version: 1, createdBy: "uid-1", createdAt: 1000 });
+        await store.putTeamKeyShares([
+          { orgId: "org_1", uid: "uid-2", version: 1, senderUid: "uid-1", sealed: "t1.first", createdAt: 1000 },
+        ]);
+        const own = { orgId: "org_1", uid: "uid-2", version: 1, senderUid: "uid-2", sealed: "t1.own", createdAt: 2000 };
+        expect(await store.replaceOwnTeamKeyShare(own)).toBe(true);
+        expect((await store.teamKeyShares("org_1"))[0]).toMatchObject({ senderUid: "uid-2", sealed: "t1.own" });
+        expect(await store.replaceOwnTeamKeyShare({ ...own, version: 2 })).toBe(false);
+        expect(await store.replaceOwnTeamKeyShare({ ...own, uid: "uid-3" })).toBe(false);
         expect((await store.teamKeyShares("org_1")).map((entry) => entry.uid)).toEqual(["uid-2"]);
       });
 
