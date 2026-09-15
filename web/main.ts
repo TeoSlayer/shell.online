@@ -184,15 +184,30 @@ function renderLanding(): void {
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
             <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you a link and password to the same encrypted terminal—open it from any desktop or phone to watch or type.</p>
             <div class="hero-actions">
-              <a class="hero-signup" href="${SIGNUP_URL}" data-cta="signup_hero">
-                <b>Sign up free</b>
-                <span aria-hidden="true">→</span>
-              </a>
-              <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
-                <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
-                <code>${installCommand}</code>
-                <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
-              </button>
+              <ol class="hero-steps" aria-label="Get started in two steps">
+                <li class="hero-step hero-step-account">
+                  <span class="hero-step-marker" aria-hidden="true">1</span>
+                  <p class="hero-step-label">Step 1 <i aria-hidden="true">·</i> Create your account</p>
+                  <div class="hero-step-body">
+                    <a class="hero-signup" href="${SIGNUP_URL}" data-cta="signup_hero">
+                      <b>Sign up free</b>
+                      <span aria-hidden="true">→</span>
+                    </a>
+                  </div>
+                </li>
+                <li class="hero-step hero-step-cli">
+                  <span class="hero-step-marker" aria-hidden="true">2</span>
+                  <p class="hero-step-label">Step 2 <i aria-hidden="true">·</i> Install the CLI</p>
+                  <div class="hero-step-body">
+                    <p class="hero-step-note">You will also need to install the shell CLI for terminal creation.</p>
+                    <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
+                      <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
+                      <code>${installCommand}</code>
+                      <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
+                    </button>
+                  </div>
+                </li>
+              </ol>
               <div class="hero-secondary-actions">
                 <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
               </div>

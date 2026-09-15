@@ -60,6 +60,14 @@ check(landingMarkup.includes('id="use-cases"'), "Visible use-case section is mis
 check(landingMarkup.includes('class="hero-signup" href="${SIGNUP_URL}"'), "Hero account button is missing");
 check(landingMarkup.includes('class="nav-signup" href="${SIGNUP_URL}"'), "Header account button is missing");
 check(indexHtml.includes("https://app.shell.online/signup"), "No-script account link is missing");
+check(
+  landingMarkup.includes('class="hero-step hero-step-account"') && landingMarkup.includes('class="hero-step hero-step-cli"'),
+  "Hero must number the account and CLI steps",
+);
+check(
+  landingMarkup.includes("You will also need to install the shell CLI for terminal creation."),
+  "Hero must say the CLI is still needed after signing up",
+);
 
 for (const metadata of [
   '<meta property="og:type" content="website"',
