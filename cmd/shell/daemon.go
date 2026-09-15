@@ -10,6 +10,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -311,6 +313,18 @@ func stopDaemon() {
 // is not signed in, or whose owner did not agree to remote starts, gets
 // nothing: this is the one place that decides a background process may exist,
 // and it says no by default.
+// isGoTestBinary reports whether this process is a compiled Go test.
+//
+// Starting a daemon means running this executable again with "daemon". Under
+// go test that executable is the test binary, which runs the whole suite
+// instead, whose tests start daemons of their own: a fork bomb that took a
+// development machine to a load average of 500. A test binary is never a
+// daemon, so it never starts one.
+func isGoTestBinary(executable string) bool {
+	name := strings.TrimSuffix(filepath.Base(executable), ".exe")
+	return strings.HasSuffix(name, ".test")
+}
+
 func ensureDaemon() {
 	path, err := account.DefaultPath()
 	if err != nil {
@@ -325,6 +339,9 @@ func ensureDaemon() {
 	}
 	self, err := os.Executable()
 	if err != nil {
+		return
+	}
+	if isGoTestBinary(self) {
 		return
 	}
 	startDetachedDaemon(self)
@@ -361,6 +378,9 @@ func restartDaemon() {
 	}
 	self, err := os.Executable()
 	if err != nil {
+		return
+	}
+	if isGoTestBinary(self) {
 		return
 	}
 	startDetachedDaemon(self)

@@ -16,6 +16,16 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- `shell --name <name> <command>` labels a session as it starts. The name
+  appears on the start card, in `shell list`, and in the web app, and is kept
+  when a persistent session restarts without one.
+- `shell ls` lists the sessions in your account from every linked machine,
+  with name, status, uptime, and machine. Ended sessions are counted and
+  hidden unless `--all` is given; `--json` prints the full records without
+  passwords.
+- Sessions can be renamed from their page in the web app with the pencil next
+  to the name, by the session's owner, its assignees, or a team admin. A blank
+  name falls back to the command.
 - A Download my data action on Account exports the signed-in account,
   membership, linked machines, owned or assigned sessions, and encrypted vault
   record as a local JSON file.
@@ -70,6 +80,20 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Every member of a team can now read the audit log. A member who opened the
+  copy of the team's audit key a teammate sealed for them re-sealed it to
+  themselves by deleting it and adding it back, which the service refuses,
+  because only a member holding a copy may store one. The copy is now replaced
+  in one step, so it is no longer lost on the next check and the key reaches
+  everyone, automatically, with nothing to paste.
+- The vault on the Account page lists teammates still waiting for the audit
+  key, and asks before sealing it to a teammate whose vault key has changed.
+- The audit log says when a locked vault, or no vault at all, is what stands
+  between the reader and the log, and offers to unlock it there.
+- The session terminal is drawn directly on the app background, with no
+  bordered panel, and its colors follow the light and dark themes. The
+  renderer choice is a tab hanging from the tab line over the terminal's
+  corner instead of a control inside the tab strip.
 - Widened the vault password fields on the vault setup, unlock, and Account
   pages to twice their previous width, so a password is no longer typed into a
   box sized for the four-letter recovery-key confirmation.
