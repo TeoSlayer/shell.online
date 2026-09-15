@@ -4,9 +4,18 @@ The optional React app behind `app.shell.online`. It provides accounts,
 organizations, linked machines, session lists, comments, and browser-started
 sessions. The CLI and relay work without it.
 
+Sign-in is Authorization Code with PKCE against any OpenID Connect provider —
+Keycloak, Authelia, Zitadel, Dex, Auth0 or Google. Registration, passwords,
+password reset and email verification belong to the provider, so this app
+never sees a password and has no screens for them.
+
+The provider needs one public client, PKCE with S256, whose redirect URI is
+`<WEB_ORIGIN>/auth/callback` and whose allowed web origin is `<WEB_ORIGIN>` —
+the second is what lets the hidden iframe renew a session before it expires.
+
 ## Local development
 
-Requirements: Node.js 22, npm, Firebase Authentication, and PostgreSQL for
+Requirements: Node.js 22, npm, an OpenID Connect provider, and PostgreSQL for
 database-backed tests.
 
 ```sh
@@ -31,11 +40,15 @@ npm run test:pg
 
 ## Configuration
 
-The client reads `VITE_FIREBASE_*` at build time. The server uses:
+The client reads `VITE_OIDC_ISSUER` and `VITE_OIDC_CLIENT_ID` at build time.
+The server uses:
 
 | Variable | Purpose |
 |---|---|
-| `FIREBASE_PROJECT_ID` | Firebase project accepted by the API |
+| `OIDC_ISSUER` | The provider whose ID tokens are accepted; falls back to `VITE_OIDC_ISSUER` |
+| `OIDC_AUDIENCE` | The `aud` tokens must carry, normally the client id; falls back to `OIDC_CLIENT_ID` |
+| `OIDC_JWKS_URI` | Optional. Discovered from the issuer when absent |
+| `FIREBASE_PROJECT_ID` | Legacy shorthand for a Firebase issuer and audience |
 | `DATABASE_URL` | PostgreSQL connection string; required in production |
 | `WEB_ORIGIN` | Public origin used for CORS and links |
 | `RELAY_URL` | Relay proxied through `/relay/*` |

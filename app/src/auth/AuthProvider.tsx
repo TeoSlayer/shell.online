@@ -8,100 +8,84 @@ import {
   type ReactNode,
 } from "react";
 import {
-  createUserWithEmailAndPassword,
-  deleteUser,
-  EmailAuthProvider,
-  onAuthStateChanged,
-  reauthenticateWithCredential,
-  reauthenticateWithPopup,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-  updateProfile,
-  type User,
-} from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
+  reauthenticate,
+  startSignIn,
+  toAuthUser,
+  userManager,
+  type AuthUser,
+} from "../lib/oidc";
 import { deleteAccountData } from "../lib/api";
 import { forgetAll, setPasswordOwner } from "../lib/session-passwords";
 import { clearLocalVault } from "../lib/vault-store";
 import { forgetOpenTabs } from "../terminal/tab-store";
 
 interface AuthValue {
-  user: User | null;
-  /* True until the first onAuthStateChanged fires, so guards do not flash. */
+  user: AuthUser | null;
+  /* True until the stored session has been read, so guards do not flash. */
   initializing: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>;
-  resendVerification: () => Promise<void>;
+  /** Leaves the app for the provider; resolves only if the redirect fails. */
+  signIn: (returnTo?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   /**
-   * Deletes the account from shell.online and from Firebase. Signs in again
-   * first: with the password for an email account, a Google popup otherwise.
+   * Deletes the account from shell.online. Signs in again at the provider
+   * first, so the service sees a fresh sign-in; the identity itself lives at
+   * the provider and is removed there.
    */
-  deleteAccount: (confirmEmail: string, password?: string) => Promise<void>;
+  deleteAccount: (confirmEmail: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (next) => {
+    let live = true;
+
+    const apply = (next: AuthUser | null) => {
+      if (!live) return;
       /* Scope any stored session password to whoever is signed in now. */
       setPasswordOwner(next?.uid ?? "");
       setUser(next);
-      setInitializing(false);
-    });
-    return unsubscribe;
+    };
+
+    /*
+     * The stored session is read once at startup; after that the manager's
+     * events are the only thing that changes it. A renewal that fails ends
+     * the session here rather than leaving a signed-in shell whose every
+     * request is refused.
+     */
+    void userManager
+      .getUser()
+      .then((found) => apply(found && !found.expired ? toAuthUser(found) : null))
+      .catch(() => apply(null))
+      .finally(() => {
+        if (live) setInitializing(false);
+      });
+
+    const onLoaded = (next: Parameters<Parameters<typeof userManager.events.addUserLoaded>[0]>[0]) =>
+      apply(toAuthUser(next));
+    const onUnloaded = () => apply(null);
+    const onExpired = () => apply(null);
+    const onRenewError = () => apply(null);
+
+    userManager.events.addUserLoaded(onLoaded);
+    userManager.events.addUserUnloaded(onUnloaded);
+    userManager.events.addAccessTokenExpired(onExpired);
+    userManager.events.addSilentRenewError(onRenewError);
+
+    return () => {
+      live = false;
+      userManager.events.removeUserLoaded(onLoaded);
+      userManager.events.removeUserUnloaded(onUnloaded);
+      userManager.events.removeAccessTokenExpired(onExpired);
+      userManager.events.removeSilentRenewError(onRenewError);
+    };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email.trim(), password);
-  }, []);
-
-  const signUp = useCallback(
-    async (name: string, email: string, password: string) => {
-      const credential = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password,
-      );
-      const displayName = name.trim();
-      if (displayName) {
-        await updateProfile(credential.user, { displayName });
-      }
-      /*
-       * Verification is best-effort. A throttled send must not strand a user
-       * who already has a working account, so failures are swallowed here and
-       * surfaced later through the resend action on the account screen.
-       */
-      try {
-        await sendEmailVerification(credential.user);
-      } catch {
-        /* resend is available from the account screen */
-      }
-      setUser({ ...credential.user } as User);
-    },
-    [],
-  );
-
-  const signInWithGoogle = useCallback(async () => {
-    await signInWithPopup(auth, googleProvider);
-  }, []);
-
-  const resetPassword = useCallback(async (email: string) => {
-    await sendPasswordResetEmail(auth, email.trim());
-  }, []);
-
-  const resendVerification = useCallback(async () => {
-    if (!auth.currentUser) throw new Error("Sign in first.");
-    await sendEmailVerification(auth.currentUser);
+  const signIn = useCallback(async (returnTo?: string) => {
+    await startSignIn({ returnTo });
   }, []);
 
   const signOutUser = useCallback(async () => {
@@ -114,67 +98,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      * to whoever signs in next, and they are only a cache now: the vault holds
      * the copies that matter.
      */
-    const current = auth.currentUser;
-    if (current) await clearLocalVault(current.uid);
-    await signOut(auth);
+    const current = await userManager.getUser();
+    if (current) await clearLocalVault(current.profile.sub);
+    /*
+     * Ending the provider's session too, not only this app's: a sign-out that
+     * left the provider's cookie in place would sign the same person straight
+     * back in on the next click, which does not look like signing out.
+     */
+    try {
+      await userManager.signoutRedirect();
+    } catch {
+      /*
+       * A provider with no end-session endpoint, or one that is unreachable,
+       * must not leave someone stuck signed in. Dropping the local session is
+       * the part this app can always do.
+       */
+      await userManager.removeUser();
+    }
   }, []);
 
-  const deleteAccount = useCallback(async (confirmEmail: string, password?: string) => {
-    const current = auth.currentUser;
-    if (!current) throw new Error("Sign in first.");
+  const deleteAccount = useCallback(async (confirmEmail: string) => {
+    const current = await userManager.getUser();
+    if (!current || current.expired) throw new Error("Sign in first.");
+    const uid = current.profile.sub;
     /*
      * Proof of presence before anything is deleted. The service refuses a
-     * sign-in older than ten minutes and Firebase refuses to delete a user
-     * after about five, so signing in again here, first, means neither can
-     * refuse halfway through.
+     * sign-in older than ten minutes, so this asks the provider for a fresh
+     * one — `prompt=login`, so it is a real sign-in and not the session
+     * cookie handed back. The password, if there is one, is typed at the
+     * provider; this app has no field for it to type into.
      */
-    if (current.providerData.some((entry) => entry.providerId === "password")) {
-      if (!password) throw new Error("Enter your password.");
-      await reauthenticateWithCredential(
-        current,
-        EmailAuthProvider.credential(current.email ?? "", password),
-      );
-    } else {
-      await reauthenticateWithPopup(current, googleProvider);
-    }
-    /* A token that carries the sign-in that just happened. */
-    await current.getIdToken(true);
+    await reauthenticate();
     /*
-     * The service first, then the sign-in. The other order, interrupted,
+     * The service first, then the local state. The other order, interrupted,
      * would leave data behind for an account nobody can sign in to again.
      * This one leaves an empty account, and deleting it again finishes the
      * job: the service treats a second request as nothing left to remove.
      */
     await deleteAccountData(confirmEmail);
     forgetAll();
-    forgetOpenTabs(current.uid);
-    await clearLocalVault(current.uid);
-    await deleteUser(current);
+    forgetOpenTabs(uid);
+    await clearLocalVault(uid);
+    /*
+     * The identity is the provider's, not this app's: a public PKCE client
+     * has no standing to delete a user, and nothing in OpenID Connect lets it
+     * ask. So the session ends here and the account itself is removed
+     * wherever it lives — which is also where it can be removed from every
+     * other application that uses it.
+     */
+    await userManager.removeUser();
   }, []);
 
   const value = useMemo(
-    () => ({
-      user,
-      initializing,
-      signIn,
-      signUp,
-      signInWithGoogle,
-      resetPassword,
-      resendVerification,
-      signOutUser,
-      deleteAccount,
-    }),
-    [
-      user,
-      initializing,
-      signIn,
-      signUp,
-      signInWithGoogle,
-      resetPassword,
-      resendVerification,
-      signOutUser,
-      deleteAccount,
-    ],
+    () => ({ user, initializing, signIn, signOutUser, deleteAccount }),
+    [user, initializing, signIn, signOutUser, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

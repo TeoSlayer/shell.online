@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./firebase", () => ({
-  auth: { currentUser: { getIdToken: async () => "id-token" } },
+vi.mock("./oidc", () => ({
+  userManager: { getUser: async () => ({ id_token: "id-token", expired: false }) },
 }));
 
 import { fetchDevices, NETWORK_FAILURE, SERVER_FAILURE } from "./api";

@@ -1,18 +1,7 @@
 import { readFileSync } from "node:fs";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
-import { BROWSER_SECURITY_HEADERS } from "./server/lib/browser-headers.ts";
-
-/*
- * Cross-Origin-Opener-Policy: signInWithPopup polls window.closed on the
- * Google window. Under the default COOP the browser severs that handle and
- * logs "Cross-Origin-Opener-Policy policy would block the window.closed
- * call", so the popup never resolves cleanly. same-origin-allow-popups keeps
- * the isolation while letting the opener keep its handle.
- *
- * Whatever serves the production build must send the same header.
- */
-const authHeaders = BROWSER_SECURITY_HEADERS;
+import { browserSecurityHeaders } from "./server/lib/browser-headers.ts";
 
 /*
  * The product version, from the repository's package.json rather than this
@@ -41,6 +30,14 @@ export default defineConfig(({ mode }) => {
   } catch {
     throw new Error(`VITE_RELAY_URL is not a URL: ${JSON.stringify(env.VITE_RELAY_URL)}`);
   }
+
+  /*
+   * The dev and preview servers send the same policy the production servers
+   * do, built around the same provider, so a sign-in that the policy would
+   * block fails here rather than only after a deploy. Whatever serves the
+   * production build must send these headers too.
+   */
+  const authHeaders = browserSecurityHeaders(env.VITE_OIDC_ISSUER?.trim());
 
   return {
     plugins: [react()],

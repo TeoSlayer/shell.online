@@ -18,6 +18,59 @@ describe("readConfig", () => {
     expect(readConfig({ VITE_FIREBASE_PROJECT_ID: "p" }).projectId).toBe("p");
   });
 
+  it("spells a Firebase project as the issuer it actually is", () => {
+    expect(readConfig({ FIREBASE_PROJECT_ID: "p" }).identity).toEqual({
+      issuer: "https://securetoken.google.com/p",
+      audience: "p",
+      jwksUri:
+        "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+    });
+  });
+
+  it("takes any OpenID issuer, and prefers it to a leftover Firebase project", () => {
+    const config = readConfig({
+      ...MINIMAL,
+      OIDC_ISSUER: "https://auth.example.test/realms/shell",
+      OIDC_CLIENT_ID: "shell-online-app",
+    });
+    expect(config.identity).toEqual({
+      issuer: "https://auth.example.test/realms/shell",
+      audience: "shell-online-app",
+      jwksUri: undefined,
+    });
+    expect(config.projectId).toBe("");
+  });
+
+  /* A trailing slash is a paste artefact and is never part of `iss`. */
+  it("trims a trailing slash from the issuer", () => {
+    const config = readConfig({
+      OIDC_ISSUER: "https://auth.example.test/realms/shell/",
+      OIDC_AUDIENCE: "a",
+    });
+    expect(config.identity.issuer).toBe("https://auth.example.test/realms/shell");
+  });
+
+  it("refuses an issuer without an audience, which would accept another app's tokens", () => {
+    expect(() => readConfig({ OIDC_ISSUER: "https://auth.example.test/realms/shell" })).toThrow(
+      /OIDC_AUDIENCE/,
+    );
+  });
+
+  it("refuses an issuer that is not a URL", () => {
+    expect(() => readConfig({ OIDC_ISSUER: "auth.example.test", OIDC_AUDIENCE: "a" })).toThrow(
+      /OIDC_ISSUER/,
+    );
+  });
+
+  it("takes an explicit key set, for a provider that publishes one elsewhere", () => {
+    const config = readConfig({
+      OIDC_ISSUER: "https://auth.example.test/realms/shell",
+      OIDC_AUDIENCE: "a",
+      OIDC_JWKS_URI: "https://auth.example.test/keys",
+    });
+    expect(config.identity.jwksUri).toBe("https://auth.example.test/keys");
+  });
+
   it("refuses a port that is not one", () => {
     expect(() => readConfig({ ...MINIMAL, PORT: "http" })).toThrow(/PORT/);
     expect(() => readConfig({ ...MINIMAL, PORT: "70000" })).toThrow(/PORT/);

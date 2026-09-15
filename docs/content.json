@@ -138,7 +138,7 @@
         ],
         [
           "Authentication and hosting",
-          "The hosted app uses Firebase Authentication and PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/."
+          "The hosted app signs people in through an OpenID Connect provider and stores its data in PostgreSQL, and the terminal relay remains independent. The app can also run as an optional self-hosted service from app/."
         ]
       ],
       "diagrams": [
@@ -864,7 +864,7 @@
         ],
         [
           "Optional accounts app",
-          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and currently uses Firebase Authentication plus PostgreSQL."
+          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and signs people in through any OpenID Connect provider, with PostgreSQL behind it."
         ],
         [
           "Cloudflare deployment remains available",

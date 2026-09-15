@@ -1,39 +1,12 @@
-import { FirebaseError } from "firebase/app";
-
 /*
- * Firebase error codes are not user-facing copy. Map the ones a person can
- * actually trigger to plain sentences, and keep a readable fallback for the
- * rest rather than leaking "auth/internal-error" into the UI.
+ * Sign-in happens at the identity provider, so the errors this app can show
+ * are the ones raised getting there and back: a provider that is unreachable,
+ * a callback that did not complete, a session that has gone. The provider
+ * shows its own messages for a wrong password, an unknown account, or a
+ * registration it refused, on its own page.
  */
-const MESSAGES: Record<string, string> = {
-  "auth/invalid-email": "That does not look like a valid email address.",
-  "auth/missing-password": "Enter your password.",
-  "auth/invalid-credential": "That email and password do not match an account.",
-  "auth/wrong-password": "That email and password do not match an account.",
-  "auth/user-not-found": "That email and password do not match an account.",
-  "auth/user-disabled": "This account has been disabled. Contact support to reopen it.",
-  "auth/email-already-in-use": "An account already uses that email. Sign in instead.",
-  "auth/weak-password": "Pick a password with at least 8 characters.",
-  "auth/too-many-requests":
-    "Too many attempts from this device. Wait a few minutes and try again.",
-  "auth/network-request-failed": "The network dropped. Check your connection and retry.",
-  "auth/popup-closed-by-user": "The Google window closed before sign-in finished.",
-  "auth/cancelled-popup-request": "The Google window closed before sign-in finished.",
-  "auth/popup-blocked":
-    "Your browser blocked the Google window. Allow popups for this site and retry.",
-  "auth/account-exists-with-different-credential":
-    "That email is already registered with a different sign-in method.",
-  "auth/unauthorized-domain":
-    "This domain is not authorized for sign-in. Add it in the Firebase console.",
-  "auth/operation-not-allowed":
-    "That sign-in method is turned off for this project.",
-  "auth/requires-recent-login": "Sign in again to complete this change.",
-};
 
 export function authErrorMessage(error: unknown): string {
-  if (error instanceof FirebaseError) {
-    return MESSAGES[error.code] ?? "Something went wrong on our side. Try again.";
-  }
   if (error instanceof Error && error.message) {
     return error.message;
   }

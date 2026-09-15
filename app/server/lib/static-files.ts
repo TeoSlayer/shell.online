@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat, realpath } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { BROWSER_SECURITY_HEADERS } from "./browser-headers";
+import { browserSecurityHeaders } from "./browser-headers";
 
 /**
  * Serves the built client, so the app and its API share an origin.
@@ -40,9 +40,13 @@ export interface StaticFiles {
 
 /**
  * @param root directory holding the built client, as `vite build` leaves it.
+ * @param issuer the OpenID provider, so the policy sent with the document
+ *   allows the browser to reach it. Omitted, the policy allows this origin
+ *   only, which is right for a deployment that has not named a provider.
  */
-export function staticFiles(root: string): StaticFiles {
+export function staticFiles(root: string, issuer?: string): StaticFiles {
   const rootPath = resolve(root);
+  const securityHeaders = browserSecurityHeaders(issuer);
   /*
    * The root is resolved through its own symlinks once, because comparing a
    * file's real path against a root that is itself a link would reject
@@ -120,7 +124,7 @@ export function staticFiles(root: string): StaticFiles {
       "Content-Length": found.size,
       "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
       "Last-Modified": found.mtime.toUTCString(),
-      ...BROWSER_SECURITY_HEADERS,
+      ...securityHeaders,
     });
     if (request.method === "HEAD") {
       response.end();

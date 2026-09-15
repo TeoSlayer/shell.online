@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FirebaseError } from "firebase/app";
 import { Button } from "./Button";
 import { Field } from "./Field";
 import { Alert } from "./Alert";
@@ -20,7 +19,6 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
   const navigate = useNavigate();
   const [org, setOrg] = useState<OrgView | null>(null);
   const [confirm, setConfirm] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -40,11 +38,10 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
 
   if (!user) return null;
 
-  const usesPassword = user.providerData.some((entry) => entry.providerId === "password");
   const teamName = org?.organization.name ?? "your team";
   const others = org ? org.members.filter((entry) => entry.uid !== user.uid) : [];
   const successor = org?.you.role === "owner" ? successorFor(org.members, user.uid) : undefined;
-  const ready = emailMatches(confirm, user.email) && (!usesPassword || password.length > 0);
+  const ready = emailMatches(confirm, user.email);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -52,10 +49,10 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
     setError("");
     setBusy(true);
     try {
-      await deleteAccount(confirm, usesPassword ? password : undefined);
+      await deleteAccount(confirm);
       navigate("/login", { replace: true, state: { deleted: true } });
     } catch (caught) {
-      setError(deletionError(caught));
+      setError(authErrorMessage(caught));
       setBusy(false);
     }
   }
@@ -65,7 +62,11 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
       <h2 id="account-delete-title">Delete your account?</h2>
       <p>This cannot be undone. Deleting your account:</p>
       <ul className="account-delete-list">
-        <li>removes your sign-in;</li>
+        <li>
+          signs you out and removes everything this service holds about you.
+          The account itself belongs to your identity provider, and is deleted
+          there;
+        </li>
         <li>
           unlinks every machine you linked, so <code>shell</code> on them stops
           publishing sessions;
@@ -107,18 +108,10 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
           placeholder={user.email ?? ""}
           disabled={busy}
         />
-        {usesPassword ? (
-          <Field
-            label="Password"
-            type="password"
-            value={password}
-            onChange={setPassword}
-            autoComplete="current-password"
-            disabled={busy}
-          />
-        ) : (
-          <p className="account-delete-note">You will be asked to sign in with Google once more.</p>
-        )}
+        <p className="account-delete-note">
+          A window will open asking you to sign in once more, so that nobody
+          who finds an unattended browser can do this.
+        </p>
         <div className="account-delete-actions">
           <Button type="submit" variant="danger" disabled={!ready} busy={busy} busyLabel="Deleting">
             Delete account
@@ -140,14 +133,4 @@ export function DeleteAccount({ onCancel }: { onCancel: () => void }) {
       </p>
     </section>
   );
-}
-
-function deletionError(error: unknown): string {
-  if (
-    error instanceof FirebaseError &&
-    (error.code === "auth/invalid-credential" || error.code === "auth/wrong-password")
-  ) {
-    return "That password is not right.";
-  }
-  return authErrorMessage(error);
 }

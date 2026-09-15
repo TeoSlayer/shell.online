@@ -40,10 +40,8 @@ if (found.length > 0) {
 // Required Vite values must be present and non-empty in the compiled bundle.
 const REQUIRED = [
   "VITE_RELAY_URL",
-  "VITE_FIREBASE_API_KEY",
-  "VITE_FIREBASE_AUTH_DOMAIN",
-  "VITE_FIREBASE_PROJECT_ID",
-  "VITE_FIREBASE_APP_ID",
+  "VITE_OIDC_ISSUER",
+  "VITE_OIDC_CLIENT_ID",
 ];
 
 const blank = [];

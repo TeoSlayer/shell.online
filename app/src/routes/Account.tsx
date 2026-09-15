@@ -15,34 +15,23 @@ import { useFeedback } from "../feedback/context";
 
 export function Account() {
   usePageTitle("Account");
-  const { user, resendVerification, signOutUser } = useAuth();
+  const { user, signOutUser } = useAuth();
   const vault = useVault();
   const feedback = useFeedback();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   if (!user) return null;
 
-  const provider = user.providerData[0]?.providerId ?? "password";
-  const providerLabel = provider === "google.com" ? "Google" : "Email and password";
-
-  async function handleResend() {
-    setError("");
-    setNotice("");
-    setBusy(true);
-    try {
-      await resendVerification();
-      setNotice("Verification email sent. Check your inbox.");
-    } catch (caught) {
-      setError(authErrorMessage(caught));
-    } finally {
-      setBusy(false);
-    }
-  }
+  /*
+   * The host of the issuer, which is as much as this app knows about where
+   * the account lives. It holds no password and cannot change one.
+   */
+  const issuer = import.meta.env.VITE_OIDC_ISSUER ?? "";
+  const providerLabel = issuer ? new URL(issuer).host : "an identity provider";
 
   async function handleSignOut() {
     setError("");
@@ -126,18 +115,12 @@ export function Account() {
         this is the destination that row would have led to, so leaving it out
         would strand anybody who opened the app from a home screen.
       */}
+      <p className="account-note">
+        Your name, email address and password belong to {providerLabel}. Change
+        them, or verify your address, there — this app only reads them.
+      </p>
+
       <div className="account-actions">
-        {!user.emailVerified && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleResend}
-            busy={busy}
-            busyLabel="Sending"
-          >
-            Resend verification
-          </Button>
-        )}
         {(vault.status === "unlocked" || vault.status === "locked") && !resetting && (
           <Button type="button" variant="ghost" onClick={() => setResetting(true)}>
             Reset vault

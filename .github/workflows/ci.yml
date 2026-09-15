@@ -168,10 +168,8 @@ jobs:
         run: npm run build
         working-directory: app
         env:
-          VITE_FIREBASE_API_KEY: ci
-          VITE_FIREBASE_AUTH_DOMAIN: ci.example.com
-          VITE_FIREBASE_PROJECT_ID: ci
-          VITE_FIREBASE_APP_ID: ci
+          VITE_OIDC_ISSUER: https://auth.ci.example.com/realms/ci
+          VITE_OIDC_CLIENT_ID: ci
 
   vulnerabilities:
     runs-on: ubuntu-latest

@@ -71,5 +71,6 @@ Objects, Rate Limiting, Analytics Engine, and static assets.
 ## Accounts app
 
 Accounts are optional and do not participate in terminal transport. The app in
-`app/` uses Firebase Authentication and PostgreSQL in the current release; its
-local Docker deployment is documented in [`app/README.md`](../app/README.md).
+`app/` signs people in through any OpenID Connect provider and stores its data
+in PostgreSQL; its local Docker deployment is documented in
+[`app/README.md`](../app/README.md).

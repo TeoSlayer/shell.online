@@ -98,7 +98,7 @@ https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md.
 
 The optional account app is documented at https://shell.online/app/. A vault is
 personal rather than team-wide, and machine remote-start permission is explicit.
-The hosted app uses Firebase Authentication.
+Sign-in goes to an OpenID Connect provider; the app holds no passwords.
 
 Manage local sessions:
 
