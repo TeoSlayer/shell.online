@@ -70,13 +70,20 @@ export const userManager = new UserManager({
   monitorSession: false,
 });
 
-/** The fields this app actually uses from whoever is signed in. */
+/**
+ * Who is signed in, as the app shows them.
+ *
+ * Identity only, and deliberately no credential: the token is read from the
+ * manager at the moment a request is made (see api.ts), so there is nothing
+ * here that would be a secret if it were written down — which matters,
+ * because the uid is written down, as the key that scopes this browser's
+ * remembered tabs and passwords to one account.
+ */
 export interface AuthUser {
   uid: string;
   email: string;
   displayName: string;
   emailVerified: boolean;
-  getIdToken: () => Promise<string>;
 }
 
 /**
@@ -98,16 +105,6 @@ export function toAuthUser(user: OidcUser): AuthUser {
      */
     displayName: profile.name ?? profile.preferred_username ?? "",
     emailVerified: profile.email_verified === true,
-    /*
-     * Re-read from storage rather than closing over the token: a silent renew
-     * replaces it, and a closure would keep handing out the expired one.
-     */
-    getIdToken: async () => {
-      const current = await userManager.getUser();
-      const token = current?.id_token;
-      if (!token) throw new Error("Signed out.");
-      return token;
-    },
   };
 }
 
