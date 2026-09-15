@@ -747,6 +747,12 @@ export function Workspace() {
               </span>
             ))}
           </div>
+          {/*
+            * Hangs from the tab line over the corner of the terminal, where
+            * it belongs to the pane in front rather than to the tab list. The
+            * grid starts below it, so it covers padding and never text.
+            */}
+          {!showingList && (
           <label className="tab-renderer">
             <span>Renderer</span>
             <select
@@ -762,6 +768,7 @@ export function Workspace() {
               <option value="refstream">Refstream (unstable alpha)</option>
             </select>
           </label>
+          )}
         </div>
       )}
 

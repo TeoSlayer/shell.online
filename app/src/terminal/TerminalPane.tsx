@@ -51,21 +51,62 @@ interface Attempt {
   password: string;
 }
 
-const THEME = {
+/*
+ * The terminal is drawn on the page itself, so its palette is the app's: ink
+ * on paper in the light theme, and shell.online's terminal colors in the dark.
+ * The canvas stays clear either way and the page shows through.
+ */
+const DARK_THEME = {
   background: "#00000000",
   foreground: "#dfe2d6",
   cursor: "#c8ff4d",
+  cursorAccent: "#161914",
   selectionBackground: "#3a3f33",
 };
 
-/* Refstream paints its own surface, so it needs an opaque theme rather than xterm's clear canvas. */
-const REFSTREAM_THEME = {
-  ...THEME,
-  background: "#1d201b",
-  foreground: "#edf0e7",
-  cursor: "#d4ff72",
-  selectionBackground: "#3b472f",
+/*
+ * The standard ANSI colors assume a dark background: "white" and the bright
+ * yellows and cyans vanish on paper. Each is darkened to the app's own ink
+ * weights so programs that pick colors themselves stay legible.
+ */
+const LIGHT_THEME = {
+  background: "#00000000",
+  foreground: "#191b18",
+  cursor: "#191b18",
+  cursorAccent: "#f3f1e9",
+  selectionBackground: "#d4dbf8",
+  black: "#191b18",
+  red: "#b3261e",
+  green: "#2f6d29",
+  yellow: "#855d00",
+  blue: "#294ec8",
+  magenta: "#8a3aa3",
+  cyan: "#17707a",
+  white: "#686c63",
+  brightBlack: "#5d6158",
+  brightRed: "#c9402f",
+  brightGreen: "#3b8233",
+  brightYellow: "#9a6c00",
+  brightBlue: "#4267f5",
+  brightMagenta: "#a04dba",
+  brightCyan: "#1f8591",
+  brightWhite: "#3a3e37",
 };
+
+/* Refstream paints its own surface, so it needs an opaque theme rather than xterm's clear canvas. */
+function terminalTheme(renderer: TerminalRenderer, dark: boolean) {
+  const base = dark ? DARK_THEME : LIGHT_THEME;
+  if (renderer !== "refstream") return base;
+  return { ...base, background: dark ? "#161914" : "#f3f1e9" };
+}
+
+/* Mirrors tokens.css: an explicit data-theme wins, otherwise the system's. */
+function appPrefersDark(): boolean {
+  const forced = document.documentElement.dataset.theme;
+  if (forced === "dark") return true;
+  if (forced === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
 
 const FONT_FAMILY = 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace';
 
@@ -105,6 +146,21 @@ export function TerminalPane({
   const toolsMount = useRef<HTMLDivElement>(null);
   const filesMount = useRef<HTMLDivElement>(null);
   const terminal = useRef<TerminalSurface | null>(null);
+
+  /* The palette follows the app theme, including a change while the pane is open. */
+  useEffect(() => {
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const apply = () => {
+      if (terminal.current) terminal.current.options.theme = terminalTheme(renderer, appPrefersDark());
+    };
+    media?.addEventListener("change", apply);
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      media?.removeEventListener("change", apply);
+      observer.disconnect();
+    };
+  }, [renderer]);
   const measure = useRef<((fontSize: number) => TerminalCell) | null>(null);
   const connection = useRef<TerminalConnection | null>(null);
 
@@ -229,7 +285,7 @@ export function TerminalPane({
       cursorBlink: true,
       convertEol: false,
       scrollback: 5000,
-      theme: renderer === "refstream" ? REFSTREAM_THEME : THEME,
+      theme: terminalTheme(renderer, appPrefersDark()),
     });
     term.open(node);
     terminal.current = term;

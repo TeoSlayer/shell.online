@@ -3,6 +3,7 @@
    --------------------------------------------------------------- */
 
 .terminal-bar {
+  position: relative;
   display: flex;
   padding-bottom: 1px;
   border-bottom: 1px solid var(--line);
@@ -23,32 +24,50 @@
   display: none;
 }
 
+/*
+ * A tab hanging from the tab line, in front of the terminal's top-right
+ * corner. It starts on the line itself and paints over it, so the line opens
+ * into the tab instead of running across its top: the active tab's join,
+ * turned upside down.
+ */
 .tab-renderer {
+  position: absolute;
+  z-index: 9;
+  top: 100%;
+  right: 0;
   display: inline-flex;
-  min-height: 40px;
-  padding-left: 12px;
-  border-left: 1px solid var(--line);
-  margin-left: 8px;
+  height: 38px;
+  padding: 0 5px 0 12px;
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 var(--radius-control) var(--radius-control);
+  background: var(--paper);
   color: var(--faint);
-  flex: none;
   font-size: 11px;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .tab-renderer select {
-  min-width: 104px;
-  height: 32px;
-  padding: 0 28px 0 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-control);
-  background-color: var(--paper);
+  /* As wide as the chosen renderer, not the longest name in the list. */
+  field-sizing: content;
+  max-width: 190px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 26px 0 8px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background-color: transparent;
   color: var(--ink);
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
   font-weight: 520;
   line-height: 1;
+}
+
+.tab-renderer select:hover {
+  background-color: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .tab-renderer select:focus-visible {
@@ -63,6 +82,8 @@
   border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   border-radius: var(--radius-control);
   margin: -10px 0 12px;
+  /* Clears the renderer tab hanging over this row's right end. */
+  margin-right: 250px;
   background: var(--blue-wash);
   color: var(--ink-soft);
   font-size: 12px;
@@ -171,15 +192,18 @@ button.tab {
   flex: 1;
 }
 
+/*
+ * No panel: the terminal is drawn straight onto the page, in the page's own
+ * colors, so a session reads as part of the app rather than a window inside
+ * it. The emulator's canvas is clear and its palette follows the app theme;
+ * see TerminalPane.
+ */
 .pane {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  padding: 14px 6px 14px 16px;
-  border: 1px solid #2a2e25;
-  border-radius: var(--radius-panel);
-  background: var(--terminal);
-  box-shadow: 0 20px 50px rgb(26 31 22 / 16%);
+  padding: 14px 0;
+  background: transparent;
 }
 
 /*
@@ -194,21 +218,23 @@ button.tab {
 }
 
 /*
- * The grid is drawn as large as it fits, and what the fit could not use is
- * split between the two sides rather than left as a gap down one of them.
+ * The grid is drawn as large as it fits and starts at the page's own left
+ * edge. With no panel around it, centring left a margin that lined up with
+ * nothing else on the page.
  */
 .pane-screen {
   display: flex;
   width: 100%;
   height: 100%;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
+/* Below the renderer tab, which hangs over the same corner. */
 .pane-tools {
   position: absolute;
   z-index: 7;
-  top: 10px;
+  top: 26px;
   right: 12px;
   display: flex;
   max-width: calc(100% - 24px);
@@ -222,27 +248,26 @@ button.tab {
 
 .pane-refstream-toolbar .terminal-tools {
   padding: 3px;
-  border: 1px solid var(--terminal-ui-line, #343c4b);
+  border: 1px solid var(--terminal-ui-line, var(--line));
   border-radius: 8px;
-  background: var(--terminal-ui-surface, #171b23);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+  background: var(--terminal-ui-surface, var(--white));
+  box-shadow: 0 8px 24px rgb(26 31 22 / 10%);
 }
 
 /*
  * Refstream ships neutral translucent defaults because it can be embedded on
- * any page. The app is always a dark terminal surface, so make every layer
- * opaque and use the app's terminal palette instead of letting page colors
- * bleed through the controls and text.
+ * any page. Here it is drawn on the app's own surface, so every layer is
+ * opaque and takes the app palette, which already follows light and dark.
  */
 .pane[data-renderer="refstream"] {
-  --terminal-ui-bg: #10130f;
-  --terminal-ui-surface: #181d17;
-  --terminal-ui-line: #343c30;
-  --terminal-ui-hover: #272e24;
-  --terminal-ui-fg: #edf0e7;
-  --terminal-ui-muted: #9ca695;
-  --terminal-ui-accent: #d4ff72;
-  --terminal-ui-selection: #3b472f;
+  --terminal-ui-bg: var(--paper);
+  --terminal-ui-surface: var(--white);
+  --terminal-ui-line: var(--line);
+  --terminal-ui-hover: color-mix(in srgb, var(--ink) 6%, var(--white));
+  --terminal-ui-fg: var(--ink);
+  --terminal-ui-muted: var(--muted);
+  --terminal-ui-accent: var(--blue);
+  --terminal-ui-selection: var(--blue-wash);
   --terminal-ui-font: var(--sans);
 }
 
@@ -254,16 +279,16 @@ button.tab {
 }
 
 .pane[data-renderer="refstream"] .shell-terminal {
-  background: var(--terminal);
+  background: var(--paper);
 }
 
 .pane-tools:has(.pane-refstream-toolbar:not(:empty), .pane-files-toolbar:not(:empty)) ~ .pane-banner {
-  top: 58px;
+  top: 74px;
 }
 
 @media (max-width: 640px) {
   .pane-tools {
-    top: 6px;
+    top: 26px;
     right: 6px;
     max-width: calc(100% - 12px);
     gap: 5px;
@@ -296,14 +321,14 @@ button.tab {
 
 .pane-banner {
   position: absolute;
-  top: 14px;
-  right: 20px;
+  top: 30px;
+  right: 12px;
   display: inline-flex;
   padding: 6px 11px;
-  border: 1px solid var(--terminal-line);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgb(16 19 9 / 90%);
-  color: var(--terminal-muted);
+  background: color-mix(in srgb, var(--white) 92%, transparent);
+  color: var(--muted);
   font-size: 12px;
   align-items: center;
   gap: 7px;
@@ -319,7 +344,7 @@ button.tab {
   position: absolute;
   inset: 0;
   display: grid;
-  background: rgb(16 19 9 / 82%);
+  background: color-mix(in srgb, var(--paper) 80%, transparent);
   backdrop-filter: blur(3px);
   place-items: center;
   padding: 20px;
@@ -331,7 +356,7 @@ button.tab {
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--white);
-  box-shadow: 0 22px 60px rgb(0 0 0 / 30%);
+  box-shadow: 0 22px 60px rgb(26 31 22 / 14%);
 }
 
 .pane-gate-mark {
@@ -460,7 +485,12 @@ button.tab {
   }
 
   .pane {
-    padding: 12px 4px 12px 12px;
+    padding: 12px 0;
+  }
+
+  .renderer-warning {
+    margin-right: 0;
+    margin-top: 30px;
   }
 
   .tab,
