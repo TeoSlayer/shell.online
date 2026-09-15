@@ -5,6 +5,7 @@ import {
   isDocumentNavigation,
   requestAnalyticsContext,
   requestVisitor,
+  type VisitorKind,
   hasVisitorSalt,
   documentTarget,
   CTA_TARGETS,
@@ -551,9 +552,9 @@ async function recordAssetAnalytics(
   if (request.method !== "GET") return;
 
   const context = requestAnalyticsContext(request);
-  const withVisitor = async (): Promise<AnalyticsContext> => ({
+  const withVisitor = async (kind: VisitorKind = "browser"): Promise<AnalyticsContext> => ({
     ...context,
-    visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+    visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, kind),
   });
 
   if (!response.ok) {
@@ -566,7 +567,7 @@ async function recordAssetAnalytics(
 
   if (url.pathname === "/install" || url.pathname === "/install.ps1") {
     const target = url.pathname === "/install.ps1" ? "powershell" : "posix";
-    recordAnalytics(env, executionContext, "installer_download", target, await withVisitor());
+    recordAnalytics(env, executionContext, "installer_download", target, await withVisitor("machine"));
     return;
   }
   if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -576,7 +577,7 @@ async function recordAssetAnalytics(
 
   const binaryTarget = binaryDownloadTarget(url.pathname);
   if (binaryTarget) {
-    recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor());
+    recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor("machine"));
     return;
   }
 
@@ -710,7 +711,7 @@ async function createSession(
     executionContext,
     "session_created",
     "cli",
-    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
+    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, "machine") },
   );
 
   const origin = requestOrigin(request, url);
@@ -780,7 +781,7 @@ async function resumeSession(
   if (resumeResult.created === true) {
     recordAnalytics(env, executionContext, "session_created", "persistent_cli", {
       ...requestAnalyticsContext(request),
-      visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+      visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, "machine"),
     });
   }
   const origin = requestOrigin(request, url);

@@ -193,18 +193,35 @@ export async function visitorKey(salt: string, address: string, userAgent: strin
 }
 
 /**
+ * The hash for a machine: the address alone, under its own label so it can
+ * never collide with a browser's. The installer (curl) and the CLI (shell/x)
+ * on one machine then share a key, and an install can be followed to its
+ * first session. Browsers keep the family in their key: two people behind
+ * one address on different browsers are two visitors, and there is no CLI
+ * to follow them to.
+ */
+export async function machineKey(salt: string, address: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`${salt}\nmachine\n${address}`);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest.subarray(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Who a hash stands for: a person's browser, or a person's machine on the command line. */
+export type VisitorKind = "browser" | "machine";
+
+/**
  * The visitor hash for a request, or nothing when the Worker has no salt, the
  * edge sent no address, or the request came from a crawler. A crawler is a
  * request to count, not a person: it stays in every event total and out of
  * every people figure, which is what the dashboard says of it.
  */
-export async function requestVisitor(salt: unknown, request: Request): Promise<string | undefined> {
+export async function requestVisitor(salt: unknown, request: Request, kind: VisitorKind = "browser"): Promise<string | undefined> {
   if (!hasVisitorSalt(salt)) return undefined;
   const address = request.headers.get("CF-Connecting-IP");
   if (!address) return undefined;
   const userAgent = request.headers.get("User-Agent") ?? "";
   if (classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")) === "bot") return undefined;
-  return visitorKey(salt, address, userAgent);
+  return kind === "machine" ? machineKey(salt, address) : visitorKey(salt, address, userAgent);
 }
 
 /**

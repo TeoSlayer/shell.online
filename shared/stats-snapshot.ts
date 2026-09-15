@@ -67,6 +67,13 @@ export interface UniqueDayRow extends Record<string, string | number | null> {
   unique_count: number;
 }
 
+/** Machines seen installing, and how many of them went on to a first session. */
+export interface InstallConversionRow extends Record<string, string | number | null> {
+  installers: number | null;
+  matured: number | null;
+  started: number | null;
+}
+
 /** One visitor on one day, with the day they were first seen, for the cohort grids. */
 export interface RetentionRow extends Record<string, string | number | null> {
   surface: string;
@@ -113,6 +120,8 @@ export interface StatsSnapshotRows {
   uniques: UniqueSummaryRow[];
   uniqueDays: UniqueDayRow[];
   retention: RetentionRow[];
+  /** Null when people are not counted. */
+  installConversion: InstallConversionRow | null;
   uniquesConfigured: boolean;
   /** Midnight UTC of the earliest visitor day still kept, or null when there is none. */
   uniquesSince: number | null;
@@ -213,6 +222,13 @@ export function buildStatsSnapshot(
     audiences,
     previous: buildComparison(rows.previous, rangeStart, rows.collectingSince, uniques),
     funnel: buildFunnel(figures, audiences, uniques),
+    installConversion: uniques.configured && rows.installConversion
+      ? {
+        installers: Number(rows.installConversion.installers ?? 0),
+        matured: Number(rows.installConversion.matured ?? 0),
+        started: Number(rows.installConversion.started ?? 0),
+      }
+      : null,
     uniques,
     retention: {
       weeks: RETENTION_WEEKS,

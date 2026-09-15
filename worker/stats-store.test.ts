@@ -34,6 +34,7 @@ describe("statistics live presence", () => {
       uniques: [],
       uniqueDays: [],
       retention: [],
+      installConversion: null,
       uniquesConfigured: false,
       uniquesSince: null,
     }, "all", now, collectingSince);
@@ -66,6 +67,7 @@ describe("statistics live presence", () => {
       uniques: [],
       uniqueDays: [],
       retention: [],
+      installConversion: null,
       uniquesConfigured: false,
       uniquesSince: null,
     }, "24h", now, now - 24 * 60 * 60 * 1_000);
@@ -141,6 +143,7 @@ describe("people and the funnel", () => {
       { day: now - DAY_MS, surface: "site", unique_count: 140 },
     ],
     retention: [],
+    installConversion: { installers: 12, matured: 9, started: 4 },
     uniquesConfigured: true,
     uniquesSince: dayStart(now - 20 * DAY_MS),
   };
@@ -283,10 +286,18 @@ describe("people and the funnel", () => {
     expect(buildStatsSnapshot({ ...rows, previous: null }, "all", now, now - 30 * DAY_MS).previous).toBeNull();
   });
 
+  it("follows machines from the installer to a first session", () => {
+    const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
+    expect(snapshot.installConversion).toEqual({ installers: 12, matured: 9, started: 4 });
+    const empty = buildStatsSnapshot({ ...rows, installConversion: { installers: 0, matured: null, started: null } }, "7d", now, rangeStart);
+    expect(empty.installConversion).toEqual({ installers: 0, matured: 0, started: 0 });
+  });
+
   it("says when nobody is being counted", () => {
     const snapshot = buildStatsSnapshot({ ...rows, uniques: [], uniquesConfigured: false }, "7d", now, rangeStart);
     expect(snapshot.uniques.configured).toBe(false);
     expect(snapshot.uniques.since).toBeNull();
+    expect(snapshot.installConversion).toBeNull();
     expect(snapshot.funnel[0].unique).toBeNull();
     expect(snapshot.uniques.surfaces.site).toEqual({ unique: 0, new: 0, returning: 0 });
   });

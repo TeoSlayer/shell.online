@@ -340,7 +340,9 @@ export function Privacy() {
             page views, installer downloads and sessions opened, with a device
             class, a client name and the referring site. To tell one visitor
             from another they keep, for 120 days, a keyed hash of the network
-            address and browser family. The key never leaves the server, the
+            address and browser family; for the installer and the command-line
+            tool, a keyed hash of the address alone, so an install can be
+            followed to a first session. The key never leaves the server, the
             address itself is not stored, and nothing in that record says who
             a visitor is. They record no session identifiers, URLs, commands,
             terminal content or full user-agent strings.

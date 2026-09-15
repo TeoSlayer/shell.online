@@ -15,6 +15,22 @@ export const VISITOR_MEMORY_DAYS = 120;
 /** How many weekly cohorts the retention grids show. */
 export const RETENTION_WEEKS = 8;
 
+/** How long after installing a machine has to start a session to count as converted. */
+export const INSTALL_CONVERSION_DAYS = 7;
+
+/**
+ * Machines followed from a binary download to a first session, by address:
+ * the one join the dashboard can make between the installer and the CLI.
+ */
+export interface StatsInstallConversion {
+  /** Machines whose first install was in the range. */
+  installers: number;
+  /** Of those, installed at least INSTALL_CONVERSION_DAYS ago, so their window has fully elapsed. */
+  matured: number;
+  /** Of the matured, started a session within the window. */
+  started: number;
+}
+
 export interface StatsSeriesPoint {
   at: number;
   sessions: number;
@@ -248,6 +264,8 @@ export interface StatsSnapshot {
   /** Null on the all-time range, or when the period before is older than collection. */
   previous: StatsComparison | null;
   funnel: StatsFunnelStep[];
+  /** Null until people are counted. */
+  installConversion: StatsInstallConversion | null;
   uniques: StatsUniques;
   retention: StatsRetention;
   accounts: StatsAccounts;

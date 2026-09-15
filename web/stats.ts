@@ -1,4 +1,5 @@
 import {
+  INSTALL_CONVERSION_DAYS,
   STATS_RANGES,
   type StatsBreakdownItem,
   type StatsRange,
@@ -452,6 +453,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       <p class="panel-insight">${escapeHtml(funnelInsight(snapshot))}</p>
       ${renderFunnel(snapshot, peopleSince)}
       ${peopleSince === null ? "" : `<p class="cohort-empty">People have been counted since ${escapeHtml(formatDay(peopleSince))}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.</p>`}
+      ${renderInstallConversion(snapshot)}
       ${renderUniquesStrip(snapshot)}
     </article>
 
@@ -859,6 +861,22 @@ function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): stri
       }).join("")}
     </div>
   `;
+}
+
+/**
+ * The one line that crosses from the installer to the CLI: of the machines
+ * that installed long enough ago to tell, how many started a session within
+ * the window. Fresh installs are named separately rather than counted as
+ * misses.
+ */
+function renderInstallConversion(snapshot: StatsSnapshot): string {
+  const conversion = snapshot.installConversion;
+  if (conversion === null || conversion.installers === 0) return "";
+  const fresh = conversion.installers - conversion.matured;
+  const verdict = conversion.matured === 0
+    ? `${integerFormatter.format(conversion.installers)} machine${conversion.installers === 1 ? "" : "s"} installed in this range, all within the last ${INSTALL_CONVERSION_DAYS} days, too recently to tell whether a session followed.`
+    : `Of the ${integerFormatter.format(conversion.matured)} machine${conversion.matured === 1 ? "" : "s"} that installed at least ${INSTALL_CONVERSION_DAYS} days ago, ${integerFormatter.format(conversion.started)} (${formatPercent(ratio(conversion.started, conversion.matured))}) started a session within ${INSTALL_CONVERSION_DAYS} days.${fresh > 0 ? ` ${integerFormatter.format(fresh)} more installed too recently to tell.` : ""}`;
+  return `<p class="cohort-empty">${escapeHtml(verdict)} Machines are followed by address from the binary download to the first session.</p>`;
 }
 
 function renderUniquesStrip(snapshot: StatsSnapshot): string {

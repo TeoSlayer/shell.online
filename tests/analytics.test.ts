@@ -8,6 +8,7 @@ import {
   documentTarget,
   hasVisitorSalt,
   isDocumentNavigation,
+  machineKey,
   normalizeAnalyticsRecord,
   requestAnalyticsContext,
   requestVisitor,
@@ -169,5 +170,22 @@ describe("analytics", () => {
       },
     });
     await expect(requestVisitor("a-salt-long-enough-to-count", crawler)).resolves.toBeUndefined();
+  });
+
+  it("keys a machine by address alone, so the installer and the CLI on it are one machine", async () => {
+    const salt = "a-salt-long-enough-to-count";
+    const installer = new Request("https://shell.online/install", {
+      headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "curl/8.4.0" },
+    });
+    const cli = new Request("https://shell.online/api/sessions", {
+      headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "shell/0.15.1" },
+    });
+    const machine = await requestVisitor(salt, installer, "machine");
+    expect(machine).toMatch(/^[a-f0-9]{20}$/);
+    await expect(requestVisitor(salt, cli, "machine")).resolves.toBe(machine);
+    /* A browser at the same address is not that machine, and its key is not made from the same bytes. */
+    await expect(requestVisitor(salt, installer)).resolves.not.toBe(machine);
+    await expect(machineKey(salt, "203.0.113.7")).resolves.toBe(machine);
+    await expect(machineKey(salt, "203.0.113.8")).resolves.not.toBe(machine);
   });
 });

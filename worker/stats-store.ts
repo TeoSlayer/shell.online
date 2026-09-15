@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+  INSTALL_CONVERSION_DAYS,
   RETENTION_WEEKS,
   VISITOR_MEMORY_DAYS,
   isStatsRange,
@@ -15,6 +16,7 @@ import {
   weekStart,
   type AudienceRow,
   type BreakdownRow,
+  type InstallConversionRow,
   type LivePresenceRow,
   type MetricSummaryRow,
   type MetricTrendRow,
@@ -379,6 +381,29 @@ export class StatsStore extends DurableObject<Record<string, never>> {
       ORDER BY day`,
       uniqueStart,
     ).toArray();
+    /*
+     * Installers followed to their first session. Both surfaces key a machine
+     * by address, so the join is on the hash. A machine counts as matured
+     * once its window has fully elapsed, so a fresh install is not a miss.
+     */
+    const conversionWindow = INSTALL_CONVERSION_DAYS * DAY_MS;
+    const installConversion = uniquesConfigured
+      ? this.sql.exec<InstallConversionRow>(
+        `SELECT COUNT(*) AS installers,
+          SUM(CASE WHEN installs.first_day <= ? THEN 1 ELSE 0 END) AS matured,
+          SUM(CASE WHEN installs.first_day <= ?
+            AND cli.first_day IS NOT NULL
+            AND cli.first_day >= installs.first_day
+            AND cli.first_day < installs.first_day + ? THEN 1 ELSE 0 END) AS started
+        FROM visitors AS installs
+        LEFT JOIN visitors AS cli ON cli.surface = 'cli' AND cli.visitor = installs.visitor
+        WHERE installs.surface = 'install' AND installs.first_day >= ?`,
+        dayStart(now) - conversionWindow,
+        dayStart(now) - conversionWindow,
+        conversionWindow,
+        uniqueStart,
+      ).one()
+      : null;
     const retention = this.sql.exec<RetentionRow>(
       `SELECT visitors.surface AS surface, visitors.visitor AS visitor,
         visitors.first_day AS first_day, visitor_days.day AS day
@@ -404,6 +429,7 @@ export class StatsStore extends DurableObject<Record<string, never>> {
         uniques,
         uniqueDays,
         retention,
+        installConversion,
         uniquesConfigured,
         uniquesSince,
       },
