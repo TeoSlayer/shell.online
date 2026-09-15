@@ -244,6 +244,10 @@ export interface StatsSnapshot {
     skillDownloads: number;
     /** Release binaries served: the installer's last step, so a completed install. */
     binaryDownloads: number;
+    /** Installers that reported finishing, from the script itself. */
+    installsReported: number;
+    /** Installers that reported failing, by their own account. */
+    installFailuresReported: number;
     copies: number;
     averageDurationSeconds: number;
     longestDurationSeconds: number;
@@ -284,6 +288,8 @@ export interface StatsSnapshot {
     typedDevices: StatsBreakdownItem[];
     /** Why viewers were turned away. */
     rejections: StatsBreakdownItem[];
+    /** How installs ended, as the scripts reported. */
+    installOutcomes: StatsBreakdownItem[];
   };
   targets: StatsTargetMetric[];
 }

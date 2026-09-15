@@ -9,6 +9,7 @@ import {
   hasVisitorSalt,
   documentTarget,
   CTA_TARGETS,
+  INSTALL_OUTCOMES,
   COPY_TARGETS,
   writeAnalytics,
   type AnalyticsContext,
@@ -230,6 +231,10 @@ export default {
 
     if (url.pathname === "/api/events" && request.method === "POST") {
       return recordEvent(request, env, url, executionContext);
+    }
+
+    if (url.pathname === "/install/report" && request.method === "GET") {
+      return recordInstallReport(request, env, url, executionContext);
     }
 
     if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -636,6 +641,33 @@ async function recordEvent(
     { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
+  return new Response(null, {
+    status: 204,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+/*
+ * The installer's last word: one request with a single outcome code, sent
+ * when the script finishes or fails unless the person set
+ * SHELL_ONLINE_INSTALL_REPORT=0. Only codes the scripts can send count; any
+ * other request gets the same empty answer and records nothing.
+ */
+async function recordInstallReport(
+  request: Request,
+  env: Env,
+  url: URL,
+  executionContext: ExecutionContext,
+): Promise<Response> {
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const allowed = await env.EVENT_LIMITER.limit({ key: ip });
+  if (!allowed.success) {
+    return json({ error: "too many events" }, 429, { "Retry-After": "60" });
+  }
+  const outcome = url.searchParams.get("outcome") ?? "";
+  if (INSTALL_OUTCOMES.has(outcome)) {
+    recordAnalytics(env, executionContext, "install_outcome", outcome, requestAnalyticsContext(request));
+  }
   return new Response(null, {
     status: 204,
     headers: { "Cache-Control": "no-store" },

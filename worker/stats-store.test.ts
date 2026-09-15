@@ -100,6 +100,8 @@ describe("people and the funnel", () => {
       metric("viewer_rejected", "session_full", 2),
       metric("viewer_rejected", "expired", 3),
       metric("input_denied", "read_only", 1),
+      metric("install_outcome", "ok", 3),
+      metric("install_outcome", "checksum_mismatch", 1),
       metric("copy", "install", 20),
       metric("copy", "brew_install", 5),
       metric("copy", "share", 3),
@@ -235,6 +237,8 @@ describe("people and the funnel", () => {
     expect(typed).toMatchObject({ basis: "opened", basisCount: 5, basisLabel: "opened sessions that allow typing" });
     expect(typed?.excluded).toEqual([{ label: "opened read-only, typing impossible", count: 1 }]);
     expect(snapshot.breakdowns.rejections).toEqual([{ label: "expired", value: 3 }, { label: "session_full", value: 2 }]);
+    expect(snapshot.metrics).toMatchObject({ installsReported: 3, installFailuresReported: 1 });
+    expect(snapshot.breakdowns.installOutcomes).toEqual([{ label: "ok", value: 3 }, { label: "checksum_mismatch", value: 1 }]);
     expect(snapshot.breakdowns.openedDevices).toEqual([{ label: "desktop", value: 4 }, { label: "mobile", value: 2 }]);
     expect(snapshot.breakdowns.typedDevices).toEqual([{ label: "desktop", value: 4 }, { label: "mobile", value: 1 }]);
   });

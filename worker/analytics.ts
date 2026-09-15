@@ -6,6 +6,8 @@ export type AnalyticsEvent =
   | "copy"
   | "cta_click"
   | "installer_download"
+  /** The installer's last word: how it went, from the script itself. */
+  | "install_outcome"
   | "binary_download"
   | "skill_download"
   | "session_created"
@@ -56,6 +58,29 @@ export interface AnalyticsRecord {
   value: number;
   auxiliary: number;
 }
+
+/** What the install scripts report at their end. Anything else is not counted. */
+export const INSTALL_OUTCOMES: ReadonlySet<string> = new Set([
+  "ok",
+  "failed",
+  "unsupported_os",
+  "unsupported_arch",
+  "no_home",
+  "install_dir_relative",
+  "install_dir_colon",
+  "install_dir_create",
+  "install_dir_unwritable",
+  "temp_dir",
+  "temp_dir_unwritable",
+  "download_failed",
+  "no_downloader",
+  "manifest_html",
+  "manifest_missing",
+  "manifest_invalid",
+  "no_sha_tool",
+  "checksum_mismatch",
+  "write_failed",
+]);
 
 /** What the landing page reports when one of its sign-up links is clicked. */
 export const CTA_TARGETS: ReadonlySet<string> = new Set(["signup_nav", "signup_hero", "signup_team", "signup_footer"]);

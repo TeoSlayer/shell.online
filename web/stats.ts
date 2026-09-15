@@ -569,7 +569,13 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "download",
         "Homebrew and source builds are not counted.",
       )}
-      ${renderBreakdown("Session outcomes, all", "How every ended session ended", outcomes, "outcome")}
+      ${renderBreakdown(
+        "Installer outcomes",
+        "How installs ended, by the script's own account",
+        snapshot.breakdowns.installOutcomes,
+        "outcome",
+        "One word sent by the installer at its end, unless SHELL_ONLINE_INSTALL_REPORT=0 was set. A machine that never reached the end of the script reports nothing.",
+      )}
     </section>
 
     <section class="stats-people-grid">
@@ -1197,6 +1203,26 @@ function humanize(value: string): string {
     viewer_read_only: "Read-only",
     viewer_rejected: "Viewer turned away",
     input_denied: "Input refused",
+    install_outcome: "Installer outcome",
+    ok: "Installed",
+    failed: "Failed, unspecified",
+    unsupported_os: "Unsupported OS",
+    unsupported_arch: "Unsupported architecture",
+    no_home: "HOME not set",
+    install_dir_relative: "Install directory not absolute",
+    install_dir_colon: "Install directory has a colon",
+    install_dir_create: "Could not create install directory",
+    install_dir_unwritable: "Install directory not writable",
+    temp_dir: "Could not create temp directory",
+    temp_dir_unwritable: "Temp directory not writable",
+    download_failed: "Download failed",
+    no_downloader: "No curl or wget",
+    manifest_html: "Manifest came back as HTML",
+    manifest_missing: "No checksum in manifest",
+    manifest_invalid: "Invalid checksum in manifest",
+    no_sha_tool: "No sha256sum or shasum",
+    checksum_mismatch: "Checksum mismatch",
+    write_failed: "Could not write executable",
     remote_input: "Remote input",
     cta_click: "Sign-up click",
     signup_nav: "Sign up free (nav)",

@@ -1,9 +1,30 @@
 #!/bin/sh
 set -eu
 
+# When it finishes, and when it fails, this script tells shell.online how it
+# went: one request carrying a single word (ok, unsupported_arch,
+# checksum_mismatch, ...) and the binary name, nothing else, so that a
+# platform that keeps failing gets noticed and fixed. Set
+# SHELL_ONLINE_INSTALL_REPORT=0 to skip it.
+
 fail() {
   printf 'shell.online: %s\n' "$1" >&2
+  report "${2:-failed}"
   exit 1
+}
+
+report() {
+  [ "${SHELL_ONLINE_INSTALL_REPORT:-1}" != 0 ] || return 0
+  case "${base_url:-}" in
+    http://*|https://*) ;;
+    *) return 0 ;;
+  esac
+  report_url="$base_url/install/report?outcome=$1&platform=${binary_name:-unknown}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS -m 5 -o /dev/null "$report_url" >/dev/null 2>&1 || true
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -T 5 -O /dev/null "$report_url" >/dev/null 2>&1 || true
+  fi
 }
 
 base_url=${SHELL_ONLINE_BASE_URL:-https://shell.online}
@@ -18,7 +39,7 @@ case "$system_name" in
   NetBSD) platform=netbsd ;;
   DragonFly) platform=dragonfly ;;
   SunOS) platform=solaris ;;
-  *) fail "unsupported operating system: ${system_name:-unknown} (supported: macOS, Linux, FreeBSD, OpenBSD, NetBSD, DragonFly BSD, and Solaris)" ;;
+  *) fail "unsupported operating system: ${system_name:-unknown} (supported: macOS, Linux, FreeBSD, OpenBSD, NetBSD, DragonFly BSD, and Solaris)" unsupported_os ;;
 esac
 
 case "$machine_name" in
@@ -44,7 +65,7 @@ case "$machine_name" in
   riscv64) architecture=riscv64 ;;
   s390x) architecture=s390x ;;
   loongarch64|loong64) architecture=loong64 ;;
-  *) fail "unsupported architecture: ${machine_name:-unknown}; see https://shell.online/docs/platforms/" ;;
+  *) fail "unsupported architecture: ${machine_name:-unknown}; see https://shell.online/docs/platforms/" unsupported_arch ;;
 esac
 
 if [ -n "${SHELL_ONLINE_INSTALL_DIR:-}" ]; then
@@ -56,23 +77,23 @@ elif [ -n "${XDG_BIN_HOME:-}" ]; then
 elif [ -n "${HOME:-}" ]; then
   install_dir=$HOME/.local/bin
 else
-  fail 'HOME is not set; set SHELL_ONLINE_INSTALL_DIR to an absolute writable directory'
+  fail 'HOME is not set; set SHELL_ONLINE_INSTALL_DIR to an absolute writable directory' no_home
 fi
 
 case "$install_dir" in
   /*) ;;
-  *) fail "install directory must be absolute: $install_dir" ;;
+  *) fail "install directory must be absolute: $install_dir" install_dir_relative ;;
 esac
 case "$install_dir" in
-  *:*) fail "install directory cannot contain a colon: $install_dir" ;;
+  *:*) fail "install directory cannot contain a colon: $install_dir" install_dir_colon ;;
 esac
 
 temporary_root=${TMPDIR:-/tmp}
 if [ ! -d "$temporary_root" ] || [ ! -w "$temporary_root" ]; then
-  fail "temporary directory is not writable: $temporary_root"
+  fail "temporary directory is not writable: $temporary_root" temp_dir_unwritable
 fi
 temporary_dir=$(mktemp -d "$temporary_root/shell-online.XXXXXX") ||
-  fail "could not create a temporary directory under $temporary_root"
+  fail "could not create a temporary directory under $temporary_root" temp_dir
 trap 'rm -rf "$temporary_dir"' EXIT HUP INT TERM
 binary_name="shell-$platform-$architecture"
 binary_url="$base_url/downloads/$binary_name"
@@ -82,14 +103,14 @@ download() {
   destination=$2
   if command -v curl >/dev/null 2>&1; then
     if ! curl -fsSL "$source_url" -o "$destination"; then
-      fail "download failed: $source_url"
+      fail "download failed: $source_url" download_failed
     fi
   elif command -v wget >/dev/null 2>&1; then
     if ! wget -q "$source_url" -O "$destination"; then
-      fail "download failed: $source_url"
+      fail "download failed: $source_url" download_failed
     fi
   else
-    fail 'curl or wget is required; install either tool and run the installer again'
+    fail 'curl or wget is required; install either tool and run the installer again' no_downloader
   fi
 }
 
@@ -98,18 +119,18 @@ download "$base_url/downloads/SHA256SUMS" "$temporary_dir/SHA256SUMS"
 manifest_first_line=$(sed -n '1p' "$temporary_dir/SHA256SUMS")
 case "$manifest_first_line" in
   '<!doctype html'*|'<html'*)
-    fail "expected a checksum manifest, received HTML from $base_url/downloads/SHA256SUMS"
+    fail "expected a checksum manifest, received HTML from $base_url/downloads/SHA256SUMS" manifest_html
     ;;
 esac
 expected=$(awk -v filename="$binary_name" '$2 == filename { print $1; exit }' "$temporary_dir/SHA256SUMS")
 
 case "$expected" in
   *[!0-9a-f]*|'')
-    fail "release manifest has no valid checksum for $binary_name"
+    fail "release manifest has no valid checksum for $binary_name" manifest_missing
     ;;
 esac
 if [ "${#expected}" -ne 64 ]; then
-  fail "release manifest has an invalid checksum for $binary_name"
+  fail "release manifest has an invalid checksum for $binary_name" manifest_invalid
 fi
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -117,18 +138,18 @@ if command -v sha256sum >/dev/null 2>&1; then
 elif command -v shasum >/dev/null 2>&1; then
   actual=$(shasum -a 256 "$temporary_dir/shell" | awk '{print $1}')
 else
-  fail 'sha256sum or shasum is required to verify the downloaded binary'
+  fail 'sha256sum or shasum is required to verify the downloaded binary' no_sha_tool
 fi
 
 if [ "$actual" != "$expected" ]; then
-  fail "downloaded binary failed checksum verification (expected $expected, received $actual)"
+  fail "downloaded binary failed checksum verification (expected $expected, received $actual)" checksum_mismatch
 fi
 
 if ! mkdir -p "$install_dir"; then
-  fail "could not create install directory: $install_dir"
+  fail "could not create install directory: $install_dir" install_dir_create
 fi
 if [ ! -d "$install_dir" ] || [ ! -w "$install_dir" ]; then
-  fail "install directory is not writable: $install_dir (set SHELL_ONLINE_INSTALL_DIR to another directory)"
+  fail "install directory is not writable: $install_dir (set SHELL_ONLINE_INSTALL_DIR to another directory)" install_dir_unwritable
 fi
 
 target=$install_dir/shell
@@ -143,11 +164,11 @@ fi
 
 if command -v install >/dev/null 2>&1; then
   if ! install -m 0755 "$temporary_dir/shell" "$target"; then
-    fail "could not write executable: $target"
+    fail "could not write executable: $target" write_failed
   fi
 else
   if ! cp "$temporary_dir/shell" "$target" || ! chmod 0755 "$target"; then
-    fail "could not write executable: $target"
+    fail "could not write executable: $target" write_failed
   fi
 fi
 
@@ -207,6 +228,7 @@ if [ -n "$resolved_shell" ] && [ "$resolved_shell" != "$target" ]; then
 fi
 
 "$target" --version
+report ok
 printf '\nNext:\n'
 printf '  shell <your-command>   Run it in the background and print its browser link\n'
 printf '  shell help             See the guided start, share, and stop flow\n'

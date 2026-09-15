@@ -41,6 +41,7 @@ const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
   "copy",
   "cta_click",
   "installer_download",
+  "install_outcome",
   "binary_download",
   "skill_download",
   "session_created",

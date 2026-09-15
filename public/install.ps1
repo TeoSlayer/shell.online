@@ -6,7 +6,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Fail([string]$Message) {
+# When it finishes, and when it fails, this script tells shell.online how it
+# went: one request carrying a single word and the binary name, nothing else,
+# so that a platform that keeps failing gets noticed and fixed. Set
+# SHELL_ONLINE_INSTALL_REPORT=0 to skip it.
+function Report([string]$Outcome) {
+  if ($env:SHELL_ONLINE_INSTALL_REPORT -eq "0") { return }
+  if ($BaseUrl -notmatch '^https?://') { return }
+  $platform = if ($script:artifact) { $script:artifact } else { "unknown" }
+  try {
+    Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri "$BaseUrl/install/report?outcome=$Outcome&platform=$platform" | Out-Null
+  } catch {
+    # Reporting must never change how the install went.
+  }
+}
+
+function Fail([string]$Message, [string]$Outcome = "failed") {
+  Report $Outcome
   Write-Error "shell.online: $Message"
   exit 1
 }
@@ -16,7 +32,7 @@ $architecture = switch ($nativeArchitecture.ToUpperInvariant()) {
   "AMD64" { "amd64" }
   "X86" { "386" }
   "ARM64" { "arm64" }
-  default { Fail "unsupported Windows architecture: $nativeArchitecture (supported: x86, x64, ARM64)" }
+  default { Fail "unsupported Windows architecture: $nativeArchitecture (supported: x86, x64, ARM64)" "unsupported_arch" }
 }
 
 if (-not $InstallDir) {
@@ -34,10 +50,10 @@ try {
   Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/downloads/SHA256SUMS" -OutFile $manifestPath
   $manifest = Get-Content -Raw $manifestPath
   $match = [regex]::Match($manifest, "(?m)^([a-f0-9]{64})  " + [regex]::Escape($artifact) + "$")
-  if (-not $match.Success) { Fail "release manifest has no valid checksum for $artifact" }
+  if (-not $match.Success) { Fail "release manifest has no valid checksum for $artifact" "manifest_missing" }
   $expected = $match.Groups[1].Value
   $actual = (Get-FileHash -Algorithm SHA256 $binaryPath).Hash.ToLowerInvariant()
-  if ($actual -ne $expected) { Fail "downloaded binary failed checksum verification" }
+  if ($actual -ne $expected) { Fail "downloaded binary failed checksum verification" "checksum_mismatch" }
 
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
   $target = Join-Path $InstallDir "shell.exe"
@@ -55,10 +71,14 @@ try {
     Write-Host "  [Environment]::SetEnvironmentVariable('Path', `"$InstallDir;`" + [Environment]::GetEnvironmentVariable('Path', 'User'), 'User')"
   }
   & $target --version
+  Report "ok"
   Write-Host ""
   Write-Host "Next:"
   Write-Host "  shell <your-command>   Run it in the background and print its browser link"
   Write-Host "  shell help             See the guided start, share, and stop flow"
+} catch {
+  Report "failed"
+  throw
 } finally {
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $temporaryDirectory
 }

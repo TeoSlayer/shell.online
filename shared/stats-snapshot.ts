@@ -190,6 +190,8 @@ export function buildStatsSnapshot(
     installs: total("installer_download"),
     skillDownloads: total("skill_download"),
     binaryDownloads,
+    installsReported: total("install_outcome", "ok"),
+    installFailuresReported: total("install_outcome") - total("install_outcome", "ok"),
     copies: total("copy"),
     averageDurationSeconds: endedCount === 0 ? 0 : durationSum / endedCount,
     longestDurationSeconds: ended.reduce(
@@ -252,6 +254,7 @@ export function buildStatsSnapshot(
       openedDevices: breakdown(rows.openedDevices),
       typedDevices: breakdown(rows.typedDevices),
       rejections: targetBreakdown(rows.summary, "viewer_rejected"),
+      installOutcomes: targetBreakdown(rows.summary, "install_outcome"),
     },
     targets: rows.summary.map((row): StatsTargetMetric => ({
       event: row.event,
