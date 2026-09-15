@@ -48,6 +48,8 @@ const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
   "viewer_disconnected",
   "collaboration_started",
   "session_ended",
+  "viewer_rejected",
+  "input_denied",
   "stats_view",
 ]);
 
@@ -346,6 +348,8 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     const devices = this.dimensionBreakdown("device", rangeStart, "page_view");
     const referrers = this.dimensionBreakdown("referrer", rangeStart, "page_view");
     const clients = this.dimensionBreakdown("client", rangeStart, "session_created");
+    const openedDevices = this.dimensionBreakdown("device", rangeStart, "share_opened");
+    const typedDevices = this.dimensionBreakdown("device", rangeStart, "collaboration_started");
     const live = this.sql.exec<LivePresenceRow>(
       `SELECT
         COALESCE(SUM(active_sessions), 0) AS active_sessions,
@@ -393,6 +397,8 @@ export class StatsStore extends DurableObject<Record<string, never>> {
         devices,
         referrers,
         clients,
+        openedDevices,
+        typedDevices,
         live,
         collectingSince,
         uniques,

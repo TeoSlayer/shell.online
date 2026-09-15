@@ -118,6 +118,8 @@ export interface StatsFigures {
   /** Sessions that ended without the host ever connecting: a blocked WebSocket, usually. */
   neverStarted: number;
   sharesOpened: number;
+  /** Opened sessions that allow typing: the only ones a keystroke can come from. */
+  sharesOpenedWritable: number;
   collaborations: number;
 }
 
@@ -146,6 +148,9 @@ export interface StatsFunnelStep {
   note: string;
   /** What the count leaves out: crawler views, an installer read in a browser. */
   excluded: StatsFunnelExclusion[];
+  /** When the share is of part of the basis step, that part and its name: typed, of the opened sessions that allow typing. */
+  basisCount?: number;
+  basisLabel?: string;
   /**
    * The step this one is a share of, or null when it is its own population:
    * sessions in a range come from every install ever made, not from this
@@ -195,8 +200,20 @@ export interface StatsSnapshot {
     sessionsCreated: number;
     sessionsStarted: number;
     sharesOpened: number;
+    /** Of those, sessions the owner made read-only, where nobody can type. */
+    sharesOpenedReadOnly: number;
     viewerConnections: number;
     collaborations: number;
+    /** Browsers that opened a link and were turned away: full, expired or unknown session. */
+    viewersRejected: number;
+    /** Viewers who tried to type into a read-only session, once each. */
+    inputDenied: number;
+    /** From creation to the first browser open, over sessions that were opened. */
+    averageSecondsToOpen: number;
+    /** From the first open to the first keystroke, over sessions that were typed into. */
+    averageSecondsToType: number;
+    /** How long a viewer stayed connected, over viewers that disconnected. */
+    averageViewerSeconds: number;
     landingViews: number;
     docsViews: number;
     terminalViews: number;
@@ -243,6 +260,12 @@ export interface StatsSnapshot {
     downloads: StatsBreakdownItem[];
     outcomes: StatsBreakdownItem[];
     pages: StatsBreakdownItem[];
+    /** Sessions opened, by the device class of the first viewer. */
+    openedDevices: StatsBreakdownItem[];
+    /** Sessions typed into, by the device class of the first typist. */
+    typedDevices: StatsBreakdownItem[];
+    /** Why viewers were turned away. */
+    rejections: StatsBreakdownItem[];
   };
   targets: StatsTargetMetric[];
 }

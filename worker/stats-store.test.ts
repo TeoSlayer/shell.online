@@ -25,6 +25,8 @@ describe("statistics live presence", () => {
       devices: [],
       referrers: [],
       clients: [],
+      openedDevices: [],
+      typedDevices: [],
       live: { active_sessions: 1, active_viewers: 3 },
       collectingSince,
       byDevice: [],
@@ -55,6 +57,8 @@ describe("statistics live presence", () => {
       devices: [],
       referrers: [],
       clients: [],
+      openedDevices: [],
+      typedDevices: [],
       live: { active_sessions: 0, active_viewers: 0 },
       collectingSince: now - 60_000,
       byDevice: [],
@@ -87,8 +91,13 @@ describe("people and the funnel", () => {
       metric("binary_download", "darwin-arm64", 4),
       metric("session_created", "cli", 48),
       metric("session_started", "cli", 48),
-      metric("share_opened", "viewer", 6),
-      metric("collaboration_started", "remote_input", 5),
+      metric("share_opened", "viewer", 5, 100),
+      metric("share_opened", "viewer_read_only", 1, 20),
+      metric("collaboration_started", "remote_input", 5, 50),
+      metric("viewer_disconnected", "viewer", 12, 3_600),
+      metric("viewer_rejected", "session_full", 2),
+      metric("viewer_rejected", "expired", 3),
+      metric("input_denied", "read_only", 1),
       metric("copy", "install", 20),
       metric("copy", "brew_install", 5),
       metric("copy", "share", 3),
@@ -116,6 +125,8 @@ describe("people and the funnel", () => {
     devices: [],
     referrers: [],
     clients: [],
+    openedDevices: [{ name: "desktop", count: 4 }, { name: "mobile", count: 2 }],
+    typedDevices: [{ name: "desktop", count: 4 }, { name: "mobile", count: 1 }],
     live: { active_sessions: 0, active_viewers: 0 },
     collectingSince: now - 30 * DAY_MS,
     uniques: [
@@ -167,6 +178,7 @@ describe("people and the funnel", () => {
       sessionsStarted: 48,
       neverStarted: 4,
       sharesOpened: 6,
+      sharesOpenedWritable: 5,
       collaborations: 5,
     });
     /* The raw totals are untouched: the ledger still shows every request. */
@@ -199,10 +211,29 @@ describe("people and the funnel", () => {
       [{ label: "by crawlers", count: 1 }],
       [{ label: "created but never connected", count: 4 }],
       [],
-      [],
+      [{ label: "opened read-only, typing impossible", count: 1 }],
     ]);
     for (const step of snapshot.funnel) expect(step.note.length).toBeGreaterThan(20);
     expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, "visited", "visited", "visited", "installer", null, "session", "opened"]);
+  });
+
+  it("keeps what happens after a link is opened: waits, stays, refusals, and read-only sessions apart", () => {
+    const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
+    expect(snapshot.metrics).toMatchObject({
+      sharesOpened: 6,
+      sharesOpenedReadOnly: 1,
+      viewersRejected: 5,
+      inputDenied: 1,
+      averageSecondsToOpen: 20,
+      averageSecondsToType: 10,
+      averageViewerSeconds: 300,
+    });
+    const typed = snapshot.funnel.find((step) => step.key === "typed");
+    expect(typed).toMatchObject({ basis: "opened", basisCount: 5, basisLabel: "opened sessions that allow typing" });
+    expect(typed?.excluded).toEqual([{ label: "opened read-only, typing impossible", count: 1 }]);
+    expect(snapshot.breakdowns.rejections).toEqual([{ label: "expired", value: 3 }, { label: "session_full", value: 2 }]);
+    expect(snapshot.breakdowns.openedDevices).toEqual([{ label: "desktop", value: 4 }, { label: "mobile", value: 2 }]);
+    expect(snapshot.breakdowns.typedDevices).toEqual([{ label: "desktop", value: 4 }, { label: "mobile", value: 1 }]);
   });
 
   it("compares with the period before, when there is one worth comparing with", () => {
@@ -236,6 +267,7 @@ describe("people and the funnel", () => {
         sessionsStarted: 40,
         neverStarted: 0,
         sharesOpened: 4,
+        sharesOpenedWritable: 4,
         collaborations: 2,
       },
       people: { site: 300, cli: 8, viewer: 0, install: 0 },

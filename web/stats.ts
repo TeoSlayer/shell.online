@@ -518,8 +518,36 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
           <span><small>Longest lifetime</small><b>${formatDuration(metrics.longestDurationSeconds)}</b></span>
           <span><small>Avg peak audience</small><b>${numberFormatter.format(metrics.averagePeakViewers)}</b></span>
           <span><small>Largest audience</small><b>${integerFormatter.format(metrics.maximumPeakViewers)}</b></span>
+          <span><small>Link waited for its first open</small><b>${metrics.sharesOpened === 0 ? "—" : formatDuration(metrics.averageSecondsToOpen)}</b></span>
+          <span><small>Open to first keystroke</small><b>${metrics.collaborations === 0 ? "—" : formatDuration(metrics.averageSecondsToType)}</b></span>
+          <span><small>A viewer stayed</small><b>${metrics.averageViewerSeconds === 0 ? "—" : formatDuration(metrics.averageViewerSeconds)}</b></span>
+          <span><small>Viewers turned away</small><b>${integerFormatter.format(metrics.viewersRejected)}</b></span>
         </div>
       </article>
+    </section>
+
+    <section class="stats-breakdown-grid">
+      ${renderBreakdown("CLI clients", "Versions creating sessions", snapshot.breakdowns.clients, "client")}
+      ${renderRates(
+        "Typed, by device",
+        "Of sessions opened on each device class, how many were typed into",
+        snapshot.breakdowns.openedDevices.map((opened) => ({
+          label: opened.label,
+          numerator: snapshot.breakdowns.typedDevices.find((typed) => typed.label === opened.label)?.value ?? 0,
+          denominator: opened.value,
+        })),
+        "Device is the first viewer's for opened and the first typist's for typed, so a phone that watched while a laptop typed lands on both sides.",
+      )}
+      ${renderBreakdown(
+        "Turned away",
+        "Browsers that opened a link and got nothing",
+        [
+          ...snapshot.breakdowns.rejections,
+          ...(metrics.inputDenied > 0 ? [{ label: "typed_into_read_only", value: metrics.inputDenied }] : []),
+        ],
+        "rejection",
+        "A full, expired or unknown session closes the link at once; typing into a read-only session is refused but the viewer stays. None of these appear as opened.",
+      )}
     </section>
 
     <section class="stats-breakdown-grid">
@@ -539,7 +567,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "download",
         "Homebrew and source builds are not counted.",
       )}
-      ${renderBreakdown("CLI clients", "Versions creating sessions", snapshot.breakdowns.clients, "client")}
+      ${renderBreakdown("Session outcomes, all", "How every ended session ended", outcomes, "outcome")}
     </section>
 
     <section class="stats-people-grid">
@@ -669,6 +697,12 @@ function sessionsInsight(snapshot: StatsSnapshot): string {
   const ended = outcomes.reduce((sum, item) => sum + item.value, 0);
   if (ended > 0 && outcomes.length > 0) {
     parts.push(`${formatPercent(ratio(outcomes[0].value, ended))} of the ${integerFormatter.format(ended)} that ended ${outcomePhrase(outcomes[0].label)}; a session lasted ${formatDuration(metrics.averageDurationSeconds)} on average.`);
+  }
+  if (metrics.sharesOpened > 0) {
+    parts.push(`A link waited ${formatDuration(metrics.averageSecondsToOpen)} for its first open on average.`);
+  }
+  if (metrics.viewersRejected > 0) {
+    parts.push(`${integerFormatter.format(metrics.viewersRejected)} viewer${metrics.viewersRejected === 1 ? " was" : "s were"} turned away by a full, expired or unknown session.`);
   }
   return parts.join(" ");
 }
@@ -802,11 +836,13 @@ function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): stri
       ${steps.map((step, index) => {
         const width = step.count === 0 ? 1.5 : Math.max(4, step.count / maximum * 100);
         const basis = step.basis === null ? null : steps.find((candidate) => candidate.key === step.basis) ?? null;
+        const basisCount = step.basisCount ?? basis?.count ?? 0;
+        const basisLabel = step.basisLabel ?? basis?.label.toLowerCase() ?? "";
         const share = basis === null
           ? (index === 0 ? "the whole path starts here" : "its own population")
-          : basis.count === 0
-            ? `no ${basis.label.toLowerCase()} to compare with`
-            : `${formatPercent(ratio(step.count, basis.count))} of ${basis.label.toLowerCase()}`;
+          : basisCount === 0
+            ? `no ${basisLabel} to compare with`
+            : `${formatPercent(ratio(step.count, basisCount))} of ${basisLabel}`;
         const excluded = step.excluded.length === 0
           ? ""
           : `<em class="funnel-excluded">+ ${step.excluded.map((entry) => `${integerFormatter.format(entry.count)} ${escapeHtml(entry.label)}`).join(" · ")}</em>`;
@@ -966,6 +1002,33 @@ function renderDonut(items: StatsBreakdownItem[]): string {
   `;
 }
 
+/** A panel of rates: each row a share of its own denominator, not of a total. */
+function renderRates(
+  title: string,
+  description: string,
+  rows: { label: string; numerator: number; denominator: number }[],
+  footnote = "",
+): string {
+  const shown = rows.filter((row) => row.denominator > 0).sort((left, right) => right.denominator - left.denominator);
+  return `
+    <article class="stats-panel breakdown-panel kind-rate">
+      <header class="panel-heading">
+        <div><span class="panel-kicker">${escapeHtml(description)}</span><h2>${escapeHtml(title)}</h2></div>
+      </header>
+      <div class="breakdown-list">
+        ${shown.slice(0, 7).map((row) => `
+          <div>
+            <span>${escapeHtml(humanize(row.label))}</span>
+            <i><b style="width:${Math.max(2, ratio(row.numerator, row.denominator) * 100)}%"></b></i>
+            <strong>${formatPercent(ratio(row.numerator, row.denominator))} <small>${integerFormatter.format(row.numerator)} of ${integerFormatter.format(row.denominator)}</small></strong>
+          </div>
+        `).join("") || "<em>No opened sessions in this range yet.</em>"}
+      </div>
+      ${footnote ? `<p class="cohort-empty">${escapeHtml(footnote)}</p>` : ""}
+    </article>
+  `;
+}
+
 function renderBreakdown(
   title: string,
   description: string,
@@ -1107,8 +1170,15 @@ function humanize(value: string): string {
     internal: "Internal",
     hacker_news: "Hacker News",
     task_exit: "Task exited",
+    persistent_task_exit: "Persistent task exited",
     disconnected_timeout: "Disconnected timeout",
     never_started: "Never started",
+    expired: "Expired",
+    session_full: "Session was full",
+    typed_into_read_only: "Typed into a read-only session",
+    viewer_read_only: "Read-only",
+    viewer_rejected: "Viewer turned away",
+    input_denied: "Input refused",
     remote_input: "Remote input",
     cta_click: "Sign-up click",
     signup_nav: "Sign up free (nav)",

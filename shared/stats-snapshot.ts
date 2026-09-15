@@ -106,6 +106,8 @@ export interface StatsSnapshotRows {
   devices: BreakdownRow[];
   referrers: BreakdownRow[];
   clients: BreakdownRow[];
+  openedDevices: BreakdownRow[];
+  typedDevices: BreakdownRow[];
   live: LivePresenceRow;
   collectingSince: number | null;
   uniques: UniqueSummaryRow[];
@@ -136,6 +138,7 @@ export function buildStatsSnapshot(
   accounts: StatsAccounts = null,
 ): StatsSnapshot {
   const total = (event: string, target?: string): number => sumCounts(rows.summary, event, target);
+  const average = (event: string): number => averageValue(rows.summary, event);
   const ended = rows.summary.filter((row) => row.event === "session_ended");
   const endedCount = ended.reduce((sum, row) => sum + Number(row.count), 0);
   const durationSum = ended.reduce((sum, row) => sum + Number(row.value_sum), 0);
@@ -161,8 +164,14 @@ export function buildStatsSnapshot(
     sessionsCreated,
     sessionsStarted,
     sharesOpened,
+    sharesOpenedReadOnly: total("share_opened", "viewer_read_only"),
     viewerConnections: total("viewer_connected"),
     collaborations,
+    viewersRejected: total("viewer_rejected"),
+    inputDenied: total("input_denied"),
+    averageSecondsToOpen: average("share_opened"),
+    averageSecondsToType: average("collaboration_started"),
+    averageViewerSeconds: average("viewer_disconnected"),
     landingViews,
     docsViews,
     terminalViews: total("page_view", "session"),
@@ -224,6 +233,9 @@ export function buildStatsSnapshot(
       ].sort((left, right) => right.value - left.value),
       outcomes: targetBreakdown(rows.summary, "session_ended"),
       pages: targetBreakdown(rows.summary, "page_view"),
+      openedDevices: breakdown(rows.openedDevices),
+      typedDevices: breakdown(rows.typedDevices),
+      rejections: targetBreakdown(rows.summary, "viewer_rejected"),
     },
     targets: rows.summary.map((row): StatsTargetMetric => ({
       event: row.event,
@@ -241,6 +253,14 @@ function sumCounts(rows: MetricSummaryRow[], event: string, target?: string): nu
   return rows
     .filter((row) => row.event === event && (target === undefined || row.target === target))
     .reduce((sum, row) => sum + Number(row.count), 0);
+}
+
+/** The mean of an event's value over its occurrences, or zero when there were none. */
+function averageValue(rows: MetricSummaryRow[], event: string): number {
+  const matching = rows.filter((row) => row.event === event);
+  const count = matching.reduce((sum, row) => sum + Number(row.count), 0);
+  if (count === 0) return 0;
+  return matching.reduce((sum, row) => sum + Number(row.value_sum), 0) / count;
 }
 
 const AUDIENCE_EVENTS: Record<keyof StatsAudiences, (event: string, target: string) => boolean> = {
@@ -285,6 +305,7 @@ export function buildFigures(summary: MetricSummaryRow[], audiences: StatsAudien
     sessionsStarted: sumCounts(summary, "session_started"),
     neverStarted: sumCounts(summary, "session_ended", "never_started"),
     sharesOpened: sumCounts(summary, "share_opened"),
+    sharesOpenedWritable: sumCounts(summary, "share_opened") - sumCounts(summary, "share_opened", "viewer_read_only"),
     collaborations: sumCounts(summary, "collaboration_started"),
   };
 }
@@ -411,9 +432,11 @@ export function buildFunnel(
       label: "Typed from a browser",
       count: figures.collaborations,
       unique: null,
-      note: "Sessions that received at least one keystroke from a browser.",
-      excluded: [],
+      note: "Sessions that received at least one keystroke from a browser. Read-only sessions cannot, so they are not in the share.",
+      excluded: excluded([{ label: "opened read-only, typing impossible", count: figures.sharesOpened - figures.sharesOpenedWritable }]),
       basis: "opened",
+      basisCount: figures.sharesOpenedWritable,
+      basisLabel: "opened sessions that allow typing",
     },
   ];
 }

@@ -135,6 +135,10 @@ interface SocketAttachment {
   terminalCols?: number;
   terminalRows?: number;
   portrait?: boolean;
+  /** When the socket was accepted, so a disconnect can say how long the viewer stayed. */
+  connectedAt?: number;
+  /** Set once a viewer has been refused input, so the refusal is counted once per viewer. */
+  inputDeniedAt?: number;
   supportsPortraitGrid?: boolean;
 }
 
@@ -911,9 +915,19 @@ export class TerminalSession extends DurableObject<Env> {
   }
 
   private async acceptSocket(request: Request): Promise<Response> {
-    if (this.meta === undefined) return json({ error: "session not found" }, 404);
+    /*
+     * A browser that opens a dead link is a person the funnel would otherwise
+     * never see: it is counted as turned away, by reason. The host presents a
+     * token, a viewer does not, which is enough to tell them apart here.
+     */
+    const isViewer = request.headers.get("Authorization") === null;
+    if (this.meta === undefined) {
+      if (isViewer) recordAnalytics(this.env, this.state, "viewer_rejected", "not_found", requestAnalyticsContext(request));
+      return json({ error: "session not found" }, 404);
+    }
     if (Date.now() >= this.meta.expiresAt) {
       await this.expire();
+      if (isViewer) recordAnalytics(this.env, this.state, "viewer_rejected", "expired", requestAnalyticsContext(request));
       return json({ error: "session expired" }, 410);
     }
 
@@ -933,6 +947,7 @@ export class TerminalSession extends DurableObject<Env> {
       : 0;
     const admission = viewerAdmission(activeViewerCount);
     if (role === "viewer" && !admission.accepted) {
+      recordAnalytics(this.env, this.state, "viewer_rejected", "session_full", requestAnalyticsContext(request));
       // Browser WebSockets hide an upgrade rejection's status and body. Finish
       // the upgrade, then close with a code the viewer can explain and retry.
       const pair = new WebSocketPair();
@@ -972,6 +987,7 @@ export class TerminalSession extends DurableObject<Env> {
       referrer: analyticsContext.referrer,
       portrait: role === "viewer" && new URL(request.url).searchParams.get("layout") === "portrait",
       supportsPortraitGrid: role === "host" && request.headers.get("X-Shell-Terminal-Grid") === "80x40",
+      connectedAt: Date.now(),
     };
 
     server.serializeAttachment(attachment);
@@ -1008,7 +1024,15 @@ export class TerminalSession extends DurableObject<Env> {
       await this.persistMeta();
       recordAnalytics(this.env, this.state, "viewer_connected", "viewer", viewerContext);
       if (firstShareOpen) {
-        recordAnalytics(this.env, this.state, "share_opened", "viewer", viewerContext);
+        /*
+         * The first open says two things worth keeping: whether anyone can
+         * type here, and how long the link waited. A read-only session is
+         * its own target so the typed rate is over sessions that allow it.
+         */
+        recordAnalytics(this.env, this.state, "share_opened", this.isReadOnly() ? "viewer_read_only" : "viewer", {
+          ...viewerContext,
+          value: Math.max(0, (Date.now() - this.meta.createdAt) / 1_000),
+        });
       }
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1258,6 +1282,16 @@ export class TerminalSession extends DurableObject<Env> {
     const action = viewerFrameAction(frame[0], this.isReadOnly());
     if (action === "blocked-input") {
       sendJson(socket, { type: "access_denied", reason: "read_only" });
+      /* Once per viewer: the first refusal is the signal, the rest are the same person retrying. */
+      if (attachment.inputDeniedAt === undefined) {
+        attachment.inputDeniedAt = Date.now();
+        socket.serializeAttachment(attachment);
+        recordAnalytics(this.env, this.state, "input_denied", "read_only", {
+          device: attachment.device,
+          client: attachment.client,
+          referrer: attachment.referrer,
+        });
+      }
       return;
     }
 
@@ -1360,6 +1394,8 @@ export class TerminalSession extends DurableObject<Env> {
         device: attachment.device,
         client: attachment.client,
         referrer: attachment.referrer,
+        /* Seconds connected; absent on sockets accepted before this was recorded. */
+        value: attachment.connectedAt === undefined ? 0 : Math.max(0, (Date.now() - attachment.connectedAt) / 1_000),
       });
       await this.refreshLivePresence(true, socket);
       await this.scheduleNextAlarm();
@@ -1523,6 +1559,8 @@ export class TerminalSession extends DurableObject<Env> {
       device: attachment.device,
       client: attachment.client,
       referrer: "internal",
+      /* Seconds from the first open to the first keystroke. */
+      value: Math.max(0, (this.meta.collaborationStartedAt - (this.meta.shareOpenedAt ?? this.meta.createdAt)) / 1_000),
     });
     const meta = { ...this.meta };
     this.state.waitUntil(this.state.storage.put("meta", meta));

@@ -2102,3 +2102,10 @@ html.stats-document #app {
   margin-top: 12px;
   font-size: 11px;
 }
+
+.kind-rate .breakdown-list > div > strong small {
+  margin-left: 6px;
+  color: #6e7a8f;
+  font-size: 9px;
+  font-weight: 500;
+}

@@ -15,6 +15,10 @@ export type AnalyticsEvent =
   | "viewer_disconnected"
   | "collaboration_started"
   | "session_ended"
+  /** A browser opened a link and was turned away: the session was full, expired or never existed. */
+  | "viewer_rejected"
+  /** A viewer tried to type into a read-only session: demand the owner did not allow. Once per viewer. */
+  | "input_denied"
   | "stats_view";
 
 export type DeviceClass = "mobile" | "tablet" | "desktop" | "bot" | "cli" | "unknown";
