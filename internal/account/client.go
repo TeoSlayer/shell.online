@@ -270,6 +270,41 @@ func (client *Client) CloseSession(
 	return err
 }
 
+// AccountSession is one session as the account holds it, from any of the
+// account's machines.
+type AccountSession struct {
+	ID         string `json:"id"`
+	Name       string `json:"name,omitempty"`
+	Command    string `json:"command"`
+	Host       string `json:"host"`
+	ShareURL   string `json:"shareUrl"`
+	ReadOnly   bool   `json:"readOnly"`
+	Encrypted  bool   `json:"encrypted"`
+	Persistent bool   `json:"persistent"`
+	StartedAt  int64  `json:"startedAt"`
+	ClosedAt   *int64 `json:"closedAt,omitempty"`
+	ExitCode   *int   `json:"exitCode,omitempty"`
+	// RelayStatus is the relay's view of an open session: waiting,
+	// connected, disconnected, exited, missing or unknown. Empty when the
+	// service has no relay to ask.
+	RelayStatus string `json:"relayStatus,omitempty"`
+}
+
+// ListSessions returns every session this account has published, newest first.
+func (client *Client) ListSessions(ctx context.Context, accessToken string) ([]AccountSession, error) {
+	contents, err := client.do(ctx, http.MethodGet, "/api/cli/sessions", accessToken, nil)
+	if err != nil {
+		return nil, err
+	}
+	var decoded struct {
+		Sessions []AccountSession `json:"sessions"`
+	}
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return nil, fmt.Errorf("decode sessions: %w", err)
+	}
+	return decoded.Sessions, nil
+}
+
 // saltFragmentPrefix marks the one fragment form that is safe to publish.
 const saltFragmentPrefix = "#salt="
 

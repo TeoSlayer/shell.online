@@ -17,6 +17,9 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 
 	fmt.Fprintf(writer, "\n  %s  %s\n", brand, spark)
 	fmt.Fprintln(writer)
+	if result.Name != "" {
+		fmt.Fprintf(writer, "  %s %s\n", label("Name"), value(result.Name))
+	}
 	fmt.Fprintf(writer, "  %s %s\n", label("Link"), value(result.ShareURL))
 	if result.Password != "" {
 		fmt.Fprintf(writer, "  %s %s\n", label("Password"), styleSessionText(color, "1;38;5;222", result.Password))

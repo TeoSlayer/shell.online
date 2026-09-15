@@ -117,6 +117,9 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 			"read_only": result.ReadOnly, "encrypted": result.Encrypted, "persistent": result.Persistent,
 			"auto_close": "task", "expires_at": result.ExpiresAt.Format(time.RFC3339), "background": true,
 		}
+		if result.Name != "" {
+			event["name"] = result.Name
+		}
 		if result.Password != "" {
 			event["e2ee_password"] = result.Password
 		}

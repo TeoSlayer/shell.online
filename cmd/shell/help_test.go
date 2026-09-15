@@ -22,6 +22,8 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 		"ten-character browser",
 		"shell list",
 		"shell list --json",
+		"shell ls",
+		"shell --name <name> <command>",
 		"shell attach <ID>",
 		"Press Ctrl-X, then D to detach",
 		"shell kill <ID>",
@@ -190,6 +192,32 @@ func TestHelpLoginTopicIsReachableFromEveryAccountVerb(t *testing.T) {
 		}
 		if !strings.Contains(stdout.String(), "shell login") {
 			t.Errorf("help %s did not reach the login topic", verb)
+		}
+	}
+}
+
+func TestLsHelpExplainsTheAccountWideList(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := run([]string{"help", "ls"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run(help ls) = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, expected := range []string{"shell ls --all", "shell ls --json", "any machine linked", "shell login", "shell -- ls"} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Errorf("ls help does not contain %q", expected)
+		}
+	}
+}
+
+func TestReferenceDocumentsNameAndLs(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if exitCode := run([]string{"help", "reference"}, &stdout, &stderr); exitCode != 0 {
+		t.Fatalf("run(help reference) = %d, stderr = %q", exitCode, stderr.String())
+	}
+	for _, expected := range []string{"--name <name>", "shell ls [--all] [--json]"} {
+		if !strings.Contains(stdout.String(), expected) {
+			t.Errorf("reference does not contain %q", expected)
 		}
 	}
 }

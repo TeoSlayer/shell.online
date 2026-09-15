@@ -441,3 +441,44 @@ func TestPollCommandsOmitsHarnessesWhenNoneWereDetected(t *testing.T) {
 		t.Fatalf("query = %q, want no harnesses parameter", raw)
 	}
 }
+
+func TestListSessionsReadsTheAccountSessions(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path != "/api/cli/sessions" || request.Method != http.MethodGet {
+				t.Errorf("unexpected request %s %s", request.Method, request.URL.Path)
+			}
+			if request.Header.Get("Authorization") != "Bearer sha_a" {
+				t.Errorf("Authorization = %q", request.Header.Get("Authorization"))
+			}
+			writeJSON(writer, http.StatusOK, map[string]any{"sessions": []map[string]any{
+				{"id": "s1", "name": "web app", "command": "npm run dev", "host": "box", "startedAt": 1000, "relayStatus": "connected"},
+				{"id": "s2", "command": "htop", "startedAt": 500, "closedAt": 900, "exitCode": 0},
+			}})
+		}))
+	defer service.Close()
+
+	sessions, err := NewClient(service.URL, "test").ListSessions(context.Background(), "sha_a")
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 2 || sessions[0].Name != "web app" || sessions[0].RelayStatus != "connected" {
+		t.Fatalf("sessions = %+v", sessions)
+	}
+	if sessions[1].ClosedAt == nil || *sessions[1].ClosedAt != 900 || sessions[1].ExitCode == nil {
+		t.Fatalf("closed session = %+v", sessions[1])
+	}
+}
+
+func TestListSessionsSurfacesARejection(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "not signed in"})
+		}))
+	defer service.Close()
+
+	if _, err := NewClient(service.URL, "test").ListSessions(context.Background(), "x"); err == nil ||
+		!strings.Contains(err.Error(), "not signed in") {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -68,6 +68,7 @@ installer, and test caveats.
 shell <command>                           # share a command
 shell                                     # share a new shell
 shell --read-only <command>               # disable browser input
+shell --name "web app" <command>          # label it in lists and the web app
 shell --foreground <command>              # also show it locally
 shell --auto-close 5m <command>           # set an earlier deadline
 shell --persistent <file> <command>       # reuse a URL and password
@@ -75,6 +76,7 @@ shell --files <command>                   # opt in working-directory files
 shell --files-root <dir> <command>        # opt in a different file root
 
 shell list                                # list local sessions (adapts to terminal width)
+shell ls                                  # list your account's sessions on every machine
 shell password <id>                       # retrieve an active password locally
 shell password rotate <id>                # revoke it without restarting the process
 shell attach <id>                         # attach locally

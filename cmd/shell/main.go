@@ -73,6 +73,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	persistentState := flags.String("persistent", "", "reuse a stable encrypted session identity from this state file")
 	shareFiles := flags.Bool("files", false, "share files under the session working directory on demand")
 	filesRoot := flags.String("files-root", "", "share files under this directory on demand (implies --files)")
+	sessionNameFlag := flags.String("name", "", "label this session in shell ls and the web app")
 	autoClose := newAutoCloseFlag()
 	flags.Var(autoClose, "auto-close", "close on task exit, or earlier at a duration/date (for example 5m, 2h, tomorrow 09:00)")
 	flags.Usage = func() {
@@ -95,6 +96,15 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 	parsedCloseDeadline, err := parseCloseDeadline(autoClose.value, now)
 	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 2
+	}
+	// A name given here wins over one handed down by a browser-started launch.
+	sessionName := strings.TrimSpace(*sessionNameFlag)
+	if sessionName == "" {
+		sessionName = sessionNameFromEnvironment()
+	}
+	if err = validateSessionName(sessionName); err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 2
 	}
@@ -214,6 +224,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 	control, controlError := startLocalSession(localSessionRecord{
 		ID:              session.ID,
+		Name:            sessionName,
 		ShareURL:        session.ShareURL,
 		ReadOnly:        session.ReadOnly,
 		Encrypted:       session.Encrypted,
@@ -248,6 +259,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	publishedSession := account.SessionInput{
 		ID:         session.ID,
 		ShareURL:   session.ShareURL,
+		Name:       sessionName,
 		Command:    displayCommand(launch.DisplayArguments),
 		ReadOnly:   session.ReadOnly,
 		Encrypted:  session.Encrypted,
@@ -264,6 +276,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			sendBackgroundResult(backgroundLaunchResult{
 				OK:         true,
 				ID:         session.ID,
+				Name:       sessionName,
 				ShareURL:   session.ShareURL,
 				ReadOnly:   session.ReadOnly,
 				Encrypted:  session.Encrypted,
@@ -289,6 +302,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				"expires_at": session.ExpiresAt.Format(time.RFC3339),
 				"background": false,
 			}
+			if sessionName != "" {
+				event["name"] = sessionName
+			}
 			if password != "" {
 				event["e2ee_password"] = password
 				event["vault"] = vault
@@ -305,7 +321,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			return
 		}
 		printSessionCard(stderr, backgroundLaunchResult{
-			OK: true, ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
+			OK: true, ID: session.ID, Name: sessionName, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
 			Encrypted: session.Encrypted, Password: password, Persistent: session.Persistent,
 			Vault: vault, Files: sharedFilesRoot,
 			ExpiresAt: session.ExpiresAt, ClosesAt: closesAt, Handoff: launch.Handoff,

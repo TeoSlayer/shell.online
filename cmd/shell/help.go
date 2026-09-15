@@ -12,6 +12,7 @@ Start
   shell <command>                  Share it in the background
   shell --read-only <command>      Share it while browser input is blocked
   shell --files <command>          Add on-demand files from this directory
+  shell --name <name> <command>    Label it in shell ls and the web app
   shell                            Share a fresh shell
   shell claude                     Share a fork of this conversation
 
@@ -21,6 +22,7 @@ both. Shares are interactive by default and end-to-end encrypted.
 Then
   shell list                       See active shares and uptime
   shell list --json                Give agents the complete machine-readable records
+  shell ls                         See every open session in your account, on any machine
   shell password <ID>              Print an active share's password locally
   shell password rotate <ID>       Revoke it and make a fresh password
   shell attach <ID>                Rejoin locally; browser access stays live
@@ -40,13 +42,14 @@ Machine services
 
 Common options
   --read-only                      View only
+  --name <name>                    Label the session
   --foreground                     Stay attached locally
   --persistent <state-file>        Keep one encrypted URL across restarts
   --files                          Opt in the working directory for file access
   --files-root <directory>         Opt in a different directory
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|files|attach|list|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
+Use shell help <start|files|attach|list|ls|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
 guided topic, or shell help reference for every command, flag, and environment variable.
 `)
 }
@@ -57,7 +60,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|files|attach|list|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
+		fmt.Fprintln(stderr, "Usage: shell help [start|files|attach|list|ls|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
 		return 2
 	}
 
@@ -72,14 +75,15 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 The command stays on this machine and runs in the background by default. shell prints
 one unguessable browser link. Links are interactive by default; --read-only creates
 a view-only link whose browser input is blocked by the server. Omit the command for
-a fresh shell.
+a fresh shell. --name gives the session a label, shown in shell list, shell ls, and
+the web app, where it can be renamed later.
 
 Examples
   shell python train.py
   shell claude
   shell codex
   shell --read-only python train.py
-  shell npm run dev
+  shell --name "web app" npm run dev
   shell --foreground htop
   shell --auto-close 5m pytest -x
   shell --files claude
@@ -242,6 +246,25 @@ The table shows each session ID, access mode, uptime, closing rule, command, sha
 URL, whether a password is stored, and whether the relay is online, reconnecting,
 expired, or temporarily unknown. Run shell password <ID> to reveal one deliberately.
 Use an ID or an unambiguous prefix with shell attach or shell kill.
+
+shell list shows the processes on this machine. shell ls shows the sessions in
+your account instead, from every linked machine; see shell help ls.
+`)
+	case "ls":
+		fmt.Fprint(stdout, `List your account's sessions
+
+  shell ls
+  shell ls --all
+  shell ls --json
+
+Lists the sessions you started on any machine linked to your account, newest
+first, with each one's name, status, uptime, and machine. Sessions that have
+ended are hidden and counted; --all includes them. --json prints the complete
+records on stdout, including share_url and the raw relay_status.
+
+shell ls needs a linked machine (shell login). It never prints a password: those
+stay on the machine that started the session and in your vault. To share a
+program that is itself called ls, put -- first: shell -- ls.
 `)
 	case "kill", "stop":
 		fmt.Fprint(stdout, `Stop sessions
@@ -333,7 +356,7 @@ process. The Docker image combines it with a restart policy for automatic recove
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, password, kill, login, agent, daemon, service, e2ee, docker, platforms, reference")
+		fmt.Fprintln(stderr, "Available topics: start, attach, list, ls, password, kill, login, agent, daemon, service, e2ee, docker, platforms, reference")
 		return 2
 	}
 	return 0
@@ -345,12 +368,13 @@ func printCLIReference(writer io.Writer) {
 SYNOPSIS
   shell [options] [--] [command] [arguments...]
   shell list [--json]
+  shell ls [--all] [--json]
   shell attach <session-id-or-prefix>
   shell kill <session-id-or-prefix>
   shell kill --all
   shell password <session-id-or-prefix>
   shell password rotate <session-id-or-prefix>
-  shell help [start|attach|list|password|kill|e2ee|docker|platforms|reference]
+  shell help [start|attach|list|ls|password|kill|e2ee|docker|platforms|reference]
 
 START AND SHARE
   shell [command] [arguments...]
@@ -361,6 +385,10 @@ START AND SHARE
 START OPTIONS
   --read-only
       Create an immutable view-only session. The relay rejects browser input.
+  --name <name>
+      Label the session in shell list, shell ls, and the web app. One line, at
+      most 120 characters. A persistent session that restarts without --name
+      keeps the name it had, including one given in the web app.
   --e2ee
       Compatibility flag. New shares are already end-to-end encrypted by default.
   --no-e2ee
@@ -406,6 +434,10 @@ SESSION COMMANDS
       the raw connected, waiting, disconnected, expired, or unknown value.
       Use this form in scripts and agents: the human table abbreviates long
       URLs, while JSON preserves the complete share URL and password fields.
+  shell ls [--all] [--json]
+      List the sessions in the linked account from every machine, with name,
+      status, uptime, machine, and command. Ended sessions are hidden unless
+      --all is given. JSON output omits passwords. Requires shell login.
   shell agent
       Watch for browser-started sessions in this terminal.
   shell daemon status|start|stop

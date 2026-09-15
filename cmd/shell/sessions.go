@@ -19,6 +19,8 @@ import (
 	"sync"
 	"text/tabwriter"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 	"shell.online/internal/e2ee"
@@ -28,6 +30,7 @@ var localSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{32}$`)
 
 type localSessionRecord struct {
 	ID         string `json:"id"`
+	Name       string `json:"name,omitempty"`
 	ShareURL   string `json:"share_url"`
 	ReadOnly   bool   `json:"read_only"`
 	Encrypted  bool   `json:"encrypted,omitempty"`
@@ -75,6 +78,7 @@ type listedSession struct {
 func (session listedSession) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		ID              string     `json:"id"`
+		Name            string     `json:"name,omitempty"`
 		ShareURL        string     `json:"share_url"`
 		ReadOnly        bool       `json:"read_only"`
 		Encrypted       bool       `json:"encrypted,omitempty"`
@@ -88,7 +92,7 @@ func (session listedSession) MarshalJSON() ([]byte, error) {
 		ClosesInSeconds *int64     `json:"closes_in_seconds,omitempty"`
 		RelayStatus     string     `json:"relay_status"`
 	}{
-		ID: session.ID, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
+		ID: session.ID, Name: session.Name, ShareURL: session.ShareURL, ReadOnly: session.ReadOnly,
 		Encrypted: session.Encrypted, Password: session.Password, Persistent: session.Persistent,
 		Command: session.Command, PID: session.PID, StartedAt: session.StartedAt, ClosesAt: session.ClosesAt,
 		UptimeSeconds: session.UptimeSeconds, ClosesInSeconds: session.ClosesInSeconds, RelayStatus: session.RelayStatus,
@@ -123,6 +127,8 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runServiceCommand(arguments[1:], stdout, stderr), true
 	case "list", "ps":
 		return runSessionList(arguments[1:], stdout, stderr), true
+	case "ls":
+		return runAccountSessionList(arguments[1:], stdout, stderr), true
 	case "attach":
 		return runSessionAttach(arguments[1:], stdout, stderr), true
 	case "kill", "stop":
@@ -314,7 +320,7 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	table := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(table, "ID\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL\tPASSWORD")
+	fmt.Fprintln(table, "ID\tNAME\tUPTIME\tRELAY\tCLOSES\tACCESS\tCOMMAND\tSHARE URL\tPASSWORD")
 	for _, session := range sessions {
 		closes := "on exit"
 		if session.ClosesAt != nil {
@@ -330,8 +336,9 @@ func runSessionList(arguments []string, stdout, stderr io.Writer) int {
 		if session.Persistent {
 			access += "+stable"
 		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			shortSessionID(session.ID),
+			sessionNameLabel(session.Name, 24),
 			compactDuration(now.Sub(session.StartedAt)),
 			relayStatusLabel(relayStatuses[session.ID]),
 			closes,
@@ -386,8 +393,15 @@ func printCompactSessionList(
 		if session.ClosesAt != nil {
 			closes = "in " + compactDuration(session.ClosesAt.Sub(now)) + ", or when the task exits"
 		}
-		fmt.Fprintf(writer, "%s  %s\n", shortSessionID(session.ID), truncateText(session.Command, 64))
+		if session.Name != "" {
+			fmt.Fprintf(writer, "%s  %s\n", shortSessionID(session.ID), truncateText(session.Name, 64))
+		} else {
+			fmt.Fprintf(writer, "%s  %s\n", shortSessionID(session.ID), truncateText(session.Command, 64))
+		}
 		fmt.Fprintf(writer, "  %s · %s · %s · %s\n", relayStatusLabel(statuses[session.ID]), compactDuration(now.Sub(session.StartedAt)), access, privacy)
+		if session.Name != "" {
+			fmt.Fprintf(writer, "  Command   %s\n", truncateText(session.Command, 64))
+		}
 		fmt.Fprintf(writer, "  Closes    %s\n", closes)
 		fmt.Fprintf(writer, "  Link      %s\n", session.ShareURL)
 		if session.Password != "" {
@@ -396,6 +410,31 @@ func printCompactSessionList(
 		fmt.Fprintf(writer, "  Rejoin    shell attach %s\n", shortSessionID(session.ID))
 		fmt.Fprintf(writer, "  Stop      shell kill %s\n", shortSessionID(session.ID))
 	}
+}
+
+// sessionNameLimit matches the longest label the accounts service keeps.
+const sessionNameLimit = 120
+
+// validateSessionName refuses a label the web app would have to cut or mangle,
+// so what the terminal was told is what the lists show.
+func validateSessionName(name string) error {
+	if utf8.RuneCountInString(name) > sessionNameLimit {
+		return fmt.Errorf("--name is limited to %d characters", sessionNameLimit)
+	}
+	for _, character := range name {
+		if unicode.IsControl(character) {
+			return errors.New("--name must be a single line of text")
+		}
+	}
+	return nil
+}
+
+// sessionNameLabel is the table cell for an optional name.
+func sessionNameLabel(name string, maximumRunes int) string {
+	if name == "" {
+		return "—"
+	}
+	return truncateText(name, maximumRunes)
 }
 
 func storedPasswordLabel(password string) string {

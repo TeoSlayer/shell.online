@@ -50,7 +50,7 @@ func normalizeAutoCloseArguments(arguments []string, now time.Time) ([]string, e
 		}
 		if argument != "--auto-close" {
 			normalized = append(normalized, argument)
-			if (argument == "--server" || argument == "--persistent") && index+1 < len(arguments) {
+			if (argument == "--server" || argument == "--persistent" || argument == "--name") && index+1 < len(arguments) {
 				normalized = append(normalized, arguments[index+1])
 				index++
 				continue

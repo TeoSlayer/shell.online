@@ -19,6 +19,7 @@ type backgroundLaunchResult struct {
 	OK         bool       `json:"ok"`
 	Error      string     `json:"error,omitempty"`
 	ID         string     `json:"session_id,omitempty"`
+	Name       string     `json:"name,omitempty"`
 	ShareURL   string     `json:"share_url,omitempty"`
 	ReadOnly   bool       `json:"read_only,omitempty"`
 	Encrypted  bool       `json:"encrypted,omitempty"`
