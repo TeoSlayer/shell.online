@@ -68,7 +68,9 @@ Set `SHELL_ONLINE_SERVER` to the URL Wrangler prints. Add a `routes` entry to
 the copied config for a custom domain. The Worker path requires Durable
 Objects, Rate Limiting, Analytics Engine, and static assets. Keep every
 documentation path in `run_worker_first`: a page served straight from the
-assets binding is never counted.
+assets binding is never counted. `npm run deploy:production` refuses a
+production config that routes fewer of these paths through the Worker than
+`wrangler.example.jsonc` does.
 
 The private statistics dashboard is optional and configured with Worker
 secrets (`npx wrangler secret put <NAME>`):

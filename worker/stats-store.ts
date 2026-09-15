@@ -300,6 +300,10 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     const collectingSince = this.sql.exec<MinimumRow>(
       "SELECT MIN(bucket) AS minimum FROM metric_hourly",
     ).one().minimum;
+    /* Taken after the purge, so it is the earliest day people can still be counted from. */
+    const uniquesSince = this.sql.exec<MinimumRow>(
+      "SELECT MIN(day) AS minimum FROM visitor_days",
+    ).one().minimum;
     const rangeStart = statsRangeStart(range, now, collectingSince);
     const summary = this.sql.exec<MetricSummaryRow>(
       `SELECT event, target,
@@ -377,6 +381,7 @@ export class StatsStore extends DurableObject<Record<string, never>> {
         uniqueDays,
         retention,
         uniquesConfigured,
+        uniquesSince,
       },
       range,
       now,

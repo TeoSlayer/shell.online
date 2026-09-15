@@ -82,6 +82,8 @@ export interface StatsSnapshotRows {
   uniqueDays: UniqueDayRow[];
   retention: RetentionRow[];
   uniquesConfigured: boolean;
+  /** Midnight UTC of the earliest visitor day still kept, or null when there is none. */
+  uniquesSince: number | null;
 }
 
 /** Midnight UTC of the day that contains `at`. */
@@ -342,9 +344,26 @@ function buildUniques(rows: StatsSnapshotRows): StatsUniques {
   return {
     configured: rows.uniquesConfigured,
     memoryDays: VISITOR_MEMORY_DAYS,
+    since: rows.uniquesConfigured ? rows.uniquesSince : null,
     surfaces,
     daily: [...days.values()].sort((left, right) => left.day - right.day),
   };
+}
+
+/**
+ * The day people counts start from, when that is after the range began, or
+ * null when people cover the whole range. Events are counted from the first
+ * event and people from the day the visitor salt was set, for at most
+ * VISITOR_MEMORY_DAYS, so a 30-day range can hold thirty days of events and
+ * one day of people. A people figure shown beside an event count over such a
+ * range has to say so, or 29,333 views next to 84 people reads as nonsense.
+ */
+export function peopleCountedSince(
+  uniques: Pick<StatsUniques, "configured" | "since">,
+  rangeStart: number,
+): number | null {
+  if (!uniques.configured || uniques.since === null) return null;
+  return uniques.since > dayStart(rangeStart) ? uniques.since : null;
 }
 
 export function statsRangeStart(

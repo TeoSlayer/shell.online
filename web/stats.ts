@@ -6,6 +6,7 @@ import {
   type StatsSeriesPoint,
   type StatsSnapshot,
 } from "../shared/stats";
+import { peopleCountedSince } from "../shared/stats-snapshot";
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import "./stats.css";
 
@@ -333,6 +334,14 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
   const people = snapshot.uniques;
   const site = people.surfaces.site;
   const cli = people.surfaces.cli;
+  /*
+   * People are counted from the day the salt was set, events from the first
+   * event. A people figure over fewer days than the count beside it says so,
+   * or thirty days of views next to one day of people reads as nonsense.
+   */
+  const peopleSince = peopleCountedSince(people, snapshot.rangeStart);
+  /* Plain text: renderKpi escapes its detail. */
+  const sinceNote = peopleSince === null ? "" : ` · counted since ${formatDay(peopleSince)}`;
   const ctaByLink = snapshot.targets
     .filter((metric) => metric.event === "cta_click")
     .map((metric) => ({ label: metric.target, value: metric.count }))
@@ -357,7 +366,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "Unique visitors",
         people.configured ? site.unique : "—",
         people.configured
-          ? `${integerFormatter.format(site.new)} new · ${integerFormatter.format(site.returning)} returning`
+          ? `${integerFormatter.format(site.new)} new · ${integerFormatter.format(site.returning)} returning${sinceNote}`
           : `${integerFormatter.format(metrics.landingViews)} landing views, people not counted`,
         snapshot.trend,
         "pageViews",
@@ -375,7 +384,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "Sessions started",
         metrics.sessionsStarted,
         people.configured
-          ? `from ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"}, ${integerFormatter.format(cli.new)} new`
+          ? `from ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"}, ${integerFormatter.format(cli.new)} new${sinceNote}`
           : `${integerFormatter.format(metrics.sessionsCreated)} created`,
         snapshot.trend,
         "sessions",
@@ -408,7 +417,8 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         <div><span class="panel-kicker">From a first look to a first keystroke</span><h2>Funnel</h2></div>
         <span class="panel-range">${escapeHtml(rangeLabel)}</span>
       </header>
-      ${renderFunnel(snapshot)}
+      ${renderFunnel(snapshot, peopleSince)}
+      ${peopleSince === null ? "" : `<p class="cohort-empty">People have been counted since ${escapeHtml(formatDay(peopleSince))}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.</p>`}
       ${renderUniquesStrip(snapshot)}
     </article>
 
@@ -506,6 +516,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
     <div class="collection-note">
       <span>Showing ${escapeHtml(rangeLabel)}.</span>
       <span>${snapshot.collectingSince ? `Collecting exact dashboard metrics since ${formatDate(snapshot.collectingSince)}.` : "Waiting for the first event."}</span>
+      ${people.configured && people.since !== null ? `<span>Counting people since ${escapeHtml(formatDay(people.since, "long"))}.</span>` : ""}
       <span>People are keyed hashes of address and browser family, forgotten ${people.memoryDays} days after they were last seen; a person seen again after that counts as new.</span>
     </div>
   `;
@@ -601,8 +612,9 @@ function renderTimeChart(
   `;
 }
 
-function renderFunnel(snapshot: StatsSnapshot): string {
+function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): string {
   const steps = snapshot.funnel;
+  const since = peopleSince === null ? "" : ` since ${escapeHtml(formatDay(peopleSince))}`;
   const colors = ["#9ab7e8", "#8eafff", "#819de5", "#f4bd78", "#8eafff", "#75dac2", "#d7a6ff"];
   const maximum = Math.max(1, ...steps.map((step) => step.count));
   return `
@@ -618,7 +630,7 @@ function renderFunnel(snapshot: StatsSnapshot): string {
         return `
           <div class="funnel-step">
             <span>${escapeHtml(step.label)}</span>
-            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}</small>`}</b>
+            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${since}</small>`}</b>
             <div><i style="width:${width}%;--funnel:${colors[index % colors.length]}"></i></div>
             <em>${escapeHtml(share)}</em>
             <small>${escapeHtml(step.note)}</small>
@@ -734,8 +746,15 @@ function renderAccounts(snapshot: StatsSnapshot): string {
   `;
 }
 
+/** A dashboard day is a UTC day, so it is named in UTC wherever the reader is. */
+function formatDay(at: number, month: "short" | "long" = "short"): string {
+  return new Date(at).toLocaleDateString([], month === "long"
+    ? { month, day: "numeric", year: "numeric", timeZone: "UTC" }
+    : { month, day: "numeric", timeZone: "UTC" });
+}
+
 function formatWeek(weekStart: number): string {
-  return new Date(weekStart).toLocaleDateString([], { month: "short", day: "numeric", timeZone: "UTC" });
+  return formatDay(weekStart);
 }
 
 function renderDonut(items: StatsBreakdownItem[]): string {

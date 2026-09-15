@@ -149,12 +149,19 @@ export async function visitorKey(salt: string, address: string, userAgent: strin
   return Array.from(digest.subarray(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The visitor hash for a request, or nothing when the Worker has no salt or the edge sent no address. */
+/**
+ * The visitor hash for a request, or nothing when the Worker has no salt, the
+ * edge sent no address, or the request came from a crawler. A crawler is a
+ * request to count, not a person: it stays in every event total and out of
+ * every people figure, which is what the dashboard says of it.
+ */
 export async function requestVisitor(salt: unknown, request: Request): Promise<string | undefined> {
   if (!hasVisitorSalt(salt)) return undefined;
   const address = request.headers.get("CF-Connecting-IP");
   if (!address) return undefined;
-  return visitorKey(salt, address, request.headers.get("User-Agent") ?? "");
+  const userAgent = request.headers.get("User-Agent") ?? "";
+  if (classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")) === "bot") return undefined;
+  return visitorKey(salt, address, userAgent);
 }
 
 /**

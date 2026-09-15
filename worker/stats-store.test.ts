@@ -3,6 +3,8 @@ import {
   buildRetentionCohorts,
   buildStatsSnapshot,
   DAY_MS,
+  dayStart,
+  peopleCountedSince,
   STATS_PRESENCE_LEASE_MS,
   STATS_PRESENCE_REFRESH_MS,
   WEEK_MS,
@@ -29,6 +31,7 @@ describe("statistics live presence", () => {
       uniqueDays: [],
       retention: [],
       uniquesConfigured: false,
+      uniquesSince: null,
     }, "all", now, collectingSince);
 
     expect(snapshot.metrics).toMatchObject({
@@ -56,6 +59,7 @@ describe("statistics live presence", () => {
       uniqueDays: [],
       retention: [],
       uniquesConfigured: false,
+      uniquesSince: null,
     }, "24h", now, now - 24 * 60 * 60 * 1_000);
 
     expect(snapshot.metrics.activeSessions).toBe(0);
@@ -101,6 +105,7 @@ describe("people and the funnel", () => {
     ],
     retention: [],
     uniquesConfigured: true,
+    uniquesSince: dayStart(now - 20 * DAY_MS),
   };
 
   it("keeps docs, unknown paths and 404s apart and counts people beside events", () => {
@@ -139,8 +144,31 @@ describe("people and the funnel", () => {
   it("says when nobody is being counted", () => {
     const snapshot = buildStatsSnapshot({ ...rows, uniques: [], uniquesConfigured: false }, "7d", now, rangeStart);
     expect(snapshot.uniques.configured).toBe(false);
+    expect(snapshot.uniques.since).toBeNull();
     expect(snapshot.funnel[0].unique).toBeNull();
     expect(snapshot.uniques.surfaces.site).toEqual({ unique: 0, new: 0, returning: 0 });
+  });
+
+  /*
+   * The salt was set on the 14th and the dashboard opened on the 15th, on the
+   * 30-day range: thirty days of views beside one day of people. The snapshot
+   * has to carry the day people start from, and say when it is inside the
+   * range, or the funnel reads as 29,333 views from 84 people.
+   */
+  it("says since when people have been counted, and whether that is inside the range", () => {
+    const covered = buildStatsSnapshot(rows, "7d", now, rangeStart);
+    expect(covered.uniques.since).toBe(dayStart(now - 20 * DAY_MS));
+    expect(peopleCountedSince(covered.uniques, covered.rangeStart)).toBeNull();
+
+    const yesterday = dayStart(now - DAY_MS);
+    const partial = buildStatsSnapshot({ ...rows, uniquesSince: yesterday }, "30d", now, now - 30 * DAY_MS);
+    expect(partial.uniques.since).toBe(yesterday);
+    expect(peopleCountedSince(partial.uniques, partial.rangeStart)).toBe(yesterday);
+
+    /* People are kept by day, so a range that starts inside their first day is covered. */
+    expect(peopleCountedSince({ configured: true, since: dayStart(rangeStart) }, rangeStart + 60_000)).toBeNull();
+    expect(peopleCountedSince({ configured: false, since: yesterday }, now - 30 * DAY_MS)).toBeNull();
+    expect(peopleCountedSince({ configured: true, since: null }, now - 30 * DAY_MS)).toBeNull();
   });
 });
 

@@ -47,6 +47,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   as "Not found". Every documentation route, current or versioned, now has its
   own page-view target; unknown paths the site answers with the landing page
   are counted apart from real 404s, and real 404s are counted at all.
+- The statistics dashboard says since when people have been counted. Event
+  counts run from the first event and people from the day the visitor salt was
+  set, so a 30-day range could show thirty days of views beside one day of
+  people. A people figure over fewer days than the count beside it now names
+  that day, in the funnel, the headline tiles and the footer.
+- Crawlers that identify themselves are no longer counted as people. The
+  funnel said they were not, and they were.
+- Deploying to production refuses a Wrangler config that serves a documentation
+  page from the assets binding instead of the Worker, since such a page is
+  never counted. Production served the web app, CLI, Refstream and platforms
+  pages that way.
 
 ### Changed
 

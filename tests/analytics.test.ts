@@ -135,7 +135,7 @@ describe("analytics", () => {
     await expect(visitorKey("another-salt-of-some-length", "203.0.113.7", "Mozilla/5.0 (Macintosh) Chrome/129.0.0.0 Safari/537.36")).resolves.not.toBe(one);
   });
 
-  it("counts nobody without a salt worth the name or without an address", async () => {
+  it("counts nobody without a salt worth the name, without an address, or behind a crawler", async () => {
     const request = new Request("https://shell.online/", {
       headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "curl/8.4.0" },
     });
@@ -145,5 +145,12 @@ describe("analytics", () => {
     await expect(requestVisitor("short", request)).resolves.toBeUndefined();
     await expect(requestVisitor("a-salt-long-enough-to-count", new Request("https://shell.online/"))).resolves.toBeUndefined();
     await expect(requestVisitor("a-salt-long-enough-to-count", request)).resolves.toMatch(/^[a-f0-9]{20}$/);
+    const crawler = new Request("https://shell.online/", {
+      headers: {
+        "CF-Connecting-IP": "203.0.113.9",
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      },
+    });
+    await expect(requestVisitor("a-salt-long-enough-to-count", crawler)).resolves.toBeUndefined();
   });
 });

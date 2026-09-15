@@ -59,6 +59,13 @@ export interface StatsUniques {
   /** False until the Worker has a visitor salt; every count is then zero. */
   configured: boolean;
   memoryDays: number;
+  /**
+   * Midnight UTC of the earliest day anyone was counted, or null when nobody
+   * has been. Events are counted from the first event and people from the
+   * day the salt was set, so a range can hold more days of events than of
+   * people; peopleCountedSince says when a figure has to say so.
+   */
+  since: number | null;
   surfaces: Record<UniqueSurface, StatsUniqueCount>;
   daily: StatsUniqueDay[];
 }
