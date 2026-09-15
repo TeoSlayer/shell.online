@@ -490,3 +490,56 @@
     grid-template-columns: repeat(2, max-content);
   }
 }
+
+/* Teammates the team audit key has not reached, on the Account vault panel. */
+.vault-team {
+  display: grid;
+  gap: 10px;
+}
+
+.vault-team-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.vault-team-list li {
+  display: grid;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  gap: 4px;
+}
+
+.vault-team-name {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 540;
+}
+
+.vault-team-confirm {
+  display: flex;
+  color: var(--muted);
+  font-size: 0.85rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 0;
+}
+
+.vault-team-confirm code {
+  font-family: var(--mono);
+  color: var(--ink-soft);
+}
+
+.vault-team-actions {
+  display: flex;
+  width: 100%;
+  margin-top: 6px;
+  gap: 8px;
+}
+
+.vault-team-actions .btn {
+  width: auto;
+}

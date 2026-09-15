@@ -156,9 +156,9 @@ function VaultContents() {
             <b>Your copy of the team&apos;s audit key</b>
             <small>
               {team.status === "ready"
-                ? `Held. It lets you read your team's audit log, which is sealed to it. Key ${team.fingerprint}.`
+                ? `Held. It opens your team's audit log automatically, here and in any browser where this vault is unlocked. Key ${team.fingerprint}.`
                 : team.status === "waiting"
-                  ? "On its way: a teammate's browser seals it to you the next time they open shell.online."
+                  ? "On its way. Any teammate who holds it seals it to your vault automatically while they have shell.online open, and the audit log opens as soon as it arrives."
                   : team.status === "error"
                     ? team.error
                     : "Checking."}
@@ -166,6 +166,8 @@ function VaultContents() {
           </span>
         </li>
       </ul>
+
+      <TeamKeyTeammates members={members} />
 
       <VaultAccessMethods />
 
@@ -217,6 +219,75 @@ function VaultContents() {
         </p>
       </div>
     </>
+  );
+}
+
+/**
+ * Teammates this browser could give a copy of the team key to, and has not.
+ *
+ * Copies are sealed automatically to every teammate whose vault key this
+ * browser has not seen change. A key that changed is shown here instead, with
+ * its fingerprint, because sealing the team's key to a swapped key would hand
+ * the whole log to whoever swapped it: the person here checks with their
+ * teammate first.
+ */
+function TeamKeyTeammates({ members }: { members: Member[] }) {
+  const team = useTeamKey();
+  const [confirming, setConfirming] = useState<string | null>(null);
+  if (team.status !== "ready" || team.pending.length === 0) return null;
+
+  return (
+    <div className="vault-team">
+      <h3 className="vault-panel-subhead">Teammates waiting for the audit key</h3>
+      <ul className="vault-team-list">
+        {team.pending.map((teammate) => {
+          const person = findPerson(members, teammate.uid);
+          return (
+            <li key={teammate.uid}>
+              <span className="vault-team-name">{displayName(person)}</span>
+              {teammate.changed ? (
+                confirming === teammate.uid ? (
+                  <span className="vault-team-confirm">
+                    <small>
+                      Their vault key is now <code>{teammate.fingerprint}</code>. Ask them to read
+                      the key on their Account page and check it matches before you go on.
+                    </small>
+                    <span className="vault-team-actions">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          team.acceptTeammateKey(teammate.uid);
+                          setConfirming(null);
+                        }}
+                      >
+                        It matches, share the key
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => setConfirming(null)}>
+                        Cancel
+                      </Button>
+                    </span>
+                  </span>
+                ) : (
+                  <span className="vault-team-confirm">
+                    <small>Their vault key changed, so nothing was sealed to it.</small>
+                    <button type="button" className="vault-link" onClick={() => setConfirming(teammate.uid)}>
+                      Check and share
+                    </button>
+                  </span>
+                )
+              ) : (
+                <span className="vault-team-confirm">
+                  <small>Not sealed yet.</small>
+                  <button type="button" className="vault-link" onClick={team.refresh}>
+                    Try now
+                  </button>
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

@@ -41,6 +41,8 @@ import { SearchSelect } from "../components/SearchSelect";
 import { sessionStateLabel } from "../lib/session-liveness";
 import type { SearchSelectOption } from "../lib/search-options";
 import { useTeamKey } from "../vault/TeamKeyProvider";
+import { useVault } from "../vault/VaultProvider";
+import { VaultUnlock } from "../vault/VaultGate";
 
 const PAGE_SIZE = 40;
 /* The service pages at most 100 at a time. */
@@ -174,6 +176,7 @@ function RankChart({
 export function Audit() {
   usePageTitle("Audit log");
   const team = useTeamKey();
+  const vault = useVault();
   const [params, setParams] = useSearchParams();
   const [events, setEvents] = useState<ShownEvent[] | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -380,6 +383,13 @@ export function Audit() {
         What protects this page, said where it is read. The team's audit key
         opens it; the service stores it sealed.
       */}
+      {/*
+        The log is opened by the team's audit key, which is kept in the vault
+        and opens on its own once the vault is unlocked. When the vault is not,
+        this said "Opening your team's audit key." for as long as anyone waited:
+        the one thing standing between the reader and the log went unmentioned,
+        on the page where they had come to read it.
+      */}
       <p className="audit-sealed-note" data-state={team.status}>
         <LockKey size={14} weight="bold" />
         <span>
@@ -389,9 +399,24 @@ export function Audit() {
               ? "This browser does not have your team's audit key yet. A teammate's browser seals it to you the next time they open shell.online; until then, what was typed shows as sealed."
               : team.status === "error"
                 ? team.error
-                : "Opening your team's audit key."}
+                : vault.status === "locked"
+                  ? "Your team's audit key is in your vault. Unlock it to read the log; no other key is asked for."
+                  : vault.status === "setup"
+                    ? "Your team's audit key is kept in your vault, and this account has none yet. Set one up and the log opens by itself from then on."
+                    : "Opening your team's audit key."}
         </span>
       </p>
+
+      {team.status === "idle" && vault.status === "locked" && (
+        <div className="audit-vault-gate">
+          <VaultUnlock />
+        </div>
+      )}
+      {team.status === "idle" && vault.status === "setup" && (
+        <p className="audit-vault-gate">
+          <Link to="/account">Set up your vault on the Account page</Link>
+        </p>
+      )}
 
       {error && (
         <div className="sessions-alert audit-error">

@@ -173,6 +173,14 @@ export function assignSession(sessionId: string, uids: string[]) {
   );
 }
 
+/** A blank name clears it, and the session is shown by its command again. */
+export function renameSession(sessionId: string, name: string) {
+  return request<{ session: SessionRecord }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/name`,
+    { method: "PUT", body: JSON.stringify({ name }) },
+  );
+}
+
 export interface Comment {
   id: string;
   sessionId: string;
@@ -462,6 +470,14 @@ export function putTeamKeyShares(version: number, shares: { uid: string; sealed:
 }
 
 /** Removes this person's own copy, so a teammate can seal a fresh one. */
+/** Replaces this member's own copy with one they sealed to themselves. */
+export function replaceMyTeamKeyShare(version: number, sealed: string) {
+  return request<{ replaced: boolean }>("/api/team-key/share", {
+    method: "PUT",
+    body: JSON.stringify({ version, sealed }),
+  });
+}
+
 export function dropMyTeamKeyShare() {
   return request<{ deleted: boolean }>("/api/team-key/share", { method: "DELETE" });
 }

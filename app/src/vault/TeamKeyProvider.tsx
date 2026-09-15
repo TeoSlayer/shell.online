@@ -15,6 +15,7 @@ import {
   fetchSessions,
   fetchTeamKey,
   putTeamKeyShares,
+  replaceMyTeamKeyShare,
   sealAuditEntries,
   type AuditEvent,
 } from "../lib/api";
@@ -49,6 +50,19 @@ interface Held {
   privateKey: Key;
 }
 
+/**
+ * A teammate with a vault and no copy of the key, as a browser holding it sees
+ * them. `changed` means their vault key is not the one this browser sealed to
+ * before: a vault reset, or a key that is not theirs. Nothing is sealed to it
+ * until the person at this browser has checked and said so.
+ */
+export interface PendingTeammate {
+  uid: string;
+  changed: boolean;
+  /** Fingerprint of the vault key they now report, to compare with them. */
+  fingerprint: string;
+}
+
 interface TeamKeyValue {
   status: TeamKeyStatus;
   error: string;
@@ -64,6 +78,10 @@ interface TeamKeyValue {
    */
   openAudit(event: Pick<AuditEvent, "sessionId" | "kind" | "at" | "actorUid" | "text">): Promise<string | null>;
   refresh(): void;
+  /** Teammates still without a copy. Known only to a browser that holds the key. */
+  pending: PendingTeammate[];
+  /** Trusts a teammate's changed vault key after the person here has checked it, and seals their copy. */
+  acceptTeammateKey(uid: string): void;
 }
 
 /* How often a browser holding the key looks for teammates who need a copy. */
@@ -83,6 +101,9 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
   const [print, setPrint] = useState("");
   const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [pending, setPending] = useState<PendingTeammate[]>([]);
+  /* The vault key each pending teammate reported, kept out of render state. */
+  const pendingKeys = useRef(new Map<string, string>());
   const held = useRef<Held | null>(null);
   const waiting = useRef<((key: Held) => void)[]>([]);
   /* Read by the refresh loop without restarting it whenever the vault re-renders. */
@@ -95,6 +116,7 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
     if (vault.status !== "unlocked") {
       held.current = null;
       setStatus("idle");
+      setPending([]);
       return;
     }
     let live = true;
@@ -214,12 +236,14 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
            * Sealed again to this person, by this person, so the copy no
            * longer depends on the teammate who sent it staying in the team:
            * a copy from someone who has left can no longer be checked.
+           *
+           * Replaced in one step. Deleting the copy and adding it back was
+           * refused, because the service only takes copies from someone who
+           * holds one, so every member but the key's maker lost theirs on the
+           * next refresh and stopped passing the key on.
            */
           const mine = await own.sealTeamKey({ uid, accountKey: own.publicKey }, team, pkcs8);
-          if (mine) {
-            await dropMyTeamKeyShare().catch(() => undefined);
-            await putTeamKeyShares(team.version, [{ uid, sealed: mine }]).catch(() => undefined);
-          }
+          if (mine) await replaceMyTeamKeyShare(team.version, mine).catch(() => undefined);
         }
 
         /* Teammates with a vault and no copy get one, sealed by this vault. */
@@ -231,10 +255,30 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
           const sealed = await own.sealTeamKey(member, team, pkcs8);
           if (sealed) shares.push({ uid: member.uid, sealed });
         }
+        let sealedFor = new Set<string>();
         if (shares.length > 0) {
-          await putTeamKeyShares(team.version, shares).catch(() => undefined);
-          for (const member of needing) trustKey(uid, member.uid, member.accountKey);
+          const sent = await putTeamKeyShares(team.version, shares).then(() => true, () => false);
+          if (sent) {
+            sealedFor = new Set(shares.map((share) => share.uid));
+            for (const member of needing) {
+              if (sealedFor.has(member.uid)) trustKey(uid, member.uid, member.accountKey);
+            }
+          }
         }
+
+        /* Whoever is still without a copy, so the vault can say who and why. */
+        const still = view.missing.filter((member) => member.uid !== uid && !sealedFor.has(member.uid));
+        const nextPending: PendingTeammate[] = [];
+        pendingKeys.current = new Map();
+        for (const member of still) {
+          pendingKeys.current.set(member.uid, member.accountKey);
+          nextPending.push({
+            uid: member.uid,
+            changed: keyTrust(uid, member.uid, member.accountKey) === "changed",
+            fingerprint: await fingerprint(member.accountKey),
+          });
+        }
+        if (live) setPending(nextPending);
 
         /*
          * Recorded now that a copy has proved to be the private half of the
@@ -305,9 +349,24 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(() => setAttempt((value) => value + 1), []);
 
+  /*
+   * The person at this browser has compared the new key with their teammate.
+   * Only then is it pinned, and the next check seals the teammate's copy to it.
+   */
+  const acceptTeammateKey = useCallback(
+    (teammate: string) => {
+      const self = held.current?.uid;
+      const accountKey = pendingKeys.current.get(teammate);
+      if (!self || !accountKey) return;
+      trustKey(self, teammate, accountKey);
+      refresh();
+    },
+    [refresh],
+  );
+
   const value = useMemo<TeamKeyValue>(
-    () => ({ status, error, fingerprint: print, createdBy, sealAudit, openAudit, refresh }),
-    [status, error, print, createdBy, sealAudit, openAudit, refresh],
+    () => ({ status, error, fingerprint: print, createdBy, sealAudit, openAudit, refresh, pending, acceptTeammateKey }),
+    [status, error, print, createdBy, sealAudit, openAudit, refresh, pending, acceptTeammateKey],
   );
 
   return <TeamKeyContext.Provider value={value}>{children}</TeamKeyContext.Provider>;

@@ -862,3 +862,9 @@
     padding: 9px 7px;
   }
 }
+
+/* The vault unlock, shown on the audit log when that is what is in the way. */
+.audit-vault-gate {
+  max-width: 460px;
+  margin: 0 0 22px;
+}

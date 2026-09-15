@@ -126,7 +126,7 @@
         ],
         [
           "Organizations and audit",
-          "An organization groups people, machines, and sessions. Roles govern administrative actions; session ownership and multiple assignees govern responsibility for individual sessions. The audit log records who did what and when. Sensitive recorded input is encrypted to the team's audit key in the browser; ordinary service metadata remains visible to the app."
+          "An organization groups people, machines, and sessions. Roles govern administrative actions; session ownership and multiple assignees govern responsibility for individual sessions. The audit log records who did what and when. Sensitive recorded input is encrypted to the team's audit key in the browser; ordinary service metadata remains visible to the app. Each member's copy of that key is kept in their vault and sealed to them by a teammate's browser, so an unlocked vault opens the audit log by itself and no key is ever pasted."
         ],
         [
           "Failure and recovery",
@@ -457,6 +457,10 @@
               "Create an immutable view-only link; the relay rejects browser input."
             ],
             [
+              "--name <name>",
+              "Label the session in shell list, shell ls, and the web app, where it can be renamed. One line, up to 120 characters."
+            ],
+            [
               "--e2ee",
               "Compatibility flag; every normal share is already E2EE."
             ],
@@ -535,6 +539,18 @@
             [
               "shell list --json",
               "Print a JSON array on stdout with e2ee_password and raw relay_status values: connected, waiting, disconnected, expired, or unknown."
+            ],
+            [
+              "shell ls",
+              "List the open sessions in your linked account from every machine, with name, status, uptime, machine, and command. Ended sessions are counted, not shown."
+            ],
+            [
+              "shell ls --all",
+              "Include sessions that have ended."
+            ],
+            [
+              "shell ls --json",
+              "Print the account's sessions as a JSON array on stdout, with share_url, status, and raw relay_status. Passwords are never included."
             ]
           ]
         ],
