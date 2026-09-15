@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   binaryDownloadTarget,
+  campaignSource,
   classifyClient,
   classifyDevice,
   classifyReferrer,
@@ -69,6 +70,22 @@ describe("analytics", () => {
       .toBe("internal");
     expect(classifyReferrer("https://example.com/private/path", "https://shell.online"))
       .toBe("other");
+    expect(classifyReferrer("https://app.shell.online/sessions", "https://shell.online")).toBe("app");
+    expect(classifyReferrer("https://app.example.test/", "https://example.test")).toBe("app");
+  });
+
+  it("takes a named campaign over a hidden referrer, and only a named one", () => {
+    expect(campaignSource(new URL("https://shell.online/?utm_source=hn&utm_medium=post"))).toBe("hacker_news");
+    expect(campaignSource(new URL("https://shell.online/?ref=producthunt"))).toBe("product_hunt");
+    expect(campaignSource(new URL("https://shell.online/?utm_source=<script>"))).toBeNull();
+    expect(campaignSource(new URL("https://shell.online/?utm_source=my-private-tracker-42"))).toBeNull();
+    expect(campaignSource(new URL("https://shell.online/"))).toBeNull();
+    const hidden = new Request("https://shell.online/?utm_source=newsletter", { headers: { "User-Agent": "Mozilla/5.0" } });
+    expect(requestAnalyticsContext(hidden).referrer).toBe("newsletter");
+    const shown = new Request("https://shell.online/?utm_source=newsletter", {
+      headers: { "User-Agent": "Mozilla/5.0", Referer: "https://github.com/TeoSlayer/shell.online" },
+    });
+    expect(requestAnalyticsContext(shown).referrer).toBe("github");
   });
 
   it("classifies request context without retaining raw headers", () => {

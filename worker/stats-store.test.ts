@@ -89,6 +89,11 @@ describe("people and the funnel", () => {
       metric("session_started", "cli", 48),
       metric("share_opened", "viewer", 6),
       metric("collaboration_started", "remote_input", 5),
+      metric("copy", "install", 20),
+      metric("copy", "brew_install", 5),
+      metric("copy", "share", 3),
+      metric("session_ended", "never_started", 4),
+      metric("session_ended", "task_exit", 40, 1_200),
     ],
     /* The same totals by who made the requests; each event's rows add up to its summary row. */
     byDevice: [
@@ -156,9 +161,11 @@ describe("people and the funnel", () => {
       siteViews: 790,
       crawlerViews: 218,
       ctaClicks: 12,
+      installCopies: 25,
       installerRuns: 50,
       installs: 3,
       sessionsStarted: 48,
+      neverStarted: 4,
       sharesOpened: 6,
       collaborations: 5,
     });
@@ -177,6 +184,7 @@ describe("people and the funnel", () => {
     expect(snapshot.funnel.map((step) => [step.key, step.count, step.unique])).toEqual([
       ["visited", 790, 400],
       ["signup", 12, null],
+      ["copied", 25, null],
       ["installer", 50, 40],
       ["installed", 3, null],
       ["session", 48, 9],
@@ -186,14 +194,15 @@ describe("people and the funnel", () => {
     expect(snapshot.funnel.map((step) => step.excluded)).toEqual([
       [{ label: "by crawlers", count: 218 }, { label: "by tools", count: 9 }],
       [],
+      [],
       [{ label: "read in a browser", count: 4 }, { label: "by crawlers", count: 8 }],
       [{ label: "by crawlers", count: 1 }],
-      [],
+      [{ label: "created but never connected", count: 4 }],
       [],
       [],
     ]);
     for (const step of snapshot.funnel) expect(step.note.length).toBeGreaterThan(20);
-    expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, "visited", "visited", "installer", null, "session", "opened"]);
+    expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, "visited", "visited", "visited", "installer", null, "session", "opened"]);
   });
 
   it("compares with the period before, when there is one worth comparing with", () => {
@@ -221,9 +230,11 @@ describe("people and the funnel", () => {
         siteViews: 500,
         crawlerViews: 300,
         ctaClicks: 6,
+        installCopies: 0,
         installerRuns: 40,
         installs: 2,
         sessionsStarted: 40,
+        neverStarted: 0,
         sharesOpened: 4,
         collaborations: 2,
       },

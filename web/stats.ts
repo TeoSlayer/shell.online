@@ -622,6 +622,7 @@ function funnelInsight(snapshot: StatsSnapshot): string {
     const visitors = people.configured ? ` from ${integerFormatter.format(people.surfaces.site.unique)} visitor${people.surfaces.site.unique === 1 ? "" : "s"}` : "";
     const crawlers = figures.crawlerViews === 0 ? "" : `, and ${integerFormatter.format(figures.crawlerViews)} by crawlers kept out`;
     parts.push(`${integerFormatter.format(figures.siteViews)} views by people${visitors}${crawlers}.`);
+    if (figures.installCopies > 0) parts.push(`${integerFormatter.format(figures.installCopies)} copied an install command.`);
     const runs = figures.installerRuns;
     parts.push(runs === 0
       ? "Nobody ran the installer."
@@ -631,6 +632,7 @@ function funnelInsight(snapshot: StatsSnapshot): string {
     parts.push("No session started.");
   } else {
     const machines = people.configured ? ` on ${integerFormatter.format(people.surfaces.cli.unique)} machine${people.surfaces.cli.unique === 1 ? "" : "s"}` : "";
+    if (figures.neverStarted > 0) parts.push(`${integerFormatter.format(figures.neverStarted)} more were created but never connected.`);
     const opened = formatPercent(ratio(figures.sharesOpened, figures.sessionsStarted));
     const typed = figures.sharesOpened === 0 ? "" : `, and ${formatPercent(ratio(figures.collaborations, figures.sharesOpened))} of those were typed into`;
     parts.push(`${integerFormatter.format(figures.sessionsStarted)} session${figures.sessionsStarted === 1 ? "" : "s"} started${machines}; ${opened} were opened in a browser${typed}.`);
@@ -1155,6 +1157,16 @@ function humanize(value: string): string {
     github: "GitHub",
     reddit: "Reddit",
     x: "X",
+    app: "Web app",
+    newsletter: "Newsletter or email",
+    product_hunt: "Product Hunt",
+    linkedin: "LinkedIn",
+    youtube: "YouTube",
+    discord: "Discord",
+    slack: "Slack",
+    mastodon: "Mastodon",
+    bluesky: "Bluesky",
+    podcast: "Podcast",
     other: "Other sites",
   };
   const normalized = value.replace(/-/g, "_");

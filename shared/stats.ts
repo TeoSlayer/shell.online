@@ -108,11 +108,15 @@ export interface StatsFigures {
   /** The same pages fetched by self-identified crawlers. */
   crawlerViews: number;
   ctaClicks: number;
+  /** The curl, Homebrew or source-build command copied on the landing page: intent before the terminal. */
+  installCopies: number;
   /** Install script fetches by curl or wget: the installer actually run, not read. */
   installerRuns: number;
   /** Release binaries served to anything but a crawler: an install completed. */
   installs: number;
   sessionsStarted: number;
+  /** Sessions that ended without the host ever connecting: a blocked WebSocket, usually. */
+  neverStarted: number;
   sharesOpened: number;
   collaborations: number;
 }

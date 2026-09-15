@@ -279,9 +279,11 @@ export function buildFigures(summary: MetricSummaryRow[], audiences: StatsAudien
     siteViews: audiences.views.browsers,
     crawlerViews: audiences.views.crawlers,
     ctaClicks: sumCounts(summary, "cta_click"),
+    installCopies: sumCounts(summary, "copy", "install") + sumCounts(summary, "copy", "brew_install") + sumCounts(summary, "copy", "source_build"),
     installerRuns: audiences.installer.tools,
     installs: installsCompleted(audiences.installs),
     sessionsStarted: sumCounts(summary, "session_started"),
+    neverStarted: sumCounts(summary, "session_ended", "never_started"),
     sharesOpened: sumCounts(summary, "share_opened"),
     collaborations: sumCounts(summary, "collaboration_started"),
   };
@@ -356,6 +358,15 @@ export function buildFunnel(
       basis: "visited",
     },
     {
+      key: "copied",
+      label: "Copied an install command",
+      count: figures.installCopies,
+      unique: null,
+      note: "The curl, Homebrew or source-build command copied on the landing page: intent, before a terminal is involved.",
+      excluded: [],
+      basis: "visited",
+    },
+    {
       key: "installer",
       label: "Ran the installer",
       count: figures.installerRuns,
@@ -383,7 +394,7 @@ export function buildFunnel(
       count: figures.sessionsStarted,
       unique: people("cli"),
       note: "A shell command connected its process to the relay. Not a share of the step before: sessions come from every install to date.",
-      excluded: [],
+      excluded: excluded([{ label: "created but never connected", count: figures.neverStarted }]),
       basis: null,
     },
     {

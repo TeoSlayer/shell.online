@@ -123,11 +123,50 @@ export function normalizeAnalyticsRecord(
 
 export function requestAnalyticsContext(request: Request): AnalyticsContext {
   const userAgent = request.headers.get("User-Agent") ?? "";
+  const url = new URL(request.url);
+  const referrer = classifyReferrer(request.headers.get("Referer"), url.origin);
+  /* A named campaign beats a referrer the browser hid, and nothing else. */
+  const campaign = campaignSource(url);
   return {
     device: classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")),
     client: classifyClient(userAgent),
-    referrer: classifyReferrer(request.headers.get("Referer"), new URL(request.url).origin),
+    referrer: campaign !== null && (referrer === "direct" || referrer === "other") ? campaign : referrer,
   };
+}
+
+/**
+ * utm_source or ref on a landing link, folded to the same tokens the referrer
+ * classifier uses, so a launch post still shows as its source when the
+ * browser sent no referrer. Only names on this list count: the dimension has
+ * to stay small, and a stranger's query string is not a source.
+ */
+const CAMPAIGN_SOURCES: Record<string, string> = {
+  hn: "hacker_news",
+  hackernews: "hacker_news",
+  hacker_news: "hacker_news",
+  reddit: "reddit",
+  x: "x",
+  twitter: "x",
+  github: "github",
+  google: "google",
+  newsletter: "newsletter",
+  email: "newsletter",
+  producthunt: "product_hunt",
+  product_hunt: "product_hunt",
+  linkedin: "linkedin",
+  youtube: "youtube",
+  discord: "discord",
+  slack: "slack",
+  mastodon: "mastodon",
+  bluesky: "bluesky",
+  podcast: "podcast",
+};
+
+export function campaignSource(url: URL): string | null {
+  const raw = url.searchParams.get("utm_source") ?? url.searchParams.get("ref");
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 40);
+  return CAMPAIGN_SOURCES[key] ?? null;
 }
 
 export function hasVisitorSalt(salt: unknown): salt is string {
@@ -249,6 +288,8 @@ export function classifyReferrer(referrer: string | null, requestOrigin: string)
     const url = new URL(referrer);
     if (url.origin === requestOrigin) return "internal";
     const hostname = url.hostname.toLowerCase();
+    /* The accounts app is ours: a visit from it is a signed-in person coming back to the docs. */
+    if (hostname === "app.shell.online" || hostname === `app.${new URL(requestOrigin).hostname}`) return "app";
     if (hostname === "news.ycombinator.com") return "hacker_news";
     if (hostname === "github.com" || hostname.endsWith(".github.com")) return "github";
     if (hostname === "reddit.com" || hostname.endsWith(".reddit.com")) return "reddit";
