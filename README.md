@@ -28,6 +28,10 @@ Windows PowerShell:
 irm https://shell.online/install.ps1 | iex
 ```
 
+At the end, and on failure, the installer sends one word back, its outcome,
+so a platform that keeps failing gets noticed and fixed. Nothing else goes
+with it. Set `SHELL_ONLINE_INSTALL_REPORT=0` to skip that.
+
 Homebrew (the tap lives in this repository):
 
 ```sh

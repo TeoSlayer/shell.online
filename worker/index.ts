@@ -5,9 +5,11 @@ import {
   isDocumentNavigation,
   requestAnalyticsContext,
   requestVisitor,
+  type VisitorKind,
   hasVisitorSalt,
   documentTarget,
   CTA_TARGETS,
+  INSTALL_OUTCOMES,
   COPY_TARGETS,
   writeAnalytics,
   type AnalyticsContext,
@@ -135,6 +137,10 @@ interface SocketAttachment {
   terminalCols?: number;
   terminalRows?: number;
   portrait?: boolean;
+  /** When the socket was accepted, so a disconnect can say how long the viewer stayed. */
+  connectedAt?: number;
+  /** Set once a viewer has been refused input, so the refusal is counted once per viewer. */
+  inputDeniedAt?: number;
   supportsPortraitGrid?: boolean;
 }
 
@@ -225,6 +231,10 @@ export default {
 
     if (url.pathname === "/api/events" && request.method === "POST") {
       return recordEvent(request, env, url, executionContext);
+    }
+
+    if (url.pathname === "/install/report" && request.method === "GET") {
+      return recordInstallReport(request, env, url, executionContext);
     }
 
     if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -500,13 +510,15 @@ async function fetchAccountStats(env: Env, range: StatsRange): Promise<StatsAcco
     });
     if (!response.ok) return { error: `accounts app answered ${response.status}` };
     const body = await response.json<unknown>();
-    return isAccountStats(body) ? body : { error: "accounts app answered in an unexpected shape" };
+    if (!isAccountStats(body)) return { error: "accounts app answered in an unexpected shape" };
+    /* An older app answers without events; the dashboard then shows none rather than nothing. */
+    return { ...body, events: isCountRecord(body.events) ? body.events : {} };
   } catch {
     return { error: "accounts app did not answer" };
   }
 }
 
-function isAccountStats(value: unknown): value is StatsAccountStats {
+function isAccountStats(value: unknown): value is Omit<StatsAccountStats, "events"> & { events?: unknown } {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return typeof candidate.total === "number" &&
@@ -514,6 +526,11 @@ function isAccountStats(value: unknown): value is StatsAccountStats {
     typeof candidate.activeInRange === "number" &&
     Array.isArray(candidate.newByDay) &&
     Array.isArray(candidate.cohorts);
+}
+
+function isCountRecord(value: unknown): value is Record<string, number> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) &&
+    Object.values(value as Record<string, unknown>).every((count) => typeof count === "number");
 }
 
 function statsPassword(env: Env): string | null {
@@ -547,9 +564,9 @@ async function recordAssetAnalytics(
   if (request.method !== "GET") return;
 
   const context = requestAnalyticsContext(request);
-  const withVisitor = async (): Promise<AnalyticsContext> => ({
+  const withVisitor = async (kind: VisitorKind = "browser"): Promise<AnalyticsContext> => ({
     ...context,
-    visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+    visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, kind),
   });
 
   if (!response.ok) {
@@ -562,7 +579,7 @@ async function recordAssetAnalytics(
 
   if (url.pathname === "/install" || url.pathname === "/install.ps1") {
     const target = url.pathname === "/install.ps1" ? "powershell" : "posix";
-    recordAnalytics(env, executionContext, "installer_download", target, await withVisitor());
+    recordAnalytics(env, executionContext, "installer_download", target, await withVisitor("machine"));
     return;
   }
   if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -572,7 +589,7 @@ async function recordAssetAnalytics(
 
   const binaryTarget = binaryDownloadTarget(url.pathname);
   if (binaryTarget) {
-    recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor());
+    recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor("machine"));
     return;
   }
 
@@ -631,6 +648,33 @@ async function recordEvent(
     { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
+  return new Response(null, {
+    status: 204,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+/*
+ * The installer's last word: one request with a single outcome code, sent
+ * when the script finishes or fails unless the person set
+ * SHELL_ONLINE_INSTALL_REPORT=0. Only codes the scripts can send count; any
+ * other request gets the same empty answer and records nothing.
+ */
+async function recordInstallReport(
+  request: Request,
+  env: Env,
+  url: URL,
+  executionContext: ExecutionContext,
+): Promise<Response> {
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const allowed = await env.EVENT_LIMITER.limit({ key: ip });
+  if (!allowed.success) {
+    return json({ error: "too many events" }, 429, { "Retry-After": "60" });
+  }
+  const outcome = url.searchParams.get("outcome") ?? "";
+  if (INSTALL_OUTCOMES.has(outcome)) {
+    recordAnalytics(env, executionContext, "install_outcome", outcome, requestAnalyticsContext(request));
+  }
   return new Response(null, {
     status: 204,
     headers: { "Cache-Control": "no-store" },
@@ -706,7 +750,7 @@ async function createSession(
     executionContext,
     "session_created",
     "cli",
-    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
+    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, "machine") },
   );
 
   const origin = requestOrigin(request, url);
@@ -776,7 +820,7 @@ async function resumeSession(
   if (resumeResult.created === true) {
     recordAnalytics(env, executionContext, "session_created", "persistent_cli", {
       ...requestAnalyticsContext(request),
-      visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+      visitor: await requestVisitor(env.STATS_VISITOR_SALT, request, "machine"),
     });
   }
   const origin = requestOrigin(request, url);
@@ -911,9 +955,19 @@ export class TerminalSession extends DurableObject<Env> {
   }
 
   private async acceptSocket(request: Request): Promise<Response> {
-    if (this.meta === undefined) return json({ error: "session not found" }, 404);
+    /*
+     * A browser that opens a dead link is a person the funnel would otherwise
+     * never see: it is counted as turned away, by reason. The host presents a
+     * token, a viewer does not, which is enough to tell them apart here.
+     */
+    const isViewer = request.headers.get("Authorization") === null;
+    if (this.meta === undefined) {
+      if (isViewer) recordAnalytics(this.env, this.state, "viewer_rejected", "not_found", requestAnalyticsContext(request));
+      return json({ error: "session not found" }, 404);
+    }
     if (Date.now() >= this.meta.expiresAt) {
       await this.expire();
+      if (isViewer) recordAnalytics(this.env, this.state, "viewer_rejected", "expired", requestAnalyticsContext(request));
       return json({ error: "session expired" }, 410);
     }
 
@@ -933,6 +987,7 @@ export class TerminalSession extends DurableObject<Env> {
       : 0;
     const admission = viewerAdmission(activeViewerCount);
     if (role === "viewer" && !admission.accepted) {
+      recordAnalytics(this.env, this.state, "viewer_rejected", "session_full", requestAnalyticsContext(request));
       // Browser WebSockets hide an upgrade rejection's status and body. Finish
       // the upgrade, then close with a code the viewer can explain and retry.
       const pair = new WebSocketPair();
@@ -972,6 +1027,7 @@ export class TerminalSession extends DurableObject<Env> {
       referrer: analyticsContext.referrer,
       portrait: role === "viewer" && new URL(request.url).searchParams.get("layout") === "portrait",
       supportsPortraitGrid: role === "host" && request.headers.get("X-Shell-Terminal-Grid") === "80x40",
+      connectedAt: Date.now(),
     };
 
     server.serializeAttachment(attachment);
@@ -1008,7 +1064,15 @@ export class TerminalSession extends DurableObject<Env> {
       await this.persistMeta();
       recordAnalytics(this.env, this.state, "viewer_connected", "viewer", viewerContext);
       if (firstShareOpen) {
-        recordAnalytics(this.env, this.state, "share_opened", "viewer", viewerContext);
+        /*
+         * The first open says two things worth keeping: whether anyone can
+         * type here, and how long the link waited. A read-only session is
+         * its own target so the typed rate is over sessions that allow it.
+         */
+        recordAnalytics(this.env, this.state, "share_opened", this.isReadOnly() ? "viewer_read_only" : "viewer", {
+          ...viewerContext,
+          value: Math.max(0, (Date.now() - this.meta.createdAt) / 1_000),
+        });
       }
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1258,6 +1322,16 @@ export class TerminalSession extends DurableObject<Env> {
     const action = viewerFrameAction(frame[0], this.isReadOnly());
     if (action === "blocked-input") {
       sendJson(socket, { type: "access_denied", reason: "read_only" });
+      /* Once per viewer: the first refusal is the signal, the rest are the same person retrying. */
+      if (attachment.inputDeniedAt === undefined) {
+        attachment.inputDeniedAt = Date.now();
+        socket.serializeAttachment(attachment);
+        recordAnalytics(this.env, this.state, "input_denied", "read_only", {
+          device: attachment.device,
+          client: attachment.client,
+          referrer: attachment.referrer,
+        });
+      }
       return;
     }
 
@@ -1360,6 +1434,8 @@ export class TerminalSession extends DurableObject<Env> {
         device: attachment.device,
         client: attachment.client,
         referrer: attachment.referrer,
+        /* Seconds connected; absent on sockets accepted before this was recorded. */
+        value: attachment.connectedAt === undefined ? 0 : Math.max(0, (Date.now() - attachment.connectedAt) / 1_000),
       });
       await this.refreshLivePresence(true, socket);
       await this.scheduleNextAlarm();
@@ -1523,6 +1599,8 @@ export class TerminalSession extends DurableObject<Env> {
       device: attachment.device,
       client: attachment.client,
       referrer: "internal",
+      /* Seconds from the first open to the first keystroke. */
+      value: Math.max(0, (this.meta.collaborationStartedAt - (this.meta.shareOpenedAt ?? this.meta.createdAt)) / 1_000),
     });
     const meta = { ...this.meta };
     this.state.waitUntil(this.state.storage.put("meta", meta));

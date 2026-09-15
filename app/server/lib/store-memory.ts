@@ -14,6 +14,8 @@ import {
 } from "./store";
 import type {
   AccountActivity,
+  AppEvent,
+  AppEventCount,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -73,6 +75,7 @@ interface Shape {
   accountKeys: AccountKey[];
   deletedAccounts: { uid: string; deletedAt: number }[];
   accountActivity: { uid: string; day: number }[];
+  appEvents: { event: AppEvent; day: number; count: number }[];
   teamKeys: TeamKey[];
   teamKeyShares: TeamKeyShare[];
 }
@@ -81,7 +84,7 @@ const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
-  accountActivity: [], teamKeys: [], teamKeyShares: [],
+  accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [],
 };
 
 /**
@@ -148,6 +151,7 @@ export class MemoryStore implements Store {
         accountKeys: parsed.accountKeys ?? [],
         deletedAccounts: parsed.deletedAccounts ?? [],
         accountActivity: parsed.accountActivity ?? [],
+        appEvents: parsed.appEvents ?? [],
         teamKeys: parsed.teamKeys ?? [],
         teamKeyShares: parsed.teamKeyShares ?? [],
       };
@@ -823,6 +827,9 @@ export class MemoryStore implements Store {
     this.data.accountActivity = this.data.accountActivity.filter(
       (entry) => entry.day >= now - ACCOUNT_ACTIVITY_MEMORY_MS,
     );
+    this.data.appEvents = this.data.appEvents.filter(
+      (entry) => entry.day >= now - ACCOUNT_ACTIVITY_MEMORY_MS,
+    );
     const before = this.data.codes.length;
     this.data.codes = this.data.codes.filter((entry) => entry.expiresAt > now);
     /* Finished commands are only kept long enough to be reported back. */
@@ -891,6 +898,26 @@ export class MemoryStore implements Store {
         .map((entry) => entry.day)
         .sort((left, right) => left - right),
     }));
+  }
+
+  /* ---- App events ---- */
+
+  async recordAppEvent(event: AppEvent, now = Date.now()): Promise<void> {
+    const day = Math.floor(now / DAY_MS) * DAY_MS;
+    const row = this.data.appEvents.find((entry) => entry.event === event && entry.day === day);
+    if (row) row.count += 1;
+    else this.data.appEvents.push({ event, day, count: 1 });
+    this.flush();
+  }
+
+  async appEvents(sinceDay: number): Promise<AppEventCount[]> {
+    const totals = new Map<AppEvent, number>();
+    for (const entry of this.data.appEvents) {
+      if (entry.day >= sinceDay) totals.set(entry.event, (totals.get(entry.event) ?? 0) + entry.count);
+    }
+    return [...totals.entries()]
+      .map(([event, count]) => ({ event, count }))
+      .sort((left, right) => left.event.localeCompare(right.event));
   }
 
   async tokensForImport(): Promise<CliToken[]> {

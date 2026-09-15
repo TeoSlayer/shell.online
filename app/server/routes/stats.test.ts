@@ -5,6 +5,14 @@ import { accountStats, buildRetentionCohorts, DAY_MS, WEEK_MS, weekStart } from 
 const monday = Date.UTC(2026, 8, 7);
 const now = monday + 2 * WEEK_MS + 3 * DAY_MS + 9 * 60 * 60_000;
 
+describe("accountStats events", () => {
+  it("passes what accounts did through as counts by kind, and an empty object when nothing was counted", () => {
+    const stats = accountStats([], "7d", now, [{ event: "machine_linked", count: 2 }, { event: "command_sent", count: 5 }]);
+    expect(stats.events).toEqual({ machine_linked: 2, command_sent: 5 });
+    expect(accountStats([], "7d", now).events).toEqual({});
+  });
+});
+
 describe("accountStats", () => {
   const accounts = [
     /* signed up week 0, used it in weeks 1 and 2 */

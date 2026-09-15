@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   binaryDownloadTarget,
+  campaignSource,
   classifyClient,
   classifyDevice,
   classifyReferrer,
   documentTarget,
   hasVisitorSalt,
   isDocumentNavigation,
+  machineKey,
   normalizeAnalyticsRecord,
   requestAnalyticsContext,
   requestVisitor,
@@ -69,6 +71,22 @@ describe("analytics", () => {
       .toBe("internal");
     expect(classifyReferrer("https://example.com/private/path", "https://shell.online"))
       .toBe("other");
+    expect(classifyReferrer("https://app.shell.online/sessions", "https://shell.online")).toBe("app");
+    expect(classifyReferrer("https://app.example.test/", "https://example.test")).toBe("app");
+  });
+
+  it("takes a named campaign over a hidden referrer, and only a named one", () => {
+    expect(campaignSource(new URL("https://shell.online/?utm_source=hn&utm_medium=post"))).toBe("hacker_news");
+    expect(campaignSource(new URL("https://shell.online/?ref=producthunt"))).toBe("product_hunt");
+    expect(campaignSource(new URL("https://shell.online/?utm_source=<script>"))).toBeNull();
+    expect(campaignSource(new URL("https://shell.online/?utm_source=my-private-tracker-42"))).toBeNull();
+    expect(campaignSource(new URL("https://shell.online/"))).toBeNull();
+    const hidden = new Request("https://shell.online/?utm_source=newsletter", { headers: { "User-Agent": "Mozilla/5.0" } });
+    expect(requestAnalyticsContext(hidden).referrer).toBe("newsletter");
+    const shown = new Request("https://shell.online/?utm_source=newsletter", {
+      headers: { "User-Agent": "Mozilla/5.0", Referer: "https://github.com/TeoSlayer/shell.online" },
+    });
+    expect(requestAnalyticsContext(shown).referrer).toBe("github");
   });
 
   it("classifies request context without retaining raw headers", () => {
@@ -135,7 +153,7 @@ describe("analytics", () => {
     await expect(visitorKey("another-salt-of-some-length", "203.0.113.7", "Mozilla/5.0 (Macintosh) Chrome/129.0.0.0 Safari/537.36")).resolves.not.toBe(one);
   });
 
-  it("counts nobody without a salt worth the name or without an address", async () => {
+  it("counts nobody without a salt worth the name, without an address, or behind a crawler", async () => {
     const request = new Request("https://shell.online/", {
       headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "curl/8.4.0" },
     });
@@ -145,5 +163,29 @@ describe("analytics", () => {
     await expect(requestVisitor("short", request)).resolves.toBeUndefined();
     await expect(requestVisitor("a-salt-long-enough-to-count", new Request("https://shell.online/"))).resolves.toBeUndefined();
     await expect(requestVisitor("a-salt-long-enough-to-count", request)).resolves.toMatch(/^[a-f0-9]{20}$/);
+    const crawler = new Request("https://shell.online/", {
+      headers: {
+        "CF-Connecting-IP": "203.0.113.9",
+        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      },
+    });
+    await expect(requestVisitor("a-salt-long-enough-to-count", crawler)).resolves.toBeUndefined();
+  });
+
+  it("keys a machine by address alone, so the installer and the CLI on it are one machine", async () => {
+    const salt = "a-salt-long-enough-to-count";
+    const installer = new Request("https://shell.online/install", {
+      headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "curl/8.4.0" },
+    });
+    const cli = new Request("https://shell.online/api/sessions", {
+      headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "shell/0.15.1" },
+    });
+    const machine = await requestVisitor(salt, installer, "machine");
+    expect(machine).toMatch(/^[a-f0-9]{20}$/);
+    await expect(requestVisitor(salt, cli, "machine")).resolves.toBe(machine);
+    /* A browser at the same address is not that machine, and its key is not made from the same bytes. */
+    await expect(requestVisitor(salt, installer)).resolves.not.toBe(machine);
+    await expect(machineKey(salt, "203.0.113.7")).resolves.toBe(machine);
+    await expect(machineKey(salt, "203.0.113.8")).resolves.not.toBe(machine);
   });
 });

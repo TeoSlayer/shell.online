@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+# The installer reports its outcome to its base URL, which for most of these
+# scenarios is the real one. Keep it quiet; one scenario below turns it back
+# on against a mock curl to check what it would send.
+export SHELL_ONLINE_INSTALL_REPORT=0
+
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/shell-online-install-test.XXXXXX")
 trap 'rm -rf "$test_root"' EXIT HUP INT TERM
 
@@ -129,5 +134,33 @@ printf '%s\n' '#!/bin/sh' 'printf "shell 0.1.0\\n"' > "$shadow_dir/shell"
 chmod 0755 "$shadow_dir/shell"
 output=$(PATH=$shadow_dir:$PATH run_installer "$shadow_install" env)
 assert_contains "$output" "Warning: shell currently resolves to $shadow_dir/shell"
+
+# The installer's last word: one request with the outcome and the binary name,
+# through curl when it has it, and nothing at all when told to keep quiet.
+report_bin=$test_root/report-bin
+report_log=$test_root/report.log
+mkdir -p "$report_bin"
+printf '%s\n' '#!/bin/sh' 'printf "%s\\n" "$*" >> "$SHELL_ONLINE_TEST_REPORT_LOG"' 'exit 22' > "$report_bin/curl"
+chmod 0755 "$report_bin/curl"
+: > "$report_log"
+if output=$(SHELL_ONLINE_INSTALL_REPORT=1 SHELL_ONLINE_TEST_REPORT_LOG=$report_log \
+  SHELL_ONLINE_BASE_URL=https://installer.invalid SHELL_ONLINE_INSTALL_DIR=$test_root/report-install \
+  PATH=$report_bin:$PATH sh "$installer" 2>&1); then
+  printf 'Installer with a failing download unexpectedly succeeded.\n' >&2
+  exit 1
+fi
+assert_contains "$output" "download failed"
+assert_contains "$(cat "$report_log")" "https://installer.invalid/install/report?outcome=download_failed&platform=shell-"
+: > "$report_log"
+if output=$(SHELL_ONLINE_INSTALL_REPORT=0 SHELL_ONLINE_TEST_REPORT_LOG=$report_log \
+  SHELL_ONLINE_BASE_URL=https://installer.invalid SHELL_ONLINE_INSTALL_DIR=$test_root/report-install \
+  PATH=$report_bin:$PATH sh "$installer" 2>&1); then
+  printf 'Installer with a failing download unexpectedly succeeded.\n' >&2
+  exit 1
+fi
+if grep -q "install/report" "$report_log"; then
+  printf 'Installer reported its outcome although SHELL_ONLINE_INSTALL_REPORT=0.\n' >&2
+  exit 1
+fi
 
 printf 'Installer integration scenarios passed.\n'

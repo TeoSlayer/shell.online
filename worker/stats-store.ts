@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+  INSTALL_CONVERSION_DAYS,
   RETENTION_WEEKS,
   VISITOR_MEMORY_DAYS,
   isStatsRange,
@@ -13,10 +14,14 @@ import {
   statsRangeStart,
   WEEK_MS,
   weekStart,
+  type AudienceRow,
   type BreakdownRow,
+  type InstallConversionRow,
   type LivePresenceRow,
   type MetricSummaryRow,
   type MetricTrendRow,
+  type PeriodUniqueRow,
+  type PreviousPeriodRows,
   type RetentionRow,
   type UniqueDayRow,
   type UniqueSummaryRow,
@@ -36,6 +41,7 @@ const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
   "copy",
   "cta_click",
   "installer_download",
+  "install_outcome",
   "binary_download",
   "skill_download",
   "session_created",
@@ -45,6 +51,8 @@ const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
   "viewer_disconnected",
   "collaboration_started",
   "session_ended",
+  "viewer_rejected",
+  "input_denied",
   "stats_view",
 ]);
 
@@ -300,20 +308,37 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     const collectingSince = this.sql.exec<MinimumRow>(
       "SELECT MIN(bucket) AS minimum FROM metric_hourly",
     ).one().minimum;
+    /* Taken after the purge, so it is the earliest day people can still be counted from. */
+    const uniquesSince = this.sql.exec<MinimumRow>(
+      "SELECT MIN(day) AS minimum FROM visitor_days",
+    ).one().minimum;
     const rangeStart = statsRangeStart(range, now, collectingSince);
-    const summary = this.sql.exec<MetricSummaryRow>(
-      `SELECT event, target,
-        SUM(count) AS count,
-        SUM(value_sum) AS value_sum,
-        MAX(value_max) AS value_max,
-        SUM(auxiliary_sum) AS auxiliary_sum,
-        MAX(auxiliary_max) AS auxiliary_max
-      FROM metric_hourly
-      WHERE bucket >= ?
-      GROUP BY event, target
-      ORDER BY count DESC, event, target`,
-      rangeStart,
-    ).toArray();
+    /* Buckets are hours and events at most ten minutes ahead of this clock, so nothing sits past tomorrow. */
+    const rangeEnd = now + DAY_MS;
+    const summary = this.metricSummary(rangeStart, rangeEnd);
+    const byDevice = this.audienceRows(rangeStart, rangeEnd);
+    /*
+     * The period of equal length before the range, for comparison. People
+     * are counted by day, so its days are the whole days before the range's
+     * first day. The all-time range has nothing before it.
+     */
+    let previous: PreviousPeriodRows | null = null;
+    if (range !== "all") {
+      const previousStart = rangeStart - (now - rangeStart);
+      previous = {
+        rangeStart: previousStart,
+        summary: this.metricSummary(previousStart, rangeStart),
+        byDevice: this.audienceRows(previousStart, rangeStart),
+        uniques: this.sql.exec<PeriodUniqueRow>(
+          `SELECT surface, COUNT(DISTINCT visitor) AS unique_count
+          FROM visitor_days
+          WHERE day >= ? AND day < ?
+          GROUP BY surface`,
+          dayStart(previousStart),
+          dayStart(rangeStart),
+        ).toArray(),
+      };
+    }
     const trend = this.sql.exec<MetricTrendRow>(
       `SELECT bucket, event, SUM(count) AS count
       FROM metric_hourly
@@ -326,6 +351,8 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     const devices = this.dimensionBreakdown("device", rangeStart, "page_view");
     const referrers = this.dimensionBreakdown("referrer", rangeStart, "page_view");
     const clients = this.dimensionBreakdown("client", rangeStart, "session_created");
+    const openedDevices = this.dimensionBreakdown("device", rangeStart, "share_opened");
+    const typedDevices = this.dimensionBreakdown("device", rangeStart, "collaboration_started");
     const live = this.sql.exec<LivePresenceRow>(
       `SELECT
         COALESCE(SUM(active_sessions), 0) AS active_sessions,
@@ -355,6 +382,29 @@ export class StatsStore extends DurableObject<Record<string, never>> {
       ORDER BY day`,
       uniqueStart,
     ).toArray();
+    /*
+     * Installers followed to their first session. Both surfaces key a machine
+     * by address, so the join is on the hash. A machine counts as matured
+     * once its window has fully elapsed, so a fresh install is not a miss.
+     */
+    const conversionWindow = INSTALL_CONVERSION_DAYS * DAY_MS;
+    const installConversion = uniquesConfigured
+      ? this.sql.exec<InstallConversionRow>(
+        `SELECT COUNT(*) AS installers,
+          SUM(CASE WHEN installs.first_day <= ? THEN 1 ELSE 0 END) AS matured,
+          SUM(CASE WHEN installs.first_day <= ?
+            AND cli.first_day IS NOT NULL
+            AND cli.first_day >= installs.first_day
+            AND cli.first_day < installs.first_day + ? THEN 1 ELSE 0 END) AS started
+        FROM visitors AS installs
+        LEFT JOIN visitors AS cli ON cli.surface = 'cli' AND cli.visitor = installs.visitor
+        WHERE installs.surface = 'install' AND installs.first_day >= ?`,
+        dayStart(now) - conversionWindow,
+        dayStart(now) - conversionWindow,
+        conversionWindow,
+        uniqueStart,
+      ).one()
+      : null;
     const retention = this.sql.exec<RetentionRow>(
       `SELECT visitors.surface AS surface, visitors.visitor AS visitor,
         visitors.first_day AS first_day, visitor_days.day AS day
@@ -367,16 +417,22 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     const snapshot = buildStatsSnapshot(
       {
         summary,
+        byDevice,
+        previous,
         trend,
         devices,
         referrers,
         clients,
+        openedDevices,
+        typedDevices,
         live,
         collectingSince,
         uniques,
         uniqueDays,
         retention,
+        installConversion,
         uniquesConfigured,
+        uniquesSince,
       },
       range,
       now,
@@ -386,6 +442,36 @@ export class StatsStore extends DurableObject<Record<string, never>> {
       "Cache-Control": "private, no-store",
       "X-Robots-Tag": "noindex, nofollow, noarchive",
     });
+  }
+
+  private metricSummary(from: number, to: number): MetricSummaryRow[] {
+    return this.sql.exec<MetricSummaryRow>(
+      `SELECT event, target,
+        SUM(count) AS count,
+        SUM(value_sum) AS value_sum,
+        MAX(value_max) AS value_max,
+        SUM(auxiliary_sum) AS auxiliary_sum,
+        MAX(auxiliary_max) AS auxiliary_max
+      FROM metric_hourly
+      WHERE bucket >= ? AND bucket < ?
+      GROUP BY event, target
+      ORDER BY count DESC, event, target`,
+      from,
+      to,
+    ).toArray();
+  }
+
+  /** Who made the requests: the same totals, split by device class. */
+  private audienceRows(from: number, to: number): AudienceRow[] {
+    return this.sql.exec<AudienceRow>(
+      `SELECT event, target, device, SUM(count) AS count
+      FROM metric_hourly
+      WHERE bucket >= ? AND bucket < ?
+        AND event IN ('page_view', 'installer_download', 'binary_download', 'viewer_connected')
+      GROUP BY event, target, device`,
+      from,
+      to,
+    ).toArray();
   }
 
   private dimensionBreakdown(

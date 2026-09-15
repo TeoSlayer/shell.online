@@ -13,6 +13,11 @@ if [ ! -f "$config" ]; then
   exit 1
 fi
 
+# A page served straight from the assets binding never reaches the Worker and
+# is never counted. Refuse a config that routes fewer paths through the Worker
+# than the example does, before anything is built.
+node "$repository_root/scripts/check-worker-routing.mjs" "$repository_root/wrangler.example.jsonc" "$config"
+
 # Wrangler resolves `main` and `assets.directory` beside its config file. A
 # private config kept in another checkout would otherwise deploy that other
 # checkout while this script builds the current one. Stage only the config

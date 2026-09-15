@@ -68,7 +68,9 @@ Set `SHELL_ONLINE_SERVER` to the URL Wrangler prints. Add a `routes` entry to
 the copied config for a custom domain. The Worker path requires Durable
 Objects, Rate Limiting, Analytics Engine, and static assets. Keep every
 documentation path in `run_worker_first`: a page served straight from the
-assets binding is never counted.
+assets binding is never counted. `npm run deploy:production` refuses a
+production config that routes fewer of these paths through the Worker than
+`wrangler.example.jsonc` does.
 
 The private statistics dashboard is optional and configured with Worker
 secrets (`npx wrangler secret put <NAME>`):
@@ -76,7 +78,7 @@ secrets (`npx wrangler secret put <NAME>`):
 | Secret | Purpose |
 |---|---|
 | `STATS_PASSWORD` | Opens the dashboard on the stats hostname; at least 12 characters |
-| `STATS_VISITOR_SALT` | Lets the dashboard count people as keyed hashes of address and browser family; at least 16 characters. Without it every unique, new, returning and retention figure stays at zero |
+| `STATS_VISITOR_SALT` | Lets the dashboard count people as keyed hashes of address and browser family (address alone for machines running the installer or the CLI, so an install can be followed to a first session); at least 16 characters. Without it every unique, new, returning and retention figure stays at zero |
 | `APP_STATS_URL` | The accounts app's origin, for exact account counts and sign-up cohorts |
 | `APP_STATS_TOKEN` | The token the accounts app expects; the same value as its `STATS_TOKEN` |
 

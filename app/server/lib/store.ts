@@ -1,6 +1,8 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type {
   AccountActivity,
+  AppEvent,
+  AppEventCount,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -257,6 +259,12 @@ export interface Store {
   touchMembership(uid: string, now?: number, resolutionMs?: number): Promise<void>;
   /** Every account's sign-up time and active days, with no identifiers. */
   accountActivity(): Promise<AccountActivity[]>;
+
+  /* ---- App events ---- */
+  /** Counts one thing an account did, on the day it did it. Nothing about who. */
+  recordAppEvent(event: AppEvent, now?: number): Promise<void>;
+  /** Totals per kind over days on or after `sinceDay` (midnight UTC), for the dashboard. */
+  appEvents(sinceDay: number): Promise<AppEventCount[]>;
 
   /* ---- Housekeeping ---- */
   purgeExpired(now?: number): Promise<void>;

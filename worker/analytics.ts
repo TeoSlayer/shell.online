@@ -6,6 +6,8 @@ export type AnalyticsEvent =
   | "copy"
   | "cta_click"
   | "installer_download"
+  /** The installer's last word: how it went, from the script itself. */
+  | "install_outcome"
   | "binary_download"
   | "skill_download"
   | "session_created"
@@ -15,6 +17,10 @@ export type AnalyticsEvent =
   | "viewer_disconnected"
   | "collaboration_started"
   | "session_ended"
+  /** A browser opened a link and was turned away: the session was full, expired or never existed. */
+  | "viewer_rejected"
+  /** A viewer tried to type into a read-only session: demand the owner did not allow. Once per viewer. */
+  | "input_denied"
   | "stats_view";
 
 export type DeviceClass = "mobile" | "tablet" | "desktop" | "bot" | "cli" | "unknown";
@@ -52,6 +58,29 @@ export interface AnalyticsRecord {
   value: number;
   auxiliary: number;
 }
+
+/** What the install scripts report at their end. Anything else is not counted. */
+export const INSTALL_OUTCOMES: ReadonlySet<string> = new Set([
+  "ok",
+  "failed",
+  "unsupported_os",
+  "unsupported_arch",
+  "no_home",
+  "install_dir_relative",
+  "install_dir_colon",
+  "install_dir_create",
+  "install_dir_unwritable",
+  "temp_dir",
+  "temp_dir_unwritable",
+  "download_failed",
+  "no_downloader",
+  "manifest_html",
+  "manifest_missing",
+  "manifest_invalid",
+  "no_sha_tool",
+  "checksum_mismatch",
+  "write_failed",
+]);
 
 /** What the landing page reports when one of its sign-up links is clicked. */
 export const CTA_TARGETS: ReadonlySet<string> = new Set(["signup_nav", "signup_hero", "signup_team", "signup_footer"]);
@@ -123,11 +152,50 @@ export function normalizeAnalyticsRecord(
 
 export function requestAnalyticsContext(request: Request): AnalyticsContext {
   const userAgent = request.headers.get("User-Agent") ?? "";
+  const url = new URL(request.url);
+  const referrer = classifyReferrer(request.headers.get("Referer"), url.origin);
+  /* A named campaign beats a referrer the browser hid, and nothing else. */
+  const campaign = campaignSource(url);
   return {
     device: classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")),
     client: classifyClient(userAgent),
-    referrer: classifyReferrer(request.headers.get("Referer"), new URL(request.url).origin),
+    referrer: campaign !== null && (referrer === "direct" || referrer === "other") ? campaign : referrer,
   };
+}
+
+/**
+ * utm_source or ref on a landing link, folded to the same tokens the referrer
+ * classifier uses, so a launch post still shows as its source when the
+ * browser sent no referrer. Only names on this list count: the dimension has
+ * to stay small, and a stranger's query string is not a source.
+ */
+const CAMPAIGN_SOURCES: Record<string, string> = {
+  hn: "hacker_news",
+  hackernews: "hacker_news",
+  hacker_news: "hacker_news",
+  reddit: "reddit",
+  x: "x",
+  twitter: "x",
+  github: "github",
+  google: "google",
+  newsletter: "newsletter",
+  email: "newsletter",
+  producthunt: "product_hunt",
+  product_hunt: "product_hunt",
+  linkedin: "linkedin",
+  youtube: "youtube",
+  discord: "discord",
+  slack: "slack",
+  mastodon: "mastodon",
+  bluesky: "bluesky",
+  podcast: "podcast",
+};
+
+export function campaignSource(url: URL): string | null {
+  const raw = url.searchParams.get("utm_source") ?? url.searchParams.get("ref");
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 40);
+  return CAMPAIGN_SOURCES[key] ?? null;
 }
 
 export function hasVisitorSalt(salt: unknown): salt is string {
@@ -149,12 +217,36 @@ export async function visitorKey(salt: string, address: string, userAgent: strin
   return Array.from(digest.subarray(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The visitor hash for a request, or nothing when the Worker has no salt or the edge sent no address. */
-export async function requestVisitor(salt: unknown, request: Request): Promise<string | undefined> {
+/**
+ * The hash for a machine: the address alone, under its own label so it can
+ * never collide with a browser's. The installer (curl) and the CLI (shell/x)
+ * on one machine then share a key, and an install can be followed to its
+ * first session. Browsers keep the family in their key: two people behind
+ * one address on different browsers are two visitors, and there is no CLI
+ * to follow them to.
+ */
+export async function machineKey(salt: string, address: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`${salt}\nmachine\n${address}`);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(digest.subarray(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Who a hash stands for: a person's browser, or a person's machine on the command line. */
+export type VisitorKind = "browser" | "machine";
+
+/**
+ * The visitor hash for a request, or nothing when the Worker has no salt, the
+ * edge sent no address, or the request came from a crawler. A crawler is a
+ * request to count, not a person: it stays in every event total and out of
+ * every people figure, which is what the dashboard says of it.
+ */
+export async function requestVisitor(salt: unknown, request: Request, kind: VisitorKind = "browser"): Promise<string | undefined> {
   if (!hasVisitorSalt(salt)) return undefined;
   const address = request.headers.get("CF-Connecting-IP");
   if (!address) return undefined;
-  return visitorKey(salt, address, request.headers.get("User-Agent") ?? "");
+  const userAgent = request.headers.get("User-Agent") ?? "";
+  if (classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")) === "bot") return undefined;
+  return kind === "machine" ? machineKey(salt, address) : visitorKey(salt, address, userAgent);
 }
 
 /**
@@ -242,6 +334,8 @@ export function classifyReferrer(referrer: string | null, requestOrigin: string)
     const url = new URL(referrer);
     if (url.origin === requestOrigin) return "internal";
     const hostname = url.hostname.toLowerCase();
+    /* The accounts app is ours: a visit from it is a signed-in person coming back to the docs. */
+    if (hostname === "app.shell.online" || hostname === `app.${new URL(requestOrigin).hostname}`) return "app";
     if (hostname === "news.ycombinator.com") return "hacker_news";
     if (hostname === "github.com" || hostname.endsWith(".github.com")) return "github";
     if (hostname === "reddit.com" || hostname.endsWith(".reddit.com")) return "reddit";

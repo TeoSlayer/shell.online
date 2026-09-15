@@ -4,7 +4,12 @@ import {
   VISITOR_MEMORY_DAYS,
   isUniqueSurface,
   type StatsAccounts,
+  type StatsAudience,
+  type StatsAudiences,
   type StatsBreakdownItem,
+  type StatsComparison,
+  type StatsFigures,
+  type StatsFunnelExclusion,
   type StatsFunnelStep,
   type StatsRange,
   type StatsRetentionCohort,
@@ -62,6 +67,13 @@ export interface UniqueDayRow extends Record<string, string | number | null> {
   unique_count: number;
 }
 
+/** Machines seen installing, and how many of them went on to a first session. */
+export interface InstallConversionRow extends Record<string, string | number | null> {
+  installers: number | null;
+  matured: number | null;
+  started: number | null;
+}
+
 /** One visitor on one day, with the day they were first seen, for the cohort grids. */
 export interface RetentionRow extends Record<string, string | number | null> {
   surface: string;
@@ -70,18 +82,49 @@ export interface RetentionRow extends Record<string, string | number | null> {
   day: number;
 }
 
+/** One event's count for one device class in the range. */
+export interface AudienceRow extends Record<string, string | number | null> {
+  event: string;
+  target: string;
+  device: string;
+  count: number;
+}
+
+/** Distinct visitor hashes seen on one surface in a period. */
+export interface PeriodUniqueRow extends Record<string, string | number | null> {
+  surface: string;
+  unique_count: number;
+}
+
+/** The period of equal length before the range, for comparison. */
+export interface PreviousPeriodRows {
+  rangeStart: number;
+  summary: MetricSummaryRow[];
+  byDevice: AudienceRow[];
+  uniques: PeriodUniqueRow[];
+}
+
 export interface StatsSnapshotRows {
   summary: MetricSummaryRow[];
+  byDevice: AudienceRow[];
+  /** Null on the all-time range. */
+  previous: PreviousPeriodRows | null;
   trend: MetricTrendRow[];
   devices: BreakdownRow[];
   referrers: BreakdownRow[];
   clients: BreakdownRow[];
+  openedDevices: BreakdownRow[];
+  typedDevices: BreakdownRow[];
   live: LivePresenceRow;
   collectingSince: number | null;
   uniques: UniqueSummaryRow[];
   uniqueDays: UniqueDayRow[];
   retention: RetentionRow[];
+  /** Null when people are not counted. */
+  installConversion: InstallConversionRow | null;
   uniquesConfigured: boolean;
+  /** Midnight UTC of the earliest visitor day still kept, or null when there is none. */
+  uniquesSince: number | null;
 }
 
 /** Midnight UTC of the day that contains `at`. */
@@ -103,9 +146,8 @@ export function buildStatsSnapshot(
   rangeStart: number,
   accounts: StatsAccounts = null,
 ): StatsSnapshot {
-  const total = (event: string, target?: string): number => rows.summary
-    .filter((row) => row.event === event && (target === undefined || row.target === target))
-    .reduce((sum, row) => sum + Number(row.count), 0);
+  const total = (event: string, target?: string): number => sumCounts(rows.summary, event, target);
+  const average = (event: string): number => averageValue(rows.summary, event);
   const ended = rows.summary.filter((row) => row.event === "session_ended");
   const endedCount = ended.reduce((sum, row) => sum + Number(row.count), 0);
   const durationSum = ended.reduce((sum, row) => sum + Number(row.value_sum), 0);
@@ -122,6 +164,8 @@ export function buildStatsSnapshot(
   const binaryDownloads = total("binary_download");
   const trendStepMs = statsTrendStep(range, now - rangeStart);
   const uniques = buildUniques(rows);
+  const audiences = buildAudiences(rows.byDevice);
+  const figures = buildFigures(rows.summary, audiences);
 
   const metrics: StatsSnapshot["metrics"] = {
     activeSessions: Math.max(0, Number(rows.live.active_sessions)),
@@ -129,8 +173,14 @@ export function buildStatsSnapshot(
     sessionsCreated,
     sessionsStarted,
     sharesOpened,
+    sharesOpenedReadOnly: total("share_opened", "viewer_read_only"),
     viewerConnections: total("viewer_connected"),
     collaborations,
+    viewersRejected: total("viewer_rejected"),
+    inputDenied: total("input_denied"),
+    averageSecondsToOpen: average("share_opened"),
+    averageSecondsToType: average("collaboration_started"),
+    averageViewerSeconds: average("viewer_disconnected"),
     landingViews,
     docsViews,
     terminalViews: total("page_view", "session"),
@@ -140,6 +190,8 @@ export function buildStatsSnapshot(
     installs: total("installer_download"),
     skillDownloads: total("skill_download"),
     binaryDownloads,
+    installsReported: total("install_outcome", "ok"),
+    installFailuresReported: total("install_outcome") - total("install_outcome", "ok"),
     copies: total("copy"),
     averageDurationSeconds: endedCount === 0 ? 0 : durationSum / endedCount,
     longestDurationSeconds: ended.reduce(
@@ -168,7 +220,17 @@ export function buildStatsSnapshot(
       signup: ratio(ctaClicks, landingViews),
       installed: ratio(binaryDownloads, landingViews),
     },
-    funnel: buildFunnel(metrics, uniques),
+    figures,
+    audiences,
+    previous: buildComparison(rows.previous, rangeStart, rows.collectingSince, uniques),
+    funnel: buildFunnel(figures, audiences, uniques),
+    installConversion: uniques.configured && rows.installConversion
+      ? {
+        installers: Number(rows.installConversion.installers ?? 0),
+        matured: Number(rows.installConversion.matured ?? 0),
+        started: Number(rows.installConversion.started ?? 0),
+      }
+      : null,
     uniques,
     retention: {
       weeks: RETENTION_WEEKS,
@@ -189,6 +251,10 @@ export function buildStatsSnapshot(
       ].sort((left, right) => right.value - left.value),
       outcomes: targetBreakdown(rows.summary, "session_ended"),
       pages: targetBreakdown(rows.summary, "page_view"),
+      openedDevices: breakdown(rows.openedDevices),
+      typedDevices: breakdown(rows.typedDevices),
+      rejections: targetBreakdown(rows.summary, "viewer_rejected"),
+      installOutcomes: targetBreakdown(rows.summary, "install_outcome"),
     },
     targets: rows.summary.map((row): StatsTargetMetric => ({
       event: row.event,
@@ -202,76 +268,194 @@ export function buildStatsSnapshot(
   };
 }
 
+function sumCounts(rows: MetricSummaryRow[], event: string, target?: string): number {
+  return rows
+    .filter((row) => row.event === event && (target === undefined || row.target === target))
+    .reduce((sum, row) => sum + Number(row.count), 0);
+}
+
+/** The mean of an event's value over its occurrences, or zero when there were none. */
+function averageValue(rows: MetricSummaryRow[], event: string): number {
+  const matching = rows.filter((row) => row.event === event);
+  const count = matching.reduce((sum, row) => sum + Number(row.count), 0);
+  if (count === 0) return 0;
+  return matching.reduce((sum, row) => sum + Number(row.value_sum), 0) / count;
+}
+
+const AUDIENCE_EVENTS: Record<keyof StatsAudiences, (event: string, target: string) => boolean> = {
+  views: (event, target) => event === "page_view" && (target === "landing" || target.startsWith("docs")),
+  installer: (event) => event === "installer_download",
+  installs: (event) => event === "binary_download",
+  viewers: (event) => event === "viewer_connected",
+};
+
+/** Which audience a device class belongs to: the classifier's classes, folded to three that matter and a rest. */
+export function audienceOf(device: string): keyof StatsAudience {
+  if (device === "desktop" || device === "mobile" || device === "tablet") return "browsers";
+  if (device === "cli") return "tools";
+  if (device === "bot") return "crawlers";
+  return "unknown";
+}
+
+export function buildAudiences(rows: AudienceRow[]): StatsAudiences {
+  const empty = (): StatsAudience => ({ browsers: 0, tools: 0, crawlers: 0, unknown: 0 });
+  const audiences: StatsAudiences = { views: empty(), installer: empty(), installs: empty(), viewers: empty() };
+  for (const row of rows) {
+    for (const key of Object.keys(AUDIENCE_EVENTS) as (keyof StatsAudiences)[]) {
+      if (AUDIENCE_EVENTS[key](row.event, row.target)) audiences[key][audienceOf(row.device)] += Number(row.count);
+    }
+  }
+  return audiences;
+}
+
+/** Everything but crawlers: a binary went to a person's machine, whatever fetched it. */
+export function installsCompleted(installs: StatsAudience): number {
+  return installs.browsers + installs.tools + installs.unknown;
+}
+
+export function buildFigures(summary: MetricSummaryRow[], audiences: StatsAudiences): StatsFigures {
+  return {
+    siteViews: audiences.views.browsers,
+    crawlerViews: audiences.views.crawlers,
+    ctaClicks: sumCounts(summary, "cta_click"),
+    installCopies: sumCounts(summary, "copy", "install") + sumCounts(summary, "copy", "brew_install") + sumCounts(summary, "copy", "source_build"),
+    installerRuns: audiences.installer.tools,
+    installs: installsCompleted(audiences.installs),
+    sessionsStarted: sumCounts(summary, "session_started"),
+    neverStarted: sumCounts(summary, "session_ended", "never_started"),
+    sharesOpened: sumCounts(summary, "share_opened"),
+    sharesOpenedWritable: sumCounts(summary, "share_opened") - sumCounts(summary, "share_opened", "viewer_read_only"),
+    collaborations: sumCounts(summary, "collaboration_started"),
+  };
+}
+
+/**
+ * The period before the range, when there is one worth comparing with: not
+ * on the all-time range, and not when it reaches back before collection
+ * began, since a comparison with an empty period says everything doubled.
+ * People are compared only when they were counted for the whole of it.
+ */
+export function buildComparison(
+  previous: PreviousPeriodRows | null,
+  rangeStart: number,
+  collectingSince: number | null,
+  uniques: StatsUniques,
+): StatsComparison | null {
+  if (!previous || collectingSince === null || previous.rangeStart < collectingSince) return null;
+  const audiences = buildAudiences(previous.byDevice);
+  const covered = uniques.configured && uniques.since !== null && uniques.since <= dayStart(previous.rangeStart);
+  let people: StatsComparison["people"] = null;
+  if (covered) {
+    people = Object.fromEntries(UNIQUE_SURFACES.map((surface) => [surface, 0])) as Record<UniqueSurface, number>;
+    for (const row of previous.uniques) {
+      if (isUniqueSurface(row.surface)) people[row.surface] = Number(row.unique_count);
+    }
+  }
+  return {
+    rangeStart: previous.rangeStart,
+    rangeEnd: rangeStart,
+    figures: buildFigures(previous.summary, audiences),
+    people,
+  };
+}
+
 /*
  * The path from a first look to a first keystroke, one row per step, each
- * saying what it counts. A step's count is an event total; its unique figure
- * is how many distinct people were behind it, on the surfaces that count
- * people. The two are shown side by side rather than blended, because a
- * hundred page views from one crawler and a hundred visitors are different
- * news.
+ * saying what it counts and what it leaves out. A step's count is of requests
+ * that a person is plausibly behind; its unique figure is how many distinct
+ * people were, on the surfaces that count people. Crawlers are listed beside
+ * the step they were kept out of, because a hundred page views from one
+ * crawler and a hundred visitors are different news.
  */
 export function buildFunnel(
-  metrics: StatsSnapshot["metrics"],
+  figures: StatsFigures,
+  audiences: StatsAudiences,
   uniques: StatsUniques,
 ): StatsFunnelStep[] {
   const people = (surface: UniqueSurface): number | null =>
     uniques.configured ? uniques.surfaces[surface].unique : null;
+  const excluded = (entries: StatsFunnelExclusion[]): StatsFunnelExclusion[] => entries.filter((entry) => entry.count > 0);
   return [
     {
       key: "visited",
       label: "Visited the site",
-      count: metrics.landingViews + metrics.docsViews,
+      count: figures.siteViews,
       unique: people("site"),
-      note: "Landing and documentation page views. Crawlers count as views, not as people.",
+      note: "Landing and documentation page views from a browser.",
+      excluded: excluded([
+        { label: "by crawlers", count: audiences.views.crawlers },
+        { label: "by tools", count: audiences.views.tools + audiences.views.unknown },
+      ]),
       basis: null,
     },
     {
       key: "signup",
       label: "Clicked Sign up",
-      count: metrics.ctaClicks,
+      count: figures.ctaClicks,
       unique: null,
-      note: "Any Sign up free or Web app link on the landing page.",
+      note: "Any Sign up free or Web app link on the landing page. Most accounts start elsewhere: the app, an invite, the CLI.",
+      excluded: [],
+      basis: "visited",
+    },
+    {
+      key: "copied",
+      label: "Copied an install command",
+      count: figures.installCopies,
+      unique: null,
+      note: "The curl, Homebrew or source-build command copied on the landing page: intent, before a terminal is involved.",
+      excluded: [],
       basis: "visited",
     },
     {
       key: "installer",
-      label: "Fetched the installer",
-      count: metrics.installs,
+      label: "Ran the installer",
+      count: figures.installerRuns,
       unique: people("install"),
-      note: "Requests for the install script. Reading it counts; so does piping it to sh.",
+      note: "The install script fetched by curl or wget, which is how it is run.",
+      excluded: excluded([
+        { label: "read in a browser", count: audiences.installer.browsers },
+        { label: "by crawlers", count: audiences.installer.crawlers },
+        { label: "unknown", count: audiences.installer.unknown },
+      ]),
       basis: "visited",
     },
     {
       key: "installed",
       label: "Completed an install",
-      count: metrics.binaryDownloads,
+      count: figures.installs,
       unique: null,
-      note: "Release binaries served, the installer's last step. Homebrew and source builds are not in this number.",
+      note: "A release binary served, the installer's last step. Homebrew and source builds are not in this number.",
+      excluded: excluded([{ label: "by crawlers", count: audiences.installs.crawlers }]),
       basis: "installer",
     },
     {
       key: "session",
       label: "Started a session",
-      count: metrics.sessionsStarted,
+      count: figures.sessionsStarted,
       unique: people("cli"),
       note: "A shell command connected its process to the relay. Not a share of the step before: sessions come from every install to date.",
+      excluded: excluded([{ label: "created but never connected", count: figures.neverStarted }]),
       basis: null,
     },
     {
       key: "opened",
       label: "Opened it in a browser",
-      count: metrics.sharesOpened,
+      count: figures.sharesOpened,
       unique: people("viewer"),
       note: "Sessions whose link was opened at least once, by anyone, the owner included.",
+      excluded: [],
       basis: "session",
     },
     {
       key: "typed",
       label: "Typed from a browser",
-      count: metrics.collaborations,
+      count: figures.collaborations,
       unique: null,
-      note: "Sessions that received at least one keystroke from a browser.",
+      note: "Sessions that received at least one keystroke from a browser. Read-only sessions cannot, so they are not in the share.",
+      excluded: excluded([{ label: "opened read-only, typing impossible", count: figures.sharesOpened - figures.sharesOpenedWritable }]),
       basis: "opened",
+      basisCount: figures.sharesOpenedWritable,
+      basisLabel: "opened sessions that allow typing",
     },
   ];
 }
@@ -342,9 +526,26 @@ function buildUniques(rows: StatsSnapshotRows): StatsUniques {
   return {
     configured: rows.uniquesConfigured,
     memoryDays: VISITOR_MEMORY_DAYS,
+    since: rows.uniquesConfigured ? rows.uniquesSince : null,
     surfaces,
     daily: [...days.values()].sort((left, right) => left.day - right.day),
   };
+}
+
+/**
+ * The day people counts start from, when that is after the range began, or
+ * null when people cover the whole range. Events are counted from the first
+ * event and people from the day the visitor salt was set, for at most
+ * VISITOR_MEMORY_DAYS, so a 30-day range can hold thirty days of events and
+ * one day of people. A people figure shown beside an event count over such a
+ * range has to say so, or 29,333 views next to 84 people reads as nonsense.
+ */
+export function peopleCountedSince(
+  uniques: Pick<StatsUniques, "configured" | "since">,
+  rangeStart: number,
+): number | null {
+  if (!uniques.configured || uniques.since === null) return null;
+  return uniques.since > dayStart(rangeStart) ? uniques.since : null;
 }
 
 export function statsRangeStart(

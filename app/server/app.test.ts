@@ -2542,6 +2542,8 @@ describe("feedback", () => {
     const posted = await call("POST", "/api/feedback", { auth: await idToken(), body: message });
     expect(posted.status).toBe(201);
     expect(posted.body.feedback.id).toMatch(/^fbk_/);
+    /* Counted for the dashboard as a thing done, with nothing about who did it. */
+    expect(await store.appEvents(0)).toEqual([{ event: "feedback_sent", count: 1 }]);
     const [kept] = await store.feedback();
     expect(kept).toMatchObject({
       uid: "uid-1",
@@ -2599,9 +2601,12 @@ describe("account figures for the statistics dashboard", () => {
     expect((await call("GET", "/api/stats/accounts?range=7d", { auth: "stats-token-with-thirty-two-characters?" })).status).toBe(401);
     expect((await call("GET", "/api/stats/accounts?range=7d", { auth: await idToken() })).status).toBe(401);
 
+    await store.recordAppEvent("machine_linked");
+    await store.recordAppEvent("machine_linked");
+    await store.recordAppEvent("command_sent");
     const answer = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1 });
+    expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1, events: { machine_linked: 2, command_sent: 1 } });
     expect(answer.body.newByDay).toHaveLength(90);
     expect(answer.body.cohorts).toHaveLength(1);
     expect(answer.body.cohorts[0].size).toBe(1);

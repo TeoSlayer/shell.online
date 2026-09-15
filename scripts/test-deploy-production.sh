@@ -9,7 +9,9 @@ fake_bin="$test_root/bin"
 command_log="$test_root/commands"
 config="$test_root/wrangler.production.jsonc"
 mkdir -p "$fake_bin"
-printf 'production-test-config\n' > "$config"
+# A production config routes at least what the example routes through the
+# Worker; the example itself, with a comment, stands in for one.
+{ printf '// production-test-config\n'; cat "$repository_root/wrangler.example.jsonc"; } > "$config"
 
 cat > "$fake_bin/npm" <<'SCRIPT'
 #!/bin/sh
@@ -28,7 +30,7 @@ case "$4" in
   "$SHELL_ONLINE_TEST_REPOSITORY_ROOT"/.wrangler.production.*.jsonc) ;;
   *) printf 'config was not staged beside the source: %s\n' "$4" >&2; exit 43 ;;
 esac
-test "$(cat "$4")" = "production-test-config"
+cmp -s "$4" "$SHELL_ONLINE_TEST_CONFIG"
 shift 4
 printf 'npx wrangler deploy --config <repo-local>%s\n' "${*:+ $*}" >> "$SHELL_ONLINE_TEST_COMMAND_LOG"
 SCRIPT
@@ -37,6 +39,7 @@ chmod 755 "$fake_bin/npm" "$fake_bin/npx"
 
 SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
 SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
+SHELL_ONLINE_TEST_CONFIG="$config" \
 SHELL_ONLINE_WRANGLER_CONFIG="$config" \
 PATH="$fake_bin:$PATH" \
   sh "$repository_root/scripts/deploy-production.sh"
@@ -50,6 +53,7 @@ set +e
 SHELL_ONLINE_TEST_VERIFY_FAIL=1 \
 SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
 SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
+SHELL_ONLINE_TEST_CONFIG="$config" \
 SHELL_ONLINE_WRANGLER_CONFIG="$config" \
 PATH="$fake_bin:$PATH" \
   sh "$repository_root/scripts/deploy-production.sh"
@@ -67,6 +71,24 @@ if SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
   printf 'Deployment unexpectedly accepted a missing Wrangler config.\n' >&2
   exit 1
 fi
+test ! -s "$command_log"
+
+# A config that serves a documentation page from the assets binding would
+# leave that page out of the statistics; the deploy must refuse it before
+# building anything.
+short_config="$test_root/short.jsonc"
+grep -v '"/app/\*",' "$config" > "$short_config"
+: > "$command_log"
+if SHELL_ONLINE_TEST_COMMAND_LOG="$command_log" \
+  SHELL_ONLINE_TEST_REPOSITORY_ROOT="$repository_root" \
+  SHELL_ONLINE_TEST_CONFIG="$short_config" \
+  SHELL_ONLINE_WRANGLER_CONFIG="$short_config" \
+  PATH="$fake_bin:$PATH" \
+  sh "$repository_root/scripts/deploy-production.sh" 2>"$test_root/short.err"; then
+  printf 'Deployment unexpectedly accepted a config that skips the Worker for /app/*.\n' >&2
+  exit 1
+fi
+grep -q '/app/\*' "$test_root/short.err"
 test ! -s "$command_log"
 
 echo "production deployment guard tests passed"

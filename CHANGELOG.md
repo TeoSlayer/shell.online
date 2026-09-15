@@ -37,6 +37,36 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   app can add exact account counts and sign-up retention when the two are
   linked.
 - Clicks on the landing page's Sign up free and Web app links are counted.
+- The funnel gains "Copied an install command" from the landing page's copy
+  buttons, and lists sessions created but never connected beside "Started a
+  session". A named `utm_source` or `ref` on a landing link counts as the
+  source when the browser hid the referrer, from a fixed list of names;
+  visits from the web app are their own source.
+- A session's first open records whether typing is allowed and how long the
+  link waited; the first keystroke, how long after the open it came; a
+  viewer's disconnect, how long they stayed. Browsers turned away by a full,
+  expired or unknown session are counted by reason, and a viewer refused
+  input in a read-only session once. The dashboard shows typed rate by
+  device, who was turned away, and the typed share over sessions that allow
+  typing.
+- Machines running the installer or the CLI are keyed by address alone, so
+  the dashboard can say how many machines that installed at least a week ago
+  started a session within seven days. The privacy policy says so.
+- Both install scripts send one word at their end, the outcome, and the
+  binary name, so a platform that keeps failing gets noticed; nothing else
+  goes with it, and `SHELL_ONLINE_INSTALL_REPORT=0` skips it. The dashboard
+  shows how installs ended by the scripts' own account.
+- The accounts app counts what accounts do, by day and by kind and nothing
+  else: machines linked, sessions registered, commands sent, vaults created,
+  invites sent and accepted, feedback sent. The dashboard shows them under
+  Accounts as things done, not as distinct accounts.
+- The statistics dashboard reads top to bottom as a story: what is live now,
+  six headline figures each with its change against the period before, the
+  funnel, then traffic, sessions, retention and accounts, each section opening
+  with the finding in a sentence. Every figure about people leaves crawlers
+  out and says so beside the step: page views by people, the installer run by
+  curl or wget rather than read or crawled, installs completed on a person's
+  machine. The raw totals stay in the ledger.
 
 ### Fixed
 
@@ -47,6 +77,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   as "Not found". Every documentation route, current or versioned, now has its
   own page-view target; unknown paths the site answers with the landing page
   are counted apart from real 404s, and real 404s are counted at all.
+- The statistics dashboard says since when people have been counted. Event
+  counts run from the first event and people from the day the visitor salt was
+  set, so a 30-day range could show thirty days of views beside one day of
+  people. A people figure over fewer days than the count beside it now names
+  that day, in the funnel, the headline tiles and the footer.
+- Crawlers that identify themselves are no longer counted as people. The
+  funnel said they were not, and they were.
+- Deploying to production refuses a Wrangler config that serves a documentation
+  page from the assets binding instead of the Worker, since such a page is
+  never counted. Production served the web app, CLI, Refstream and platforms
+  pages that way.
 
 ### Changed
 
