@@ -1,5 +1,6 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type {
+  AccountActivity,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -38,6 +39,15 @@ export interface AuditPage {
  * before the deletion.
  */
 export const DELETED_ACCOUNT_MEMORY_MS = 2 * 60 * 60_000;
+
+export const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * How long the days an account used the app are kept. Long enough for a
+ * year's sign-up cohorts to be read back, short enough that the table stays
+ * a footnote.
+ */
+export const ACCOUNT_ACTIVITY_MEMORY_MS = 400 * DAY_MS;
 
 /** What the activity trail shows in place of a deleted account's email. */
 export const DELETED_ACTOR_EMAIL = "deleted account";
@@ -237,6 +247,16 @@ export interface Store {
    * it. Deleting an account keeps its messages and clears who sent them.
    */
   feedback(limit?: number): Promise<Feedback[]>;
+
+  /* ---- Account activity ---- */
+  /**
+   * Records that an account used the app. Cheap enough for every request: the
+   * membership's lastSeenAt moves at most once per `resolutionMs`, and the
+   * day is written only when it does.
+   */
+  touchMembership(uid: string, now?: number, resolutionMs?: number): Promise<void>;
+  /** Every account's sign-up time and active days, with no identifiers. */
+  accountActivity(): Promise<AccountActivity[]>;
 
   /* ---- Housekeeping ---- */
   purgeExpired(now?: number): Promise<void>;

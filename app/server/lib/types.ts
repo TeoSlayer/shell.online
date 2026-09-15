@@ -196,6 +196,16 @@ export interface Feedback {
   at: number;
 }
 
+/**
+ * One account's sign-up time and the days it used the app, with nothing that
+ * says which account. What the statistics dashboard's account figures are
+ * computed from.
+ */
+export interface AccountActivity {
+  joinedAt: number;
+  days: number[];
+}
+
 export interface SessionRecord {
   id: string;
   uid: string;

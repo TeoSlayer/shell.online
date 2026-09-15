@@ -1,19 +1,29 @@
 import { DurableObject } from "cloudflare:workers";
 import {
+  RETENTION_WEEKS,
+  VISITOR_MEMORY_DAYS,
   isStatsRange,
   type StatsRange,
 } from "../shared/stats";
 import {
   buildStatsSnapshot,
+  DAY_MS,
+  dayStart,
   STATS_PRESENCE_LEASE_MS,
   statsRangeStart,
+  WEEK_MS,
+  weekStart,
   type BreakdownRow,
   type LivePresenceRow,
   type MetricSummaryRow,
   type MetricTrendRow,
+  type RetentionRow,
+  type UniqueDayRow,
+  type UniqueSummaryRow,
 } from "../shared/stats-snapshot";
 import {
   normalizeAnalyticsRecord,
+  uniqueSurface,
   type AnalyticsContext,
   type AnalyticsEvent,
   type AnalyticsRecord,
@@ -24,6 +34,7 @@ const STATS_OBJECT_NAME = "shell-online-global-stats";
 const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
   "page_view",
   "copy",
+  "cta_click",
   "installer_download",
   "binary_download",
   "skill_download",
@@ -54,7 +65,7 @@ export async function submitStatsEvent(
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...record, at: Date.now() }),
+        body: JSON.stringify({ ...record, at: Date.now(), visitor: context.visitor }),
       },
     );
     if (!response.ok) throw new Error(`Stats store rejected event: ${response.status}`);
@@ -66,9 +77,10 @@ export async function submitStatsEvent(
 export function fetchStatsSnapshot(
   namespace: DurableObjectNamespace<StatsStore>,
   range: StatsRange,
+  uniquesConfigured: boolean,
 ): Promise<Response> {
   return namespace.getByName(STATS_OBJECT_NAME).fetch(
-    `https://stats.internal/internal/stats?range=${range}`,
+    `https://stats.internal/internal/stats?range=${range}&uniques=${uniquesConfigured ? "1" : "0"}`,
   );
 }
 
@@ -144,6 +156,31 @@ export class StatsStore extends DurableObject<Record<string, never>> {
       )
     `);
     this.sql.exec("CREATE INDEX IF NOT EXISTS live_presence_expiry ON live_presence(expires_at)");
+    /*
+     * Who was seen, as keyed hashes only: one row per person per day per
+     * surface, and one row per person with their first and last day. Both are
+     * forgotten VISITOR_MEMORY_DAYS after the person was last seen, so "new"
+     * means "not seen in that long" and nothing older than that is kept.
+     */
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS visitor_days (
+        surface TEXT NOT NULL,
+        visitor TEXT NOT NULL,
+        day INTEGER NOT NULL,
+        PRIMARY KEY (surface, visitor, day)
+      )
+    `);
+    this.sql.exec("CREATE INDEX IF NOT EXISTS visitor_days_day ON visitor_days(day)");
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS visitors (
+        surface TEXT NOT NULL,
+        visitor TEXT NOT NULL,
+        first_day INTEGER NOT NULL,
+        last_day INTEGER NOT NULL,
+        PRIMARY KEY (surface, visitor)
+      )
+    `);
+    this.sql.exec("CREATE INDEX IF NOT EXISTS visitors_last_day ON visitors(last_day)");
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -153,7 +190,10 @@ export class StatsStore extends DurableObject<Record<string, never>> {
     }
     if (url.pathname === "/internal/stats" && request.method === "GET") {
       const requestedRange = url.searchParams.get("range");
-      return this.snapshot(isStatsRange(requestedRange) ? requestedRange : "7d");
+      return this.snapshot(
+        isStatsRange(requestedRange) ? requestedRange : "7d",
+        url.searchParams.get("uniques") === "1",
+      );
     }
     if (url.pathname === "/internal/presence" && request.method === "POST") {
       return this.updatePresence(request);
@@ -228,12 +268,35 @@ export class StatsStore extends DurableObject<Record<string, never>> {
       record.auxiliary,
       record.auxiliary,
     );
+    const surface = record.visitor ? uniqueSurface(record.event, record.target) : null;
+    if (surface && record.visitor) {
+      const day = dayStart(record.at);
+      this.sql.exec(
+        "INSERT OR IGNORE INTO visitor_days (surface, visitor, day) VALUES (?, ?, ?)",
+        surface,
+        record.visitor,
+        day,
+      );
+      this.sql.exec(
+        `INSERT INTO visitors (surface, visitor, first_day, last_day) VALUES (?, ?, ?, ?)
+        ON CONFLICT (surface, visitor) DO UPDATE SET
+          first_day = MIN(visitors.first_day, excluded.first_day),
+          last_day = MAX(visitors.last_day, excluded.last_day)`,
+        surface,
+        record.visitor,
+        day,
+        day,
+      );
+    }
     return new Response(null, { status: 204 });
   }
 
-  private snapshot(range: StatsRange): Response {
+  private snapshot(range: StatsRange, uniquesConfigured: boolean): Response {
     const now = Date.now();
     this.sql.exec("DELETE FROM live_presence WHERE expires_at <= ?", now);
+    const forgetBefore = dayStart(now) - VISITOR_MEMORY_DAYS * DAY_MS;
+    this.sql.exec("DELETE FROM visitor_days WHERE day < ?", forgetBefore);
+    this.sql.exec("DELETE FROM visitors WHERE last_day < ?", forgetBefore);
     const collectingSince = this.sql.exec<MinimumRow>(
       "SELECT MIN(bucket) AS minimum FROM metric_hourly",
     ).one().minimum;
@@ -269,9 +332,52 @@ export class StatsStore extends DurableObject<Record<string, never>> {
         COALESCE(SUM(active_viewers), 0) AS active_viewers
       FROM live_presence`,
     ).one();
+    /*
+     * People are counted by day, so a range that starts mid-day includes the
+     * whole of that day: a day is the finest grain the visitor tables keep.
+     */
+    const uniqueStart = dayStart(rangeStart);
+    const uniques = this.sql.exec<UniqueSummaryRow>(
+      `SELECT seen.surface AS surface,
+        COUNT(*) AS unique_count,
+        SUM(CASE WHEN visitors.first_day >= ? THEN 1 ELSE 0 END) AS new_count
+      FROM (SELECT DISTINCT surface, visitor FROM visitor_days WHERE day >= ?) AS seen
+      JOIN visitors ON visitors.surface = seen.surface AND visitors.visitor = seen.visitor
+      GROUP BY seen.surface`,
+      uniqueStart,
+      uniqueStart,
+    ).toArray();
+    const uniqueDays = this.sql.exec<UniqueDayRow>(
+      `SELECT day, surface, COUNT(*) AS unique_count
+      FROM visitor_days
+      WHERE day >= ?
+      GROUP BY day, surface
+      ORDER BY day`,
+      uniqueStart,
+    ).toArray();
+    const retention = this.sql.exec<RetentionRow>(
+      `SELECT visitors.surface AS surface, visitors.visitor AS visitor,
+        visitors.first_day AS first_day, visitor_days.day AS day
+      FROM visitors
+      JOIN visitor_days ON visitor_days.surface = visitors.surface AND visitor_days.visitor = visitors.visitor
+      WHERE visitors.first_day >= ? AND visitors.surface IN ('site', 'cli')`,
+      weekStart(now) - (RETENTION_WEEKS - 1) * WEEK_MS,
+    ).toArray();
 
     const snapshot = buildStatsSnapshot(
-      { summary, trend, devices, referrers, clients, live, collectingSince },
+      {
+        summary,
+        trend,
+        devices,
+        referrers,
+        clients,
+        live,
+        collectingSince,
+        uniques,
+        uniqueDays,
+        retention,
+        uniquesConfigured,
+      },
       range,
       now,
       rangeStart,
@@ -328,7 +434,7 @@ async function parsePresenceRequest(
   };
 }
 
-function parseStatsRecord(candidate: unknown): (AnalyticsRecord & { at: number }) | null {
+function parseStatsRecord(candidate: unknown): (AnalyticsRecord & { at: number; visitor?: string }) | null {
   if (typeof candidate !== "object" || candidate === null) return null;
   const value = candidate as Record<string, unknown>;
   if (
@@ -345,7 +451,11 @@ function parseStatsRecord(candidate: unknown): (AnalyticsRecord & { at: number }
   ) return null;
   const at = Number(value.at);
   if (Math.abs(Date.now() - at) > 10 * 60 * 1_000) return null;
+  if (value.visitor !== undefined && (typeof value.visitor !== "string" || !/^[a-f0-9]{20}$/.test(value.visitor))) {
+    return null;
+  }
   return {
+    ...(typeof value.visitor === "string" ? { visitor: value.visitor } : {}),
     event: value.event as AnalyticsEvent,
     target: value.target,
     device: value.device as AnalyticsRecord["device"],

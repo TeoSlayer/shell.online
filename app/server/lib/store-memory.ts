@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import {
+  ACCOUNT_ACTIVITY_MEMORY_MS,
+  DAY_MS,
   DELETED_ACCOUNT_MEMORY_MS,
   DELETED_ACTOR_EMAIL,
   type AccountDeletion,
@@ -11,6 +13,7 @@ import {
   type Store,
 } from "./store";
 import type {
+  AccountActivity,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -69,6 +72,7 @@ interface Shape {
   feedback: Feedback[];
   accountKeys: AccountKey[];
   deletedAccounts: { uid: string; deletedAt: number }[];
+  accountActivity: { uid: string; day: number }[];
   teamKeys: TeamKey[];
   teamKeyShares: TeamKeyShare[];
 }
@@ -77,7 +81,7 @@ const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
-  teamKeys: [], teamKeyShares: [],
+  accountActivity: [], teamKeys: [], teamKeyShares: [],
 };
 
 /**
@@ -143,6 +147,7 @@ export class MemoryStore implements Store {
         feedback: parsed.feedback ?? [],
         accountKeys: parsed.accountKeys ?? [],
         deletedAccounts: parsed.deletedAccounts ?? [],
+        accountActivity: parsed.accountActivity ?? [],
         teamKeys: parsed.teamKeys ?? [],
         teamKeyShares: parsed.teamKeyShares ?? [],
       };
@@ -337,6 +342,7 @@ export class MemoryStore implements Store {
       if (invite.acceptedBy === uid) delete invite.email;
     }
     data.accountKeys = data.accountKeys.filter((entry) => entry.uid !== uid);
+    data.accountActivity = data.accountActivity.filter((entry) => entry.uid !== uid);
     data.comments = data.comments.filter((entry) => entry.authorUid !== uid);
     data.notifications = data.notifications.filter(
       (entry) => entry.uid !== uid && entry.actorUid !== uid,
@@ -814,6 +820,9 @@ export class MemoryStore implements Store {
   }
 
   async purgeExpired(now = Date.now()): Promise<void> {
+    this.data.accountActivity = this.data.accountActivity.filter(
+      (entry) => entry.day >= now - ACCOUNT_ACTIVITY_MEMORY_MS,
+    );
     const before = this.data.codes.length;
     this.data.codes = this.data.codes.filter((entry) => entry.expiresAt > now);
     /* Finished commands are only kept long enough to be reported back. */
@@ -858,6 +867,30 @@ export class MemoryStore implements Store {
     return [...this.data.feedback]
       .sort(byTime((entry) => entry.at, (entry) => entry.id, true))
       .slice(0, limit);
+  }
+
+  /* ---- Account activity ---- */
+
+  async touchMembership(uid: string, now = Date.now(), resolutionMs = 60 * 60_000): Promise<void> {
+    const membership = this.data.memberships.find((entry) => entry.uid === uid);
+    if (!membership) return;
+    if (membership.lastSeenAt !== undefined && now - membership.lastSeenAt < resolutionMs) return;
+    membership.lastSeenAt = now;
+    const day = Math.floor(now / DAY_MS) * DAY_MS;
+    if (!this.data.accountActivity.some((entry) => entry.uid === uid && entry.day === day)) {
+      this.data.accountActivity.push({ uid, day });
+    }
+    this.flush();
+  }
+
+  async accountActivity(): Promise<AccountActivity[]> {
+    return this.data.memberships.map((membership) => ({
+      joinedAt: membership.joinedAt,
+      days: this.data.accountActivity
+        .filter((entry) => entry.uid === membership.uid)
+        .map((entry) => entry.day)
+        .sort((left, right) => left - right),
+    }));
   }
 
   async tokensForImport(): Promise<CliToken[]> {

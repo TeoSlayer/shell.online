@@ -4,12 +4,17 @@ import {
   binaryDownloadTarget,
   isDocumentNavigation,
   requestAnalyticsContext,
+  requestVisitor,
+  hasVisitorSalt,
+  documentTarget,
+  CTA_TARGETS,
+  COPY_TARGETS,
   writeAnalytics,
   type AnalyticsContext,
   type AnalyticsEvent,
   type DeviceClass,
 } from "./analytics";
-import { isStatsRange } from "../shared/stats";
+import { isStatsRange, type StatsAccountStats, type StatsAccounts, type StatsRange } from "../shared/stats";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
 import { viewerFrameAction } from "../shared/session-access";
@@ -30,7 +35,7 @@ import {
   readGitHubApiStarCount,
 } from "../shared/github";
 import { STATS_PRESENCE_REFRESH_MS } from "../shared/stats-snapshot";
-import { isVersionedDocumentationPath } from "../shared/documentation";
+import { isVersionedDocumentationPath, resolveDocumentationRoute } from "../shared/documentation";
 import {
   fetchStatsSnapshot,
   removeStatsPresence,
@@ -83,6 +88,17 @@ interface Env {
   STATS_PASSWORD: string;
   ANALYTICS: AnalyticsEngineDataset;
   ASSETS: Fetcher;
+  /**
+   * Secret behind the visitor hashes the dashboard counts people with. Absent
+   * or short, nobody is counted and the dashboard says so. See requestVisitor.
+   */
+  STATS_VISITOR_SALT?: string;
+  /**
+   * The accounts app, and the token it expects, for the account figures on the
+   * dashboard. Both absent means the accounts panel is left out.
+   */
+  APP_STATS_URL?: string;
+  APP_STATS_TOKEN?: string;
 }
 
 interface SessionMeta {
@@ -221,7 +237,7 @@ export default {
       const skillUrl = new URL("/skill/shell-online/SKILL.md", url.origin);
       const skillAsset = await env.ASSETS.fetch(skillUrl);
       const response = secureAssetResponse(skillAsset, "/skill", url.hostname);
-      recordAssetAnalytics(request, env, url, response, executionContext);
+      executionContext.waitUntil(recordAssetAnalytics(request, env, url, response, executionContext));
       return response;
     }
 
@@ -267,7 +283,7 @@ export default {
       });
     }
     const response = secureAssetResponse(assetResponse, url.pathname, url.hostname);
-    recordAssetAnalytics(request, env, url, response, executionContext);
+    executionContext.waitUntil(recordAssetAnalytics(request, env, url, response, executionContext));
     return response;
   },
 } satisfies ExportedHandler<Env>;
@@ -453,14 +469,51 @@ async function handleStatsRequest(request: Request, env: Env, url: URL): Promise
       return secureStatsResponse(json({ error: "authentication required" }, 401));
     }
     const requestedRange = url.searchParams.get("range");
-    const response = await fetchStatsSnapshot(
-      env.STATS,
-      isStatsRange(requestedRange) ? requestedRange : "7d",
-    );
-    return secureStatsResponse(response);
+    const range: StatsRange = isStatsRange(requestedRange) ? requestedRange : "7d";
+    const [snapshotResponse, accounts] = await Promise.all([
+      fetchStatsSnapshot(env.STATS, range, hasVisitorSalt(env.STATS_VISITOR_SALT)),
+      fetchAccountStats(env, range),
+    ]);
+    if (!snapshotResponse.ok) return secureStatsResponse(snapshotResponse);
+    const snapshot = await snapshotResponse.json<Record<string, unknown>>();
+    return secureStatsResponse(json({ ...snapshot, accounts }));
   }
 
   return secureStatsResponse(json({ error: "not found" }, 404));
+}
+
+/*
+ * The accounts app keeps the only exact count of people: accounts. It answers
+ * aggregates -- how many, how many new, how many back each week -- to a bearer
+ * token, and nothing per person. Left out when it is not linked, and reported
+ * as unavailable rather than left out when it is linked and does not answer,
+ * so a broken link is visible on the dashboard rather than silent.
+ */
+async function fetchAccountStats(env: Env, range: StatsRange): Promise<StatsAccounts> {
+  const base = env.APP_STATS_URL?.trim();
+  const token = env.APP_STATS_TOKEN?.trim();
+  if (!base || !token) return null;
+  try {
+    const response = await fetch(`${base.replace(/\/+$/, "")}/api/stats/accounts?range=${range}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!response.ok) return { error: `accounts app answered ${response.status}` };
+    const body = await response.json<unknown>();
+    return isAccountStats(body) ? body : { error: "accounts app answered in an unexpected shape" };
+  } catch {
+    return { error: "accounts app did not answer" };
+  }
+}
+
+function isAccountStats(value: unknown): value is StatsAccountStats {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.total === "number" &&
+    typeof candidate.newInRange === "number" &&
+    typeof candidate.activeInRange === "number" &&
+    Array.isArray(candidate.newByDay) &&
+    Array.isArray(candidate.cohorts);
 }
 
 function statsPassword(env: Env): string | null {
@@ -484,19 +537,32 @@ function recordAnalytics(
   waitUntilContext.waitUntil(submitStatsEvent(env.STATS, event, target, analyticsContext));
 }
 
-function recordAssetAnalytics(
+async function recordAssetAnalytics(
   request: Request,
   env: Env,
   url: URL,
   response: Response,
   executionContext: ExecutionContext,
-): void {
-  if (request.method !== "GET" || !response.ok) return;
+): Promise<void> {
+  if (request.method !== "GET") return;
 
   const context = requestAnalyticsContext(request);
+  const withVisitor = async (): Promise<AnalyticsContext> => ({
+    ...context,
+    visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+  });
+
+  if (!response.ok) {
+    /* A document that got a 404 is worth counting; a missing asset is noise. */
+    if (response.status === 404 && isDocumentNavigation(request) && !isStatsHostname(url.hostname)) {
+      recordAnalytics(env, executionContext, "page_view", "not_found", context);
+    }
+    return;
+  }
+
   if (url.pathname === "/install" || url.pathname === "/install.ps1") {
     const target = url.pathname === "/install.ps1" ? "powershell" : "posix";
-    recordAnalytics(env, executionContext, "installer_download", target, context);
+    recordAnalytics(env, executionContext, "installer_download", target, await withVisitor());
     return;
   }
   if (url.pathname === "/skill" || url.pathname === "/skill/") {
@@ -506,7 +572,7 @@ function recordAssetAnalytics(
 
   const binaryTarget = binaryDownloadTarget(url.pathname);
   if (binaryTarget) {
-    recordAnalytics(env, executionContext, "binary_download", binaryTarget, context);
+    recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor());
     return;
   }
 
@@ -515,23 +581,9 @@ function recordAssetAnalytics(
     recordAnalytics(env, executionContext, "stats_view", "dashboard", context);
     return;
   }
-  const documentTarget = new Map([
-    ["/", "landing"],
-    ["/docs/", "docs"],
-    ["/platforms/", "docs_platforms"],
-    ["/mobile/", "docs_mobile"],
-    ["/reliability/", "docs_reliability"],
-    ["/security/", "docs_security"],
-    ["/e2ee/", "docs_e2ee"],
-    ["/docker/", "docs_docker"],
-    ["/self-hosting/", "docs_self_hosting"],
-  ]).get(url.pathname);
-  const target = documentTarget ?? (
-    SESSION_ID_PATTERN.test(url.pathname.replace(/^\/s\//, "").replace(/\/$/, ""))
-      ? "session"
-      : "not_found"
-  );
-  recordAnalytics(env, executionContext, "page_view", target, context);
+  const target = documentTarget(url.pathname, response.status, RELEASE_VERSION);
+  /* An unknown path is as likely a crawler as a person, so it counts no visitor. */
+  recordAnalytics(env, executionContext, "page_view", target, target === "unknown_path" ? context : await withVisitor());
 }
 
 async function recordEvent(
@@ -561,26 +613,22 @@ async function recordEvent(
     return json({ error: "invalid event" }, 400);
   }
 
-  if (
-    body.event !== "copy" ||
-    (
-      body.target !== "install" &&
-      body.target !== "brew_install" &&
-      body.target !== "source_build" &&
-      body.target !== "run" &&
-      body.target !== "share" &&
-      body.target !== "skill"
-    )
-  ) {
+  const event = body.event;
+  const target = body.target;
+  const known = typeof target === "string" && (
+    (event === "copy" && COPY_TARGETS.has(target)) ||
+    (event === "cta_click" && CTA_TARGETS.has(target))
+  );
+  if (!known) {
     return json({ error: "invalid event" }, 400);
   }
 
   recordAnalytics(
     env,
     executionContext,
-    "copy",
-    body.target,
-    requestAnalyticsContext(request),
+    event,
+    target,
+    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
   return new Response(null, {
@@ -658,7 +706,7 @@ async function createSession(
     executionContext,
     "session_created",
     "cli",
-    requestAnalyticsContext(request),
+    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
   const origin = requestOrigin(request, url);
@@ -726,7 +774,10 @@ async function resumeSession(
   if (!resumed.ok) return json({ error: resumed.status === 403 ? "persistent credentials rejected" : "could not resume session" }, resumed.status);
   const resumeResult = await resumed.json<{ created?: unknown }>();
   if (resumeResult.created === true) {
-    recordAnalytics(env, executionContext, "session_created", "persistent_cli", requestAnalyticsContext(request));
+    recordAnalytics(env, executionContext, "session_created", "persistent_cli", {
+      ...requestAnalyticsContext(request),
+      visitor: await requestVisitor(env.STATS_VISITOR_SALT, request),
+    });
   }
   const origin = requestOrigin(request, url);
   return json({
@@ -904,6 +955,13 @@ export class TerminalSession extends DurableObject<Env> {
     const server = pair[1];
     const guestNumber = role === "viewer" ? this.nextGuestNumber() : undefined;
     const analyticsContext = requestAnalyticsContext(request);
+    /*
+     * A viewer is a person to count once; the host is the machine already
+     * counted when its session was created, so it carries no visitor hash.
+     */
+    const viewerContext: AnalyticsContext = role === "viewer"
+      ? { ...analyticsContext, visitor: await requestVisitor(this.env.STATS_VISITOR_SALT, request) }
+      : analyticsContext;
     const attachment: SocketAttachment = {
       role,
       id: role === "viewer" ? randomUint32() : 0,
@@ -948,9 +1006,9 @@ export class TerminalSession extends DurableObject<Env> {
       if (firstShareOpen) this.meta.shareOpenedAt = Date.now();
       this.meta.peakViewers = Math.max(this.meta.peakViewers ?? 0, viewerCount, 1);
       await this.persistMeta();
-      recordAnalytics(this.env, this.state, "viewer_connected", "viewer", analyticsContext);
+      recordAnalytics(this.env, this.state, "viewer_connected", "viewer", viewerContext);
       if (firstShareOpen) {
-        recordAnalytics(this.env, this.state, "share_opened", "viewer", analyticsContext);
+        recordAnalytics(this.env, this.state, "share_opened", "viewer", viewerContext);
       }
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1699,7 +1757,8 @@ function secureAssetResponse(response: Response, pathname: string, hostname: str
 }
 
 function isPublicDocumentPath(pathname: string): boolean {
-  return pathname === "/" || pathname === "/docs/" || pathname === "/mobile/" || pathname === "/reliability/" || pathname === "/security/" || pathname === "/e2ee/" || pathname === "/docker/" || pathname === "/self-hosting/";
+  if (pathname === "/") return true;
+  return !isVersionedDocumentationPath(pathname) && resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
 }
 
 function secureStatsResponse(response: Response): Response {

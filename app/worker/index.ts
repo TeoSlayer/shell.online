@@ -40,6 +40,8 @@ export interface Env {
   MAIL_API_KEY?: string;
   /** Where in-app feedback is forwarded. Absent keeps it in the database only. */
   FEEDBACK_TO?: string;
+  /** Secret: what the relay's statistics dashboard presents for account figures. */
+  STATS_TOKEN?: string;
 }
 
 interface ExecutionContext {
@@ -136,6 +138,7 @@ function routerFor(env: Env): NodeHandler {
       from: env.MAIL_FROM,
     }),
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
+    statsToken: env.STATS_TOKEN && env.STATS_TOKEN.length >= 32 ? env.STATS_TOKEN : undefined,
     log: (message, error) => console.error(message, error),
     sessionLiveness: liveness,
   }));

@@ -174,7 +174,7 @@ function renderLanding(): void {
           <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
             <span data-copy-label aria-live="polite">Copy install</span>
           </button>
-          <a class="nav-signup" href="${SIGNUP_URL}">Sign up free</a>
+          <a class="nav-signup" href="${SIGNUP_URL}" data-cta="signup_nav">Sign up free</a>
         </nav>
       </header>
 
@@ -184,7 +184,7 @@ function renderLanding(): void {
             <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
             <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you a link and password to the same encrypted terminal—open it from any desktop or phone to watch or type.</p>
             <div class="hero-actions">
-              <a class="hero-signup" href="${SIGNUP_URL}">
+              <a class="hero-signup" href="${SIGNUP_URL}" data-cta="signup_hero">
                 <b>Sign up free</b>
                 <span aria-hidden="true">→</span>
               </a>
@@ -296,7 +296,7 @@ function renderLanding(): void {
             </article>
           </div>
           <aside class="product-path" aria-label="More ways to use shell.online">
-            <a href="${SIGNUP_URL}"><b>Manage a team</b><span>Link machines, open sessions, assign work.</span><i>→</i></a>
+            <a href="${SIGNUP_URL}" data-cta="signup_team"><b>Manage a team</b><span>Link machines, open sessions, assign work.</span><i>→</i></a>
             <a href="/e2ee/"><b>Understand E2EE</b><span>See exactly what the relay can and cannot read.</span><i>→</i></a>
             <a href="/skill"><b>Install for agents</b><span>Give terminal-native agents the same workflow.</span><i>→</i></a>
           </aside>
@@ -415,7 +415,7 @@ function renderLanding(): void {
         <p>Live browser terminals for the work your machine is already doing.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
         <nav aria-label="Footer navigation">
           <a href="/docs/">Docs</a>
-          <a href="${SIGNUP_URL}">Web app</a>
+          <a href="${SIGNUP_URL}" data-cta="signup_footer">Web app</a>
           <a href="#use-cases">Use cases</a>
           <a href="/mobile/">Mobile</a>
           <a href="/reliability/">Reliability</a>
@@ -433,6 +433,8 @@ function renderLanding(): void {
   `;
 
   wireLandingCopyButtons();
+
+  wireLandingCtaLinks();
   void wireGitHubStarCount();
 }
 
@@ -528,6 +530,25 @@ function wireLandingFit(): void {
 }
 
 type CopyTarget = "install" | "brew_install" | "source_build" | "run" | "share" | "skill";
+type CtaTarget = "signup_nav" | "signup_hero" | "signup_team" | "signup_footer";
+
+function isCtaTarget(value: string | undefined): value is CtaTarget {
+  return value === "signup_nav" || value === "signup_hero" || value === "signup_team" || value === "signup_footer";
+}
+
+/*
+ * Which sign-up link was clicked, and nothing else: the click itself goes
+ * ahead as a normal navigation, and keepalive lets the report finish after
+ * the page has gone.
+ */
+function wireLandingCtaLinks(): void {
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-cta]")) {
+    link.addEventListener("click", () => {
+      const target = link.dataset.cta;
+      if (isCtaTarget(target)) trackEvent("cta_click", target);
+    });
+  }
+}
 
 function wireLandingCopyButtons(): void {
   const buttons = document.querySelectorAll<HTMLButtonElement>("button[data-copy-target][data-copy-value]");
@@ -596,14 +617,18 @@ async function copyToClipboard(value: string): Promise<void> {
 }
 
 function trackCopy(target: CopyTarget): void {
+  trackEvent("copy", target);
+}
+
+function trackEvent(event: "copy" | "cta_click", target: CopyTarget | CtaTarget): void {
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ event: "copy", target }),
+    body: JSON.stringify({ event, target }),
     credentials: "same-origin",
     keepalive: true,
   }).catch(() => {
-    // Copying should still succeed if analytics is unavailable.
+    // Copying and navigating should still succeed if analytics is unavailable.
   });
 }
 

@@ -45,6 +45,8 @@ import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/aud
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
+import { accountStats, isStatsRange } from "./routes/stats";
+import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
 
@@ -76,6 +78,12 @@ export interface AppOptions {
    * store only, which is still the record; the mail is for whoever reads it.
    */
   feedbackTo?: string;
+  /**
+   * Lets the statistics dashboard on the relay read account figures: counts
+   * and sign-up cohorts, never a person. Absent means the route does not
+   * exist. At least 32 characters; see readConfig.
+   */
+  statsToken?: string;
   /**
    * Serves the built client for anything that is not an API route. Present
    * only in a deployment that serves the app and the API together; in
@@ -364,7 +372,10 @@ export function createApp(options: AppOptions) {
   async function requireMember(request: IncomingMessage, inviteId?: string) {
     const identity = await requireUser(request);
     if (!identity) return null;
-    return (await ensureMembership(store, identity, inviteId))?.membership ?? null;
+    const membership = (await ensureMembership(store, identity, inviteId))?.membership ?? null;
+    /* A day with a request on it is a day the account was active. */
+    if (membership) await store.touchMembership(membership.uid);
+    return membership;
   }
 
   /* The CLI authenticates with an opaque access token issued by this service. */
@@ -1458,6 +1469,19 @@ export function createApp(options: AppOptions) {
         );
         if (!result.ok) return send(response, result.status, { error: result.error });
         return send(response, 201, { feedback: { id: result.value.id, at: result.value.at } });
+      }
+
+      /* ---- Account figures for the statistics dashboard ---- */
+
+      if (route === "GET /api/stats/accounts") {
+        const expected = options.statsToken;
+        if (!expected) return send(response, 404, { error: "not found" });
+        const presented = bearer(request);
+        const matches = presented.length === expected.length &&
+          timingSafeEqual(Buffer.from(presented), Buffer.from(expected));
+        if (!matches) return send(response, 401, { error: "sign in first" });
+        const range = url.searchParams.get("range");
+        return send(response, 200, accountStats(await store.accountActivity(), isStatsRange(range) ? range : "7d"));
       }
 
       /* ---- Inbox ---- */

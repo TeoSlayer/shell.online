@@ -50,6 +50,11 @@ export interface Config {
    * in the database only, which is still the record.
    */
   feedbackTo?: string;
+  /**
+   * The bearer token the relay's statistics dashboard presents for account
+   * figures. Absent means that route does not exist.
+   */
+  statsToken?: string;
 }
 
 export class ConfigError extends Error {}
@@ -133,6 +138,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new ConfigError("set DATABASE_URL: the file store cannot back a deployment");
   }
 
+  const statsToken = env.STATS_TOKEN?.trim() || undefined;
+  /* A short token is a guessable one, and this one opens business figures. */
+  if (statsToken !== undefined && statsToken.length < 32) {
+    throw new ConfigError("STATS_TOKEN must be at least 32 characters");
+  }
+
   const clientDir = env.CLIENT_DIR?.trim() || undefined;
   const relayUrl = env.RELAY_URL?.trim() || undefined;
   if (relayUrl) {
@@ -175,5 +186,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
       from: env.MAIL_FROM?.trim() || undefined,
     },
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
+    statsToken,
   };
 }

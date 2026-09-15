@@ -25,6 +25,11 @@ export interface Membership {
   role: Role;
   joinedAt: number;
   /**
+   * When this account last used the app, to the hour. Moved by
+   * Store.touchMembership; see the account_activity migration for why.
+   */
+  lastSeenAt?: number;
+  /**
    * This person's browser key, published so colleagues can seal a session
    * password to them. Absent until they have signed in somewhere.
    */

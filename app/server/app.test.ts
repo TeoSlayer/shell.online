@@ -2581,3 +2581,31 @@ describe("feedback", () => {
     expect(other.status).toBe(201);
   });
 });
+
+describe("account figures for the statistics dashboard", () => {
+  const TOKEN = "stats-token-with-thirty-two-characters!";
+
+  it("does not exist until a token is configured", async () => {
+    const answer = await call("GET", "/api/stats/accounts", { auth: TOKEN });
+    expect(answer.status).toBe(404);
+  });
+
+  it("answers only the configured token, with counts and no identifiers", async () => {
+    handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN], statsToken: TOKEN });
+    /* One person signs in, which creates their organization and marks the day. */
+    expect((await call("GET", "/api/org", { auth: await idToken() })).status).toBe(200);
+
+    expect((await call("GET", "/api/stats/accounts?range=7d")).status).toBe(401);
+    expect((await call("GET", "/api/stats/accounts?range=7d", { auth: "stats-token-with-thirty-two-characters?" })).status).toBe(401);
+    expect((await call("GET", "/api/stats/accounts?range=7d", { auth: await idToken() })).status).toBe(401);
+
+    const answer = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
+    expect(answer.status).toBe(200);
+    expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1 });
+    expect(answer.body.newByDay).toHaveLength(90);
+    expect(answer.body.cohorts).toHaveLength(1);
+    expect(answer.body.cohorts[0].size).toBe(1);
+    expect(JSON.stringify(answer.body)).not.toContain("uid-1");
+    expect(JSON.stringify(answer.body)).not.toContain("ana@example.com");
+  });
+});

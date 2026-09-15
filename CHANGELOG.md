@@ -12,12 +12,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   and unlock screens, error notices, the empty sessions list, and the delete
   account form. Messages are kept by the service and, with `FEEDBACK_TO`
   set, forwarded by email. Nothing from a terminal is attached.
+- The statistics dashboard counts people, not only events: unique, new and
+  returning visitors, CLI machines, installers and viewers, from keyed hashes
+  of address and browser family that never leave the Worker and are forgotten
+  after 120 days. A funnel from a first look to a first browser keystroke says
+  what each step counts, weekly cohorts show who came back, and the accounts
+  app can add exact account counts and sign-up retention when the two are
+  linked.
+- Clicks on the landing page's Sign up free and Web app links are counted.
 
 ### Fixed
 
 - Widened the vault password fields on the vault setup, unlock, and Account
   pages to twice their previous width, so a password is no longer typed into a
   box sized for the four-letter recovery-key confirmation.
+- The web app, CLI, Refstream and platforms documentation pages were counted
+  as "Not found". Every documentation route, current or versioned, now has its
+  own page-view target; unknown paths the site answers with the landing page
+  are counted apart from real 404s, and real 404s are counted at all.
 
 ### Changed
 

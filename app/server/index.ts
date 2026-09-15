@@ -50,6 +50,7 @@ const server = createAccountsServer({
   trustProxy: config.trustProxy,
   mailer: createMailer(config.mail),
   feedbackTo: config.feedbackTo,
+  statsToken: config.statsToken,
   serveClient: config.clientDir ? staticFiles(config.clientDir) : undefined,
   relay: forward ?? undefined,
   sessionLiveness: config.relayUrl ? relaySessionLiveness(config.relayUrl) : undefined,

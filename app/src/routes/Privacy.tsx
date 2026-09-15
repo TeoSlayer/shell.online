@@ -120,7 +120,8 @@ export function Privacy() {
                 Your email address, your name if you give one, and how you sign
                 in: email and password, or Google. Google&rsquo;s Firebase
                 Authentication holds the account and your password. We never
-                see the password.
+                see the password. We also keep the days on which your account
+                used the app, so we can count how many accounts are active.
               </dd>
             </div>
             <div>
@@ -333,10 +334,15 @@ export function Privacy() {
 
         <Section id="analytics">
           <p>
-            The web app runs no analytics. The shell.online site and the relay
-            count events such as page views, installer downloads and sessions
-            opened, with a device class, a client name and the referring site.
-            They record no IP addresses, session identifiers, URLs, commands,
+            The web app runs no analytics of its own; the days your account
+            used it are account data, described above, and leave the app only
+            as counts. The shell.online site and the relay count events such as
+            page views, installer downloads and sessions opened, with a device
+            class, a client name and the referring site. To tell one visitor
+            from another they keep, for 120 days, a keyed hash of the network
+            address and browser family. The key never leaves the server, the
+            address itself is not stored, and nothing in that record says who
+            a visitor is. They record no session identifiers, URLs, commands,
             terminal content or full user-agent strings.
           </p>
         </Section>
@@ -363,6 +369,10 @@ export function Privacy() {
             <li>
               Feedback you send stays with us, with your identity removed once
               you delete your account.
+            </li>
+            <li>
+              The days your account used the app: 400 days, or until you delete
+              your account.
             </li>
             <li>
               When an account is deleted, its user identifier alone is kept for
@@ -395,7 +405,7 @@ export function Privacy() {
               your session records, and the session passwords sealed to you,
               are deleted;
             </li>
-            <li>your vault, comments and notifications are deleted;</li>
+            <li>your vault, comments, notifications and activity days are deleted;</li>
             <li>
               feedback you sent is kept, no longer linked to your account or
               email address;

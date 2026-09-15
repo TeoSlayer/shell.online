@@ -4,9 +4,14 @@ import {
   classifyClient,
   classifyDevice,
   classifyReferrer,
+  documentTarget,
+  hasVisitorSalt,
   isDocumentNavigation,
   normalizeAnalyticsRecord,
   requestAnalyticsContext,
+  requestVisitor,
+  uniqueSurface,
+  visitorKey,
   writeAnalytics,
 } from "../worker/analytics";
 
@@ -91,5 +96,54 @@ describe("analytics", () => {
     expect(binaryDownloadTarget("/downloads/shell-linux-armv7")).toBe("linux-armv7");
     expect(binaryDownloadTarget("/downloads/shell-linux-mips64le")).toBe("linux-mips64le");
     expect(binaryDownloadTarget("/downloads/shell-linux-amd64.sha256")).toBeNull();
+  });
+
+  it("names every documentation page, and keeps unknown paths apart from 404s", () => {
+    expect(documentTarget("/", 200, "0.15.1")).toBe("landing");
+    expect(documentTarget("/docs/", 200, "0.15.1")).toBe("docs");
+    expect(documentTarget("/app/", 200, "0.15.1")).toBe("docs_app");
+    expect(documentTarget("/cli/", 200, "0.15.1")).toBe("docs_cli");
+    expect(documentTarget("/refstream/", 200, "0.15.1")).toBe("docs_refstream");
+    expect(documentTarget("/self-hosting/", 200, "0.15.1")).toBe("docs_self_hosting");
+    expect(documentTarget("/docs/v0.15.1/app/", 200, "0.15.1")).toBe("docs_app");
+    expect(documentTarget("/docs/v0.15.1/", 200, "0.15.1")).toBe("docs");
+    expect(documentTarget("/s/abcdefghijklmnopqrstuvwxyz012345", 200, "0.15.1")).toBe("session");
+    expect(documentTarget("/docs/contributing/", 200, "0.15.1")).toBe("unknown_path");
+    expect(documentTarget("/docs/contributing/", 404, "0.15.1")).toBe("not_found");
+  });
+
+  it("counts people on the surfaces where a person is behind the event", () => {
+    expect(uniqueSurface("page_view", "landing")).toBe("site");
+    expect(uniqueSurface("page_view", "docs_app")).toBe("site");
+    expect(uniqueSurface("page_view", "session")).toBe("viewer");
+    expect(uniqueSurface("page_view", "unknown_path")).toBeNull();
+    expect(uniqueSurface("cta_click", "signup_hero")).toBe("site");
+    expect(uniqueSurface("binary_download", "darwin-arm64")).toBe("install");
+    expect(uniqueSurface("session_created", "cli")).toBe("cli");
+    expect(uniqueSurface("viewer_connected", "viewer")).toBe("viewer");
+    expect(uniqueSurface("session_ended", "task_exit")).toBeNull();
+    expect(uniqueSurface("viewer_disconnected", "viewer")).toBeNull();
+  });
+
+  it("hashes a visitor so the address cannot be read back and a browser update is the same person", async () => {
+    const salt = "a-salt-long-enough-to-count";
+    const one = await visitorKey(salt, "203.0.113.7", "Mozilla/5.0 (Macintosh) Chrome/129.0.0.0 Safari/537.36");
+    expect(one).toMatch(/^[a-f0-9]{20}$/);
+    expect(one).not.toContain("203");
+    await expect(visitorKey(salt, "203.0.113.7", "Mozilla/5.0 (Macintosh) Chrome/130.0.0.0 Safari/537.36")).resolves.toBe(one);
+    await expect(visitorKey(salt, "203.0.113.8", "Mozilla/5.0 (Macintosh) Chrome/129.0.0.0 Safari/537.36")).resolves.not.toBe(one);
+    await expect(visitorKey("another-salt-of-some-length", "203.0.113.7", "Mozilla/5.0 (Macintosh) Chrome/129.0.0.0 Safari/537.36")).resolves.not.toBe(one);
+  });
+
+  it("counts nobody without a salt worth the name or without an address", async () => {
+    const request = new Request("https://shell.online/", {
+      headers: { "CF-Connecting-IP": "203.0.113.7", "User-Agent": "curl/8.4.0" },
+    });
+    expect(hasVisitorSalt(undefined)).toBe(false);
+    expect(hasVisitorSalt("short")).toBe(false);
+    await expect(requestVisitor(undefined, request)).resolves.toBeUndefined();
+    await expect(requestVisitor("short", request)).resolves.toBeUndefined();
+    await expect(requestVisitor("a-salt-long-enough-to-count", new Request("https://shell.online/"))).resolves.toBeUndefined();
+    await expect(requestVisitor("a-salt-long-enough-to-count", request)).resolves.toMatch(/^[a-f0-9]{20}$/);
   });
 });

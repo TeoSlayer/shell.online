@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import {
+  ACCOUNT_ACTIVITY_MEMORY_MS,
+  DAY_MS,
   DELETED_ACCOUNT_MEMORY_MS,
   DELETED_ACTOR_EMAIL,
   type AccountDeletion,
@@ -13,6 +15,7 @@ import {
   type Store,
 } from "./store";
 import type {
+  AccountActivity,
   AccountKey,
   AgentCommand,
   AuditEvent,
@@ -223,6 +226,7 @@ function toMembership(row: Row): Membership {
     name: row.name,
     role: row.role,
     joinedAt: row.joined_at,
+    lastSeenAt: row.last_seen_at ?? undefined,
     publicKey: row.public_key,
     accountKey: row.account_key,
   }) as unknown as Membership;
@@ -993,6 +997,7 @@ export class PostgresStore implements Store {
         "DELETE FROM sessions WHERE uid = $1",
         "DELETE FROM session_key_shares WHERE uid = $1",
         "DELETE FROM account_keys WHERE uid = $1",
+        "DELETE FROM account_activity WHERE uid = $1",
         "DELETE FROM comments WHERE author_uid = $1",
         "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
         /* The address an invite was sent to is theirs once they accepted it. */
@@ -1575,9 +1580,45 @@ export class PostgresStore implements Store {
     return rows.map(toFeedback);
   }
 
+  /* ---- Account activity ---- */
+
+  /*
+   * One UPDATE per request, which does nothing until the hour is up; the day
+   * row is written only when the update did something, so a busy account
+   * costs one extra statement an hour and an idle one costs nothing.
+   */
+  async touchMembership(uid: string, now = Date.now(), resolutionMs = 60 * 60_000): Promise<void> {
+    const moved = await this.pool.query(
+      `UPDATE memberships SET last_seen_at = $2
+       WHERE uid = $1 AND (last_seen_at IS NULL OR $2 - last_seen_at >= $3)`,
+      [uid, now, resolutionMs],
+    );
+    if ((moved.rowCount ?? 0) === 0) return;
+    await this.pool.query(
+      "INSERT INTO account_activity (uid, day) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [uid, Math.floor(now / DAY_MS) * DAY_MS],
+    );
+  }
+
+  async accountActivity(): Promise<AccountActivity[]> {
+    const members = await this.rows("SELECT uid, joined_at FROM memberships");
+    const days = await this.rows("SELECT uid, day FROM account_activity ORDER BY day");
+    const byUid = new Map<string, number[]>();
+    for (const row of days) {
+      const list = byUid.get(row.uid as string) ?? [];
+      list.push(row.day as number);
+      byUid.set(row.uid as string, list);
+    }
+    return members.map((row) => ({
+      joinedAt: row.joined_at as number,
+      days: byUid.get(row.uid as string) ?? [],
+    }));
+  }
+
   /* ---- Housekeeping ---- */
 
   async purgeExpired(now = Date.now()): Promise<void> {
+    await this.pool.query("DELETE FROM account_activity WHERE day < $1", [now - ACCOUNT_ACTIVITY_MEMORY_MS]);
     await this.pool.query("DELETE FROM auth_codes WHERE expires_at <= $1", [now]);
     /* Finished commands are only kept long enough to be reported back. */
     await this.pool.query("DELETE FROM agent_commands WHERE done_at IS NOT NULL AND done_at < $1", [

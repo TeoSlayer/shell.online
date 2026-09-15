@@ -43,6 +43,7 @@ The client reads `VITE_FIREBASE_*` at build time. The server uses:
 | `MAIL_PROVIDER`, `MAIL_API_URL` | Optional non-SendGrid JSON provider |
 | `FEEDBACK_TO` | Optional address that feedback sent from the app is forwarded to |
 | `TRUST_PROXY` | Set to `1` only behind a trusted proxy |
+| `STATS_TOKEN` | Optional, 32+ characters: lets the relay's statistics dashboard read account counts and sign-up cohorts |
 
 See [`.env.example`](.env.example) for the complete development configuration.
 

@@ -148,6 +148,7 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
 
 const TABLES = [
   "feedback",
+  "account_activity",
   "deleted_accounts",
   "account_keys",
   "session_key_shares",
@@ -903,6 +904,42 @@ for (const implementation of implementations) {
       it("orders messages sent in the same millisecond the same way every time", async () => {
         for (const id of ["fbk_b", "fbk_c", "fbk_a"]) await store.putFeedback(feedback({ id }));
         expect((await store.feedback()).map((entry) => entry.id)).toEqual(["fbk_c", "fbk_b", "fbk_a"]);
+      });
+    });
+
+    describe("account activity", () => {
+      const day = 24 * 60 * 60_000;
+      const noon = 10 * day + 12 * 60 * 60_000;
+
+      it("marks a day once and moves last seen at most once an hour", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.touchMembership("uid-1", noon);
+        await store.touchMembership("uid-1", noon + 10 * 60_000);
+        expect((await store.membershipOf("uid-1"))?.lastSeenAt).toBe(noon);
+        await store.touchMembership("uid-1", noon + 2 * 60 * 60_000);
+        expect((await store.membershipOf("uid-1"))?.lastSeenAt).toBe(noon + 2 * 60 * 60_000);
+        await store.touchMembership("uid-1", noon + day);
+        await store.touchMembership("nobody", noon);
+        expect(await store.accountActivity()).toEqual([{ joinedAt: 1000, days: [10 * day, 11 * day] }]);
+      });
+
+      it("keeps the days through a membership rewrite and drops them with the account", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.touchMembership("uid-1", noon);
+        await store.putMembership(membership({ name: "Ana R." }));
+        expect((await store.accountActivity())[0].days).toEqual([10 * day]);
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: true }, noon + 1);
+        expect(await store.accountActivity()).toEqual([]);
+      });
+
+      it("forgets days older than the memory window when purging", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.touchMembership("uid-1", noon);
+        await store.purgeExpired(noon + 401 * day);
+        expect((await store.accountActivity())[0].days).toEqual([]);
       });
     });
 
