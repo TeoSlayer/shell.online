@@ -1512,20 +1512,59 @@
  * middle, because a modal in the middle covers the thing that was just
  * clicked — the one part of the screen somebody was looking at.
  */
+/*
+ * The inspect card stands beside the figure it is about, and walks with it.
+ *
+ * It used to be pinned to the right edge, which meant reading about somebody
+ * while looking at a box a screen's width away from them. Positioned from the
+ * top-left corner and moved with a transform, because a transform is the one
+ * property a browser will move without laying anything out again -- and this
+ * moves every frame.
+ */
 .keep-wright {
   display: flex;
-  position: absolute;
-  top: var(--keep-safe);
-  right: var(--keep-safe);
-  bottom: var(--keep-safe);
+  position: fixed;
+  top: 0;
+  left: 0;
   z-index: var(--keep-z-modal);
-  width: min(340px, calc(100vw - var(--keep-space-4)));
+  width: min(320px, calc(100vw - var(--keep-space-4)));
+  max-height: calc(100vh - var(--keep-space-4));
   padding: var(--keep-space-2);
   flex-direction: column;
-  gap: var(--keep-space-2);
+  gap: var(--keep-space);
   overflow-y: auto;
   pointer-events: auto;
-  animation: keep-slide var(--keep-normal) ease-out;
+  will-change: transform;
+}
+
+/* The harness's own mark, at the size of the crest it replaces. */
+.keep-wright-sigil {
+  display: inline-flex;
+  width: calc(34px * var(--keep-scale));
+  height: calc(34px * var(--keep-scale));
+  border: 2px solid var(--keep-gold);
+  border-radius: 50%;
+  background: var(--keep-stone-dark);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+}
+
+.keep-wright-sigil img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+}
+
+/* The mark beside each fact. Never on its own: the word is beside it. */
+.keep-fact-mark {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--keep-gold);
 }
 
 @keyframes keep-slide {

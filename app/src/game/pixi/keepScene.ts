@@ -29,6 +29,15 @@ export interface KeepHandle {
   onPick?: (actor: Actor | undefined) => void;
   /** Called when the ground is clicked and the player's hero was sent there. */
   onOrder?: (x: number, y: number) => void;
+  /**
+   * Where the inspected figure is on the canvas, every frame.
+   *
+   * Called rather than returned because the card follows a figure that walks:
+   * it has to be told sixty times a second, and routing that through React
+   * state would re-render the whole route at frame rate to move one box.
+   * `undefined` means nothing is inspected.
+   */
+  onTrack?: (at: { x: number; y: number } | undefined) => void;
   select(id: string | undefined): void;
   /** What the player's own hero and their soldiers are drawn in. */
   wear(skin: number, livery: number): void;
@@ -204,6 +213,24 @@ export async function buildKeepScene(
     held = new Set([...sim.camps.values()].map((camp) => `${camp.x},${camp.y}`));
   };
 
+  /*
+   * Where the inspected figure is, in canvas pixels, reported every frame.
+   *
+   * `toScreen` here is pixi-viewport's, which is the world transform -- not the
+   * projection's `toScreen`, which turns tiles into world units. The figure's
+   * position has to go through both, in that order.
+   */
+  const track = () => {
+    if (!handle.onTrack) return;
+    const chosen = selected ? sim.actors.find((actor) => actor.id === selected) : undefined;
+    if (!chosen) {
+      handle.onTrack(undefined);
+      return;
+    }
+    const world = toScreen(chosen.x, chosen.y);
+    handle.onTrack(viewport.toScreen(world.x, world.y));
+  };
+
   let found = false;
   const findYou = () => {
     if (found) return;
@@ -266,6 +293,7 @@ export async function buildKeepScene(
       }
       findYou();
       heldCamps();
+      track();
       /* Only the camps somebody is actually holding are standing. */
       for (const [key, camp] of camps) camp.visible = held.has(key);
       companies.sync(sim);

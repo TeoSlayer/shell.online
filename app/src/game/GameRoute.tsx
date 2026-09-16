@@ -190,6 +190,7 @@ export default function GameRoute() {
    * cost; everything else opens the menu where it was left.
    */
   const [pauseAt, setPauseAt] = useState<"gathering" | undefined>();
+
   const handle = useRef<KeepHandle>({
     sim: sim.current,
     select: () => {},
@@ -198,6 +199,36 @@ export default function GameRoute() {
     still: () => {},
   });
   handle.current.onPick = setPicked;
+  /*
+   * The inspect card follows the figure it is about.
+   *
+   * Its position is written straight onto the node by the scene, every frame,
+   * rather than kept in state: a card that re-rendered the route sixty times a
+   * second to move one box would be paying a component tree for arithmetic.
+   * It is also clamped to the window here, because a card about somebody
+   * standing at the edge of the view is a card half off the screen.
+   */
+  const cardRef = useRef<HTMLElement>(null);
+  handle.current.onTrack = (at) => {
+    const card = cardRef.current;
+    if (!card) return;
+    if (!at) {
+      card.style.visibility = "hidden";
+      return;
+    }
+    const box = card.getBoundingClientRect();
+    const GAP = 28;
+    const left = Math.min(
+      Math.max(12, at.x + GAP),
+      Math.max(12, window.innerWidth - box.width - 12),
+    );
+    const top = Math.min(
+      Math.max(12, at.y - box.height / 2),
+      Math.max(12, window.innerHeight - box.height - 12),
+    );
+    card.style.visibility = "visible";
+    card.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+  };
 
   /*
    * Who is on the field: the account's live sessions, polled, with the
@@ -325,7 +356,9 @@ export default function GameRoute() {
 
         {picked && (
           <WrightPanel
+            cardRef={cardRef}
             actor={picked}
+            field={sim.current.actors}
             now={Date.now()}
             onClose={() => {
               setPicked(undefined);
