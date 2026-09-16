@@ -51,6 +51,7 @@ const server = createAccountsServer({
   mailer: createMailer(config.mail),
   feedbackTo: config.feedbackTo,
   statsToken: config.statsToken,
+  excludedAccounts: config.excludedAccounts,
   serveClient: config.clientDir
     ? staticFiles(config.clientDir, config.identity.issuer)
     : undefined,

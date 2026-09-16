@@ -75,7 +75,7 @@ interface Shape {
   accountKeys: AccountKey[];
   deletedAccounts: { uid: string; deletedAt: number }[];
   accountActivity: { uid: string; day: number }[];
-  appEvents: { event: AppEvent; day: number; count: number }[];
+  appEvents: { event: AppEvent; day: number; count: number; internal?: boolean }[];
   teamKeys: TeamKey[];
   teamKeyShares: TeamKeyShare[];
 }
@@ -914,29 +914,33 @@ export class MemoryStore implements Store {
     this.flush();
   }
 
-  async accountActivity(): Promise<AccountActivity[]> {
+  async accountActivity(isInternal: (email: string) => boolean = () => false): Promise<AccountActivity[]> {
     return this.data.memberships.map((membership) => ({
       joinedAt: membership.joinedAt,
       days: this.data.accountActivity
         .filter((entry) => entry.uid === membership.uid)
         .map((entry) => entry.day)
         .sort((left, right) => left - right),
+      internal: isInternal(membership.email),
     }));
   }
 
   /* ---- App events ---- */
 
-  async recordAppEvent(event: AppEvent, now = Date.now()): Promise<void> {
+  async recordAppEvent(event: AppEvent, now = Date.now(), internal = false): Promise<void> {
     const day = Math.floor(now / DAY_MS) * DAY_MS;
-    const row = this.data.appEvents.find((entry) => entry.event === event && entry.day === day);
+    const row = this.data.appEvents.find(
+      (entry) => entry.event === event && entry.day === day && (entry.internal ?? false) === internal,
+    );
     if (row) row.count += 1;
-    else this.data.appEvents.push({ event, day, count: 1 });
+    else this.data.appEvents.push({ event, day, count: 1, internal });
     this.flush();
   }
 
   async appEvents(sinceDay: number): Promise<AppEventCount[]> {
     const totals = new Map<AppEvent, number>();
     for (const entry of this.data.appEvents) {
+      if (entry.internal ?? false) continue;
       if (entry.day >= sinceDay) totals.set(entry.event, (totals.get(entry.event) ?? 0) + entry.count);
     }
     return [...totals.entries()]

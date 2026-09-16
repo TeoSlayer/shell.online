@@ -7,6 +7,7 @@ import { PostgresStore } from "../server/lib/store-postgres";
 import { callNodeHandler, type NodeHandler } from "./node-adapter";
 import { allowedOriginsFor, readIdentity, type Env as Settings } from "../server/lib/config";
 import { browserSecurityHeaders } from "../server/lib/browser-headers";
+import { parseExcludedAccounts } from "../server/lib/internal-accounts";
 import { relaySessionLiveness, type SessionLivenessSource } from "../server/lib/session-liveness";
 
 /**
@@ -50,6 +51,8 @@ export interface Env {
   FEEDBACK_TO?: string;
   /** Secret: what the relay's statistics dashboard presents for account figures. */
   STATS_TOKEN?: string;
+  /** Accounts the statistics leave out: ours, not customers'. See internal-accounts.ts. */
+  STATS_EXCLUDE?: string;
 }
 
 interface ExecutionContext {
@@ -148,6 +151,7 @@ function routerFor(env: Env): NodeHandler {
     }),
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     statsToken: env.STATS_TOKEN && env.STATS_TOKEN.length >= 32 ? env.STATS_TOKEN : undefined,
+    excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
     log: (message, error) => console.error(message, error),
     sessionLiveness: liveness,
   }));

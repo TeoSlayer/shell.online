@@ -4,6 +4,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- The statistics dashboard now carries the accounts, laid out to be read in
+  one pass: how many there are and how that moved against the period before,
+  how many signed up and how many opened the app, how many of those had
+  signed up earlier, a line of sign-ups and use for every day since the first
+  account, what accounts did in the app, how many days each of them has been
+  in it, and which sign-up weeks came back. It sits directly under the funnel,
+  which ends at a first keystroke, because an account is what the funnel is
+  for.
+- Accounts of your own are left out of every account figure, named by
+  `STATS_EXCLUDE` on the accounts app: addresses, or domains and their
+  subdomains. The team's accounts are the most active there are and were
+  always going to use the product, so leaving them in makes a quiet week look
+  like a good one. The dashboard says how many it left out, so the figure can
+  be checked rather than taken on trust. What those accounts do in the app is
+  counted apart from what customers do and never reported.
+
 ### Fixed
 
 - The scheduled download check installed on three fresh GitHub runners every

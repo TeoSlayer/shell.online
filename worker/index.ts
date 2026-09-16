@@ -16,7 +16,8 @@ import {
   type AnalyticsEvent,
   type DeviceClass,
 } from "./analytics";
-import { isStatsRange, type StatsAccountStats, type StatsAccounts, type StatsRange } from "../shared/stats";
+import { isStatsRange, type StatsRange } from "../shared/stats";
+import { fetchAccountStats } from "./account-stats";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
 import { viewerFrameAction } from "../shared/session-access";
@@ -508,7 +509,7 @@ async function handleStatsRequest(request: Request, env: Env, url: URL): Promise
     const range: StatsRange = isStatsRange(requestedRange) ? requestedRange : "7d";
     const [snapshotResponse, accounts] = await Promise.all([
       fetchStatsSnapshot(env.STATS, range, hasVisitorSalt(env.STATS_VISITOR_SALT)),
-      fetchAccountStats(env, range),
+      fetchAccountStats(env.APP_STATS_URL, env.APP_STATS_TOKEN, range),
     ]);
     if (!snapshotResponse.ok) return secureStatsResponse(snapshotResponse);
     const snapshot = await snapshotResponse.json<Record<string, unknown>>();
@@ -516,47 +517,6 @@ async function handleStatsRequest(request: Request, env: Env, url: URL): Promise
   }
 
   return secureStatsResponse(json({ error: "not found" }, 404));
-}
-
-/*
- * The accounts app keeps the only exact count of people: accounts. It answers
- * aggregates -- how many, how many new, how many back each week -- to a bearer
- * token, and nothing per person. Left out when it is not linked, and reported
- * as unavailable rather than left out when it is linked and does not answer,
- * so a broken link is visible on the dashboard rather than silent.
- */
-async function fetchAccountStats(env: Env, range: StatsRange): Promise<StatsAccounts> {
-  const base = env.APP_STATS_URL?.trim();
-  const token = env.APP_STATS_TOKEN?.trim();
-  if (!base || !token) return null;
-  try {
-    const response = await fetch(`${base.replace(/\/+$/, "")}/api/stats/accounts?range=${range}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      signal: AbortSignal.timeout(4_000),
-    });
-    if (!response.ok) return { error: `accounts app answered ${response.status}` };
-    const body = await response.json<unknown>();
-    if (!isAccountStats(body)) return { error: "accounts app answered in an unexpected shape" };
-    /* An older app answers without events; the dashboard then shows none rather than nothing. */
-    return { ...body, events: isCountRecord(body.events) ? body.events : {} };
-  } catch {
-    return { error: "accounts app did not answer" };
-  }
-}
-
-function isAccountStats(value: unknown): value is Omit<StatsAccountStats, "events"> & { events?: unknown } {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.total === "number" &&
-    typeof candidate.newInRange === "number" &&
-    typeof candidate.activeInRange === "number" &&
-    Array.isArray(candidate.newByDay) &&
-    Array.isArray(candidate.cohorts);
-}
-
-function isCountRecord(value: unknown): value is Record<string, number> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) &&
-    Object.values(value as Record<string, unknown>).every((count) => typeof count === "number");
 }
 
 function statsPassword(env: Env): string | null {

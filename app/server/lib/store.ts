@@ -265,13 +265,27 @@ export interface Store {
    * day is written only when it does.
    */
   touchMembership(uid: string, now?: number, resolutionMs?: number): Promise<void>;
-  /** Every account's sign-up time and active days, with no identifiers. */
-  accountActivity(): Promise<AccountActivity[]>;
+  /**
+   * Every account's sign-up time and active days, with no identifiers.
+   *
+   * `isInternal` is applied to each address while the store still holds it,
+   * and only its answer leaves: the caller can drop our own accounts from the
+   * figures without ever being handed an address to drop them by.
+   */
+  accountActivity(isInternal?: (email: string) => boolean): Promise<AccountActivity[]>;
 
   /* ---- App events ---- */
-  /** Counts one thing an account did, on the day it did it. Nothing about who. */
-  recordAppEvent(event: AppEvent, now?: number): Promise<void>;
-  /** Totals per kind over days on or after `sinceDay` (midnight UTC), for the dashboard. */
+  /**
+   * Counts one thing an account did, on the day it did it. Nothing about who,
+   * beyond whether the account was one of ours: counts of what the team did
+   * while testing are kept apart from counts of what customers did, because
+   * the dashboard reports the second and not the first.
+   */
+  recordAppEvent(event: AppEvent, now?: number, internal?: boolean): Promise<void>;
+  /**
+   * Customers' totals per kind over days on or after `sinceDay` (midnight
+   * UTC), for the dashboard. Our own are never included.
+   */
   appEvents(sinceDay: number): Promise<AppEventCount[]>;
 
   /* ---- Housekeeping ---- */

@@ -1628,8 +1628,8 @@ export class PostgresStore implements Store {
     );
   }
 
-  async accountActivity(): Promise<AccountActivity[]> {
-    const members = await this.rows("SELECT uid, joined_at FROM memberships");
+  async accountActivity(isInternal: (email: string) => boolean = () => false): Promise<AccountActivity[]> {
+    const members = await this.rows("SELECT uid, email, joined_at FROM memberships");
     const days = await this.rows("SELECT uid, day FROM account_activity ORDER BY day");
     const byUid = new Map<string, number[]>();
     for (const row of days) {
@@ -1640,22 +1640,24 @@ export class PostgresStore implements Store {
     return members.map((row) => ({
       joinedAt: row.joined_at as number,
       days: byUid.get(row.uid as string) ?? [],
+      internal: isInternal((row.email as string | null) ?? ""),
     }));
   }
 
   /* ---- App events ---- */
 
-  async recordAppEvent(event: AppEvent, now = Date.now()): Promise<void> {
+  async recordAppEvent(event: AppEvent, now = Date.now(), internal = false): Promise<void> {
     await this.pool.query(
-      `INSERT INTO app_events (event, day, count) VALUES ($1, $2, 1)
-       ON CONFLICT (event, day) DO UPDATE SET count = app_events.count + 1`,
-      [event, Math.floor(now / DAY_MS) * DAY_MS],
+      `INSERT INTO app_events (event, day, internal, count) VALUES ($1, $2, $3, 1)
+       ON CONFLICT (event, day, internal) DO UPDATE SET count = app_events.count + 1`,
+      [event, Math.floor(now / DAY_MS) * DAY_MS, internal],
     );
   }
 
   async appEvents(sinceDay: number): Promise<AppEventCount[]> {
     const rows = await this.rows(
-      "SELECT event, SUM(count) AS count FROM app_events WHERE day >= $1 GROUP BY event ORDER BY event",
+      `SELECT event, SUM(count) AS count FROM app_events
+       WHERE day >= $1 AND internal = FALSE GROUP BY event ORDER BY event`,
       [sinceDay],
     );
     return rows.map((row) => ({ event: row.event as AppEvent, count: Number(row.count) }));

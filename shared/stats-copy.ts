@@ -1,4 +1,4 @@
-import type { StatsSnapshot } from "./stats";
+import type { StatsAccountStats, StatsSnapshot } from "./stats";
 import { DAY_MS } from "./stats-snapshot";
 
 /*
@@ -52,6 +52,10 @@ export function humanize(value: string): string {
     invite_created: "Sent an invite",
     invite_accepted: "Accepted an invite",
     feedback_sent: "Sent feedback",
+    one_day: "One day only",
+    two_days: "Two days",
+    three_to_six_days: "Three to six days",
+    seven_or_more_days: "Seven days or more",
     ok: "Installed",
     failed: "Failed, unspecified",
     unsupported_os: "Unsupported OS",
@@ -223,6 +227,35 @@ export function sessionsInsight(snapshot: StatsSnapshot): string {
     parts.push(`${integerFormatter.format(metrics.viewersRejected)} viewer${metrics.viewersRejected === 1 ? " was" : "s were"} turned away by a full, expired or unknown session.`);
   }
   return parts.join(" ");
+}
+
+/**
+ * The accounts panel in a sentence: how many there are, how the range moved
+ * it, how many of them came back, and how many of our own were left out.
+ * Written so a quiet range reads as quiet rather than as a broken figure.
+ */
+export function accountsInsight(accounts: StatsAccountStats, rangeLabel: string): string {
+  const ours = accounts.excluded === 0
+    ? ""
+    : ` ${integerFormatter.format(accounts.excluded)} of our own account${accounts.excluded === 1 ? " is" : "s are"} left out of every figure here.`;
+  if (accounts.total === 0) {
+    return `Nobody has signed up yet.${ours}`;
+  }
+  /* Over all time every account is new and nobody can have come back, so neither is said. */
+  const allTime = accounts.newInRange === accounts.total && accounts.previous === null;
+  const parts = [
+    allTime
+      ? `${integerFormatter.format(accounts.total)} account${accounts.total === 1 ? "" : "s"} in all.`
+      : `${integerFormatter.format(accounts.total)} account${accounts.total === 1 ? "" : "s"}, ${accounts.newInRange === 0 ? `none of them new in ${rangeLabel}` : `${integerFormatter.format(accounts.newInRange)} of them from ${rangeLabel}`}.`,
+  ];
+  parts.push(accounts.activeInRange === 0
+    ? `None of them opened the app in ${rangeLabel}.`
+    : `${integerFormatter.format(accounts.activeInRange)} used the app (${formatPercent(ratio(accounts.activeInRange, accounts.total))} of all of them)${allTime ? "" : accounts.returningInRange === 0 ? ", all of them for the first time" : `, ${integerFormatter.format(accounts.returningInRange)} of which had signed up earlier`}.`);
+  const previous = accounts.previous;
+  if (previous !== null && previous.newAccounts > 0 && accounts.newInRange === 0) {
+    parts.push(`The period before brought ${integerFormatter.format(previous.newAccounts)}; this one brought none.`);
+  }
+  return `${parts.join(" ")}${ours}`;
 }
 
 export interface DeltaChip {

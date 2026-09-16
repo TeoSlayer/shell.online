@@ -171,6 +171,19 @@ describe("withoutCredentials", () => {
   });
 });
 
+describe("readConfig statistics settings", () => {
+  it("reads the accounts the statistics leave out, and excludes nobody by default", () => {
+    expect(readConfig(MINIMAL).excludedAccounts).toEqual([]);
+    expect(readConfig({ ...MINIMAL, STATS_EXCLUDE: "Ours.example, someone@mail.example" }).excludedAccounts)
+      .toEqual(["ours.example", "someone@mail.example"]);
+  });
+
+  it("refuses a statistics token short enough to guess", () => {
+    expect(() => readConfig({ ...MINIMAL, STATS_TOKEN: "short" })).toThrow(/STATS_TOKEN/);
+    expect(readConfig({ ...MINIMAL, STATS_TOKEN: "t".repeat(32) }).statsToken).toBe("t".repeat(32));
+  });
+});
+
 describe("allowedOriginsFor", () => {
   /*
    * A page on somebody's own machine must not be able to call production with

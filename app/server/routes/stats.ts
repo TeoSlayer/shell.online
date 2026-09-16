@@ -30,11 +30,53 @@ export interface RetentionCohort {
   active: number[];
 }
 
-export interface AccountStats {
+/** How many accounts have used the app on how many separate days. */
+export const ENGAGEMENT_BUCKETS = [
+  { label: "one_day", from: 1, to: 1 },
+  { label: "two_days", from: 2, to: 2 },
+  { label: "three_to_six_days", from: 3, to: 6 },
+  { label: "seven_or_more_days", from: 7, to: Number.POSITIVE_INFINITY },
+] as const;
+
+/** The headline counts over one period, so a range can be read against the one before it. */
+export interface AccountPeriod {
+  /** Accounts in existence at the end of the period. */
   total: number;
+  /** Of those, that signed up during it. */
+  newAccounts: number;
+  /** Accounts that used the app during it. */
+  active: number;
+  /** Of the active, that had signed up before it began: the ones that came back. */
+  returning: number;
+}
+
+export interface AccountStats {
+  /** Accounts there are now. */
+  total: number;
+  /** Of those, that signed up in the range. */
   newInRange: number;
+  /** Accounts that used the app in the range. */
   activeInRange: number;
+  /** Of the active, that had signed up before the range began. */
+  returningInRange: number;
+  /** The same four over the period of equal length before the range, or null over all time. */
+  previous: AccountPeriod | null;
   newByDay: { day: number; count: number }[];
+  /** Accounts that used the app on each day, over the same days as newByDay. */
+  activeByDay: { day: number; count: number }[];
+  /**
+   * Accounts by how many separate days they have ever used the app, over the
+   * accounts that signed up since activity was first recorded. An account
+   * that signed up before that has days missing through no fault of its own,
+   * and would read as a bounce.
+   */
+  engagement: { label: string; value: number }[];
+  /** How many accounts the engagement figures are over. */
+  engagementBase: number;
+  /** Midnight UTC of the first day any account was recorded as active, or null. */
+  activeSince: number | null;
+  /** Accounts left out of every figure above because they are ours. */
+  excluded: number;
   cohorts: RetentionCohort[];
   /** Things done in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
   events: Record<string, number>;
@@ -62,40 +104,137 @@ export function rangeStart(range: StatsRange, now: number): number {
   return 0;
 }
 
+/**
+ * The account figures for one range.
+ *
+ * Our own accounts are dropped before anything is counted, and only the
+ * number of them dropped is reported: the dashboard is read as product
+ * signal, and the team's accounts are the most active there are. See
+ * internal-accounts.ts.
+ */
 export function accountStats(
   activity: AccountActivity[],
   range: StatsRange,
   now = Date.now(),
   events: AppEventCount[] = [],
 ): AccountStats {
+  const excluded = activity.filter((account) => account.internal).length;
+  const accounts = activity.filter((account) => !account.internal);
   const start = rangeStart(range, now);
-  const startDay = dayStart(start);
-  const newByDay = new Map<number, number>();
-  const firstDay = dayStart(now) - (NEW_BY_DAY_LIMIT - 1) * DAY_MS;
-  for (let day = firstDay; day <= dayStart(now); day += DAY_MS) newByDay.set(day, 0);
+  const current = countPeriod(accounts, start, now);
+  /*
+   * The period of equal length before this one, so a headline figure can say
+   * how it moved. All time has nothing before it.
+   */
+  const previous = range === "all" ? null : countPeriod(accounts, start - (now - start), start);
 
-  let newInRange = 0;
-  let activeInRange = 0;
+  const today = dayStart(now);
+  const firstDay = today - (NEW_BY_DAY_LIMIT - 1) * DAY_MS;
+  const newByDay = new Map<number, number>();
+  const activeByDay = new Map<number, number>();
+  for (let day = firstDay; day <= today; day += DAY_MS) {
+    newByDay.set(day, 0);
+    activeByDay.set(day, 0);
+  }
+
+  let activeSince: number | null = null;
   const rows: { visitor: string; first_day: number; day: number }[] = [];
-  activity.forEach((account, index) => {
+  accounts.forEach((account, index) => {
     const joinedDay = dayStart(account.joinedAt);
-    if (account.joinedAt >= start) newInRange += 1;
-    /* Signing up is using it, so a brand-new account is active on its first day. */
-    if (account.joinedAt >= start || account.days.some((day) => day >= startDay)) activeInRange += 1;
     if (newByDay.has(joinedDay)) newByDay.set(joinedDay, (newByDay.get(joinedDay) ?? 0) + 1);
+    /* The recorded days only, so this is when the app started keeping them. */
+    for (const day of account.days) {
+      const recorded = dayStart(day);
+      if (activeSince === null || recorded < activeSince) activeSince = recorded;
+    }
+    for (const day of activeDays(account)) {
+      if (activeByDay.has(day)) activeByDay.set(day, (activeByDay.get(day) ?? 0) + 1);
+    }
+    /*
+     * Cohorts are built from rows shaped like the relay's visitor rows, with
+     * the index standing in for a person: it never leaves this function, and
+     * two runs of the same data give it to different accounts.
+     */
     const visitor = String(index);
     rows.push({ visitor, first_day: joinedDay, day: joinedDay });
     for (const day of account.days) rows.push({ visitor, first_day: joinedDay, day });
   });
 
+  /*
+   * Days are only known from the day activity was first recorded, so an
+   * account that signed up before it looks like one that never came back.
+   * Engagement is over the accounts that signed up since, and says how many
+   * that is.
+   */
+  const measurable = activeSince === null
+    ? []
+    : accounts.filter((account) => dayStart(account.joinedAt) >= (activeSince as number));
+
   return {
-    total: activity.length,
-    newInRange,
-    activeInRange,
+    total: current.total,
+    newInRange: current.newAccounts,
+    activeInRange: current.active,
+    returningInRange: current.returning,
+    previous,
     newByDay: [...newByDay.entries()].map(([day, count]) => ({ day, count })),
+    activeByDay: [...activeByDay.entries()].map(([day, count]) => ({ day, count })),
+    engagement: ENGAGEMENT_BUCKETS.map((bucket) => ({
+      label: bucket.label,
+      value: measurable.filter((account) => {
+        const days = activeDays(account).length;
+        return days >= bucket.from && days <= bucket.to;
+      }).length,
+    })),
+    engagementBase: measurable.length,
+    activeSince,
+    excluded,
     cohorts: buildRetentionCohorts(rows, now),
     events: Object.fromEntries(events.map((entry) => [entry.event, entry.count])),
   };
+}
+
+/**
+ * The days an account was in the app.
+ *
+ * Signing up is using it, so the sign-up day counts even where no activity
+ * row was written for it -- which is every account that signed up before
+ * activity was recorded at all, and any whose first request predated the
+ * first hourly touch.
+ */
+function activeDays(account: AccountActivity): number[] {
+  const days = new Set(account.days.map(dayStart));
+  days.add(dayStart(account.joinedAt));
+  return [...days].sort((left, right) => left - right);
+}
+
+/**
+ * The four counts over one period: what existed, what arrived, what was used,
+ * and how much of the use came from accounts that were already here.
+ *
+ * Sign-ups are placed by their exact time, in [start, end). Activity only has
+ * a UTC day, so it is matched by day with both ends inclusive; that is what
+ * makes a period and the one before it the same number of days, at the cost
+ * of the two sharing the day they meet on.
+ */
+function countPeriod(accounts: AccountActivity[], start: number, end: number): AccountPeriod {
+  const startDay = dayStart(start);
+  const endDay = dayStart(end);
+  let total = 0;
+  let newAccounts = 0;
+  let active = 0;
+  let returning = 0;
+  for (const account of accounts) {
+    if (account.joinedAt >= end) continue;
+    total += 1;
+    const isNew = account.joinedAt >= start;
+    if (isNew) newAccounts += 1;
+    const used = isNew ||
+      activeDays(account).some((day) => day >= startDay && day <= endDay);
+    if (!used) continue;
+    active += 1;
+    if (!isNew) returning += 1;
+  }
+  return { total, newAccounts, active, returning };
 }
 
 /*
