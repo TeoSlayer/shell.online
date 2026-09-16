@@ -1,28 +1,52 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BORING_UI, KEEP_BUILD } from "../keep";
+import { CLASS_LORE } from "../lore/world";
+import type { Purse } from "../state/shop";
 import { useGameShell } from "../state/context";
+import { Codex } from "./Codex";
 import { Menu, type MenuItem } from "./Menu";
 import { OptionsPanel } from "./OptionsPanel";
 import { Prompt } from "./Prompt";
+import { Shop } from "./Shop";
 
-type Pane = "root" | "options";
+type Pane = "root" | "options" | "shop" | "codex";
 
 /**
- * The pause screen.
+ * The pause screen, and everything reached from it.
  *
- * Pausing is the one place a game is allowed to take the whole screen, so it
- * does: the field dims, the simulation stops, and what is left is a short list
- * of the things somebody who has just stopped playing actually wants. The way
- * out is the last item and it says what it does in plain words rather than in
- * character, because a person looking for the exit is no longer playing along.
+ * The field carries four numbers and nothing else; everything a player might
+ * want but does not need at a glance lives behind this. That is the whole
+ * division: a heads-up display is screen space borrowed from the game, and a
+ * pause menu is space that costs nothing because the game has stopped.
+ *
+ * The way out is the last item and it says what it does in plain words rather
+ * than in character, because a person looking for the exit has stopped playing
+ * along.
  */
-export function PauseMenu({ onResume }: { onResume: () => void }) {
+export function PauseMenu({
+  onResume,
+  purse,
+  characterClass,
+  wearing,
+  shopOpen,
+  onBuy,
+  onWear,
+}: {
+  onResume: () => void;
+  purse: Purse;
+  characterClass: string;
+  wearing: string;
+  /** The pedlar starts calling at level two; before that the row says so. */
+  shopOpen: boolean;
+  onBuy: (skinId: string) => void;
+  onWear: (skinId: string) => void;
+}) {
   const navigate = useNavigate();
   const [pane, setPane] = useState<Pane>("root");
   const { options } = useGameShell();
   const panel = useRef<HTMLDivElement>(null);
-  /* Where the root menu was, so Options and back does not reset it. */
+  /* Where the root menu was, so a side trip does not reset it. */
   const rootIndex = useRef(0);
   /* Focus goes back where it came from when the menu closes. */
   const returnFocus = useRef<HTMLElement | null>(null);
@@ -58,6 +82,8 @@ export function PauseMenu({ onResume }: { onResume: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  const lore = CLASS_LORE[characterClass] ?? CLASS_LORE.terminal;
+
   const rootItems: MenuItem[] = [
     {
       id: "resume",
@@ -66,15 +92,19 @@ export function PauseMenu({ onResume }: { onResume: () => void }) {
       onSelect: onResume,
     },
     {
-      id: "sheet",
-      label: "Character sheet",
-      detail: "Your class, level and holdings",
-      /*
-       * Honest rather than hidden: the sheet is not built yet, and a menu item
-       * that silently does nothing is worse than one that says why.
-       */
-      disabled: true,
-      onSelect: () => {},
+      id: "shop",
+      label: "The pedlar",
+      detail: shopOpen
+        ? `${purse.marks.toLocaleString()} marks to spend`
+        : "Starts calling at level 2",
+      disabled: !shopOpen,
+      onSelect: () => setPane("shop"),
+    },
+    {
+      id: "codex",
+      label: "The Chronicle",
+      detail: "What everything here is a name for",
+      onSelect: () => setPane("codex"),
     },
     {
       id: "options",
@@ -91,22 +121,32 @@ export function PauseMenu({ onResume }: { onResume: () => void }) {
     },
   ];
 
+  const title =
+    pane === "root"
+      ? "Paused"
+      : pane === "options"
+        ? "Options"
+        : pane === "shop"
+          ? "The pedlar"
+          : "The Chronicle";
+
   return (
     <div className="keep-pause" role="presentation">
       <div
-        className="keep-pause-panel keep-panel"
+        className={`keep-pause-panel keep-panel${pane === "root" ? "" : " is-wide"}`}
         role="dialog"
         aria-modal="true"
-        aria-label="Paused"
+        aria-label={title}
         ref={panel}
       >
         <header className="keep-pause-head">
           {/* Icon and word together: never the icon alone, never the colour alone. */}
           <span className="keep-pause-glyph" aria-hidden="true">❙❙</span>
-          <h2>{pane === "root" ? "Paused" : "Options"}</h2>
+          <h2>{title}</h2>
+          {pane === "root" && <span className="keep-pause-who">{lore.title}</span>}
         </header>
 
-        {pane === "root" ? (
+        {pane === "root" && (
           <Menu
             items={rootItems}
             label="Paused"
@@ -116,9 +156,19 @@ export function PauseMenu({ onResume }: { onResume: () => void }) {
               rootIndex.current = index;
             }}
           />
-        ) : (
-          <OptionsPanel onBack={() => setPane("root")} />
         )}
+        {pane === "options" && <OptionsPanel onBack={() => setPane("root")} />}
+        {pane === "shop" && (
+          <Shop
+            purse={purse}
+            characterClass={characterClass}
+            wearing={wearing}
+            onBuy={onBuy}
+            onWear={onWear}
+            onBack={() => setPane("root")}
+          />
+        )}
+        {pane === "codex" && <Codex onBack={() => setPane("root")} />}
 
         <footer className="keep-pause-foot">
           <Prompt action="cancel" verb={pane === "root" ? "resume" : "go back"} />

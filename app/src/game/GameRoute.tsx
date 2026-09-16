@@ -13,7 +13,10 @@ import { drawFoes, drawSites } from "./scenes/foes";
 import { drawFx } from "./scenes/fx";
 import { createWorld, DEMO_GARRISON, tickWorld, type Wright } from "./state/world";
 import { useGarrison } from "./state/use-garrison";
+import { buy } from "./state/shop";
 import { experienceFrom, fortification, marksEarnedTo, standing } from "./state/progress";
+import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
+import { ChooseCharacter } from "./ui/ChooseCharacter";
 import { Hud } from "./ui/Hud";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Prompt } from "./ui/Prompt";
@@ -37,6 +40,8 @@ export default function GameRoute() {
   usePageTitle(KEEP_TITLE);
 
   const [options, setOptionsState] = useState<GameOptions>(readOptions);
+  /* Who you are, what you are wearing, and what you have bought. */
+  const [save, setSaveState] = useState<Save>(readSave);
   const [paused, setPaused] = useState(false);
   const device = useInputDevice();
 
@@ -59,6 +64,16 @@ export default function GameRoute() {
   const setOptions = useCallback((next: GameOptions) => {
     setOptionsState(next);
     writeOptions(next);
+  }, []);
+
+  /*
+   * Saved on every change rather than on a timer or on the way out. The game
+   * is a browser tab: it is closed, not exited, and a save that waits for a
+   * clean shutdown is a save that is sometimes lost.
+   */
+  const setSave = useCallback((next: Save) => {
+    setSaveState(next);
+    writeSave(next);
   }, []);
 
   const reducedMotion = motionReduced(options, systemReduced);
@@ -99,6 +114,12 @@ export default function GameRoute() {
 
   /* The holding is however fortified this level has earned. */
   const base = { ...STARTING_BASE, ...fortification(rank.level) };
+
+  /* Earned by levelling, less what has been spent with the pedlar. */
+  const purse = {
+    marks: marksLeft(marksEarnedTo(rank.level), save),
+    owned: save.owned,
+  };
 
   /*
    * The world, in a ref rather than in state.
@@ -222,10 +243,10 @@ export default function GameRoute() {
           <header className="keep-hud">
             <Hud
               standing={rank}
-              marks={marksEarnedTo(rank.level)}
+              marks={purse.marks}
               elixir={0}
-              gathering={false}
-              characterClass="claude-code"
+              gathering={save.gathering}
+              characterClass={save.characterClass || "terminal"}
               wrights={tally.wrights}
               demo={garrison.demo}
               onOpenRoster={() => setPaused(true)}
@@ -245,7 +266,41 @@ export default function GameRoute() {
           </footer>
         </div>
 
-        {paused && <PauseMenu onResume={() => setPaused(false)} />}
+        {paused && (
+          <PauseMenu
+            onResume={() => setPaused(false)}
+            purse={purse}
+            characterClass={save.characterClass || "terminal"}
+            wearing={save.skinId}
+            shopOpen={rank.level >= 2}
+            onBuy={(skinId) => {
+              const result = buy(purse, skinId);
+              if (!result.ok) return;
+              /*
+               * What is stored is the spend, not the purse. The purse is
+               * derived from the level that earned it, so storing both would
+               * be two facts that can disagree.
+               */
+              setSave({
+                ...save,
+                spent: save.spent + (purse.marks - result.purse.marks),
+                owned: result.purse.owned,
+                skinId: save.skinId || skinId,
+              });
+            }}
+            onWear={(skinId) => setSave({ ...save, skinId })}
+          />
+        )}
+
+        {/*
+          * The one decision the game asks for, over the top of everything.
+          * Shown until it has been made; the field carries on behind it.
+          */}
+        {!hasChosen(save) && (
+          <ChooseCharacter
+            onChoose={(characterClass) => setSave({ ...save, characterClass })}
+          />
+        )}
       </div>
     </GameShellContext.Provider>
   );

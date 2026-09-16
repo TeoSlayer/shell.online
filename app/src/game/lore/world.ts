@@ -44,7 +44,8 @@ export const WORLD = {
 export const OPENING = [
   `It is ${WORLD.era}, and nothing has been rebooted in living memory.`,
   `Your keep stands on ${WORLD.region}, built around ${WORLD.flame} — an amber light in the hall that must not go out.`,
-  `Each outpost you have linked sends a wright when there is work. ${WORLD.foe} come when there is rot.`,
+  /* One sentence, so the foe's name is never asked to start one in lower case. */
+  `Each outpost you have linked sends a wright when there is work; ${WORLD.foe} come when there is rot.`,
 ] as const;
 
 /** Flavour for each class of wright, keyed by the session kind it comes from. */

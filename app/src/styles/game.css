@@ -284,13 +284,27 @@
   to { opacity: 1; }
 }
 
+/*
+ * Header and footer pinned, middle scrolls.
+ *
+ * Scrolling the whole panel took the footer with it, so on a long panel -- the
+ * Chronicle, the shop -- the way out and the button prompt were below the
+ * fold. A dialog whose close is off screen is a dialog somebody is stuck in.
+ */
 .keep-pause-panel {
-  display: flex;
+  display: grid;
   width: min(560px, 100%);
   max-height: 100%;
   padding: var(--keep-space-3);
-  flex-direction: column;
   gap: var(--keep-space-2);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.keep-pause-panel > .keep-menu,
+.keep-pause-panel > .keep-options,
+.keep-pause-panel > .keep-shop,
+.keep-pause-panel > .keep-codex {
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -821,5 +835,239 @@
 @media (width <= 900px) {
   .keep-standing {
     min-width: 100%;
+  }
+}
+
+/* ---- the opening, the shop and the Chronicle -------------------------- */
+
+/*
+ * A full-screen curtain for the one question the game asks. Darker than the
+ * pause overlay: this is not a pause over a running game, it is the game
+ * waiting for an answer.
+ */
+.keep-curtain {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-modal);
+  padding: var(--keep-safe);
+  align-items: center;
+  justify-content: center;
+  background: rgb(9 7 5 / 92%);
+  animation: keep-fade var(--keep-normal) ease-out;
+}
+
+.keep-opening {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: 100%;
+  padding: var(--keep-space-3);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+  overflow-y: auto;
+}
+
+.keep-opening-head h2 {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-xl);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.keep-opening-head p {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-pale, var(--keep-mist));
+  line-height: 1.6;
+}
+
+.keep-opening-choose h3 {
+  margin: 0 0 var(--keep-space);
+  font-size: var(--keep-text-lg);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/*
+ * The list and the description side by side, so moving through five classes
+ * does not reflow the panel under the player's cursor.
+ */
+.keep-opening-choose {
+  display: grid;
+  gap: var(--keep-space-2);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "title title" "list detail";
+}
+
+.keep-opening-choose h3 { grid-area: title; }
+.keep-opening-choose .keep-menu { grid-area: list; }
+.keep-opening-detail { grid-area: detail; }
+
+.keep-opening-detail {
+  padding: var(--keep-space-2);
+  border: 4px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 22%);
+}
+
+.keep-opening-title {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-opening-note {
+  margin: 0;
+  color: var(--keep-mist);
+  line-height: 1.6;
+}
+
+.keep-pause-panel.is-wide {
+  width: min(760px, 100%);
+}
+
+.keep-pause-who {
+  margin-left: auto;
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- shop ------------------------------------------------------------- */
+
+.keep-shop,
+.keep-codex {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-shop-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--keep-space-2);
+  flex-flow: row wrap;
+}
+
+.keep-shop-purse {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: var(--keep-space);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-shop-note,
+.keep-codex-intro {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-refusal {
+  margin: 0;
+  padding: var(--keep-space);
+  border: 3px solid var(--keep-blood);
+  color: var(--keep-blood);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-shop-item {
+  display: flex;
+  padding: var(--keep-space);
+  border: 4px solid var(--keep-stone-dark);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+/* The four colours the skin changes, which are the entire product. */
+.keep-swatch {
+  display: grid;
+  width: calc(44px * var(--keep-scale));
+  height: calc(44px * var(--keep-scale));
+  border: 3px solid var(--keep-stone-dark);
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  flex: none;
+}
+
+.keep-swatch span {
+  display: block;
+}
+
+.keep-shop-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-shop-name {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-shop-blurb,
+.keep-shop-fits {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-fits {
+  color: var(--keep-gold);
+}
+
+/* ---- the Chronicle ---------------------------------------------------- */
+
+.keep-codex-section h3 {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-codex-list {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-codex-list dt {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.keep-codex-list dd {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  line-height: 1.6;
+}
+
+.keep-codex-list code {
+  color: var(--keep-elixir);
+  font-family: inherit;
+}
+
+@media (width <= 760px) {
+  .keep-opening-choose {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "list" "detail";
   }
 }
