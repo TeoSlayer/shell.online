@@ -5,7 +5,7 @@ import { buildWorld, homeView, loadArt } from "./scene";
 import { toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
-import { Banners } from "./banners";
+import { Banners, OrderMark } from "./banners";
 import { loadSigils } from "./sigils";
 import type { Scene } from "./PixiStage";
 import { GARRISONS } from "../world/marches";
@@ -96,6 +96,7 @@ export async function buildKeepScene(
   let selected: string | undefined;
   const actors = new ActorLayer(art, things, labels, sigils);
   const companies = new Banners(banners);
+  const orderMark = new OrderMark(banners);
 
   const birds = new Birds(things);
   const smoke = new Smoke(things, fx["fx-smoke_01"]);
@@ -195,6 +196,8 @@ export async function buildKeepScene(
       selected = undefined;
       handle.onPick?.(undefined);
       handle.onOrder?.(tile.x, tile.y);
+      /* Answer the press at once, and say where. */
+      orderMark.show(tile.x, tile.y);
     }
   };
   app.stage.on("pointertap", onTap);
@@ -313,6 +316,7 @@ export async function buildKeepScene(
       /* Only the camps somebody is actually holding are standing. */
       for (const [key, camp] of camps) camp.visible = held.has(key);
       companies.sync(sim);
+      orderMark.tick(deltaMs);
       actors.sync(sim, selected);
       blows.sync(sim);
       birds.tick(deltaMs);
@@ -324,6 +328,7 @@ export async function buildKeepScene(
       viewport.off("moved", rescaleSigns);
       app.stage.off("pointertap", onTap);
       companies.destroy();
+      orderMark.destroy();
       actors.destroy();
       birds.destroy();
       smoke.destroy();

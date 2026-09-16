@@ -171,6 +171,38 @@
   pointer-events: auto;
 }
 
+/*
+ * Headings are lettered like the signposts; everything else is not.
+ *
+ * The interface was monospace throughout, in capitals, widely letterspaced --
+ * which is a terminal's voice, and this is supposed to be a keep. Putting the
+ * blackletter on the *titles* alone gives it somewhere to sit without costing
+ * anything in a hurry: a heading is read once, a number is read at a glance,
+ * and the two want different faces.
+ */
+.keep-pause-head h2,
+.keep-shop-shelf-name,
+.keep-gathering-notice h3,
+.keep-gathering-heading,
+.keep-standing-class,
+.keep-opening h2 {
+  font-family: "Pirata One", Georgia, serif;
+  font-weight: 400;
+  /* Blackletter is wide enough already; the tracking was for a monospace. */
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.keep-pause-head h2,
+.keep-opening h2 {
+  font-size: var(--keep-text-huge);
+}
+
+.keep-standing-class {
+  font-size: var(--keep-text-xl);
+  line-height: 1.1;
+}
+
 /* ---- pixel panels ----------------------------------------------------- */
 
 /*
@@ -1238,14 +1270,25 @@
  * that is not a game resource: it is real money, and it should not look like
  * the experience bar next to it.
  */
+/*
+ * The vial: glass with something green in it.
+ *
+ * It used to be a black slot that filled with green, which at zero tokens --
+ * where most accounts start -- was a black slot, and read as an empty box
+ * somebody had forgotten to style. Glass is glass whether or not there is
+ * anything in it, so the vessel now has a dark green cast of its own and the
+ * fill is the bright thing inside it.
+ */
 .keep-vial {
   display: block;
   position: relative;
-  width: calc(18px * var(--keep-scale));
-  height: calc(34px * var(--keep-scale));
-  border: 3px solid var(--keep-stone-dark);
-  background: rgb(0 0 0 / 40%);
-  box-shadow: inset 0 3px 0 0 var(--keep-stone-lit);
+  width: calc(20px * var(--keep-scale));
+  height: calc(36px * var(--keep-scale));
+  border: 2px solid var(--keep-brass-dim);
+  border-radius: calc(3px * var(--keep-scale)) calc(3px * var(--keep-scale))
+    calc(8px * var(--keep-scale)) calc(8px * var(--keep-scale));
+  background: linear-gradient(180deg, rgb(17 28 12 / 90%), var(--keep-elixir-dim));
+  box-shadow: inset 0 0 calc(6px * var(--keep-scale)) rgb(0 0 0 / 60%);
   overflow: hidden;
   flex: none;
 }
@@ -1256,8 +1299,21 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background: var(--keep-elixir);
+  background: linear-gradient(180deg, #a6f56b, var(--keep-elixir));
+  box-shadow: 0 0 calc(8px * var(--keep-scale)) var(--keep-elixir);
   transition: height var(--keep-normal) linear;
+}
+
+/* A highlight down one side, which is what makes a rectangle read as glass. */
+.keep-vial::after {
+  position: absolute;
+  top: 12%;
+  left: 16%;
+  width: 18%;
+  height: 56%;
+  border-radius: 40%;
+  background: rgb(255 255 255 / 22%);
+  content: "";
 }
 
 .keep-elixir-label {

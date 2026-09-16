@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { atWork, heroPlate, soldierPlate, type Plate } from "./plates";
 import type { Sigils } from "./sigils";
+import { makeUnmade, walkUnmade, type Unmade } from "./unmade";
 import { depthOf, TILE_H, toScreen } from "../world/iso";
 import type { Loaded } from "./scene";
 import type { Actor, Sim } from "../world/sim";
@@ -34,9 +35,6 @@ const UNIT_FOR: Record<string, string> = {
   heisenbug: "Unit_09",
 };
 
-/** The Unmade are tinted cold; everything else on this map is warm. */
-const UNMADE_TINT = 0x6fd6c0;
-
 /** How much bigger than drawn a soldier is. See `make`. */
 const FIGURE = 1.25;
 
@@ -51,6 +49,15 @@ const FIGURE = 1.25;
  * never find.
  */
 const HERO = 2.1;
+
+/** A small deterministic offset, so two bugs do not step in lockstep. */
+function hashOf(id: string): number {
+  let value = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    value = (Math.imul(value, 31) + id.charCodeAt(index)) | 0;
+  }
+  return (Math.abs(value) % 100) / 16;
+}
 
 /**
  * A deterministic vertical stagger, so boards do not stack.
@@ -69,7 +76,15 @@ function lift(id: string): number {
 
 interface Piece {
   root: Container;
-  sprite: Sprite;
+  /**
+   * The figure itself: a sprite for anybody human, a drawn creature for the
+   * Unmade. Kenney's pack has no insects, and six legs settles what a thing is
+   * in a way no amount of tinting could.
+   */
+  sprite: Sprite | undefined;
+  bug: Unmade | undefined;
+  /** Whichever of the two is on screen, for facing and for the lunge. */
+  figure: Container;
   shadow: Graphics;
   bar: Graphics;
   plate?: Plate;
@@ -169,6 +184,31 @@ export class ActorLayer {
       .fill({ color: 0x1a1008, alpha: 0.32 });
     root.addChild(shadow);
 
+    if (actor.side === "unmade") {
+      const bug = makeUnmade(actor.kind);
+      bug.root.position.set(0, TILE_H * 0.25);
+      root.addChild(bug.root);
+
+      /* Health over the creature, shown only once something is off it. */
+      const hurt = new Graphics();
+      hurt.position.set(0, -24);
+      hurt.visible = false;
+      root.addChild(hurt);
+
+      this.parent.addChild(root);
+      return {
+        root,
+        sprite: undefined,
+        bug,
+        figure: bug.root,
+        shadow,
+        bar: hurt,
+        plate: undefined,
+        headroom: 0,
+        lastHp: actor.hp,
+      };
+    }
+
     const texture = this.art.frame(UNIT_FOR[actor.kind] ?? UNIT_FOR.terminal);
     const sprite = new Sprite(texture);
     sprite.anchor.set(0.5, 1);
@@ -180,7 +220,6 @@ export class ActorLayer {
      */
     sprite.scale.set(size);
     sprite.position.set(0, TILE_H * 0.25);
-    if (actor.side === "unmade") sprite.tint = UNMADE_TINT;
     root.addChild(sprite);
 
     /*
@@ -236,7 +275,7 @@ export class ActorLayer {
      * gets twice the clearance and nobody's name sits on their own head.
      */
     const headroom = texture.height * size + 12;
-    return { root, sprite, shadow, bar, plate, headroom, lastHp: actor.hp };
+    return { root, sprite, bug: undefined, figure: sprite, shadow, bar, plate, headroom, lastHp: actor.hp };
   }
 
   /** Brings the display in line with the simulation. */
@@ -264,9 +303,13 @@ export class ActorLayer {
         piece.plate.root.position.set(x, y - piece.headroom - stagger);
       }
 
-      /* Facing, as a mirror rather than a second sprite. */
-      const size = actor.role === "hero" ? HERO : FIGURE;
-      piece.sprite.scale.x = actor.facing === 1 ? size : -size;
+      /* Facing, as a mirror rather than a second drawing. */
+      if (piece.sprite) {
+        const size = actor.role === "hero" ? HERO : FIGURE;
+        piece.sprite.scale.x = actor.facing === 1 ? size : -size;
+      } else {
+        piece.figure.scale.x = actor.facing === 1 ? 1 : -1;
+      }
 
       /*
        * A blow is a lunge rather than a different drawing. Kenney's units have
@@ -274,24 +317,32 @@ export class ActorLayer {
        * better than a static figure with a number popping off it.
        */
       const lunging = actor.action === "attack";
-      piece.sprite.position.x = lunging ? actor.facing * 5 : 0;
-      piece.sprite.position.y = TILE_H * 0.25 + (actor.moving ? Math.sin(sim.clock / 3) * 1.5 : 0);
+      piece.figure.position.x = lunging ? actor.facing * 5 : 0;
+      piece.figure.position.y = TILE_H * 0.25 + (actor.moving ? Math.sin(sim.clock / 3) * 1.5 : 0);
+
+      /* Six legs, walking in alternating tripods, which is how insects walk. */
+      if (piece.bug) walkUnmade(piece.bug, sim.clock / 2.6 + hashOf(actor.id), actor.moving);
 
       /*
        * White when struck. Never colour alone: a number flies off as well.
        * Otherwise the Unmade are cold, a real session wears whatever skin has
        * been bought, and the garrison's own soldiers are as drawn.
        */
-      piece.sprite.tint = actor.hurt > 0
-        ? 0xffffff
-        : actor.side === "unmade"
-          ? UNMADE_TINT
+      /*
+       * White when struck. Never colour alone: a number flies off as well. The
+       * Unmade carry their own colours in how they are drawn, so all they take
+       * from this is the flinch.
+       */
+      if (piece.sprite) {
+        piece.sprite.tint = actor.hurt > 0
+          ? 0xffffff
           : actor.heroUid && actor.heroUid === sim.youUid
             ? actor.role === "hero"
               ? this.skinTint
               : this.liveryTint
             : 0xffffff;
-      piece.sprite.alpha = actor.hurt > 0 ? 0.75 : 1;
+      }
+      piece.figure.alpha = actor.hurt > 0 ? 0.6 : 1;
 
       if (actor.hp !== piece.lastHp) {
         piece.lastHp = actor.hp;

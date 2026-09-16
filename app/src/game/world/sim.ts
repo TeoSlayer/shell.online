@@ -448,10 +448,19 @@ export function garrisonSoldiers(sim: Sim): void {
 
 /* ---- the Unmade ---------------------------------------------------------- */
 
+/*
+ * How much the Unmade can take.
+ *
+ * Raised a long way. A camp has a hero hitting twice as hard as anybody else,
+ * several soldiers, and the holding's own watch, so at the old figures a foe
+ * arrived and was gone inside a second -- the fighting was a flicker of damage
+ * numbers rather than anything you could watch. These last long enough to be a
+ * fight, which is the whole point of drawing them.
+ */
 const UNMADE_KINDS = [
-  { kind: "mite", hp: 6 },
-  { kind: "crawler", hp: 12 },
-  { kind: "heisenbug", hp: 20 },
+  { kind: "mite", hp: 22 },
+  { kind: "crawler", hp: 48 },
+  { kind: "heisenbug", hp: 90 },
 ];
 
 /**
