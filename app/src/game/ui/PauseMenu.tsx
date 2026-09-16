@@ -5,12 +5,13 @@ import { CLASS_LORE } from "../lore/world";
 import type { Purse } from "../state/shop";
 import { useGameShell } from "../state/context";
 import { Codex } from "./Codex";
+import { Marches } from "./Marches";
 import { Menu, type MenuItem } from "./Menu";
 import { OptionsPanel } from "./OptionsPanel";
 import { Prompt } from "./Prompt";
 import { Shop } from "./Shop";
 
-type Pane = "root" | "options" | "shop" | "codex";
+type Pane = "root" | "marches" | "options" | "shop" | "codex";
 
 /**
  * The pause screen, and everything reached from it.
@@ -34,6 +35,7 @@ export function PauseMenu({
   garrison,
   onBuy,
   onWear,
+  onTravel,
 }: {
   onResume: () => void;
   purse: Purse;
@@ -46,6 +48,8 @@ export function PauseMenu({
   garrison: number;
   onBuy: (skinId: string) => void;
   onWear: (skinId: string) => void;
+  /** Rides to a holding and closes the menu. The map is too big to walk. */
+  onTravel: (garrisonId: string) => void;
 }) {
   const navigate = useNavigate();
   const [pane, setPane] = useState<Pane>("root");
@@ -106,6 +110,12 @@ export function PauseMenu({
       onSelect: () => setPane("shop"),
     },
     {
+      id: "marches",
+      label: "The Marches",
+      detail: "Nine holdings, and the road to each",
+      onSelect: () => setPane("marches"),
+    },
+    {
       id: "codex",
       label: "The Chronicle",
       detail: "What everything here is a name for",
@@ -126,14 +136,14 @@ export function PauseMenu({
     },
   ];
 
-  const title =
-    pane === "root"
-      ? "Paused"
-      : pane === "options"
-        ? "Options"
-        : pane === "shop"
-          ? "The pedlar"
-          : "The Chronicle";
+  const TITLES: Record<Pane, string> = {
+    root: "Paused",
+    marches: "The Marches",
+    options: "Options",
+    shop: "The pedlar",
+    codex: "The Chronicle",
+  };
+  const title = TITLES[pane];
 
   return (
     <div className="keep-pause" role="presentation">
@@ -172,6 +182,15 @@ export function PauseMenu({
             onIndexChange={(index) => {
               rootIndex.current = index;
             }}
+          />
+        )}
+        {pane === "marches" && (
+          <Marches
+            onTravel={(id) => {
+              onTravel(id);
+              onResume();
+            }}
+            onBack={() => setPane("root")}
           />
         )}
         {pane === "options" && <OptionsPanel onBack={() => setPane("root")} />}

@@ -53,12 +53,17 @@ export interface Garrison {
 }
 
 /**
- * The six holdings.
+ * The nine holdings.
  *
- * Laid out around the Keep rather than in a line, so the map has a middle and
- * the roads between them have a reason to cross. Positions are in tiles on a
- * grid roughly 64 across, which at the default zoom is a good deal more than
- * one screen — the point of a map you can move around.
+ * The Keep in the middle and eight around it, roughly on the compass points, so
+ * that the map has a centre and every road out of it leads somewhere. Laid out
+ * on a grid 128 tiles across: several screens in any direction at a zoom you
+ * can read, which is the point of a map you move around rather than a board you
+ * look at.
+ *
+ * Each holding is a *rename of a part of the product*, and that is the rule the
+ * lore is held to. A garrison nobody can point at a feature for would drift
+ * into fantasy filler the first time anybody edited it.
  */
 export const GARRISONS: Garrison[] = [
   {
@@ -66,17 +71,37 @@ export const GARRISONS: Garrison[] = [
     name: "Prompt Keep",
     purpose: "The hall. While the Prompt burns, the machine is up.",
     truth: "Your account, and the shell process behind it.",
-    x: 32,
-    y: 30,
+    x: 64,
+    y: 62,
+    radius: 10,
+    ground: "stone",
+    draws: "none",
+    buildings: [
+      { sprite: "Structure_02", x: 64, y: 60, scale: 1.6 },
+      { sprite: "Structure_06", x: 64, y: 67.5, scale: 1.1 },
+      { sprite: "Structure_12", x: 58.5, y: 63 },
+      { sprite: "Structure_12", x: 69.5, y: 63 },
+      { sprite: "Structure_04", x: 59.5, y: 66.5 },
+      { sprite: "Structure_11", x: 68.5, y: 66.5 },
+      { sprite: "Structure_20", x: 60.5, y: 57.5 },
+      { sprite: "Structure_10", x: 67.5, y: 57.5 },
+    ],
+  },
+  {
+    id: "relay",
+    name: "The Relay",
+    purpose: "Every word you type crosses here, and not one of them stops.",
+    truth: "The relay. It carries your session and can read no part of it.",
+    x: 64,
+    y: 22,
     radius: 7,
     ground: "stone",
     draws: "none",
     buildings: [
-      { sprite: "Structure_02", x: 32, y: 29, scale: 1.5 },
-      { sprite: "Structure_12", x: 28.5, y: 31 },
-      { sprite: "Structure_12", x: 35.5, y: 31 },
-      { sprite: "Structure_04", x: 30, y: 33 },
-      { sprite: "Structure_11", x: 34.5, y: 33 },
+      { sprite: "Structure_05", x: 64, y: 20, scale: 1.4 },
+      { sprite: "Structure_12", x: 59.5, y: 23 },
+      { sprite: "Structure_12", x: 68.5, y: 23 },
+      { sprite: "Structure_08", x: 64, y: 26 },
     ],
   },
   {
@@ -84,16 +109,17 @@ export const GARRISONS: Garrison[] = [
     name: "The Forge",
     purpose: "Where a thing that did not exist is made to.",
     truth: "Sessions building a feature. Their work raises the walls.",
-    x: 19,
-    y: 20,
-    radius: 5,
+    x: 32,
+    y: 32,
+    radius: 8,
     ground: "dirt",
     draws: "feature",
     buildings: [
-      { sprite: "Structure_07", x: 19, y: 19, scale: 1.2 },
-      { sprite: "Structure_21", x: 16.5, y: 21 },
-      { sprite: "Structure_23", x: 21.5, y: 21.5 },
-      { sprite: "Structure_13", x: 18, y: 23 },
+      { sprite: "Structure_07", x: 32, y: 30, scale: 1.3 },
+      { sprite: "Structure_21", x: 26.5, y: 33 },
+      { sprite: "Structure_23", x: 37.5, y: 33.5 },
+      { sprite: "Structure_13", x: 29.5, y: 36.5 },
+      { sprite: "Structure_16", x: 35.5, y: 36.5 },
     ],
   },
   {
@@ -101,32 +127,33 @@ export const GARRISONS: Garrison[] = [
     name: "Watchmen's Rise",
     purpose: "The Unmade are seen from here first, and met here.",
     truth: "Sessions fixing a fault. The waves come to them.",
-    x: 46,
-    y: 20,
-    radius: 5,
+    x: 98,
+    y: 32,
+    radius: 8,
     ground: "grass",
     draws: "bug",
     buildings: [
-      { sprite: "Structure_12", x: 46, y: 18.5, scale: 1.3 },
-      { sprite: "Structure_05", x: 43.5, y: 21 },
-      { sprite: "Structure_10", x: 48.5, y: 21.5 },
-      { sprite: "Structure_03", x: 45, y: 23 },
+      { sprite: "Structure_12", x: 98, y: 29, scale: 1.4 },
+      { sprite: "Structure_05", x: 92.5, y: 32 },
+      { sprite: "Structure_10", x: 103.5, y: 32.5 },
+      { sprite: "Structure_03", x: 95, y: 36.5 },
+      { sprite: "Structure_08", x: 101.5, y: 36.5 },
     ],
   },
   {
-    id: "chronicle",
-    name: "The Chronicle",
-    purpose: "Everything that was done here, written down and sealed.",
-    truth: "The audit log. Sealed to a key this service does not hold.",
-    x: 20,
-    y: 42,
-    radius: 4,
+    id: "vault",
+    name: "The Vault",
+    purpose: "Nine locks, and the keeper holds not one of the keys.",
+    truth: "Session passwords, sealed once per member. The service holds none.",
+    x: 108,
+    y: 62,
+    radius: 6,
     ground: "stone",
     draws: "none",
     buildings: [
-      { sprite: "Structure_04", x: 20, y: 41, scale: 1.2 },
-      { sprite: "Structure_09", x: 17.5, y: 43 },
-      { sprite: "Structure_22", x: 22.5, y: 43 },
+      { sprite: "Structure_06", x: 108, y: 60, scale: 1.2 },
+      { sprite: "Structure_12", x: 104, y: 63.5 },
+      { sprite: "Structure_12", x: 112, y: 63.5 },
     ],
   },
   {
@@ -134,16 +161,17 @@ export const GARRISONS: Garrison[] = [
     name: "The Muster Yard",
     purpose: "Every outpost that has answered sends its wrights through here.",
     truth: "Your linked machines. A wright arrives when one starts a session.",
-    x: 46,
-    y: 42,
-    radius: 5,
+    x: 98,
+    y: 92,
+    radius: 8,
     ground: "dirt",
     draws: "idle",
     buildings: [
-      { sprite: "Structure_08", x: 46, y: 41 },
-      { sprite: "Structure_16", x: 43.5, y: 43 },
-      { sprite: "Structure_17", x: 48.5, y: 43 },
-      { sprite: "Structure_14", x: 45, y: 45 },
+      { sprite: "Structure_08", x: 98, y: 89 },
+      { sprite: "Structure_16", x: 92.5, y: 92 },
+      { sprite: "Structure_17", x: 103.5, y: 92.5 },
+      { sprite: "Structure_14", x: 94.5, y: 96.5 },
+      { sprite: "Structure_01", x: 102, y: 96 },
     ],
   },
   {
@@ -151,15 +179,49 @@ export const GARRISONS: Garrison[] = [
     name: "Pedlar's Gate",
     purpose: "Cloth, dye, and nothing that will help you fight.",
     truth: "The shop. Everything in it is cosmetic, by construction.",
-    x: 32,
-    y: 47,
-    radius: 4,
+    x: 64,
+    y: 104,
+    radius: 7,
     ground: "sand",
     draws: "none",
     buildings: [
-      { sprite: "Structure_06", x: 32, y: 46 },
-      { sprite: "Structure_19", x: 29.5, y: 48 },
-      { sprite: "Structure_20", x: 34.5, y: 48 },
+      { sprite: "Structure_23", x: 64, y: 102 },
+      { sprite: "Structure_19", x: 58.5, y: 105 },
+      { sprite: "Structure_22", x: 69.5, y: 105 },
+      { sprite: "Structure_07", x: 64, y: 108 },
+    ],
+  },
+  {
+    id: "chronicle",
+    name: "The Chronicle",
+    purpose: "Everything that was done here, written down and sealed.",
+    truth: "The audit log. Sealed to a key this service does not hold.",
+    x: 30,
+    y: 92,
+    radius: 7,
+    ground: "stone",
+    draws: "none",
+    buildings: [
+      { sprite: "Structure_04", x: 30, y: 90, scale: 1.3 },
+      { sprite: "Structure_09", x: 25, y: 93.5 },
+      { sprite: "Structure_22", x: 35, y: 93.5 },
+      { sprite: "Structure_12", x: 30, y: 96.5 },
+    ],
+  },
+  {
+    id: "roost",
+    name: "Ravens' Roost",
+    purpose: "Every raven ever sent for you is waiting in the rafters.",
+    truth: "Your inbox: mentions, handoffs, and sessions that ended badly.",
+    x: 24,
+    y: 62,
+    radius: 6,
+    ground: "grass",
+    draws: "none",
+    buildings: [
+      { sprite: "Structure_09", x: 24, y: 60, scale: 1.2 },
+      { sprite: "Structure_16", x: 19.5, y: 63.5 },
+      { sprite: "Structure_10", x: 28.5, y: 63.5 },
     ],
   },
 ];
@@ -174,7 +236,7 @@ export function garrisonFor(work: "bug" | "feature" | "idle"): Garrison {
 }
 
 /** The whole map, in tiles. Bigger than any window, which is the point. */
-export const MAP = { width: 64, height: 64 } as const;
+export const MAP = { width: 128, height: 128 } as const;
 
 /**
  * The roads, as runs of tiles between holdings.
@@ -185,31 +247,63 @@ export const MAP = { width: 64, height: 64 } as const;
  * on it.
  */
 export const ROADS: { from: string; to: string }[] = [
+  { from: "keep", to: "relay" },
   { from: "keep", to: "forge" },
   { from: "keep", to: "watch" },
-  { from: "keep", to: "chronicle" },
+  { from: "keep", to: "vault" },
   { from: "keep", to: "muster" },
   { from: "keep", to: "pedlar" },
+  { from: "keep", to: "chronicle" },
+  { from: "keep", to: "roost" },
+  /* Two that do not touch the Keep, so the network is a country and not a wheel. */
+  { from: "forge", to: "relay" },
+  { from: "muster", to: "pedlar" },
 ];
 
 /**
  * The ground of the whole map, worked out once.
  *
  * A flat array rather than a function called per tile per frame: the map is
- * four thousand tiles and the renderer walks all of them when the view moves.
+ * sixteen thousand tiles and the renderer walks all of them when it is built.
  */
 export function buildGround(): Ground[] {
   const tiles: Ground[] = new Array(MAP.width * MAP.height).fill("grass");
   const at = (x: number, y: number) => y * MAP.width + x;
+  const put = (x: number, y: number, ground: Ground) => {
+    if (x < 0 || y < 0 || x >= MAP.width || y >= MAP.height) return;
+    tiles[at(x, y)] = ground;
+  };
+  const isWater = (x: number, y: number) =>
+    x >= 0 && y >= 0 && x < MAP.width && y < MAP.height && tiles[at(x, y)] === "water";
 
-  /* A river along the west, so the map has an edge that is not just an edge. */
+  /*
+   * A river down the west and a lake in the north-east, so the country has
+   * edges that are features rather than merely where the tiles stop.
+   */
   for (let y = 0; y < MAP.height; y += 1) {
-    const bend = 6 + Math.round(Math.sin(y / 9) * 2.5);
-    for (let x = bend; x < bend + 2; x += 1) {
-      if (x >= 0 && x < MAP.width) tiles[at(x, y)] = "water";
+    const bend = 13 + Math.round(Math.sin(y / 15) * 5);
+    for (let x = bend; x < bend + 3; x += 1) put(x, y, "water");
+  }
+
+  /* Clear of Watchmen's Rise, so a fight there never spills onto the shore. */
+  const LAKE = { x: 116, y: 11, rx: 10, ry: 7 };
+  for (let y = LAKE.y - LAKE.ry; y <= LAKE.y + LAKE.ry; y += 1) {
+    for (let x = LAKE.x - LAKE.rx; x <= LAKE.x + LAKE.rx; x += 1) {
+      const dx = (x - LAKE.x) / LAKE.rx;
+      const dy = (y - LAKE.y) / LAKE.ry;
+      if (dx * dx + dy * dy <= 1) put(x, y, "water");
     }
-    if (bend - 1 >= 0) tiles[at(bend - 1, y)] = "sand";
-    if (bend + 2 < MAP.width) tiles[at(bend + 2, y)] = "sand";
+  }
+
+  /* Shores, found from the water rather than drawn alongside it, so the two
+   * cannot drift apart when either is moved. */
+  for (let y = 0; y < MAP.height; y += 1) {
+    for (let x = 0; x < MAP.width; x += 1) {
+      if (tiles[at(x, y)] !== "grass") continue;
+      const touching =
+        isWater(x - 1, y) || isWater(x + 1, y) || isWater(x, y - 1) || isWater(x, y + 1);
+      if (touching) tiles[at(x, y)] = "sand";
+    }
   }
 
   /* Each holding's own ground. */
@@ -219,9 +313,8 @@ export function buildGround(): Ground[] {
         if (Math.hypot(x, y) > garrison.radius) continue;
         const tx = Math.round(garrison.x) + x;
         const ty = Math.round(garrison.y) + y;
-        if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) continue;
-        if (tiles[at(tx, ty)] === "water") continue;
-        tiles[at(tx, ty)] = garrison.ground;
+        if (isWater(tx, ty)) continue;
+        put(tx, ty, garrison.ground);
       }
     }
   }
@@ -236,12 +329,9 @@ export function buildGround(): Ground[] {
       const t = step / steps;
       const x = Math.round(from.x + (to.x - from.x) * t);
       const y = Math.round(from.y + (to.y - from.y) * t);
-      for (const [dx, dy] of [[0, 0], [1, 0]] as const) {
-        const tx = x + dx;
-        const ty = y + dy;
-        if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) continue;
-        if (tiles[at(tx, ty)] === "water") continue;
-        tiles[at(tx, ty)] = "dirt";
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1]] as const) {
+        if (isWater(x + dx, y + dy)) continue;
+        put(x + dx, y + dy, "dirt");
       }
     }
   }

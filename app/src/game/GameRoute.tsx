@@ -308,6 +308,7 @@ export default function GameRoute() {
             shopOpen={rank.level >= 2}
             elixir={elixir}
             garrison={tally.wrights.length}
+            onTravel={(id) => handle.current.lookAt(id)}
             onBuy={(skinId) => {
               const result = buy(purse, skinId);
               if (!result.ok) return;

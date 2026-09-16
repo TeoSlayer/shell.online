@@ -2,10 +2,11 @@ import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildWorld, homeView, loadArt } from "./scene";
-import { toTile } from "./iso";
+import { toScreen, toTile } from "./iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, loadEffects, Smoke } from "./ambience";
 import type { Scene } from "./PixiStage";
+import { GARRISONS } from "../world/marches";
 import { createSim, garrisonSoldiers, muster, tickSim, type Actor, type Mark, type Sim } from "../world/sim";
 
 /**
@@ -17,6 +18,9 @@ import { createSim, garrisonSoldiers, muster, tickSim, type Actor, type Mark, ty
  * shaking findable — it was a question about numbers, not about pixels.
  */
 
+/** How far above a holding the camera sits, so the HUD does not cover it. */
+const RIDE_LIFT = 150;
+
 export interface KeepHandle {
   sim: Sim;
   /** Called when a wright standing for a real session is clicked. */
@@ -24,8 +28,8 @@ export interface KeepHandle {
   select(id: string | undefined): void;
   /** The skin worn by this player's own wrights. */
   wear(tint: number): void;
-  /** Centres the view on a garrison, for the map menu. */
-  lookAt(x: number, y: number): void;
+  /** Rides the camera to a holding, named by id. See the road book. */
+  lookAt(garrisonId: string): void;
 }
 
 /** The style of a floating number. Built here so Blows stays about pooling. */
@@ -71,8 +75,22 @@ export async function buildKeepScene(
     selected = id;
   };
   handle.wear = (tint) => actors.wear(tint);
-  handle.lookAt = (x, y) => {
-    viewport.animate({ position: { x, y }, scale: 1.1, time: 450, ease: "easeInOutSine" });
+  handle.lookAt = (garrisonId) => {
+    const garrison = GARRISONS.find((holding) => holding.id === garrisonId);
+    if (!garrison) return;
+    const { x, y } = toScreen(garrison.x, garrison.y);
+    /*
+     * Animated rather than cut, and not because it is prettier: a cut across a
+     * map this size leaves you somewhere that looks like where you were, with
+     * no idea which way you came from. The ride is short enough not to be a
+     * wait and long enough to show the direction.
+     */
+    viewport.animate({
+      position: { x, y: y - RIDE_LIFT },
+      scale: 0.95,
+      time: 600,
+      ease: "easeInOutSine",
+    });
   };
 
   /*
@@ -118,7 +136,7 @@ export async function buildKeepScene(
   };
   app.stage.on("pointertap", onTap);
 
-  const home = homeView(app.screen.width, app.screen.height);
+  const home = homeView();
   viewport.setZoom(home.zoom, true);
   viewport.moveCenter(home.x, home.y);
 

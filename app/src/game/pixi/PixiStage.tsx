@@ -16,6 +16,7 @@ import "pixi.js/unsafe-eval";
 import { Viewport } from "pixi-viewport";
 import { MAP } from "../world/marches";
 import { TILE_H, TILE_W } from "./iso";
+import { widestZoom } from "./scene";
 
 export interface Scene {
   /** Everything in world space. The viewport moves this, not the camera. */
@@ -113,7 +114,13 @@ export function PixiStage({
         .pinch()
         .wheel({ smooth: 4 })
         .decelerate({ friction: 0.92 })
-        .clampZoom({ minScale: 0.45, maxScale: 2 })
+        /*
+         * The floor is whatever shows the whole country, worked out from the
+         * map rather than picked, so that making the Marches bigger again
+         * cannot leave a corner of them unreachable. The ceiling is where the
+         * art is visibly enlarged past the resolution it was drawn at.
+         */
+        .clampZoom({ minScale: widestZoom(created.screen.width, created.screen.height), maxScale: 2 })
         .clamp({ direction: "all", underflow: "center" });
 
       scene = await build(created, viewport);

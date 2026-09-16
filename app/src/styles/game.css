@@ -305,6 +305,71 @@
   justify-content: center;
 }
 
+/* ---- the road book ---------------------------------------------------- */
+
+/*
+ * A list of holdings, each with the sentence from its own board and the line
+ * the board does not carry. Laid out like the shop, because it is the same
+ * shape of thing: a row of readable text with one thing you can do to it.
+ */
+.keep-marches {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-marches-note {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-marches-list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-marches-item {
+  display: flex;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-marches-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.keep-marches-name {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.keep-marches-purpose {
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+}
+
+/* The rename, set apart, because it is the part that is not in character. */
+.keep-marches-truth {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  font-style: italic;
+}
+
 /* ---- pause ------------------------------------------------------------ */
 
 .keep-pause {
@@ -355,6 +420,7 @@
 .keep-pause-panel > .keep-menu,
 .keep-pause-panel > .keep-options,
 .keep-pause-panel > .keep-shop,
+.keep-pause-panel > .keep-marches,
 .keep-pause-panel > .keep-codex {
   min-height: 0;
   flex: 1 1 auto;

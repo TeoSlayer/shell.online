@@ -3,17 +3,32 @@ import { buildGround, GARRISONS, MAP, type Ground } from "../world/marches";
 import { diamond, TILE_H, TILE_W, toScreen } from "./iso";
 
 /**
- * The ground of the Marches, drawn once into one object.
+ * The ground of the Marches, drawn once into a handful of objects.
  *
- * Four thousand tiles is far too many to leave as four thousand sprites: even
- * doing nothing, that is four thousand transforms to update every frame. They
- * are baked into a single Graphics instead, which the renderer uploads once
- * and then draws as one thing however far the view is moved or zoomed.
+ * Sixteen thousand tiles is far too many to leave as sixteen thousand sprites:
+ * even doing nothing, that is sixteen thousand transforms to update every
+ * frame. They are baked into a few Graphics instead, which the renderer uploads
+ * once and afterwards draws as a few things however far the view is moved.
  *
  * The ground is drawn rather than textured because Kenney's terrain tiles are
  * square, meant for a square grid, and the map is diamonds. Flat diamonds with
- * a lit top edge and a shadowed bottom one read as a tilted floor at any zoom
- * and cost nothing to draw.
+ * a lit north-west edge read as a tilted floor at any zoom and cost nothing.
+ *
+ * Two decisions here are about the size of the map rather than the look of it,
+ * and both stopped mattering only once it was four times bigger:
+ *
+ * The tiles are grouped by colour before anything is drawn. A separate fill per
+ * tile is sixteen thousand fill instructions to build and to hold; quantising
+ * the per-tile variation into a few steps and collecting every tile that shares
+ * a colour into one path brings that to a couple of dozen, and the picture is
+ * the same one.
+ *
+ * And the layer is not cached as a texture. It used to be, which was right when
+ * the map was 64 tiles across and the cache was a 4096x2048 bitmap. At 128 it
+ * would be 8192x4096 -- 134 MB of video memory, and past the maximum texture
+ * size on a good many machines, on which it would silently fail. Static
+ * geometry is uploaded once and redrawn for almost nothing; a bitmap that large
+ * is not.
  */
 
 /** Two tones per ground: the face, and the edge that catches the light. */
@@ -25,50 +40,82 @@ const COLOURS: Record<Ground, { face: number; lit: number; dark: number }> = {
   water: { face: 0x35688f, lit: 0x4581ad, dark: 0x27506e },
 };
 
+/** How many tones each ground is allowed. See the note about grouping above. */
+const STEPS = 5;
+
 /**
  * A little variation per tile, so a field of grass is not one flat colour.
  *
  * Deterministic, from the tile's own position, so the map looks the same every
  * time it is opened. A field that reshuffles itself on reload is unsettling in
- * a way nobody can name.
+ * a way nobody can quite name.
  */
-function shade(base: number, tileX: number, tileY: number): number {
+function stepFor(tileX: number, tileY: number): number {
   let value = Math.imul(tileX * 374_761_393 + tileY * 668_265_263, 0x85ebca6b);
   value = (value ^ (value >>> 13)) >>> 0;
-  const lift = ((value % 20) - 10) / 255;
+  return value % STEPS;
+}
 
-  const r = Math.min(255, Math.max(0, ((base >> 16) & 255) + Math.round(lift * 255)));
-  const g = Math.min(255, Math.max(0, ((base >> 8) & 255) + Math.round(lift * 255)));
-  const b = Math.min(255, Math.max(0, (base & 255) + Math.round(lift * 255)));
+/** The colour of one of those steps: a few points either side of the base. */
+function toneOf(base: number, step: number): number {
+  const lift = Math.round(((step - (STEPS - 1) / 2) / (STEPS - 1)) * 18);
+  const r = Math.min(255, Math.max(0, ((base >> 16) & 255) + lift));
+  const g = Math.min(255, Math.max(0, ((base >> 8) & 255) + lift));
+  const b = Math.min(255, Math.max(0, (base & 255) + lift));
   return (r << 16) | (g << 8) | b;
 }
 
 export function buildGroundLayer(): Container {
   const layer = new Container();
   const tiles = buildGround();
+
+  /*
+   * One path per (ground, tone), filled once at the end. Building the paths
+   * first and filling afterwards is what turns sixteen thousand instructions
+   * into twenty-five.
+   */
   const faces = new Graphics();
-  const edges = new Graphics();
+  const byTone = new Map<string, { ground: Ground; step: number; tiles: number[][] }>();
 
   for (let y = 0; y < MAP.height; y += 1) {
     for (let x = 0; x < MAP.width; x += 1) {
       const ground = tiles[y * MAP.width + x];
-      const colour = COLOURS[ground];
-      faces.poly(diamond(x, y)).fill({ color: shade(colour.face, x, y) });
-
-      /*
-       * The north-west edge only. Outlining every diamond turns the map into
-       * graph paper; catching the light on one side of each tile is what makes
-       * the floor read as tilted rather than as a pattern.
-       */
-      const { x: sx, y: sy } = toScreen(x, y);
-      edges
-        .moveTo(sx - TILE_W / 2, sy)
-        .lineTo(sx, sy - TILE_H / 2)
-        .stroke({ color: colour.lit, width: 1, alpha: 0.35 });
+      const step = stepFor(x, y);
+      const key = `${ground}:${step}`;
+      let bucket = byTone.get(key);
+      if (!bucket) {
+        bucket = { ground, step, tiles: [] };
+        byTone.set(key, bucket);
+      }
+      bucket.tiles.push(diamond(x, y));
     }
   }
 
-  layer.addChild(faces, edges);
+  for (const bucket of byTone.values()) {
+    for (const points of bucket.tiles) faces.poly(points);
+    faces.fill({ color: toneOf(COLOURS[bucket.ground].face, bucket.step) });
+  }
+
+  /*
+   * The north-west edge of each tile, one path per ground. Outlining every
+   * diamond turns the map into graph paper; catching the light on one side is
+   * what makes the floor read as tilted rather than as a pattern.
+   */
+  const edges = new Graphics();
+  const byGround = new Map<Ground, number[][]>();
+  for (let y = 0; y < MAP.height; y += 1) {
+    for (let x = 0; x < MAP.width; x += 1) {
+      const ground = tiles[y * MAP.width + x];
+      const { x: sx, y: sy } = toScreen(x, y);
+      const lines = byGround.get(ground) ?? [];
+      lines.push([sx - TILE_W / 2, sy, sx, sy - TILE_H / 2]);
+      byGround.set(ground, lines);
+    }
+  }
+  for (const [ground, lines] of byGround) {
+    for (const [ax, ay, bx, by] of lines) edges.moveTo(ax, ay).lineTo(bx, by);
+    edges.stroke({ color: COLOURS[ground].lit, width: 1, alpha: 0.35 });
+  }
 
   /*
    * A darker apron under each holding, so a garrison reads as a place that has
@@ -78,15 +125,9 @@ export function buildGroundLayer(): Container {
   for (const garrison of GARRISONS) {
     const { x, y } = toScreen(garrison.x, garrison.y);
     aprons.ellipse(x, y, garrison.radius * TILE_W * 0.62, garrison.radius * TILE_H * 0.62);
-    aprons.fill({ color: 0x000000, alpha: 0.1 });
   }
-  layer.addChildAt(aprons, 1);
+  aprons.fill({ color: 0x000000, alpha: 0.1 });
 
-  /*
-   * The whole ground is static, so it is cached as a bitmap: Pixi renders it
-   * once and afterwards draws a single texture. Without this the map costs
-   * thousands of geometry batches on every frame at every zoom level.
-   */
-  layer.cacheAsTexture(true);
+  layer.addChild(faces, aprons, edges);
   return layer;
 }
