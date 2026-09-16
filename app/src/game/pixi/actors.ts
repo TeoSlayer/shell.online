@@ -93,6 +93,13 @@ interface Piece {
   plate?: Plate;
   /** How far above the feet this figure's plate hangs. See `make`. */
   headroom: number;
+  /**
+   * The figure's drawn extent, for picking: half its width, and how far it
+   * rises above the point it stands on. Kept rather than measured, because
+   * `getBounds` walks the display list and this is asked per actor per click.
+   */
+  halfWidth: number;
+  rise: number;
   lastHp: number;
 }
 
@@ -177,7 +184,7 @@ export class ActorLayer {
     }
   }
 
-  private make(actor: Actor): Piece {
+  private make(actor: Actor, yourUid: string | undefined): Piece {
     const root = new Container();
     const size = actor.role === "hero" ? HERO : FIGURE;
 
@@ -208,6 +215,8 @@ export class ActorLayer {
         bar: hurt,
         plate: undefined,
         headroom: 0,
+        halfWidth: 18,
+        rise: 24,
         lastHp: actor.hp,
       };
     }
@@ -254,7 +263,10 @@ export class ActorLayer {
      */
     let plate: Plate | undefined;
     if (actor.role === "hero" || actor.role === "soldier") {
-      plate = actor.role === "hero" ? heroPlate(actor) : soldierPlate(actor, this.sigils);
+      plate =
+        actor.role === "hero"
+          ? heroPlate(actor, actor.heroUid !== undefined && actor.heroUid === yourUid)
+          : soldierPlate(actor, this.sigils);
       /*
        * Hung by its bottom edge, so the board grows upwards out of the head
        * rather than downwards into it. A container positioned by its top would
@@ -278,7 +290,49 @@ export class ActorLayer {
      * gets twice the clearance and nobody's name sits on their own head.
      */
     const headroom = texture.height * size + 12;
-    return { root, sprite, bug: undefined, figure: sprite, shadow, bar, plate, headroom, lastHp: actor.hp };
+    return {
+      root,
+      sprite,
+      bug: undefined,
+      figure: sprite,
+      shadow,
+      bar,
+      plate,
+      headroom,
+      /* A little wider than drawn, because a click aims at a body, not a pixel. */
+      halfWidth: (texture.width * size) / 2 + 4,
+      rise: texture.height * size,
+      lastHp: actor.hp,
+    };
+  }
+
+  /**
+   * Whose figure is under a point on the map, if anybody's.
+   *
+   * Tested against the *drawn* body rather than against the tile the figure
+   * stands on. Picking used to measure tile distance from the feet, which meant
+   * only the lower body answered a click: a figure rises a hundred-odd pixels
+   * out of the tile it occupies, and in tile space its own head is several
+   * tiles away from it.
+   *
+   * The topmost match wins, which for an isometric map means the one drawn
+   * last -- the figure actually on top where they overlap.
+   */
+  hit(x: number, y: number, pickable: (id: string) => boolean): string | undefined {
+    let found: string | undefined;
+    let bestDepth = -Infinity;
+
+    for (const [id, piece] of this.pieces) {
+      if (!pickable(id)) continue;
+      const foot = piece.root.y + TILE_H * 0.25;
+      if (x < piece.root.x - piece.halfWidth || x > piece.root.x + piece.halfWidth) continue;
+      if (y > foot + 6 || y < foot - piece.rise) continue;
+      if (piece.root.zIndex <= bestDepth) continue;
+      bestDepth = piece.root.zIndex;
+      found = id;
+    }
+
+    return found;
   }
 
   /** Brings the display in line with the simulation. */
@@ -289,7 +343,7 @@ export class ActorLayer {
       seen.add(actor.id);
       let piece = this.pieces.get(actor.id);
       if (!piece) {
-        piece = this.make(actor);
+        piece = this.make(actor, sim.youUid);
         this.pieces.set(actor.id, piece);
       }
 

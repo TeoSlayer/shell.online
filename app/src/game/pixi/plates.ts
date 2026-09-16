@@ -109,13 +109,31 @@ export class Bars {
   }
 }
 
+/**
+ * The rim on your own hero's board.
+ *
+ * Turquoise, and nothing else on the map is. The company ring already says
+ * which ground is yours, but a ring is on the floor and the board is where the
+ * eye goes -- so at a glance across a country with four companies on it, this
+ * is the thing that answers "which one am I".
+ *
+ * It is a second signal, not the only one: your hero is also the one the view
+ * opens on, the one the HUD names, and the only one that answers a click.
+ */
+const YOURS_RIM = 0x3fd9c8;
+
 /** A hero's plate: shield, initials, name, health, and work in flight. */
-export function heroPlate(actor: Actor): Plate {
+export function heroPlate(actor: Actor, yours: boolean): Plate {
   const root = new Container();
 
   const name = new Text({
     text: actor.name.length > 20 ? `${actor.name.slice(0, 19)}…` : actor.name,
-    style: { fontFamily: FONT, fontSize: 19, fontWeight: "700", fill: 0xf0c04a },
+    style: {
+      fontFamily: FONT,
+      fontSize: 19,
+      fontWeight: "700",
+      fill: yours ? YOURS_RIM : 0xf0c04a,
+    },
   });
   name.anchor.set(0, 0);
 
@@ -128,7 +146,7 @@ export function heroPlate(actor: Actor): Plate {
   board
     .rect(-width / 2, 0, width, height)
     .fill({ color: 0x241d15, alpha: 0.9 })
-    .stroke({ color: 0xe8b44a, width: 2, alignment: 1 });
+    .stroke({ color: yours ? YOURS_RIM : 0xe8b44a, width: yours ? 3 : 2, alignment: 1 });
 
   /*
    * The shield: a pointed pentagon rather than a rectangle, because a rectangle
@@ -144,7 +162,7 @@ export function heroPlate(actor: Actor): Plate {
       left + SHIELD / 2, 6 + SHIELD,
       left, 6 + SHIELD * 0.6,
     ])
-    .fill({ color: 0xe8b44a })
+    .fill({ color: yours ? YOURS_RIM : 0xe8b44a })
     .stroke({ color: 0x241d15, width: 2, alignment: 0 });
 
   const initials = new Text({

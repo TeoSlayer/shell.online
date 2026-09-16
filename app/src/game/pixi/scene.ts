@@ -36,6 +36,9 @@ const KINGDOM = [
   "pine-dark",
   "pine-tall",
   "pine-broad",
+  "castle-keep",
+  "siege",
+  "hero-banner",
 ];
 
 export type Kingdom = Map<string, Texture>;
@@ -44,7 +47,7 @@ export async function loadKingdom(): Promise<Kingdom> {
   const loaded: Kingdom = new Map();
   await Promise.all(
     KINGDOM.map(async (name) => {
-      const file = name.startsWith("banner") ? `${name}.png` : `${name}.svg`;
+      const file = name.startsWith("pine") ? `${name}.svg` : `${name}.png`;
       try {
         loaded.set(name, await Assets.load(`/game/kingdom/${file}`));
       } catch {
@@ -242,6 +245,8 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   ground: Container;
   /** The camps, by "x,y", so the scene can show the ones somebody holds. */
   camps: Map<string, Container>;
+  /** Each camp's dyeable standard, by the same key. */
+  campBanners: Map<string, Sprite>;
   /** Between the ground and the figures: the colour each hero commands. */
   banners: Container;
   things: Container;
@@ -290,7 +295,30 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * fourteen sets of barracks on a map with three people on it reads as a
    * country full of abandoned camps, which is a different and wrong story.
    */
+  /*
+   * The landmarks: a castle over the Keep and a siege engine at the Watch.
+   *
+   * Placed on the holdings they belong to rather than scattered, because a
+   * landmark that is everywhere is scenery. The Keep is the account itself and
+   * the middle of the map, so it gets the castle; the Watch is where faults are
+   * met, so it gets the engine.
+   */
+  const keep = GARRISONS.find((holding) => holding.id === "keep");
+  const castle = kingdom.get("castle-keep");
+  if (keep && castle) {
+    things.addChild(standing(castle, keep.x, keep.y - 1, 0.34));
+  }
+
+  const watch = GARRISONS.find((holding) => holding.id === "watch");
+  const siege = kingdom.get("siege");
+  if (watch && siege) {
+    things.addChild(standing(siege, watch.x - 4, watch.y + 3, 0.3));
+    things.addChild(standing(siege, watch.x + 4.5, watch.y + 3.5, 0.26));
+  }
+
   const camps = new Map<string, Container>();
+  /** A camp's own banner, kept so the scene can dye it its hero's colour. */
+  const campBanners = new Map<string, Sprite>();
   const flags = ["banner-a", "banner-b", "banner-c", "banner-d"];
   campSites().forEach((site, index) => {
     const camp = new Container();
@@ -309,7 +337,30 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
      */
     const flag = kingdom.get(flags[index % flags.length]);
     if (flag) {
-      camp.addChild(standing(flag, site.x - 1.5, site.y + 3.2, 0.26));
+      /*
+       * Three times the size it was first drawn at. A banner the height of a
+       * soldier is a banner nobody sees from across a camp, and the whole job
+       * of it is to be seen from across a camp.
+       */
+      camp.addChild(standing(flag, site.x - 3.5, site.y + 3.6, 0.78));
+    }
+
+    /*
+     * And one banner in the holder's own colour.
+     *
+     * This is the grey render rather than the red flags beside it, and that is
+     * the whole reason it is here: grey takes a tint, red does not. The flags
+     * say "a camp"; this one says whose.
+     */
+    const dyed = kingdom.get("hero-banner");
+    if (dyed) {
+      const standard = new Sprite(dyed);
+      standard.anchor.set(0.5, 1);
+      standard.scale.set(0.42);
+      const at = toScreen(site.x + 3.2, site.y + 3.2);
+      standard.position.set(at.x, at.y + TILE_H * 0.2);
+      camp.addChild(standard);
+      campBanners.set(`${site.x},${site.y}`, standard);
     }
     camp.visible = false;
     /*
@@ -332,7 +383,7 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   }
 
   root.addChild(border.canopy, ground, banners, border.thicket, things, labels, signs);
-  return { root, ground, camps, banners, things, labels, signs };
+  return { root, ground, camps, campBanners, banners, things, labels, signs };
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */

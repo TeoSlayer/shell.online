@@ -86,7 +86,7 @@ export async function buildKeepScene(
      */
     document.fonts?.load('26px "Pirata One"').catch(() => undefined),
   ]);
-  const { root, camps, banners, things, labels, signs } = buildWorld(app, art, kingdom);
+  const { root, camps, campBanners, banners, things, labels, signs } = buildWorld(app, art, kingdom);
 
   const world = new Container();
   world.addChild(root);
@@ -159,24 +159,22 @@ export async function buildKeepScene(
    */
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
-  const PICK_RADIUS = 1.4;
   const onTap = (event: { global: { x: number; y: number } }) => {
     const world = viewport.toWorld(event.global.x, event.global.y);
     const tile = toTile(world.x, world.y);
 
-    let nearest: Actor | undefined;
-    let nearestDistance = PICK_RADIUS;
-    for (const actor of sim.actors) {
-      /* Heroes and soldiers can be inspected. The watch and the Unmade cannot. */
-      if (actor.role !== "hero" && actor.role !== "soldier") continue;
-      const distance = Math.hypot(actor.x - tile.x, actor.y - tile.y);
-      /* A hero is a bigger figure, so it is a bigger thing to hit. */
-      const reach = actor.role === "hero" ? PICK_RADIUS * 1.6 : PICK_RADIUS;
-      if (distance < Math.min(nearestDistance, reach)) {
-        nearestDistance = distance;
-        nearest = actor;
-      }
-    }
+    /*
+     * Ask the renderer what is under the point, because only the renderer knows
+     * how big anybody is drawn. Heroes and soldiers can be inspected; the watch
+     * and the Unmade cannot, so they are not offered.
+     */
+    const inspectable = new Map(
+      sim.actors
+        .filter((actor) => actor.role === "hero" || actor.role === "soldier")
+        .map((actor) => [`${actor.id}`, actor] as const),
+    );
+    const hit = actors.hit(world.x, world.y, (id) => inspectable.has(id));
+    const nearest = hit ? inspectable.get(hit) : undefined;
 
     if (nearest) {
       selected = nearest.id;
@@ -231,6 +229,12 @@ export async function buildKeepScene(
     if (sim.camps.size === heldFor) return;
     heldFor = sim.camps.size;
     held = new Set([...sim.camps.values()].map((camp) => `${camp.x},${camp.y}`));
+
+    /* Each standing camp flies its holder's colour. */
+    for (const [uid, camp] of sim.camps) {
+      const standard = campBanners.get(`${camp.x},${camp.y}`);
+      if (standard) standard.tint = sim.banners.get(uid) ?? 0xffffff;
+    }
   };
 
   /*

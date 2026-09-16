@@ -149,7 +149,13 @@ export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Bo
      * the imported ones are scaled against their own height rather than sharing
      * a number that happens to suit the others.
      */
-    sprite.scale.set(outsider ? (tree.scale * 110) / sprite.texture.height : tree.scale);
+    /*
+     * Three times over for the imported conifers. They were drawn to the same
+     * height as Kenney's, which wasted what they are for: these are the tall
+     * dark shapes that give the wood its depth, and at the same height as
+     * everything else they were just more trees.
+     */
+    sprite.scale.set(outsider ? (tree.scale * 330) / sprite.texture.height : tree.scale);
     sprite.position.set(tree.x, tree.y);
     /*
      * Darkened with distance. A wood lit exactly like the field it surrounds

@@ -80,6 +80,23 @@ const ICONS = [
   ["medieval-icons/Filled/SVG/Filled 2_Medieval Lance.svg", "lance.svg"],
 ];
 
+/**
+ * The rendered pieces, which are landmarks rather than icons.
+ *
+ * Grey and gold, which is what makes them usable: the flat banners in this pack
+ * are red on gold and cannot be tinted to anybody's colours without going
+ * muddy, and `banner` here is grey, so it takes a hero's colour cleanly. That
+ * is the whole reason it is in this list.
+ *
+ * They ship at three thousand pixels. The castle is a building on the map and
+ * gets the most; the rest are smaller things and get less.
+ */
+const RENDERS = [
+  ["medieval-kingdom-3d-icons/Castle.png", "castle-keep.png", 620],
+  ["medieval-kingdom-3d-icons/Siege Weapon.png", "siege.png", 340],
+  ["medieval-kingdom-3d-icons/Banner.png", "hero-banner.png", 300],
+];
+
 await mkdir(out, { recursive: true });
 
 let taken = 0;
@@ -106,6 +123,23 @@ for (const [from, to] of FLAGS) {
     await run("sips", ["--resampleWidth", String(BANNER_WIDTH), input, "--out", join(out, to)]);
     taken += 1;
     console.log(`${to}  <-  ${from}  (resampled to ${BANNER_WIDTH}px)`);
+  } catch (error) {
+    console.warn(`sips failed for ${from}: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+for (const [from, to, width] of RENDERS) {
+  const input = join(source, from);
+  try {
+    await stat(input);
+  } catch {
+    console.warn(`missing, skipped: ${from}`);
+    continue;
+  }
+  try {
+    await run("sips", ["--resampleWidth", String(width), input, "--out", join(out, to)]);
+    taken += 1;
+    console.log(`${to}  <-  ${from}  (resampled to ${width}px)`);
   } catch (error) {
     console.warn(`sips failed for ${from}: ${error instanceof Error ? error.message : error}`);
   }
