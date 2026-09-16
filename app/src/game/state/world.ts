@@ -35,6 +35,49 @@ export interface Wright {
   moving: boolean;
   /** Ticks to stand still before choosing somewhere new to be. */
   rest: number;
+  /**
+   * What they are doing right now, which is what the renderer draws.
+   *
+   * Held for a few ticks after the blow lands rather than being derived from
+   * position each frame. A swing that is only true on the tick the damage
+   * applies is a swing nobody ever sees: at thirty ticks a second it would be
+   * one frame in eighteen.
+   */
+  action: "stand" | "walk" | "attack" | "build";
+  /** The clock tick the current action stops being true at. */
+  actionUntil: number;
+  /**
+   * Which way round the hall they committed to going, once blocked.
+   *
+   * 0 means not going around anything. This is memory rather than geometry
+   * because the geometry alone oscillates: at the middle of a wall, "step
+   * sideways to get past" and "step towards the target" point opposite ways,
+   * and an actor that re-decides every tick alternates between them for ever.
+   * Once a wright starts going round a building, it keeps going round the same
+   * way until it is clear.
+   */
+  detour: 0 | 1 | -1;
+}
+
+/** A bolt in the air, from an Arcanist to whatever it named. */
+export interface Bolt {
+  id: number;
+  x: number;
+  y: number;
+  toX: number;
+  toY: number;
+  life: number;
+  maxLife: number;
+}
+
+/** A short-lived burst where something was struck. */
+export interface Spark {
+  id: number;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  kind: "hit" | "build";
 }
 
 /** One of the Unmade, on its way in. */
@@ -78,6 +121,8 @@ export interface World {
   foes: Foe[];
   sites: Site[];
   marks: Mark[];
+  bolts: Bolt[];
+  sparks: Spark[];
   /** The courtyard they may walk in, in tiles. */
   bounds: { left: number; top: number; right: number; bottom: number };
   /** Advances once per tick; animations read it so a pause freezes them. */
@@ -94,11 +139,16 @@ export interface World {
 
 /** Tiles per second. Slow: this is a garrison at work, not a race. */
 const SPEED = 1.6;
-const STEP = SPEED / (1000 / TICK_MS);
 
-/** How long a wright stands about before picking a new spot, in ticks. */
-const REST_MIN = 30;
-const REST_MAX = 150;
+/**
+ * How long a wright stands about before picking somewhere new, in ticks.
+ *
+ * Shortened from one-to-five seconds. At the longer figure most of the
+ * garrison was standing still most of the time, and a yard of statues is not
+ * what a place with work going on in it looks like.
+ */
+const REST_MIN = 12;
+const REST_MAX = 60;
 
 export function createWorld(bounds: World["bounds"]): World {
   return {
@@ -106,6 +156,8 @@ export function createWorld(bounds: World["bounds"]): World {
     foes: [],
     sites: [],
     marks: [],
+    bolts: [],
+    sparks: [],
     bounds,
     clock: 0,
     nextSpawn: SPAWN_EVERY,
@@ -156,37 +208,179 @@ function insideKeep(world: World, x: number, y: number): boolean {
 }
 
 /**
- * Pushes a wright back out of the hall if a step took them into it.
+ * Whether the straight line from one point to another passes through the hall.
  *
- * Choosing targets outside the building is not enough: the walk between two
- * points on opposite sides of it goes straight through, and a wright strolling
- * across the roof is the sort of thing that makes the whole map read as flat.
+ * The usual slab test. It is here so that a detour can be checked before it is
+ * committed to: the corner on the far side of a building looks like the
+ * shortest way round right up until you notice that walking at it goes through
+ * the building, which is how the second attempt at this got stuck.
  *
- * Rather than pathfind, which is a great deal of machinery for one square
- * obstacle, a step that ends inside is moved out by the shortest way. What
- * that looks like on screen is somebody walking into the wall of the hall and
- * sliding along it until they can carry on, which is both what you want and
- * what a person does.
+ * The box is shrunk by a hair, so a path that grazes the wall counts as clear.
+ * Without that, walking along the edge is forever "blocked" by the edge being
+ * walked along.
  */
-function pushOutOfKeep(world: World, wright: Wright): void {
-  if (!insideKeep(world, wright.x, wright.y)) return;
+function pathCrossesKeep(
+  world: World,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+): boolean {
   const { left, top, right, bottom } = world.bounds;
   const midX = (left + right) / 2;
   const midY = (top + bottom) / 2;
+  const nudge = 0.001;
+  const minX = midX - KEEP_HALF + nudge;
+  const maxX = midX + KEEP_HALF - nudge;
+  const minY = midY - KEEP_HALF + nudge;
+  const maxY = midY + KEEP_HALF - nudge;
 
-  /* How far out each way, and leave by whichever is nearest. */
-  const outLeft = midX - KEEP_HALF;
-  const outRight = midX + KEEP_HALF;
-  const outTop = midY - KEEP_HALF;
-  const outBottom = midY + KEEP_HALF;
-  const distances = [
-    { value: wright.x - outLeft, apply: () => { wright.x = outLeft; } },
-    { value: outRight - wright.x, apply: () => { wright.x = outRight; } },
-    { value: wright.y - outTop, apply: () => { wright.y = outTop; } },
-    { value: outBottom - wright.y, apply: () => { wright.y = outBottom; } },
-  ];
-  distances.sort((a, b) => a.value - b.value)[0].apply();
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  let enter = 0;
+  let leave = 1;
+
+  /* One slab per axis: clip the travelled fraction to the overlap of both. */
+  for (const [origin, delta, low, high] of [
+    [fromX, dx, minX, maxX],
+    [fromY, dy, minY, maxY],
+  ] as const) {
+    if (Math.abs(delta) < 1e-9) {
+      /* Parallel to this slab: either always within it, or never touching. */
+      if (origin < low || origin > high) return false;
+      continue;
+    }
+    const first = (low - origin) / delta;
+    const second = (high - origin) / delta;
+    enter = Math.max(enter, Math.min(first, second));
+    leave = Math.min(leave, Math.max(first, second));
+    if (enter > leave) return false;
+  }
+  return enter <= leave;
 }
+
+/**
+ * A step towards a target, going around the hall rather than into it.
+ *
+ * Returns whether the actor actually moved.
+ *
+ * The first version of this walked straight at the target and shoved anybody
+ * who ended up inside the building back out by the shortest way. That works
+ * until the target is directly on the other side of the hall: the wright steps
+ * in, gets shoved back, steps in again, and stands there vibrating against the
+ * wall for ever. The tests found it; it would have shown up on screen as a
+ * hero having a fit against the keep.
+ *
+ * So the step is tried in order — straight at it, along each axis alone, then
+ * tangentially either way — and the first one that does not end up inside the
+ * building is taken. That is wall-sliding, and what it looks like is somebody
+ * walking round a building, which is what they should have been doing.
+ */
+function stepToward(
+  world: World,
+  actor: Wright,
+  toX: number,
+  toY: number,
+  speed: number,
+): boolean {
+  const step = speed / (1000 / TICK_MS);
+  const dx = toX - actor.x;
+  const dy = toY - actor.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance <= step) {
+    actor.x = toX;
+    actor.y = toY;
+    actor.detour = 0;
+    return false;
+  }
+
+  const ux = dx / distance;
+  const uy = dy / distance;
+
+  const take = (mx: number, my: number): boolean => {
+    /* A candidate with no length is not a move; it reports progress and makes none. */
+    if (Math.abs(mx) + Math.abs(my) < 0.01) return false;
+    const nextX = actor.x + mx * step;
+    const nextY = actor.y + my * step;
+    if (insideKeep(world, nextX, nextY)) return false;
+    actor.x = nextX;
+    actor.y = nextY;
+    return true;
+  };
+
+  /* Straight at it, whenever that is possible. Nothing is being gone around. */
+  if (take(ux, uy)) {
+    actor.detour = 0;
+    return true;
+  }
+
+  /*
+   * Blocked, so go round by way of a corner.
+   *
+   * Sliding along the wall was the obvious approach and it does not work here.
+   * The building is axis-aligned and the direction of travel is not, so a step
+   * along the wall always has some component into it; the actor drifts over
+   * the edge, gets refused, steps back out, and creeps along at a twentieth of
+   * its speed while jittering. Both earlier attempts died this way.
+   *
+   * Corners do not have that problem. They sit outside the building by a
+   * margin, so walking at one is an ordinary unobstructed walk, and the choice
+   * of which corner is made from geometry that does not change between ticks.
+   */
+  const midX = (world.bounds.left + world.bounds.right) / 2;
+  const midY = (world.bounds.top + world.bounds.bottom) / 2;
+  const out = KEEP_HALF + 0.35;
+
+  const corners: [number, number][] = [
+    [midX - out, midY - out],
+    [midX + out, midY - out],
+    [midX + out, midY + out],
+    [midX - out, midY + out],
+  ];
+
+  /*
+   * The corner on the shortest way round: nearest to here, and from there
+   * nearest to where we are going. Recomputed each tick, but from position
+   * alone, so it is stable while the actor walks towards it.
+   */
+  let best: [number, number] | undefined;
+  let bestCost = Infinity;
+  for (const [cx, cy] of corners) {
+    /* Skip the one we are effectively standing on, or we would never leave. */
+    const here = Math.hypot(cx - actor.x, cy - actor.y);
+    if (here < step) continue;
+    /*
+     * And skip any corner we cannot walk straight at. The corner diagonally
+     * across the building always looks cheapest and is never reachable; taking
+     * it means walking into the wall and stopping there.
+     */
+    if (pathCrossesKeep(world, actor.x, actor.y, cx, cy)) continue;
+    const cost = here + Math.hypot(toX - cx, toY - cy);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = [cx, cy];
+    }
+  }
+
+  if (best) {
+    const [cx, cy] = best;
+    const cornerDistance = Math.hypot(cx - actor.x, cy - actor.y);
+    if (take((cx - actor.x) / cornerDistance, (cy - actor.y) / cornerDistance)) {
+      actor.detour = 1;
+      return true;
+    }
+  }
+
+  /*
+   * Last resort: a step that is inside the building at least gets out of it.
+   * Reached only if the actor somehow starts inside, which nothing above can
+   * cause but a resize of the courtyard underneath them can.
+   */
+  if (take(ux, 0)) return true;
+  if (take(0, uy)) return true;
+  return false;
+}
+
 
 function hashId(id: string): number {
   let value = 0;
@@ -197,7 +391,13 @@ function hashId(id: string): number {
 }
 
 /** Adds a wright at the gate, which is where somebody arriving would come in. */
-export function muster(world: World, input: Omit<Wright, "x" | "y" | "toX" | "toY" | "facing" | "moving" | "rest">): Wright {
+export function muster(
+  world: World,
+  input: Omit<
+    Wright,
+    "x" | "y" | "toX" | "toY" | "facing" | "moving" | "rest" | "action" | "actionUntil" | "detour"
+  >,
+): Wright {
   const gateX = (world.bounds.left + world.bounds.right) / 2;
   const wright: Wright = {
     ...input,
@@ -208,6 +408,9 @@ export function muster(world: World, input: Omit<Wright, "x" | "y" | "toX" | "to
     facing: 1,
     moving: false,
     rest: 0,
+    action: "stand",
+    actionUntil: 0,
+    detour: 0,
   };
   world.wrights.push(wright);
   /* Send them somewhere immediately, so they walk in rather than appearing. */
@@ -237,6 +440,21 @@ const SWING_EVERY = 18;
 /** How long a hit shows, and how long a number floats. */
 const HURT_TICKS = 6;
 const MARK_TICKS = 40;
+/**
+ * How long a swing or a hammer blow is held on screen.
+ *
+ * Long enough to be seen, and shorter than the gap between blows, so the
+ * animation plays out and the wright settles before the next one begins. A
+ * swing that were only true on the tick the damage lands would be one frame in
+ * eighteen, which is a swing nobody ever sees.
+ */
+const SWING_ANIM = 12;
+const HAMMER_ANIM = 16;
+/** How long a bolt is in the air, and how long a burst burns. */
+const BOLT_TICKS = 9;
+const SPARK_TICKS = 10;
+/** How far an Arcanist can name a fault from. */
+const CAST_REACH = 3.4;
 
 const FOE_KINDS = [
   { kind: "mite", hp: 3, speed: 1.1 },
@@ -281,6 +499,29 @@ function spawnFoe(world: World): void {
     speed: choice.speed,
     facing: 1,
     hurt: 0,
+  });
+}
+
+function addSpark(world: World, x: number, y: number, kind: Spark["kind"]): void {
+  world.sparks.push({
+    id: world.clock * 1000 + world.sparks.length,
+    x,
+    y,
+    life: SPARK_TICKS,
+    maxLife: SPARK_TICKS,
+    kind,
+  });
+}
+
+function addBolt(world: World, from: Wright, to: Foe): void {
+  world.bolts.push({
+    id: world.clock * 1000 + world.bolts.length,
+    x: from.x,
+    y: from.y,
+    toX: to.x,
+    toY: to.y,
+    life: BOLT_TICKS,
+    maxLife: BOLT_TICKS,
   });
 }
 
@@ -350,6 +591,18 @@ function nearestFoe(world: World, wright: Wright): Foe | undefined {
  * kind they are running to win a fight in a browser game, and a balance patch
  * for something nobody chooses would be a strange thing to write.
  */
+/**
+ * Whether a class fights at a distance.
+ *
+ * Named here rather than imported from the artwork, so the simulation does not
+ * depend on the sprites. The two agree because they are both short lists
+ * saying the same thing about the same five classes, and the test below says
+ * so if they stop agreeing.
+ */
+function ranged(kind: string): boolean {
+  return kind === "codex";
+}
+
 function blow(kind: string): number {
   switch (kind) {
     case "codex":
@@ -404,9 +657,26 @@ export function tickWorld(world: World): void {
     }
   }
 
-  /* Numbers rise and fade. */
+  /* Numbers rise and fade; bolts fly; bursts burn out. */
   for (const mark of world.marks) mark.life -= 1;
   world.marks = world.marks.filter((mark) => mark.life > 0);
+
+  for (const bolt of world.bolts) {
+    bolt.life -= 1;
+    /* A bolt that lands leaves a burst where it landed. */
+    if (bolt.life === 0) addSpark(world, bolt.toX, bolt.toY, "hit");
+  }
+  world.bolts = world.bolts.filter((bolt) => bolt.life > 0);
+
+  for (const spark of world.sparks) spark.life -= 1;
+  world.sparks = world.sparks.filter((spark) => spark.life > 0);
+
+  /* An action that has run its course goes back to standing. */
+  for (const wright of world.wrights) {
+    if (wright.action !== "stand" && world.clock >= wright.actionUntil) {
+      wright.action = wright.moving ? "walk" : "stand";
+    }
+  }
 
   for (const wright of world.wrights) {
     /*
@@ -427,16 +697,17 @@ export function tickWorld(world: World): void {
       const distance = Math.hypot(dx, dy);
 
       if (distance > REACH) {
-        const step = SPEED / (1000 / TICK_MS);
-        wright.x += (dx / distance) * step;
-        wright.y += (dy / distance) * step;
-        pushOutOfKeep(world, wright);
-        wright.moving = true;
+        wright.moving = stepToward(world, wright, site.x, site.y, SPEED);
+        wright.action = "walk";
         if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
       } else {
         wright.moving = false;
         if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
         if ((world.clock + hashId(wright.id)) % HAMMER_EVERY === 0) {
+          wright.action = "build";
+          wright.actionUntil = world.clock + HAMMER_ANIM;
+          /* Chips fly where the hammer lands, not where the wright stands. */
+          addSpark(world, site.x, site.y - 0.2, "build");
           site.progress += 1;
           if (site.progress >= site.total) {
             world.raised += 1;
@@ -455,12 +726,17 @@ export function tickWorld(world: World): void {
         const dy = foe.y - wright.y;
         const distance = Math.hypot(dx, dy);
 
-        if (distance > REACH) {
-          const step = SPEED / (1000 / TICK_MS);
-          wright.x += (dx / distance) * step;
-          wright.y += (dy / distance) * step;
-          pushOutOfKeep(world, wright);
-          wright.moving = true;
+        /*
+         * An Arcanist stops further out and throws. It is the one class whose
+         * flavour is naming a fault from across the yard rather than hitting
+         * it, and one ranged class among five gives the field variety without
+         * anybody having to learn a system.
+         */
+        const reach = ranged(wright.kind) ? CAST_REACH : REACH;
+
+        if (distance > reach) {
+          wright.moving = stepToward(world, wright, foe.x, foe.y, SPEED);
+          wright.action = "walk";
           if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
         } else {
           wright.moving = false;
@@ -471,6 +747,22 @@ export function tickWorld(world: World): void {
            */
           if ((world.clock + hashId(wright.id)) % SWING_EVERY === 0) {
             const damage = blow(wright.kind);
+            wright.action = "attack";
+            wright.actionUntil = world.clock + SWING_ANIM;
+
+            if (ranged(wright.kind)) {
+              /*
+               * The bolt is the flourish, not the mechanism: the damage lands
+               * now, and the burst appears where it arrives. Applying it on
+               * arrival instead would mean a fault could die to a bolt thrown
+               * by a wright who has since been dismissed, which is a whole
+               * class of bug for no visible gain.
+               */
+              addBolt(world, wright, foe);
+            } else {
+              addSpark(world, foe.x, foe.y, "hit");
+            }
+
             foe.hp -= damage;
             foe.hurt = HURT_TICKS;
             addMark(world, String(damage), foe.x, foe.y, "damage");
@@ -492,26 +784,21 @@ export function tickWorld(world: World): void {
       wright.toX = target.x;
       wright.toY = target.y;
       wright.moving = true;
+      wright.action = "walk";
       continue;
     }
 
     const dx = wright.toX - wright.x;
-    const dy = wright.toY - wright.y;
-    const distance = Math.hypot(dx, dy);
 
-    if (distance <= STEP) {
-      wright.x = wright.toX;
-      wright.y = wright.toY;
+    if (!stepToward(world, wright, wright.toX, wright.toY, SPEED)) {
       wright.moving = false;
+      wright.action = "stand";
       /* A spread of rests, so a garrison does not move in lockstep. */
       const roll = noise(hashId(wright.id) + world.clock);
       wright.rest = Math.round(REST_MIN + roll * (REST_MAX - REST_MIN));
       continue;
     }
 
-    wright.x += (dx / distance) * STEP;
-    wright.y += (dy / distance) * STEP;
-    pushOutOfKeep(world, wright);
     /* Only turn on a real horizontal move, or they flip on the spot. */
     if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
   }

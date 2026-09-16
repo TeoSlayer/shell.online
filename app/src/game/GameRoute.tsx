@@ -10,7 +10,9 @@ import { drawField, HOLDING, layout, STARTING_BASE } from "./scenes/field";
 import { drawLife } from "./scenes/life";
 import { drawWrights } from "./scenes/wrights";
 import { drawFoes, drawSites } from "./scenes/foes";
-import { createWorld, DEMO_GARRISON, muster, tickWorld, type Wright } from "./state/world";
+import { drawFx } from "./scenes/fx";
+import { createWorld, DEMO_GARRISON, tickWorld, type Wright } from "./state/world";
+import { useGarrison } from "./state/use-garrison";
 import { experienceFrom, fortification, marksEarnedTo, standing } from "./state/progress";
 import { Hud } from "./ui/Hud";
 import { PauseMenu } from "./ui/PauseMenu";
@@ -110,7 +112,12 @@ export default function GameRoute() {
    * much ground is visible; until then there is nowhere to stand.
    */
   const world = useRef(createWorld({ left: 0, top: 0, right: 0, bottom: 0 }));
-  const mustered = useRef(false);
+
+  /*
+   * Who is on the field: the account's live sessions, polled, with the
+   * stand-in garrison when there are none or the service cannot be reached.
+   */
+  const garrison = useGarrison(world.current, DEMO_GARRISON);
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -186,9 +193,8 @@ export default function GameRoute() {
             drawFrame={(draw) => {
               /*
                * The courtyard is only known once the stage has measured the
-               * window, so the garrison is mustered on the first frame rather
-               * than on mount. One tile in from the wall on every side, which
-               * is the walkable yard.
+               * window. One tile in from the wall on every side, which is the
+               * part of the yard anybody can actually walk on.
                */
               const { left, top } = layout(draw);
               world.current.bounds = {
@@ -197,15 +203,12 @@ export default function GameRoute() {
                 right: left + HOLDING.w - 2.5,
                 bottom: top + HOLDING.h - 2,
               };
-              if (!mustered.current) {
-                mustered.current = true;
-                for (const entry of DEMO_GARRISON) muster(world.current, entry);
-              }
 
               drawLife(draw);
               drawSites(draw, world.current);
               drawWrights(draw, world.current);
               drawFoes(draw, world.current);
+              drawFx(draw, world.current);
             }}
           />
         </main>
@@ -224,7 +227,7 @@ export default function GameRoute() {
               gathering={false}
               characterClass="claude-code"
               wrights={tally.wrights}
-              demo
+              demo={garrison.demo}
               onOpenRoster={() => setPaused(true)}
             />
             <button

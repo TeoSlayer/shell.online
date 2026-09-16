@@ -157,7 +157,20 @@ export function drawWrights(draw: DrawContext, world: World): void {
 
   for (const wright of ordered) {
     const art = heroArt(wright.kind);
-    const animation = wright.moving ? art.walk : art.idle;
+    /*
+     * The action decides the animation, not the position. Deriving "is
+     * swinging" from being next to a fault would play the swing continuously
+     * while standing there; the world says when a blow is actually being
+     * struck and holds it long enough to be seen.
+     */
+    const animation =
+      wright.action === "attack"
+        ? art.attack
+        : wright.action === "build"
+          ? art.build
+          : wright.moving
+            ? art.walk
+            : art.idle;
     const height = animation.sprite.h;
     const { x, y } = screenPosition(draw, wright, height);
 

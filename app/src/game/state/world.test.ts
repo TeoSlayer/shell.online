@@ -133,3 +133,133 @@ describe("walking about the yard", () => {
     }
   });
 });
+
+describe("fighting, and showing that it is fighting", () => {
+  /** A yard with one fault already in it and one wright sent to deal with it. */
+  function skirmish(kind: string): World {
+    const world = createWorld(YARD);
+    muster(world, { id: "w", name: "fix: a thing", kind, work: "bug" });
+    world.foes.push({
+      id: "f1",
+      kind: "mite",
+      x: (YARD.left + YARD.right) / 2,
+      y: YARD.top,
+      hp: 50,
+      maxHp: 50,
+      speed: 0,
+      facing: 1,
+      hurt: 0,
+    });
+    return world;
+  }
+
+  it("gets round the hall to a fault on the far side of it", () => {
+    /*
+     * The regression test for three separate attempts at this.
+     *
+     * A wright at the gate and a fault directly opposite, with the hall
+     * between them, is the worst case for anything that steers by local rules:
+     * shoving out of the wall makes it vibrate, sliding along the wall makes
+     * it creep at a twentieth speed, and heading for the nearest corner walks
+     * it into the wall and stops. All three look, on screen, like a hero
+     * having a fit against a building.
+     *
+     * What is asserted is only that it arrives. How it gets there is allowed
+     * to change.
+     */
+    const world = skirmish("openclaw");
+    const foe = world.foes[0];
+    let closest = Infinity;
+    for (let step = 0; step < 400; step += 1) {
+      tickWorld(world);
+      const wright = world.wrights[0];
+      closest = Math.min(closest, Math.hypot(foe.x - wright.x, foe.y - wright.y));
+    }
+    expect(closest).toBeLessThan(1);
+  });
+
+  it("swings, and holds the swing long enough to be seen", () => {
+    /*
+     * The failure this guards against: an action that is true only on the tick
+     * the damage lands is one frame in eighteen, which is a swing nobody ever
+     * sees on screen.
+     */
+    const world = skirmish("openclaw");
+    let swinging = 0;
+    for (let step = 0; step < 300; step += 1) {
+      tickWorld(world);
+      if (world.wrights[0].action === "attack") swinging += 1;
+    }
+    expect(swinging).toBeGreaterThan(20);
+  });
+
+  it("takes the fault down and counts it", () => {
+    /*
+     * The planted fault is gone; the field is not empty, because more keep
+     * arriving for as long as somebody is working on one. Asserting an empty
+     * field would be asserting that the waves stop, which is not the design.
+     */
+    const world = skirmish("openclaw");
+    for (let step = 0; step < 2000; step += 1) tickWorld(world);
+    expect(world.foes.some((foe) => foe.id === "f1")).toBe(false);
+    expect(world.felled).toBeGreaterThan(0);
+  });
+
+  it("throws a bolt for the one class that fights at a distance", () => {
+    const world = skirmish("codex");
+    let sawBolt = false;
+    for (let step = 0; step < 300; step += 1) {
+      tickWorld(world);
+      if (world.bolts.length > 0) sawBolt = true;
+    }
+    expect(sawBolt).toBe(true);
+  });
+
+  it("strikes in reach for everybody else, with no bolt", () => {
+    const world = skirmish("openclaw");
+    let sawBolt = false;
+    let sawSpark = false;
+    for (let step = 0; step < 300; step += 1) {
+      tickWorld(world);
+      if (world.bolts.length > 0) sawBolt = true;
+      if (world.sparks.some((spark) => spark.kind === "hit")) sawSpark = true;
+    }
+    expect(sawBolt).toBe(false);
+    expect(sawSpark).toBe(true);
+  });
+
+  it("clears its own effects rather than piling them up for ever", () => {
+    /*
+     * Every burst, bolt and number is short-lived. If any of them failed to be
+     * removed, a keep left open all afternoon would slow to a crawl, and the
+     * only symptom would be that it got gradually worse.
+     */
+    const world = skirmish("codex");
+    for (let step = 0; step < 4000; step += 1) tickWorld(world);
+    expect(world.bolts.length).toBeLessThan(20);
+    expect(world.sparks.length).toBeLessThan(20);
+    expect(world.marks.length).toBeLessThan(20);
+  });
+});
+
+describe("building, and showing that it is building", () => {
+  it("raises a structure through its stages and counts it", () => {
+    const world = createWorld(YARD);
+    muster(world, { id: "b", name: "feat: a thing", kind: "claude-code", work: "feature" });
+
+    let hammering = 0;
+    const stagesSeen = new Set<number>();
+    for (let step = 0; step < 3000; step += 1) {
+      tickWorld(world);
+      if (world.wrights[0].action === "build") hammering += 1;
+      for (const site of world.sites) {
+        stagesSeen.add(Math.floor((site.progress / site.total) * 3));
+      }
+    }
+
+    expect(hammering).toBeGreaterThan(20);
+    /* It passed through more than one stage rather than jumping to finished. */
+    expect(stagesSeen.size).toBeGreaterThan(1);
+    expect(world.raised).toBeGreaterThan(0);
+  });
+});
