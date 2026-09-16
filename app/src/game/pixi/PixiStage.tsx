@@ -98,16 +98,23 @@ export function PixiStage({
 
       /*
        * Drag to move, wheel or pinch to zoom, with the map kept on screen.
-       * The zoom range is chosen from what is legible: below about a third,
-       * buildings are specks; above two, the art is visibly enlarged past the
-       * resolution it was drawn at.
+       *
+       * The zoom range is chosen from what is legible: below about half,
+       * buildings are specks and the names have already gone; above two, the
+       * art is visibly enlarged past the resolution it was drawn at.
+       *
+       * `clamp` is what stops the country sliding off into an empty corner.
+       * It only works because the projection is shifted so that no tile has a
+       * negative coordinate -- see ORIGIN_X in iso.ts -- which makes the map
+       * exactly the box pixi-viewport thinks the world is.
        */
       viewport
         .drag({ mouseButtons: "left" })
         .pinch()
         .wheel({ smooth: 4 })
         .decelerate({ friction: 0.92 })
-        .clampZoom({ minScale: 0.3, maxScale: 2 });
+        .clampZoom({ minScale: 0.45, maxScale: 2 })
+        .clamp({ direction: "all", underflow: "center" });
 
       scene = await build(created, viewport);
       if (stopped) return;

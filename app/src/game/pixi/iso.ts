@@ -10,10 +10,26 @@
  * which is how nearly every 2D isometric game has ever worked, and what lets
  * artwork drawn face-on sit convincingly on a tilted floor.
  */
+import { MAP } from "../world/marches";
 
 /** Half the width and half the height of a tile diamond, in world units. */
 export const TILE_W = 64;
 export const TILE_H = 32;
+
+/**
+ * How far right the projection is pushed so that no part of the map is at a
+ * negative coordinate.
+ *
+ * A diamond grid laid out from the origin runs half its width into negative x,
+ * because tile (0, n) is as far left as tile (n, 0) is right. That is fine for
+ * drawing and useless for a camera: pixi-viewport describes its world as a box
+ * from (0, 0) to (worldWidth, worldHeight), so a map that starts at -2048
+ * cannot be clamped, and zooming out sent the whole country sliding into a
+ * corner of an empty screen. Shifting here rather than moving a container
+ * means every coordinate in the game agrees, including the one a click is
+ * turned back into.
+ */
+export const ORIGIN_X = MAP.width * (TILE_W / 2);
 
 export interface Point {
   x: number;
@@ -23,7 +39,7 @@ export interface Point {
 /** Tile coordinates to the point on screen where that tile's middle sits. */
 export function toScreen(tileX: number, tileY: number): Point {
   return {
-    x: (tileX - tileY) * (TILE_W / 2),
+    x: (tileX - tileY) * (TILE_W / 2) + ORIGIN_X,
     y: (tileX + tileY) * (TILE_H / 2),
   };
 }
@@ -38,9 +54,10 @@ export function toScreen(tileX: number, tileY: number): Point {
 export function toTile(screenX: number, screenY: number): Point {
   const halfW = TILE_W / 2;
   const halfH = TILE_H / 2;
+  const x = screenX - ORIGIN_X;
   return {
-    x: (screenX / halfW + screenY / halfH) / 2,
-    y: (screenY / halfH - screenX / halfW) / 2,
+    x: (x / halfW + screenY / halfH) / 2,
+    y: (screenY / halfH - x / halfW) / 2,
   };
 }
 
