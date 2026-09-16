@@ -32,13 +32,17 @@ export const COUNTRY = {
 /**
  * How far past the country the wood is carried.
  *
- * Generous on purpose. At the widest zoom the country is shorter than the
- * window, and pixi-viewport centres a world smaller than its view -- so
- * whatever is beyond the country is what fills the bands above and below it.
- * Stopping the canopy at the world bounds would put the void back, one step
- * further out, which is no better for being further away.
+ * Nearly twice the country's own width, which sounds absurd and is not. At the
+ * widest zoom the country is shorter than the window and pixi-viewport centres
+ * a world smaller than its view, so what is beyond the country is what fills
+ * the bands above and below -- and on a wide or a tall window those bands are
+ * large. The first number here was chosen from the arithmetic for one window
+ * size and left the corners of a different one showing the clear colour.
+ *
+ * It costs nothing to be generous. The whole of this is baked into one texture
+ * whose size is fixed by the bake scale, not by the area it covers.
  */
-export const OVERHANG = 2600;
+export const OVERHANG = 7600;
 
 export type Standing = "tree" | "rock" | "ruin";
 
@@ -228,7 +232,7 @@ export interface Blob {
 }
 
 /** How many tones the far canopy is drawn in. See `canopyBlobs`. */
-export const CANOPY_TONES = 3;
+export const CANOPY_TONES = 4;
 
 /**
  * The wood beyond the thicket, as overlapping blobs rather than trees.
@@ -245,7 +249,7 @@ export const CANOPY_TONES = 3;
 export function canopyBlobs(): Blob[] {
   const bounds = canopyBounds();
   const blobs: Blob[] = [];
-  const STEP = 132;
+  const STEP = 178;
 
   for (let y = bounds.y; y < bounds.y + bounds.height; y += STEP) {
     for (let x = bounds.x; x < bounds.x + bounds.width; x += STEP) {
@@ -258,11 +262,22 @@ export function canopyBlobs(): Blob[] {
       blobs.push({
         x: x + (noise(key, other, 11) - 0.5) * STEP,
         y: y + (noise(key, other, 12) - 0.5) * STEP,
-        radius: STEP * (0.42 + noise(key, other, 13) * 0.34),
-        /* Darker further out, in steps, so the wood recedes. */
+        radius: STEP * (0.46 + noise(key, other, 13) * 0.36),
+        /*
+         * The tone is mostly noise, with a nudge darker further out.
+         *
+         * It was purely distance at first, which meant everything past a couple
+         * of thousand units fell in the darkest tone and the far wood came out
+         * as one flat colour -- exactly the flat field the whole border exists
+         * to replace, in a different green. Noise is what makes canopy read as
+         * canopy; the distance term only leans it.
+         */
         tone: Math.min(
           CANOPY_TONES - 1,
-          Math.floor(Math.min(1, distance / 2200) * CANOPY_TONES * 0.999),
+          Math.floor(
+            (noise(key, other, 14) * 0.78 + Math.min(1, distance / 5200) * 0.22) *
+              CANOPY_TONES * 0.999,
+          ),
         ),
       });
     }

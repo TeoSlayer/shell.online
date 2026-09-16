@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import type { Application } from "pixi.js";
-import { borderTrees, canopyBlobs, canopyBounds, CANOPY_TONES, COUNTRY } from "../world/border";
+import { borderTrees, canopyBlobs, canopyBounds, CANOPY_TONES } from "../world/border";
 import type { Loaded } from "./scene";
 
 /**
@@ -35,8 +35,25 @@ import type { Loaded } from "./scene";
  */
 const BAKE = 1 / 12;
 
-export function buildBorder(app: Application, art: Loaded): Container {
+export interface Border {
+  /** The far wood, which goes under the map. */
+  canopy: Container;
+  /**
+   * The trees at the edge, which go *over* it.
+   *
+   * They have to. The thicket deliberately straddles the edge of the country so
+   * that the straight line the projection makes disappears under branches, and
+   * a straddling tree drawn beneath the ground is a tree with its trunk sliced
+   * off along that exact line -- which draws the eye to it rather than hiding
+   * it. Nothing walks out here, so there is nothing for them to be wrongly in
+   * front of.
+   */
+  thicket: Container;
+}
+
+export function buildBorder(app: Application, art: Loaded): Border {
   const layer = new Container();
+  const thicket = new Container();
   const bounds = canopyBounds();
 
   /*
@@ -52,7 +69,23 @@ export function buildBorder(app: Application, art: Loaded): Container {
   drawn.rect(bounds.x, bounds.y, bounds.width, bounds.height).fill({ color: 0x1f3318 });
 
   const blobs = canopyBlobs();
-  const TONES = [0x24401c, 0x1d3417, 0x172a12];
+  /*
+   * Four greens, spread wide enough to see.
+   *
+   * The first set were within a few points of each other and of the fill behind
+   * them, which made the far wood one flat colour at every zoom -- exactly the
+   * flat field the border exists to replace, in a different green. Canopy is
+   * read by its mottling, so the mottling has to be visible.
+   */
+  /*
+   * Four greens, spread wide enough to see.
+   *
+   * The first set were within a few points of each other and of the fill behind
+   * them, which made the far wood one flat colour -- exactly the flat field the
+   * border exists to replace, in a different green. Canopy is read by its
+   * mottling, so the mottling has to be visible.
+   */
+  const TONES = [0x395d2a, 0x2c4921, 0x203819, 0x182b12];
   for (let tone = 0; tone < CANOPY_TONES; tone += 1) {
     let drew = false;
     for (const blob of blobs) {
@@ -63,17 +96,21 @@ export function buildBorder(app: Application, art: Loaded): Container {
     if (drew) drawn.fill({ color: TONES[tone] });
   }
 
-  /* A darker ring hugging the country, so the grass reads as a clearing. */
-  drawn
-    .rect(bounds.x, bounds.y, bounds.width, bounds.height)
-    .poly([
-      COUNTRY.width / 2, 0,
-      COUNTRY.width, COUNTRY.height / 2,
-      COUNTRY.width / 2, COUNTRY.height,
-      0, COUNTRY.height / 2,
-    ])
-    .cut()
-    .fill({ color: 0x14230f, alpha: 0.5 });
+  /*
+   * There is deliberately no darker ring cut around the country here.
+   *
+   * There was one, drawn as this rectangle with the country's diamond `cut()`
+   * out of it, and it quietly destroyed everything above: the whole far wood
+   * rendered as one flat colour, the last one filled. Every tone was being
+   * built correctly -- a count of the blobs showed all four evenly spread --
+   * and none of them survived into the picture.
+   *
+   * Whatever the exact mechanism inside the path builder, the lesson is the
+   * cheap one: a boolean path operation in a context that already holds
+   * thousands of filled subpaths is not a local edit, and this context holds
+   * about fourteen thousand. The recession it was drawing is done by the tone
+   * gradient instead, which costs nothing and cannot reach backwards.
+   */
 
   const baked = app.renderer.generateTexture({ target: drawn, resolution: BAKE });
   const canopy = new Sprite(baked);
@@ -106,8 +143,8 @@ export function buildBorder(app: Application, art: Loaded): Container {
     const base = tree.kind === "tree" ? 0x9fbf8a : tree.kind === "rock" ? 0xa8a79c : 0x6f6f68;
     const channel = (shift: number) => Math.round(((base >> shift) & 0xff) * shade);
     sprite.tint = (channel(16) << 16) | (channel(8) << 8) | channel(0);
-    layer.addChild(sprite);
+    thicket.addChild(sprite);
   }
 
-  return layer;
+  return { canopy: layer, thicket };
 }

@@ -203,8 +203,9 @@ export function buildWorld(app: Application, art: Loaded): {
 } {
   const root = new Container();
   /*
-   * The wood goes down before the ground does, so the country is a clearing in
-   * it rather than a shape laid on top of it.
+   * The far wood goes down before the ground, so the country is a clearing in
+   * it. The thicket goes down after, so the trees that straddle the edge are
+   * not sliced along it.
    */
   const border = buildBorder(app, art);
   const ground = buildGroundLayer();
@@ -240,7 +241,7 @@ export function buildWorld(app: Application, art: Loaded): {
     signs.addChild(signFor(garrison));
   }
 
-  root.addChild(border, ground, things, labels, signs);
+  root.addChild(border.canopy, ground, border.thicket, things, labels, signs);
   return { root, ground, things, labels, signs };
 }
 
