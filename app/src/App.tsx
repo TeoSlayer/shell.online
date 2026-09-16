@@ -38,10 +38,18 @@ import { FeedbackProvider } from "./feedback/FeedbackProvider";
  */
 const GameRoute = lazy(() => import("./game/GameRoute"));
 
-export default function App() {
+/**
+ * Everything below sign-in: the providers that need an identity, and the
+ * routes.
+ *
+ * Split out from App so the development QA harness can mount the same tree
+ * with a stand-in identity on a machine that has no sign-in provider
+ * configured. Production mounts it through App below, under the real provider,
+ * and nothing about the guards changes either way.
+ */
+export function SignedInApp() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
+    <>
         <VaultProvider>
         <TeamKeyProvider>
         <FeedbackProvider>
@@ -142,6 +150,15 @@ export default function App() {
         </FeedbackProvider>
         </TeamKeyProvider>
         </VaultProvider>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <SignedInApp />
       </AuthProvider>
     </BrowserRouter>
   );

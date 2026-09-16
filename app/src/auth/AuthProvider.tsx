@@ -63,7 +63,18 @@ interface AuthValue {
   deleteAccount: (confirmEmail: string, password?: string) => Promise<void>;
 }
 
-const AuthContext = createContext<AuthValue | null>(null);
+/*
+ * Exported for one reason: the development QA harness at /qa.html mounts the
+ * whole application on a machine that has no sign-in provider configured, and
+ * supplies a stand-in identity here.
+ *
+ * This weakens nothing. The production build always mounts a real provider
+ * below, every guard still asks this context whether there is a user, and the
+ * service on the other side still checks a real token on every request -- a
+ * browser that puts a name in here gets a nicely rendered page and a 401 from
+ * anything that matters. The harness is not an input to `vite build`.
+ */
+export const AuthContext = createContext<AuthValue | null>(null);
 
 function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const firebaseAuth = auth;
