@@ -49,6 +49,7 @@ import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/aud
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
+import { emptyProfile, profileForApi, readProfile } from "./routes/game";
 import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats";
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
@@ -692,6 +693,33 @@ export function createApp(options: AppOptions) {
        * `missing` names the members with a vault and no copy yet, so any
        * teammate who holds the key can seal one for them.
        */
+      /*
+       * The saved game: who the player chose to be, what they are wearing,
+       * what they have bought and what they have spent.
+       *
+       * Scoped to the caller's own account rather than to their team, because
+       * a keep is one person's progress. Everything else about it -- the
+       * level, how fortified it is, the purse -- is worked out again from the
+       * work that earned it, so none of that is stored and none of it can
+       * disagree with itself.
+       */
+      if (route === "GET /api/game") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const profile = (await store.gameProfile(caller.uid)) ?? emptyProfile(caller.uid, Date.now());
+        return send(response, 200, { game: profileForApi(profile) });
+      }
+
+      if (route === "PUT /api/game") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const previous = await store.gameProfile(caller.uid);
+        const profile = readProfile(caller.uid, body, previous, Date.now());
+        await store.putGameProfile(profile);
+        return send(response, 200, { game: profileForApi(profile) });
+      }
+
       if (route === "GET /api/team-key") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });

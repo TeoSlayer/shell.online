@@ -21,7 +21,7 @@ at a glance that a change to the keep cannot have changed how a session starts.
 
 ## The seams
 
-Five, all of them small, all of them deliberate. If you are adding a sixth,
+Six, all of them small, all of them deliberate. If you are adding a seventh,
 that is worth a conversation first.
 
 | File | What it does |
@@ -30,7 +30,13 @@ that is worth a conversation first.
 | `src/components/AppShell.tsx` | The `LaunchGame` button at the right of the top bar |
 | `src/styles/shell.css` | That button's styles, `.launch-game*` |
 | `src/auth/AuthProvider.tsx` | `AuthContext` is exported so the QA harness can supply an identity. No guard changed |
+| `src/lib/api.ts` | `request` is exported, so the game calls its own endpoints without a second copy of the token handling and the error sentences |
 | `scripts/check-bundle.mjs` | The guard that keeps all of the above honest |
+
+The game also owns a slice of the service, which is not a seam so much as its
+own corner: `server/routes/game.ts`, the `game_profiles` table in migration
+014, and two methods on the `Store` interface. Nothing else on the server
+reads them.
 
 Nothing in this directory imports from `src/routes`, and nothing outside it
 imports from here except through those seams.

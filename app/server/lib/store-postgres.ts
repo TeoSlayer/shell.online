@@ -26,6 +26,7 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameProfile,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -348,6 +349,26 @@ function toFeedback(row: Row): Feedback {
  * atomic -- claiming queued work, marking a code consumed -- are single
  * statements, so two instances of the service can serve the same database.
  */
+/**
+ * The skins an account owns, from the JSON text they are stored as.
+ *
+ * A value that will not parse is read as owning nothing rather than throwing.
+ * A save that cannot be read should cost somebody their hats, not their
+ * ability to open the game at all.
+ */
+function readOwned(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export class PostgresStore implements Store {
   private constructor(private readonly pool: pg.Pool) {}
 
@@ -1015,6 +1036,8 @@ export class PostgresStore implements Store {
         "DELETE FROM session_key_shares WHERE uid = $1",
         "DELETE FROM account_keys WHERE uid = $1",
         "DELETE FROM account_activity WHERE uid = $1",
+        /* The keep goes with the account. It is nobody else's progress. */
+        "DELETE FROM game_profiles WHERE uid = $1",
         "DELETE FROM comments WHERE author_uid = $1",
         "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
         /* The address an invite was sent to is theirs once they accepted it. */
@@ -1641,6 +1664,52 @@ export class PostgresStore implements Store {
       joinedAt: row.joined_at as number,
       days: byUid.get(row.uid as string) ?? [],
     }));
+  }
+
+  /* ---- The saved game ---- */
+
+  async gameProfile(uid: string): Promise<GameProfile | null> {
+    const rows = await this.rows("SELECT * FROM game_profiles WHERE uid = $1", [uid]);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      uid: row.uid as string,
+      characterClass: row.character_class as string,
+      skinId: row.skin_id as string,
+      owned: readOwned(row.owned),
+      spent: Number(row.spent),
+      gathering: row.gathering === true,
+      tokens: Number(row.tokens),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  async putGameProfile(profile: GameProfile): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO game_profiles
+         (uid, character_class, skin_id, owned, spent, gathering, tokens, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (uid) DO UPDATE SET
+         character_class = EXCLUDED.character_class,
+         skin_id = EXCLUDED.skin_id,
+         owned = EXCLUDED.owned,
+         spent = EXCLUDED.spent,
+         gathering = EXCLUDED.gathering,
+         tokens = EXCLUDED.tokens,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        profile.uid,
+        profile.characterClass,
+        profile.skinId,
+        JSON.stringify(profile.owned),
+        profile.spent,
+        profile.gathering,
+        profile.tokens,
+        profile.createdAt,
+        profile.updatedAt,
+      ],
+    );
   }
 
   /* ---- App events ---- */

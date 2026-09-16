@@ -287,7 +287,13 @@ class ApiError extends Error {}
 export const NETWORK_FAILURE = "Could not reach shell.online. Check your connection and try again.";
 export const SERVER_FAILURE = "Something went wrong on our side. Try again.";
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/*
+ * Exported so the game skin can call its own endpoints without a second copy
+ * of the token handling, the outage-page parsing, or the error sentences. See
+ * src/game/README.md, which lists this among the seams between the game and
+ * the rest of the application.
+ */
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await currentIdToken();
   if (!token) throw new ApiError("You are signed out. Sign in and try again.");
   let response: Response;

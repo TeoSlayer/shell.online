@@ -292,3 +292,26 @@ export interface AgentCommand {
  * this interface so the production implementation (Firestore, D1) can drop in
  * without touching route code.
  */
+
+/**
+ * One account's saved game.
+ *
+ * See `server/lib/migrations/014_game.sql` for why this is so short: anything
+ * the game can work out again is worked out again, so what is kept is only
+ * what cannot be. Deleting an account deletes this with it.
+ */
+export interface GameProfile {
+  uid: string;
+  /** The class the player chose. Empty until they have chosen. */
+  characterClass: string;
+  skinId: string;
+  owned: string[];
+  /** Marks spent. The purse is what the level earned, less this. */
+  spent: number;
+  /** Whether they have agreed to their statistics being gathered. */
+  gathering: boolean;
+  /** Tokens that gathering has cost so far. What the elixir vial shows. */
+  tokens: number;
+  createdAt: number;
+  updatedAt: number;
+}

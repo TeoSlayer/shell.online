@@ -24,6 +24,7 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameProfile,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -77,6 +78,7 @@ interface Shape {
   accountActivity: { uid: string; day: number }[];
   appEvents: { event: AppEvent; day: number; count: number }[];
   teamKeys: TeamKey[];
+  gameProfiles: GameProfile[];
   teamKeyShares: TeamKeyShare[];
 }
 
@@ -84,7 +86,7 @@ const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
-  accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [],
+  accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [], gameProfiles: [],
 };
 
 /**
@@ -153,6 +155,7 @@ export class MemoryStore implements Store {
         accountActivity: parsed.accountActivity ?? [],
         appEvents: parsed.appEvents ?? [],
         teamKeys: parsed.teamKeys ?? [],
+        gameProfiles: parsed.gameProfiles ?? [],
         teamKeyShares: parsed.teamKeyShares ?? [],
       };
     } catch {
@@ -346,6 +349,8 @@ export class MemoryStore implements Store {
       if (invite.acceptedBy === uid) delete invite.email;
     }
     data.accountKeys = data.accountKeys.filter((entry) => entry.uid !== uid);
+    /* The keep goes with the account. It is nobody else's progress. */
+    data.gameProfiles = data.gameProfiles.filter((entry) => entry.uid !== uid);
     data.accountActivity = data.accountActivity.filter((entry) => entry.uid !== uid);
     data.comments = data.comments.filter((entry) => entry.authorUid !== uid);
     data.notifications = data.notifications.filter(
@@ -713,6 +718,19 @@ export class MemoryStore implements Store {
   /* ---------------------------------------------------------------
      Team audit key
      --------------------------------------------------------------- */
+
+  async gameProfile(uid: string): Promise<GameProfile | null> {
+    const found = this.data.gameProfiles.find((entry) => entry.uid === uid);
+    return found ? { ...found, owned: [...found.owned] } : null;
+  }
+
+  async putGameProfile(profile: GameProfile): Promise<void> {
+    const stored = { ...profile, owned: [...profile.owned] };
+    const at = this.data.gameProfiles.findIndex((entry) => entry.uid === profile.uid);
+    if (at >= 0) this.data.gameProfiles[at] = stored;
+    else this.data.gameProfiles.push(stored);
+    await this.flush();
+  }
 
   async teamKey(orgId: string): Promise<TeamKey | null> {
     const found = this.data.teamKeys.find((entry) => entry.orgId === orgId);

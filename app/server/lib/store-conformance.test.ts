@@ -572,6 +572,65 @@ for (const implementation of implementations) {
       });
     });
 
+    describe("the saved game", () => {
+      const profile = (overrides: Record<string, unknown> = {}) => ({
+        uid: "uid-1",
+        characterClass: "codex",
+        skinId: "gilt",
+        owned: ["ash", "gilt"],
+        spent: 300,
+        gathering: true,
+        tokens: 12_345,
+        createdAt: 1000,
+        updatedAt: 1000,
+        ...overrides,
+      });
+
+      it("has nothing for somebody who has never opened it", async () => {
+        expect(await store.gameProfile("uid-nobody")).toBeNull();
+      });
+
+      it("keeps a profile and hands it back whole", async () => {
+        await store.putGameProfile(profile());
+        expect(await store.gameProfile("uid-1")).toEqual(profile());
+      });
+
+      it("replaces rather than adding a second one", async () => {
+        await store.putGameProfile(profile());
+        await store.putGameProfile(profile({ skinId: "moss", spent: 400, updatedAt: 2000 }));
+        const stored = await store.gameProfile("uid-1");
+        expect(stored?.skinId).toBe("moss");
+        expect(stored?.spent).toBe(400);
+        /* Created at is the first save, not the latest. */
+        expect(stored?.createdAt).toBe(1000);
+      });
+
+      it("keeps one account's keep out of another's", async () => {
+        await store.putGameProfile(profile());
+        await store.putGameProfile(profile({ uid: "uid-2", skinId: "wine" }));
+        expect((await store.gameProfile("uid-1"))?.skinId).toBe("gilt");
+        expect((await store.gameProfile("uid-2"))?.skinId).toBe("wine");
+      });
+
+      it("does not hand back a list that can be changed underneath it", async () => {
+        /*
+         * The in-memory store is the one that can get this wrong, by handing
+         * out the array it is holding. A caller that then pushed to it would
+         * be editing the database.
+         */
+        await store.putGameProfile(profile());
+        const first = await store.gameProfile("uid-1");
+        first?.owned.push("smuggled");
+        expect((await store.gameProfile("uid-1"))?.owned).toEqual(["ash", "gilt"]);
+      });
+
+      it("goes when the account goes", async () => {
+        await store.putGameProfile(profile({ uid: "uid-7" }));
+        await store.deleteAccount("uid-7", { dissolve: false }, 5000);
+        expect(await store.gameProfile("uid-7")).toBeNull();
+      });
+    });
+
     describe("team audit key", () => {
       type TeamKeyRecord = Parameters<Store["putTeamKey"]>[0];
       type ShareRecord = Parameters<Store["putTeamKeyShares"]>[0][number];

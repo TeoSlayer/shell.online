@@ -16,6 +16,7 @@ import { useGarrison } from "./state/use-garrison";
 import { buy } from "./state/shop";
 import { experienceFrom, fortification, marksEarnedTo, standing } from "./state/progress";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
+import { loadSave, reconcile, storeSave } from "./state/remote";
 import { ChooseCharacter } from "./ui/ChooseCharacter";
 import { Hud } from "./ui/Hud";
 import { PauseMenu } from "./ui/PauseMenu";
@@ -74,6 +75,39 @@ export default function GameRoute() {
   const setSave = useCallback((next: Save) => {
     setSaveState(next);
     writeSave(next);
+    /*
+     * Sent up as well, and not waited for. A purchase should land the instant
+     * it is made; whether the service also heard about it is not something the
+     * player should be made to watch a spinner for.
+     */
+    void storeSave(next);
+  }, []);
+
+  /* Tokens the gathering has cost, which only the service knows. */
+  const [elixir, setElixir] = useState(0);
+
+  /*
+   * On arrival, the service's copy is merged with this browser's.
+   *
+   * Merged rather than replaced, and merged by what cannot go backwards: a
+   * class once chosen, skins once bought, marks once spent. Taking whichever
+   * was written most recently would let a tab somebody opened on a borrowed
+   * laptop and abandoned overwrite months of progress.
+   */
+  useEffect(() => {
+    let live = true;
+    void loadSave().then((remote) => {
+      if (!live || !remote) return;
+      setElixir(remote.tokens);
+      setSaveState((current) => {
+        const merged = reconcile(current, remote.save);
+        writeSave(merged);
+        return merged;
+      });
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   const reducedMotion = motionReduced(options, systemReduced);
@@ -244,7 +278,7 @@ export default function GameRoute() {
             <Hud
               standing={rank}
               marks={purse.marks}
-              elixir={0}
+              elixir={elixir}
               gathering={save.gathering}
               characterClass={save.characterClass || "terminal"}
               wrights={tally.wrights}

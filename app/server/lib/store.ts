@@ -11,6 +11,7 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameProfile,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -173,6 +174,17 @@ export interface Store {
   deleteAccount(uid: string, plan: AccountDeletion, now?: number): Promise<void>;
   /** Whether this uid was deleted at or after `since`. */
   recentlyDeleted(uid: string, since: number): Promise<boolean>;
+
+  /* ---- The saved game ---- */
+  /**
+   * One account's saved game, or nothing if they have never opened it.
+   *
+   * Scoped by uid rather than by organization: the keep is a person's own
+   * progress, and two people on the same team have their own.
+   */
+  gameProfile(uid: string): Promise<GameProfile | null>;
+  /** Writes the whole profile. Creates it on first save. */
+  putGameProfile(profile: GameProfile): Promise<void>;
 
   /* ---- Team audit key ---- */
   teamKey(orgId: string): Promise<TeamKey | null>;
