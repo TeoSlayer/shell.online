@@ -18,8 +18,19 @@ export interface Skin {
   /** One line, in the world's voice, so the shop reads as a place. */
   note: string;
   cost: number;
-  /** Which class it dresses, or "any" for the whole garrison. */
+  /** Which class it dresses, or "any" for anyone. */
   fits: string | "any";
+  /**
+   * Who wears it: you, or the people who work for you.
+   *
+   * Two different things, sold side by side. A hero skin dresses your own
+   * figure; a retinue colour washes over your soldiers, so that a map with
+   * several companies on it reads as several companies rather than as one
+   * crowd. Neither touches anybody else's -- you cannot dress a colleague, and
+   * a shop that let you would be the only thing in this game that changes what
+   * somebody else sees.
+   */
+  wears: "hero" | "retinue";
   /**
    * The colour the wright is washed in.
    *
@@ -40,21 +51,15 @@ export interface Skin {
  * whole garrison gold is a thing you save for.
  */
 export const SKINS: Skin[] = [
+  /* ---- what you wear ---- */
   {
     id: "ash",
     name: "Ashen",
     note: "Whatever it was before, it has been through a fire since.",
     cost: 40,
     fits: "any",
+    wears: "hero",
     tint: 0x9a9a9a,
-  },
-  {
-    id: "moss",
-    name: "Moss",
-    note: "Issued to whoever was last through the gate.",
-    cost: 40,
-    fits: "any",
-    tint: 0x76b055,
   },
   {
     id: "wine",
@@ -62,6 +67,7 @@ export const SKINS: Skin[] = [
     note: "Dyed properly, once, by somebody who was owed a favour.",
     cost: 80,
     fits: "any",
+    wears: "hero",
     tint: 0xc96a92,
   },
   {
@@ -70,6 +76,7 @@ export const SKINS: Skin[] = [
     note: "Cold colours on a warm march. It does not help.",
     cost: 80,
     fits: "codex",
+    wears: "hero",
     tint: 0x7fd0e8,
   },
   {
@@ -78,6 +85,7 @@ export const SKINS: Skin[] = [
     note: "The Artificers had these made. Nobody asked for them.",
     cost: 120,
     fits: "claude-code",
+    wears: "hero",
     tint: 0xff9a3c,
   },
   {
@@ -86,7 +94,46 @@ export const SKINS: Skin[] = [
     note: "The Castellan's own colours. Wear them and mean it.",
     cost: 260,
     fits: "any",
+    wears: "hero",
     tint: 0xf2d357,
+  },
+
+  /* ---- what your soldiers wear ---- */
+  {
+    id: "moss",
+    name: "Moss livery",
+    note: "Issued to whoever was last through the gate.",
+    cost: 40,
+    fits: "any",
+    wears: "retinue",
+    tint: 0x76b055,
+  },
+  {
+    id: "slate",
+    name: "Slate livery",
+    note: "Hard to see at dusk, which is half the point of it.",
+    cost: 60,
+    fits: "any",
+    wears: "retinue",
+    tint: 0x8fa3b8,
+  },
+  {
+    id: "ember",
+    name: "Ember livery",
+    note: "A company you can find across a field, for better or worse.",
+    cost: 120,
+    fits: "any",
+    wears: "retinue",
+    tint: 0xe2703a,
+  },
+  {
+    id: "indigo",
+    name: "Indigo livery",
+    note: "Expensive dye on people who will be in a ditch by Thursday.",
+    cost: 200,
+    fits: "any",
+    wears: "retinue",
+    tint: 0x7f7fe0,
   },
 ];
 
@@ -96,6 +143,11 @@ export function skinById(id: string): Skin | undefined {
 
 /** Whether a skin can be worn by a given class. */
 export function fitsClass(skin: Skin, kind: string): boolean {
+  /*
+   * A retinue colour is worn by a company of mixed classes, so it cannot be cut
+   * for one of them. Only what the hero wears is ever class-bound.
+   */
+  if (skin.wears === "retinue") return true;
   return skin.fits === "any" || skin.fits === kind;
 }
 

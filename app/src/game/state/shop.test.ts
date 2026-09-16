@@ -4,6 +4,27 @@ import { buy, fitsClass, SKINS, skinById, swatchFor, tintFor, type Purse } from 
 const purse = (marks: number, owned: string[] = []): Purse => ({ marks, owned });
 
 describe("the catalogue", () => {
+  it("sells something for you and something for your soldiers", () => {
+    /*
+     * Two slots, because they are two choices. A catalogue with only one kind
+     * in it would quietly make the other half of the shop unreachable.
+     */
+    expect(SKINS.some((skin) => skin.wears === "hero")).toBe(true);
+    expect(SKINS.some((skin) => skin.wears === "retinue")).toBe(true);
+  });
+
+  it("never cuts a retinue colour for one class", () => {
+    /*
+     * A livery is worn by a company of mixed classes, so it cannot be cut for
+     * one of them. Only what the hero wears is ever class-bound.
+     */
+    for (const skin of SKINS) {
+      if (skin.wears !== "retinue") continue;
+      expect(fitsClass(skin, "codex")).toBe(true);
+      expect(fitsClass(skin, "terminal")).toBe(true);
+    }
+  });
+
   it("sells nothing that changes a number", () => {
     /*
      * The line this whole file is drawn around. The moment a purchase makes a
@@ -13,7 +34,7 @@ describe("the catalogue", () => {
      */
     for (const skin of SKINS) {
       expect(Object.keys(skin)).toEqual(
-        expect.arrayContaining(["id", "name", "note", "cost", "fits", "tint"]),
+        expect.arrayContaining(["id", "name", "note", "cost", "fits", "wears", "tint"]),
       );
       /* A colour and nothing else: no stats, no reach, no damage. */
       expect(skin.tint).toBeGreaterThanOrEqual(0);

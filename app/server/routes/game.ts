@@ -28,6 +28,7 @@ export function emptyProfile(uid: string, now: number): GameProfile {
     uid,
     characterClass: "",
     skinId: "",
+    liveryId: "",
     owned: [],
     spent: 0,
     gathering: false,
@@ -72,6 +73,7 @@ export function readProfile(
     uid,
     characterClass: CLASSES.includes(characterClass) ? characterClass : before.characterClass,
     skinId: text(body.skin_id, 32),
+    liveryId: text(body.livery_id, 32),
     owned,
     spent: count(body.spent, MAX_SPENT),
     gathering: body.gathering === true,
@@ -87,6 +89,7 @@ export function profileForApi(profile: GameProfile) {
   return {
     character_class: profile.characterClass,
     skin_id: profile.skinId,
+    livery_id: profile.liveryId,
     owned: profile.owned,
     spent: profile.spent,
     gathering: profile.gathering,

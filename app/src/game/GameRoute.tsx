@@ -11,7 +11,7 @@ import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
 import { DEMO_ROSTER } from "./state/demo-garrison";
 import { useGarrison } from "./state/use-garrison";
-import { buy, tintFor } from "./state/shop";
+import { buy, skinById, tintFor } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
 import { useEarned } from "./state/use-earned";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
@@ -340,6 +340,7 @@ export default function GameRoute() {
             purse={purse}
             characterClass={save.characterClass || "terminal"}
             wearing={save.skinId}
+            livery={save.liveryId}
             shopOpen={rank.level >= 2}
             elixir={elixir}
             garrison={tally.wrights.length}
@@ -350,22 +351,36 @@ export default function GameRoute() {
             onBuy={(skinId) => {
               const result = buy(purse, skinId);
               if (!result.ok) return;
+              const bought = skinById(skinId);
               /*
                * What is stored is the spend, not the purse. The purse is
                * derived from the level that earned it, so storing both would
                * be two facts that can disagree.
+               *
+               * A first purchase in a slot is worn at once, because nobody buys
+               * a colour in order to not wear it.
                */
-              setSave({
+              const next = {
                 ...save,
                 spent: save.spent + (purse.marks - result.purse.marks),
                 owned: result.purse.owned,
-                skinId: save.skinId || skinId,
-              });
+                skinId:
+                  bought?.wears === "hero" ? save.skinId || skinId : save.skinId,
+                liveryId:
+                  bought?.wears === "retinue" ? save.liveryId || skinId : save.liveryId,
+              };
+              setSave(next);
+              handle.current.wear(tintFor(next.skinId), tintFor(next.liveryId));
             }}
             onWear={(skinId) => {
-              setSave({ ...save, skinId });
+              const chosen = skinById(skinId);
+              const next =
+                chosen?.wears === "retinue"
+                  ? { ...save, liveryId: skinId }
+                  : { ...save, skinId };
+              setSave(next);
               /* The field shows it at once, rather than on the next reload. */
-              handle.current.wear(tintFor(skinId));
+              handle.current.wear(tintFor(next.skinId), tintFor(next.liveryId));
             }}
           />
         )}

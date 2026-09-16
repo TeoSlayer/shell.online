@@ -28,8 +28,8 @@ export interface KeepHandle {
   /** Called when the ground is clicked and the player's hero was sent there. */
   onOrder?: (x: number, y: number) => void;
   select(id: string | undefined): void;
-  /** The skin worn by this player's own wrights. */
-  wear(tint: number): void;
+  /** What the player's own hero and their soldiers are drawn in. */
+  wear(skin: number, livery: number): void;
   /** Stops everything that drifts or flaps, for reduced motion. */
   still(stop: boolean): void;
   /** Rides the camera to a holding, named by id. See the road book. */
@@ -77,7 +77,7 @@ export async function buildKeepScene(
   handle.select = (id) => {
     selected = id;
   };
-  handle.wear = (tint) => actors.wear(tint);
+  handle.wear = (skin, livery) => actors.wear(skin, livery);
   /*
    * The reduced-motion setting reached the interface and stopped at the edge of
    * the canvas, so somebody who had asked for less motion got a still HUD over

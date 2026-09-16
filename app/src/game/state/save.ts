@@ -18,6 +18,8 @@ export interface Save {
   characterClass: string;
   /** The skin worn, if any. */
   skinId: string;
+  /** What your soldiers wear. Separate from what you wear. */
+  liveryId: string;
   /** Skins bought. */
   owned: string[];
   /** Marks spent, so the purse is (earned by level) minus this. */
@@ -33,6 +35,7 @@ export const SAVE_VERSION = 1;
 export const NEW_SAVE: Save = {
   characterClass: "",
   skinId: "",
+  liveryId: "",
   owned: [],
   spent: 0,
   gathering: false,
@@ -58,6 +61,7 @@ export function normaliseSave(input: unknown): Save {
   return {
     characterClass: CLASSES.includes(raw.characterClass as string) ? (raw.characterClass as string) : "",
     skinId: typeof raw.skinId === "string" ? raw.skinId : "",
+    liveryId: typeof raw.liveryId === "string" ? raw.liveryId : "",
     owned,
     spent: Number.isFinite(raw.spent) ? Math.max(0, Math.floor(raw.spent as number)) : 0,
     gathering: raw.gathering === true,

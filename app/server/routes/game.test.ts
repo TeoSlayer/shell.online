@@ -107,6 +107,16 @@ describe("narrowing what it does accept", () => {
     expect(profile.skinId.length).toBeLessThanOrEqual(32);
   });
 
+  it("keeps what you wear apart from what your soldiers wear", () => {
+    /*
+     * Two choices, two fields. Packing both into one would be storing two facts
+     * in one place and parsing them apart for ever after.
+     */
+    const profile = readProfile("u1", { skin_id: "gilt", livery_id: "moss" }, null, NOW);
+    expect(profile.skinId).toBe("gilt");
+    expect(profile.liveryId).toBe("moss");
+  });
+
   it("survives a body that is empty", () => {
     expect(() => readProfile("u1", {}, null, NOW)).not.toThrow();
   });
@@ -118,6 +128,7 @@ describe("what the client reads back", () => {
     expect(Object.keys(wire).sort()).toEqual([
       "character_class",
       "gathering",
+      "livery_id",
       "owned",
       "skin_id",
       "spent",

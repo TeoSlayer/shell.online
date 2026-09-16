@@ -17,6 +17,7 @@ export function Shop({
   purse,
   characterClass,
   wearing,
+  livery,
   onBuy,
   onWear,
   onBack,
@@ -24,6 +25,8 @@ export function Shop({
   purse: Purse;
   characterClass: string;
   wearing: string;
+  /** What this player's soldiers are wearing, which is a separate choice. */
+  livery: string;
   onBuy: (skinId: string) => void;
   onWear: (skinId: string) => void;
   onBack: () => void;
@@ -49,10 +52,21 @@ export function Shop({
         </p>
       )}
 
+      {/*
+        * Two shelves, because the shop sells two different things: what you
+        * wear, and what the people who work for you wear. Run together in one
+        * list they read as ten interchangeable hats, and buying one and seeing
+        * the wrong figure change colour is a small betrayal.
+        */}
+      {(["hero", "retinue"] as const).map((slot) => (
+      <section key={slot} className="keep-shop-shelf">
+      <h3 className="keep-shop-shelf-name">
+        {slot === "hero" ? "What you wear" : "What your soldiers wear"}
+      </h3>
       <ul className="keep-shop-list">
-        {SKINS.map((skin) => {
+        {SKINS.filter((skin) => skin.wears === slot).map((skin) => {
           const owned = purse.owned.includes(skin.id);
-          const worn = wearing === skin.id;
+          const worn = (slot === "hero" ? wearing : livery) === skin.id;
           const wearable = fitsClass(skin, characterClass);
 
           return (
@@ -107,6 +121,8 @@ export function Shop({
           );
         })}
       </ul>
+      </section>
+      ))}
 
       <button type="button" className="keep-button" onClick={onBack}>
         Back

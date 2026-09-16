@@ -343,6 +343,8 @@ export interface GameProfile {
   /** The class the player chose. Empty until they have chosen. */
   characterClass: string;
   skinId: string;
+  /** What this player's soldiers wear. See migration 016. */
+  liveryId: string;
   owned: string[];
   /** Marks spent. The purse is what the level earned, less this. */
   spent: number;

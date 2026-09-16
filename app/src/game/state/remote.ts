@@ -17,6 +17,7 @@ import { normaliseSave, type Save } from "./save";
 interface Wire {
   character_class: string;
   skin_id: string;
+  livery_id: string;
   owned: string[];
   spent: number;
   gathering: boolean;
@@ -28,6 +29,7 @@ function toSave(wire: Wire): Save {
   return normaliseSave({
     characterClass: wire.character_class,
     skinId: wire.skin_id,
+    liveryId: wire.livery_id ?? "",
     owned: wire.owned,
     spent: wire.spent,
     gathering: wire.gathering,
@@ -91,6 +93,7 @@ export function reconcile(local: Save, remote: Save): Save {
     characterClass: local.characterClass || remote.characterClass,
     /* Whatever this browser was last wearing, if it is something owned. */
     skinId: ownedBoth.includes(local.skinId) ? local.skinId : remote.skinId,
+    liveryId: ownedBoth.includes(local.liveryId) ? local.liveryId : remote.liveryId,
     owned: ownedBoth,
     /* The larger spend: hats already bought cannot become unbought. */
     spent: Math.max(local.spent, remote.spent),

@@ -31,6 +31,7 @@ export function PauseMenu({
   purse,
   characterClass,
   wearing,
+  livery,
   shopOpen,
   elixir,
   garrison,
@@ -45,6 +46,8 @@ export function PauseMenu({
   purse: Purse;
   characterClass: string;
   wearing: string;
+  /** What this player's soldiers are wearing. */
+  livery: string;
   /** The pedlar starts calling at level two; before that the row says so. */
   shopOpen: boolean;
   /** Tokens the gathering has spent, and who is on the field. */
@@ -226,6 +229,7 @@ export function PauseMenu({
             purse={purse}
             characterClass={characterClass}
             wearing={wearing}
+            livery={livery}
             onBuy={onBuy}
             onWear={onWear}
             onBack={() => setPane("root")}

@@ -762,6 +762,7 @@ export class MemoryStore implements Store {
         uid: run.uid,
         characterClass: "",
         skinId: "",
+        liveryId: "",
         owned: [],
         spent: 0,
         gathering: true,

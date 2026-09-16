@@ -1677,6 +1677,7 @@ export class PostgresStore implements Store {
       uid: row.uid as string,
       characterClass: row.character_class as string,
       skinId: row.skin_id as string,
+      liveryId: (row.livery_id as string) ?? "",
       owned: readOwned(row.owned),
       spent: Number(row.spent),
       gathering: row.gathering === true,
@@ -1689,11 +1690,12 @@ export class PostgresStore implements Store {
   async putGameProfile(profile: GameProfile): Promise<void> {
     await this.pool.query(
       `INSERT INTO game_profiles
-         (uid, character_class, skin_id, owned, spent, gathering, tokens, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (uid, character_class, skin_id, livery_id, owned, spent, gathering, tokens, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (uid) DO UPDATE SET
          character_class = EXCLUDED.character_class,
          skin_id = EXCLUDED.skin_id,
+         livery_id = EXCLUDED.livery_id,
          owned = EXCLUDED.owned,
          spent = EXCLUDED.spent,
          gathering = EXCLUDED.gathering,
@@ -1703,6 +1705,7 @@ export class PostgresStore implements Store {
         profile.uid,
         profile.characterClass,
         profile.skinId,
+        profile.liveryId,
         JSON.stringify(profile.owned),
         profile.spent,
         profile.gathering,

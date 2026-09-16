@@ -577,6 +577,7 @@ for (const implementation of implementations) {
         uid: "uid-1",
         characterClass: "codex",
         skinId: "gilt",
+        liveryId: "moss",
         owned: ["ash", "gilt"],
         spent: 300,
         gathering: true,

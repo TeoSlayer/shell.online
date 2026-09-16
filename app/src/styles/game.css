@@ -305,6 +305,23 @@
   justify-content: center;
 }
 
+/* ---- the shop's two shelves -------------------------------------------- */
+
+.keep-shop-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-shop-shelf-name {
+  margin: var(--keep-space) 0 0;
+  color: var(--keep-gold);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* ---- the road book ---------------------------------------------------- */
 
 /*

@@ -1,4 +1,5 @@
-import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import { atWork, heroPlate, soldierPlate, type Plate } from "./plates";
 import { depthOf, TILE_H, toScreen } from "./iso";
 import type { Loaded } from "./scene";
 import type { Actor, Sim } from "../world/sim";
@@ -50,13 +51,19 @@ const FIGURE = 1.25;
  */
 const HERO = 2.1;
 
-/** A few pixels of deterministic vertical stagger, so boards do not stack. */
+/**
+ * A deterministic vertical stagger, so boards do not stack.
+ *
+ * Wider than it was, because a camp gathers a whole company into a few tiles
+ * and three steps of thirteen pixels is not enough separation for a dozen
+ * boards. Deterministic so a name does not hop when the list is re-ordered.
+ */
 function lift(id: string): number {
   let value = 0;
   for (let index = 0; index < id.length; index += 1) {
     value = (Math.imul(value, 31) + id.charCodeAt(index)) | 0;
   }
-  return (Math.abs(value) % 3) * 13;
+  return (Math.abs(value) % 5) * 22;
 }
 
 interface Piece {
@@ -64,15 +71,25 @@ interface Piece {
   sprite: Sprite;
   shadow: Graphics;
   bar: Graphics;
-  plate?: Container;
+  plate?: Plate;
+  /** How far above the feet this figure's plate hangs. See `make`. */
+  headroom: number;
   lastHp: number;
 }
 
 export class ActorLayer {
   private readonly pieces = new Map<string, Piece>();
 
-  /** The skin the player is wearing, washed over their own sessions' wrights. */
+  /**
+    * Two colours, because the shop sells two things.
+    *
+    * `skinTint` is what the player's own hero is drawn in; `liveryTint` washes
+    * over the soldiers that stand for their sessions, so a map with several
+    * companies on it reads as several companies. Neither ever touches anybody
+    * else's figures.
+    */
   private skinTint = 0xffffff;
+  private liveryTint = 0xffffff;
 
   constructor(
     private readonly art: Loaded,
@@ -84,11 +101,11 @@ export class ActorLayer {
   /** The last zoom the plates were sized for; see `zoomed`. */
   private plateScale = 1;
   private platesShown = true;
-  private soldierPlatesShown = true;
 
-  /** Called when a skin is bought or changed in the shop. */
-  wear(tint: number): void {
-    this.skinTint = tint;
+  /** Called when a skin or a livery is bought or changed in the shop. */
+  wear(skin: number, livery: number): void {
+    this.skinTint = skin;
+    this.liveryTint = livery;
   }
 
   /**
@@ -103,7 +120,16 @@ export class ActorLayer {
    * rather than at anybody in it.
    */
   zoomed(scale: number): void {
-    this.plateScale = Math.min(1.7, Math.max(0.6, 1 / scale));
+    /*
+     * Against the zoom, and allowed to grow further than it shrinks.
+     *
+     * Zoomed out is exactly when a plate matters most -- it is how you find
+     * your own company among several at the far end of a large map -- and it is
+     * also when the figure under it is smallest. So the far end of the range is
+     * generous. Close up it settles to about its drawn size, because at that
+     * zoom the figure is doing the identifying.
+     */
+    this.plateScale = Math.min(2.6, Math.max(0.75, 1 / scale));
     /*
      * A hero is named at almost any zoom; a soldier only close up.
      *
@@ -115,18 +141,19 @@ export class ActorLayer {
      * everybody's sessions were gathered in one place instead of spread over
      * the holdings by what they were doing.
      */
-    this.platesShown = scale > 0.44;
-    this.soldierPlatesShown = scale > 0.85;
-    for (const [id, piece] of this.pieces) {
+    /*
+     * Shown at every zoom the wheel allows, heroes and soldiers alike. They
+     * were hidden below a threshold at one point, on the theory that a dozen
+     * boards over one camp interleave into an unreadable stack; the answer to
+     * that is the stagger below and the scaling above, not taking away the
+     * names at exactly the distance you need them.
+     */
+    this.platesShown = true;
+    for (const piece of this.pieces.values()) {
       if (!piece.plate) continue;
-      piece.plate.scale.set(this.plateScale);
-      piece.plate.visible = this.shows(id.startsWith("hero-"));
+      piece.plate.root.scale.set(this.plateScale);
+      piece.plate.root.visible = this.platesShown;
     }
-  }
-
-  /** Whether a name board of this kind is shown at the current zoom. */
-  private shows(isHero: boolean): boolean {
-    return isHero ? this.platesShown : this.soldierPlatesShown;
   }
 
   private make(actor: Actor): Piece {
@@ -164,49 +191,42 @@ export class ActorLayer {
      * The garrison's own soldiers are scenery; giving them plates would fill
      * the map with labels that stand for nothing.
      */
-    let plate: Container | undefined;
+    /*
+     * The board above the head, which is a different thing for each of them.
+     *
+     * A hero gets a shield with their initials, their name, a health bar and a
+     * bar for how much of their company is at work. A soldier gets its class
+     * and the session it is. The watch and the Unmade get nothing: a name over
+     * scenery is a name that stands for nothing, and a map of those is a map
+     * nobody reads.
+     */
+    let plate: Plate | undefined;
     if (actor.role === "hero" || actor.role === "soldier") {
+      plate = actor.role === "hero" ? heroPlate(actor) : soldierPlate(actor);
       /*
-       * A little board, for the same reason the garrison signs are boards: a
-       * name in outlined text over grass, roofs and road was unreadable at the
-       * worst of it, and the outline thick enough to fix that turned sixteen
-       * point type to mud. It also stops two wrights standing near each other
-       * from interleaving their names into one unreadable line.
+       * Hung by its bottom edge, so the board grows upwards out of the head
+       * rather than downwards into it. A container positioned by its top would
+       * push the board further down the taller it got, which would make a
+       * hero -- whose board is the tallest -- the one whose name covered them.
        */
-      const text = new Text({
-        text: actor.name.length > 24 ? `${actor.name.slice(0, 23)}…` : actor.name,
-        style: {
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 16,
-          fontWeight: actor.role === "hero" ? "700" : "400",
-          /* A hero's name is brass; a soldier's is parchment. */
-          fill: actor.role === "hero" ? 0xf0c04a : 0xf0d9a8,
-        },
-      });
-      text.anchor.set(0.5, 0);
-      text.position.set(0, 3);
-
-      const board = new Graphics();
-      board
-        .rect(-text.width / 2 - 6, 0, text.width + 12, text.height + 6)
-        .fill({ color: 0x241d15, alpha: 0.85 })
-        .stroke({ color: 0xc9a06a, width: 1, alignment: 1 });
-
-      plate = new Container();
-      plate.addChild(board, text);
-      plate.scale.set(this.plateScale);
-      plate.visible = this.shows(actor.role === "hero");
+      plate.root.pivot.set(0, plate.height);
+      plate.root.scale.set(this.plateScale);
       /*
-       * Staggered by the id, so two wrights standing together do not lay their
+       * Staggered by the id, so two figures standing together do not lay their
        * boards on top of one another. Deterministic, so a name does not hop to
        * a different height when the list is re-ordered.
        */
-      plate.y = lift(actor.id);
-      this.labels.addChild(plate);
+      plate.root.y = lift(actor.id);
+      this.labels.addChild(plate.root);
     }
 
     this.parent.addChild(root);
-    return { root, sprite, shadow, bar, plate, lastHp: actor.hp };
+    /*
+     * Measured from the sprite rather than fixed, so a hero at twice the size
+     * gets twice the clearance and nobody's name sits on their own head.
+     */
+    const headroom = texture.height * size + 12;
+    return { root, sprite, shadow, bar, plate, headroom, lastHp: actor.hp };
   }
 
   /** Brings the display in line with the simulation. */
@@ -224,7 +244,15 @@ export class ActorLayer {
       const { x, y } = toScreen(actor.x, actor.y);
       piece.root.position.set(x, y);
       piece.root.zIndex = depthOf(actor.x, actor.y, 10);
-      if (piece.plate) piece.plate.position.set(x, y + TILE_H * 0.4 + lift(actor.id));
+      if (piece.plate) {
+        /*
+         * Heroes are not staggered. There is one per camp, so there is nothing
+         * for them to collide with, and lifting them adds up to another eighty
+         * pixels of empty sky between a person and their own name.
+         */
+        const stagger = actor.role === "hero" ? 0 : lift(actor.id);
+        piece.plate.root.position.set(x, y - piece.headroom - stagger);
+      }
 
       /* Facing, as a mirror rather than a second sprite. */
       const size = actor.role === "hero" ? HERO : FIGURE;
@@ -249,7 +277,9 @@ export class ActorLayer {
         : actor.side === "unmade"
           ? UNMADE_TINT
           : actor.heroUid && actor.heroUid === sim.youUid
-            ? this.skinTint
+            ? actor.role === "hero"
+              ? this.skinTint
+              : this.liveryTint
             : 0xffffff;
       piece.sprite.alpha = actor.hurt > 0 ? 0.75 : 1;
 
@@ -268,9 +298,11 @@ export class ActorLayer {
 
       if (piece.plate) {
         const chosen = actor.id === selectedId;
-        piece.plate.tint = chosen ? 0xffd27a : 0xffffff;
+        piece.plate.root.tint = chosen ? 0xffd27a : 0xffffff;
         piece.shadow.tint = chosen ? 0xf0a03c : 0xffffff;
         piece.shadow.alpha = chosen ? 0.9 : 1;
+        /* A hero's two bars, which only redraw when a number actually moves. */
+        piece.plate.bars?.set(actor.hp / actor.maxHp, atWork(actor, sim.actors));
       }
     }
 
@@ -278,7 +310,8 @@ export class ActorLayer {
     for (const [id, piece] of this.pieces) {
       if (seen.has(id)) continue;
       piece.root.destroy({ children: true });
-      piece.plate?.destroy({ children: true });
+      piece.plate?.bars?.destroy();
+      piece.plate?.root.destroy({ children: true });
       this.pieces.delete(id);
     }
   }
@@ -286,7 +319,8 @@ export class ActorLayer {
   destroy(): void {
     for (const piece of this.pieces.values()) {
       piece.root.destroy({ children: true });
-      piece.plate?.destroy({ children: true });
+      piece.plate?.bars?.destroy();
+      piece.plate?.root.destroy({ children: true });
     }
     this.pieces.clear();
   }
