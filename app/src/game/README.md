@@ -33,24 +33,53 @@ that is worth a conversation first.
 | `src/lib/api.ts` | `request` is exported, so the game calls its own endpoints without a second copy of the token handling and the error sentences |
 | `scripts/check-bundle.mjs` | The guard that keeps all of the above honest |
 
+There is one seam the other way, and it is worth knowing about because it is
+the only place the service reaches into the game:
+
+| File | What it does |
+|---|---|
+| `src/game/world/work.ts` | Decides whether a session reads as mending or making. `server/lib/game-stats.ts` imports it |
+
+It has no imports of its own, which is why it can be shared. The map walks a
+wright to the garrison its work belongs to and the service counts the same
+session towards the same column; two copies of those patterns would drift until
+the map and the ladder disagreed about what a session was. It is reached only
+from the game chunk and from the service, so it stays out of the corporate
+bundle, and `check-bundle.mjs` still says so.
+
 The game also owns a slice of the service, which is not a seam so much as its
-own corner: `server/routes/game.ts`, the `game_profiles` table in migration
-014, and two methods on the `Store` interface. Nothing else on the server
-reads them.
+own corner. Nothing else on the server reads any of it:
+
+- `server/routes/game.ts` — the saved game, and what a browser may not set
+- `server/lib/game-stats.ts` — what a level is worth, counted from sessions
+- `server/routes/gathering.ts` — what a machine may report, and how hard it is believed
+- `game_profiles` in migration 014, `game_collection_runs` in migration 015
+- four methods on the `Store` interface
+
+And a slice of the CLI, for the half of the gathering that has to happen where
+the plaintext is:
+
+- `internal/stats` — reads git, `gh` and the agents' own history files
+- `cmd/shell/stats.go` — `shell stats`, which prints what would be sent and sends nothing
+- the `"probe"` case in `cmd/shell/agent_loop.go`
 
 Nothing in this directory imports from `src/routes`, and nothing outside it
-imports from here except through those seams.
+imports from here except through the seams above.
 
 ## Layout
 
 ```
-assets/    sprites, palettes, and the rules that build them
-engine/    loop, canvas layers, input, sprite cache
-scenes/    what gets drawn: the field, and the things on it
-state/     options, game state, what is saved
-ui/        the DOM interface over the canvas: HUD, menus, shop
+world/     the map, the simulation, the scatter. No Pixi in any of it
+pixi/      what gets drawn, and the camera: scene, actors, ground, ambience
+engine/    input, the focus grid, the fixed-step loop
+state/     options, progress, the shop, what is saved, what the service says
+ui/        the DOM interface over the canvas: HUD, menus, shop, the gathering
 lore/      names, flavour, and the codex
 ```
+
+`world/` knowing nothing about Pixi is the rule that matters. It is what lets a
+thousand ticks of the simulation be run in a test and looked at, which is how
+the shaking was found: by counting direction reversals, not by watching.
 
 ## Running it
 
@@ -71,18 +100,29 @@ else, so both exist in development and in no deployment.
 
 ## Working on the art
 
-Sprites are palette-indexed text; see `assets/sprite.ts` for why that rather
-than PNGs. Two tools matter:
+Kenney's packs, all CC0, vendored into `public/game/` with provenance in
+`docs/third-party-notices.md`. An earlier version of this drew everything as
+palette-indexed text sprites, which was small and diffable and produced
+structures nobody could identify; recognisable art was worth more than a clever
+pipeline.
+
+Two import scripts keep the vendoring honest rather than leaving mystery files
+in the repository:
 
 ```sh
-npx tsx scripts/sprite-sheet.ts out.html   # every sprite, magnified, captioned
-npm test                                   # the atlas test: miscounts, holes, footprints
+node scripts/import-kenney.mjs <pack-dir>       # the XML atlas, converted to Pixi's JSON
+node scripts/import-fantasy-ui.mjs <pack-dir>   # the panel frames, recoloured to brass
 ```
 
-The atlas test catches what a diff cannot — a row one character short shifts
-every pixel after it and simply looks badly drawn. The contact sheet catches
-what a test cannot, which is whether the thing looks like what it is meant to
-be.
+The second one is three bytes and a checksum: the frames are 1-bit paletted, so
+it rewrites the single palette entry that is not transparent and leaves every
+pixel where Kenney drew it.
+
+The map itself is not art. `world/marches.ts` is where the holdings, the roads
+and the water are; `world/scatter.ts` decides where a tree may stand, and its
+test is mostly about the three places one must never be — in a road, inside a
+holding, or in the river — because each of those reads as a collision fault
+rather than as scenery.
 
 ## The rules the game is held to
 
