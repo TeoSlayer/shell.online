@@ -198,6 +198,10 @@ export function signFor(garrison: Garrison): Container {
 export function buildWorld(app: Application, art: Loaded): {
   root: Container;
   ground: Container;
+  /** The camps, by "x,y", so the scene can show the ones somebody holds. */
+  camps: Map<string, Container>;
+  /** Between the ground and the figures: the colour each hero commands. */
+  banners: Container;
   things: Container;
   labels: Container;
   signs: Container;
@@ -219,6 +223,7 @@ export function buildWorld(app: Application, art: Loaded): {
    * read when somebody walks past is not a label. These are drawn over
    * everything, like the garrison signs, because that is what a label is.
    */
+  const banners = new Container();
   const labels = new Container();
   const signs = new Container();
   things.sortableChildren = true;
@@ -234,18 +239,30 @@ export function buildWorld(app: Application, art: Loaded): {
   ground.addChild(scatter.shadows);
 
   /*
-   * A barracks and a muster tent on every camp site, occupied or not.
+   * A barracks, a muster tent and a gate on every camp site -- built once for
+   * every site, and shown only where a hero is actually holding.
    *
-   * On every site rather than on every hero, because the sites are fixed and
-   * the roster is not: building these when a hero arrives would mean adding and
-   * removing buildings from the scene graph on a four-second poll, for
-   * structures that never move. An empty camp reads as ground somebody could
-   * hold, which is what it is.
+   * Built for all of them because the sites are fixed and the roster is not:
+   * adding and removing buildings on a four-second poll, for structures that
+   * never move, is churn for nothing. Hidden where nobody holds because
+   * fourteen sets of barracks on a map with three people on it reads as a
+   * country full of abandoned camps, which is a different and wrong story.
    */
+  const camps = new Map<string, Container>();
   for (const site of campSites()) {
-    things.addChild(standing(art.frame("Structure_16"), site.x, site.y - 1.5, 1.1));
-    things.addChild(standing(art.frame("Structure_01"), site.x - 3.5, site.y + 1.5, 0.9));
-    things.addChild(standing(art.frame("Structure_08"), site.x + 3.5, site.y + 1.5, 0.85));
+    const camp = new Container();
+    camp.addChild(standing(art.frame("Structure_16"), site.x, site.y - 1.5, 1.1));
+    camp.addChild(standing(art.frame("Structure_01"), site.x - 3.5, site.y + 1.5, 0.9));
+    camp.addChild(standing(art.frame("Structure_08"), site.x + 3.5, site.y + 1.5, 0.85));
+    camp.visible = false;
+    /*
+     * Sorted as its own group rather than by each building's depth. A camp is
+     * a handful of structures standing together on cleared ground, and nobody
+     * walks between them closely enough for the difference to show.
+     */
+    camp.zIndex = depthOf(site.x, site.y);
+    things.addChild(camp);
+    camps.set(`${site.x},${site.y}`, camp);
   }
 
   for (const garrison of GARRISONS) {
@@ -257,8 +274,8 @@ export function buildWorld(app: Application, art: Loaded): {
     signs.addChild(signFor(garrison));
   }
 
-  root.addChild(border.canopy, ground, border.thicket, things, labels, signs);
-  return { root, ground, things, labels, signs };
+  root.addChild(border.canopy, ground, banners, border.thicket, things, labels, signs);
+  return { root, ground, camps, banners, things, labels, signs };
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */

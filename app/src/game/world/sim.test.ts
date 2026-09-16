@@ -294,6 +294,16 @@ describe("the Unmade", () => {
     expect(sim.spawned).toBeGreaterThan(0);
   });
 
+  it("shows a soldier building, so feature work is not invisible", () => {
+    /*
+     * A map where only broken things move would quietly teach everybody that
+     * only broken things count.
+     */
+    const sim = theExample();
+    run(sim, 300);
+    expect(sim.raised).toBeGreaterThan(0);
+  });
+
   it("leaves alone a hero who is only building", () => {
     const sim = theExample();
     /* Ten features and three idle: nothing broken, so nothing comes. */
@@ -329,7 +339,32 @@ describe("the Unmade", () => {
       youUid: "ada",
     });
     run(sim, 6000);
-    expect(sim.actors.filter((actor) => actor.side === "unmade").length).toBeLessThanOrEqual(18);
+    expect(sim.actors.filter((actor) => actor.side === "unmade").length).toBeLessThanOrEqual(40);
+  });
+
+  it("does not throw the whole wave at one camp", () => {
+    /*
+     * A team where one person is fixing everything drew every foe on the map,
+     * and everybody else's camp stayed quiet. Each camp takes a share.
+     */
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [
+        { uid: "ada", name: "Ada", characterClass: "codex" },
+        { uid: "alan", name: "Alan", characterClass: "codex" },
+      ],
+      soldiers: [
+        { id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" },
+        { id: "b", name: "fix: that", kind: "codex", work: "bug", heroUid: "alan" },
+      ],
+      youUid: "ada",
+    });
+    run(sim, 2000);
+
+    const atAda = sim.actors.filter((a) => a.side === "unmade" && a.heroUid === "ada").length;
+    const atAlan = sim.actors.filter((a) => a.side === "unmade" && a.heroUid === "alan").length;
+    expect(atAda).toBeLessThanOrEqual(7);
+    expect(atAlan).toBeLessThanOrEqual(7);
   });
 
   it("gets felled, and the count says so", () => {

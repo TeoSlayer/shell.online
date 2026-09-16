@@ -1,5 +1,6 @@
 import { GARRISONS, type Garrison } from "./marches";
 import { assignCamps, CAMP_RADIUS, type Camp } from "./camps";
+import { assignBanners } from "./banners";
 import type { Work } from "./work";
 
 /**
@@ -129,6 +130,14 @@ export interface Sim {
   nextSpawn: number;
   /** Where each hero holds, by account id. */
   camps: Map<string, Camp>;
+  /**
+   * What colour each hero's company is washed in.
+   *
+   * Kept here rather than worked out in the renderer because it has to be the
+   * same everywhere it is used -- the ring on the ground, the plate, and the
+   * inspect card -- and two places computing it is two places that can drift.
+   */
+  banners: Map<string, number>;
   /** Which hero is the player's, so only that one takes orders. */
   youUid?: string;
 }
@@ -148,8 +157,21 @@ const SWING_ANIM = 12;
 const HURT_TICKS = 6;
 const MARK_TICKS = 45;
 const EFFECT_TICKS = 18;
-const SPAWN_EVERY = 90;
-const MAX_UNMADE = 18;
+/*
+ * How often the Unmade arrive, and how many stand at once.
+ *
+ * Both raised, because a camp with a fault being worked on should look like it.
+ * At the old rate one foe wandered in every three seconds and was put down
+ * before the next arrived, so a besieged camp looked much like a quiet one --
+ * which is the opposite of what the whole arrangement is for.
+ */
+const SPAWN_EVERY = 34;
+const MAX_UNMADE = 40;
+/** How many of the Unmade one camp can have at it before the rest hold back. */
+const MAX_PER_CAMP = 7;
+
+/** How often a soldier building something shows that it is. */
+const BUILD_EVERY = 52;
 /** Beyond this a fight is abandoned, and outside it none is started. */
 const ABANDON_AT = 9;
 
@@ -172,6 +194,7 @@ export function createSim(): Sim {
     raised: 0,
     nextSpawn: 40,
     camps: new Map(),
+    banners: new Map(),
   };
 }
 
@@ -249,6 +272,7 @@ export function setRoster(
 ): void {
   sim.youUid = roster.youUid;
   sim.camps = assignCamps(roster.heroes.map((hero) => hero.uid));
+  sim.banners = assignBanners(roster.heroes.map((hero) => hero.uid));
 
   const wanted = new Set<string>();
 
@@ -569,8 +593,21 @@ export function tickSim(sim: Sim): void {
     sim.nextSpawn -= 1;
     if (sim.nextSpawn <= 0) {
       sim.nextSpawn = SPAWN_EVERY;
-      /* Round the besieged camps in turn, so one is not singled out. */
-      spawnUnmade(sim, under[sim.spawned % under.length]);
+      /*
+       * Round the besieged camps in turn, so one is not singled out, and skip
+       * any that already has a crowd at it. Without the cap, a team where one
+       * person is fixing everything drew the whole wave while everybody else's
+       * camp stayed quiet.
+       */
+      for (let step = 0; step < under.length; step += 1) {
+        const heroUid = under[(sim.spawned + step) % under.length];
+        const already = sim.actors.filter(
+          (actor) => actor.side === "unmade" && actor.heroUid === heroUid,
+        ).length;
+        if (already >= MAX_PER_CAMP) continue;
+        spawnUnmade(sim, heroUid);
+        break;
+      }
     }
   }
 
@@ -647,6 +684,24 @@ export function tickSim(sim: Sim): void {
           }
         }
         continue;
+      }
+    }
+
+    /*
+     * A soldier building something shows that it is.
+     *
+     * Not a mechanic: it raises no walls and unlocks nothing. It is here
+     * because a camp where half the company is on features had nothing visible
+     * happening in it, so feature work read as idling -- and a map where only
+     * broken things move would quietly teach everybody that only broken things
+     * count.
+     */
+    if (actor.role === "soldier" && actor.work === "feature") {
+      if ((sim.clock + hashId(actor.id)) % BUILD_EVERY === 0) {
+        addEffect(sim, "build", actor.x, actor.y);
+        actor.action = "attack";
+        actor.actionUntil = sim.clock + SWING_ANIM;
+        sim.raised += 1;
       }
     }
 

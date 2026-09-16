@@ -5,6 +5,7 @@ import { buildWorld, homeView, loadArt } from "./scene";
 import { toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
+import { Banners } from "./banners";
 import type { Scene } from "./PixiStage";
 import { GARRISONS } from "../world/marches";
 import { createSim, garrisonSoldiers, orderHero, tickSim, yourHero, type Actor, type Mark, type Sim } from "../world/sim";
@@ -58,7 +59,7 @@ export async function buildKeepScene(
   handle: KeepHandle,
 ): Promise<Scene> {
   const [art, fx] = await Promise.all([loadArt(), loadEffects()]);
-  const { root, things, labels, signs } = buildWorld(app, art);
+  const { root, camps, banners, things, labels, signs } = buildWorld(app, art);
 
   const world = new Container();
   world.addChild(root);
@@ -68,6 +69,7 @@ export async function buildKeepScene(
 
   let selected: string | undefined;
   const actors = new ActorLayer(art, things, labels);
+  const companies = new Banners(banners);
 
   const birds = new Birds(things);
   const smoke = new Smoke(things, fx["fx-smoke_01"]);
@@ -187,6 +189,20 @@ export async function buildKeepScene(
    * Once only. Re-centring on every poll would drag the view back every four
    * seconds, out from under whoever was reading a signpost.
    */
+  /*
+   * Which camp sites are occupied, rebuilt only when the roster changes.
+   *
+   * Comparing the set every frame would be fine and pointless; the roster moves
+   * on a four-second poll and this is a handful of string keys.
+   */
+  let held = new Set<string>();
+  let heldFor = -1;
+  const heldCamps = () => {
+    if (sim.camps.size === heldFor) return;
+    heldFor = sim.camps.size;
+    held = new Set([...sim.camps.values()].map((camp) => `${camp.x},${camp.y}`));
+  };
+
   let found = false;
   const findYou = () => {
     if (found) return;
@@ -248,6 +264,10 @@ export async function buildKeepScene(
         tickSim(sim);
       }
       findYou();
+      heldCamps();
+      /* Only the camps somebody is actually holding are standing. */
+      for (const [key, camp] of camps) camp.visible = held.has(key);
+      companies.sync(sim);
       actors.sync(sim, selected);
       blows.sync(sim);
       birds.tick(deltaMs);
@@ -258,6 +278,7 @@ export async function buildKeepScene(
       viewport.off("zoomed", rescaleSigns);
       viewport.off("moved", rescaleSigns);
       app.stage.off("pointertap", onTap);
+      companies.destroy();
       actors.destroy();
       birds.destroy();
       smoke.destroy();
