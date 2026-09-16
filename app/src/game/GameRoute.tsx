@@ -9,7 +9,7 @@ import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { DEMO_GARRISON } from "./state/demo-garrison";
+import { DEMO_ROSTER } from "./state/demo-garrison";
 import { useGarrison } from "./state/use-garrison";
 import { buy, tintFor } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
@@ -203,7 +203,7 @@ export default function GameRoute() {
    * Who is on the field: the account's live sessions, polled, with the
    * stand-in garrison when there are none or the service cannot be reached.
    */
-  const garrison = useGarrison(sim.current, DEMO_GARRISON);
+  const garrison = useGarrison(sim.current, DEMO_ROSTER);
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -272,7 +272,7 @@ export default function GameRoute() {
             label="The Marches: garrisons spread over open country, seen from above and tilted"
             paused={paused}
             build={async (app, viewport) => {
-              const scene = await buildKeepScene(app, viewport, handle.current, DEMO_GARRISON);
+              const scene = await buildKeepScene(app, viewport, handle.current);
               handle.current.still(motionWanted.current);
               return scene;
             }}

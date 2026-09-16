@@ -1,6 +1,7 @@
 import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import type { Application } from "pixi.js";
 import { GARRISONS, MAP, type Garrison } from "../world/marches";
+import { campSites } from "../world/camps";
 import { depthOf, TILE_H, TILE_W, toScreen } from "./iso";
 import { buildGroundLayer } from "./ground";
 import { buildBorder } from "./border";
@@ -231,6 +232,21 @@ export function buildWorld(app: Application, art: Loaded): {
    */
   const scatter = buildScatter(art, things);
   ground.addChild(scatter.shadows);
+
+  /*
+   * A barracks and a muster tent on every camp site, occupied or not.
+   *
+   * On every site rather than on every hero, because the sites are fixed and
+   * the roster is not: building these when a hero arrives would mean adding and
+   * removing buildings from the scene graph on a four-second poll, for
+   * structures that never move. An empty camp reads as ground somebody could
+   * hold, which is what it is.
+   */
+  for (const site of campSites()) {
+    things.addChild(standing(art.frame("Structure_16"), site.x, site.y - 1.5, 1.1));
+    things.addChild(standing(art.frame("Structure_01"), site.x - 3.5, site.y + 1.5, 0.9));
+    things.addChild(standing(art.frame("Structure_08"), site.x + 3.5, site.y + 1.5, 0.85));
+  }
 
   for (const garrison of GARRISONS) {
     for (const building of garrison.buildings) {

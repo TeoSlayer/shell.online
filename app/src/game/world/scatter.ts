@@ -1,4 +1,5 @@
 import { GARRISONS, groundTiles, MAP, ROADS, garrisonById } from "./marches";
+import { campSites, CAMP_RADIUS } from "./camps";
 
 /**
  * Everything growing on the Marches that nobody built.
@@ -128,6 +129,21 @@ function cleared(): Set<number> {
       for (let x = -reach; x <= reach; x += 1) {
         if (Math.hypot(x, y) > reach) continue;
         mark(garrison.x + x, garrison.y + y);
+      }
+    }
+  }
+
+  /*
+   * The camps too. They are fixed ground whether or not anybody is holding
+   * them, so the wood is cleared off them once here rather than when a hero
+   * turns up -- the scatter is static and the roster is not.
+   */
+  for (const site of campSites()) {
+    const reach = CAMP_RADIUS + 2;
+    for (let y = -reach; y <= reach; y += 1) {
+      for (let x = -reach; x <= reach; x += 1) {
+        if (Math.hypot(x, y) > reach) continue;
+        mark(site.x + x, site.y + y);
       }
     }
   }

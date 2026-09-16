@@ -1,15 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { GARRISONS, garrisonFor } from "./marches";
-import { createSim, garrisonSoldiers, muster, tickSim, type Sim, type Work } from "./sim";
+import { GARRISONS } from "./marches";
+import { assignCamps, CAMP_RADIUS, campSites } from "./camps";
+import {
+  besieged,
+  createSim,
+  garrisonSoldiers,
+  orderHero,
+  setRoster,
+  tickSim,
+  yourHero,
+  type Sim,
+  type Work,
+} from "./sim";
 
 /**
  * The simulation, run deep and looked at.
  *
- * This file exists because the shaking did. A wright that reverses direction
- * thirty times a second looks like a rendering fault and is not one, and the
- * only way to tell the difference is to run the numbers without Pixi in the
- * way and count. `sim.ts` has no imports from the renderer for exactly this
- * reason, so a thousand ticks here cost nothing.
+ * Most of this is about one sentence: a hero is a person, a soldier is a
+ * session, and a soldier belongs to the hero who owns it. The rest is about the
+ * shaking -- a wright that reverses direction thirty times a second looks like a
+ * rendering fault and is not one, and the only way to tell is to run the numbers
+ * without Pixi in the way and count.
  */
 
 const session = (id: string) => ({
@@ -19,18 +30,31 @@ const session = (id: string) => ({
   command: "npm run dev",
 });
 
-function fieldOf(count: number, work: Work = "bug"): Sim {
+/** One person with ten Claude sessions and three OpenClaw ones: the worked example. */
+function theExample(): Sim {
   const sim = createSim();
-  garrisonSoldiers(sim);
-  for (let index = 0; index < count; index += 1) {
-    muster(sim, {
-      id: `wright-${index}`,
-      name: `wright ${index}`,
-      kind: "claude-code",
-      work,
-      session: session(`wright-${index}`),
-    });
-  }
+  setRoster(sim, {
+    heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+    soldiers: [
+      ...Array.from({ length: 10 }, (_, index) => ({
+        id: `claude-${index}`,
+        name: `claude ${index}`,
+        kind: "claude-code",
+        work: "feature" as Work,
+        heroUid: "ada",
+        session: session(`claude-${index}`),
+      })),
+      ...Array.from({ length: 3 }, (_, index) => ({
+        id: `claw-${index}`,
+        name: `claw ${index}`,
+        kind: "openclaw",
+        work: "idle" as Work,
+        heroUid: "ada",
+        session: session(`claw-${index}`),
+      })),
+    ],
+    youUid: "ada",
+  });
   return sim;
 }
 
@@ -39,60 +63,317 @@ function run(sim: Sim, ticks: number): Sim {
   return sim;
 }
 
-describe("mustering", () => {
-  it("puts a wright at the garrison its work belongs to", () => {
-    const sim = createSim();
-    const fighting = muster(sim, { id: "a", name: "a", kind: "codex", work: "bug" });
-    const building = muster(sim, { id: "b", name: "b", kind: "codex", work: "feature" });
-
-    const forFighting = garrisonFor("bug");
-    const forBuilding = garrisonFor("feature");
-    expect(Math.hypot(fighting.x - forFighting.x, fighting.y - forFighting.y))
-      .toBeLessThanOrEqual(forFighting.radius + 4);
-    expect(Math.hypot(building.x - forBuilding.x, building.y - forBuilding.y))
-      .toBeLessThanOrEqual(forBuilding.radius + 4);
+describe("the camps", () => {
+  it("finds somewhere for everybody to hold", () => {
+    expect(campSites().length).toBeGreaterThan(6);
   });
 
-  it("musters the same session only once", () => {
+  it("never puts a camp in a holding", () => {
+    for (const camp of campSites()) {
+      for (const garrison of GARRISONS) {
+        expect(Math.hypot(camp.x - garrison.x, camp.y - garrison.y))
+          .toBeGreaterThan(garrison.radius + CAMP_RADIUS);
+      }
+    }
+  });
+
+  it("never puts two camps on the same ground", () => {
     /*
-     * The roster is polled and the scene can be rebuilt -- React remounts an
-     * effect in development -- so `muster` is called repeatedly with ids that
-     * are already on the field. Before this held, every one of those put a
-     * second copy of the same wright on the map, and the field filled up with
-     * duplicates that fought beside themselves.
+     * Two heroes handed one spot reads as a rendering fault rather than as a
+     * crowded team, which is why camps are assigned for the whole roster at
+     * once instead of one hash at a time.
+     */
+    const sites = campSites();
+    for (let first = 0; first < sites.length; first += 1) {
+      for (let second = first + 1; second < sites.length; second += 1) {
+        expect(Math.hypot(sites[first].x - sites[second].x, sites[first].y - sites[second].y))
+          .toBeGreaterThan(CAMP_RADIUS * 2);
+      }
+    }
+  });
+
+  it("gives every member their own ground", () => {
+    const uids = Array.from({ length: 8 }, (_, index) => `member-${index}`);
+    const camps = assignCamps(uids);
+    const seen = new Set(([...camps.values()]).map((camp) => `${camp.x},${camp.y}`));
+    expect(seen.size).toBe(uids.length);
+  });
+
+  it("gives the same member the same ground every time", () => {
+    const uids = ["ada", "grace", "alan"];
+    const first = assignCamps(uids);
+    const again = assignCamps([...uids].reverse());
+    for (const uid of uids) expect(again.get(uid)).toEqual(first.get(uid));
+  });
+});
+
+describe("heroes and their soldiers", () => {
+  it("gives one person thirteen soldiers of two classes", () => {
+    /* The worked example from the specification, asserted. */
+    const sim = theExample();
+    const soldiers = sim.actors.filter((actor) => actor.role === "soldier");
+    expect(soldiers).toHaveLength(13);
+    expect(soldiers.every((soldier) => soldier.heroUid === "ada")).toBe(true);
+    expect(new Set(soldiers.map((soldier) => soldier.kind))).toEqual(
+      new Set(["claude-code", "openclaw"]),
+    );
+  });
+
+  it("keeps a hero on the field with nothing running", () => {
+    /* A colleague with nothing open is still on the team. */
+    const sim = createSim();
+    setRoster(sim, { heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }], soldiers: [] });
+    expect(sim.actors.filter((actor) => actor.role === "hero")).toHaveLength(1);
+  });
+
+  it("starts every soldier at its own hero's camp", () => {
+    const sim = theExample();
+    const camp = sim.camps.get("ada")!;
+    for (const soldier of sim.actors.filter((actor) => actor.role === "soldier")) {
+      expect(Math.hypot(soldier.x - camp.x, soldier.y - camp.y)).toBeLessThanOrEqual(CAMP_RADIUS);
+    }
+  });
+
+  it("keeps two people's retinues apart", () => {
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [
+        { uid: "ada", name: "Ada", characterClass: "codex" },
+        { uid: "alan", name: "Alan", characterClass: "openclaw" },
+      ],
+      soldiers: [
+        { id: "a", name: "a", kind: "codex", work: "idle", heroUid: "ada" },
+        { id: "b", name: "b", kind: "openclaw", work: "idle", heroUid: "alan" },
+      ],
+    });
+    run(sim, 600);
+
+    const ada = sim.actors.find((actor) => actor.id === "soldier-a")!;
+    const alan = sim.actors.find((actor) => actor.id === "soldier-b")!;
+    const adaCamp = sim.camps.get("ada")!;
+    const alanCamp = sim.camps.get("alan")!;
+    expect(Math.hypot(ada.x - adaCamp.x, ada.y - adaCamp.y)).toBeLessThan(CAMP_RADIUS + 3);
+    expect(Math.hypot(alan.x - alanCamp.x, alan.y - alanCamp.y)).toBeLessThan(CAMP_RADIUS + 3);
+  });
+
+  it("takes the same roster twice without doubling anybody", () => {
+    /*
+     * The poll depends on this. The roster arrives every four seconds and is
+     * usually identical; before `setRoster` was idempotent the field filled up
+     * with copies of everybody.
+     */
+    const sim = theExample();
+    const before = sim.actors.length;
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: sim.actors
+        .filter((actor) => actor.role === "soldier")
+        .map((actor) => ({
+          id: actor.id.replace("soldier-", ""),
+          name: actor.name,
+          kind: actor.kind,
+          work: actor.work,
+          heroUid: "ada",
+        })),
+      youUid: "ada",
+    });
+    expect(sim.actors).toHaveLength(before);
+  });
+
+  it("leaves people standing where they were when the roster repeats", () => {
+    const sim = theExample();
+    run(sim, 200);
+    const before = sim.actors.map((actor) => `${actor.id}:${actor.x.toFixed(3)}`);
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: sim.actors
+        .filter((actor) => actor.role === "soldier")
+        .map((actor) => ({
+          id: actor.id.replace("soldier-", ""),
+          name: actor.name,
+          kind: actor.kind,
+          work: actor.work,
+          heroUid: "ada",
+        })),
+      youUid: "ada",
+    });
+    expect(sim.actors.map((actor) => `${actor.id}:${actor.x.toFixed(3)}`)).toEqual(before);
+  });
+
+  it("dismisses a soldier whose session has gone", () => {
+    const sim = theExample();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: [],
+      youUid: "ada",
+    });
+    expect(sim.actors.filter((actor) => actor.role === "soldier")).toHaveLength(0);
+    expect(sim.actors.filter((actor) => actor.role === "hero")).toHaveLength(1);
+  });
+
+  it("does not dismiss the watch along with the roster", () => {
+    const sim = theExample();
+    garrisonSoldiers(sim);
+    const watch = sim.actors.filter((actor) => actor.role === "watch").length;
+    setRoster(sim, { heroes: [], soldiers: [] });
+    expect(sim.actors.filter((actor) => actor.role === "watch")).toHaveLength(watch);
+  });
+});
+
+describe("following", () => {
+  it("brings the retinue along when the hero is sent somewhere", () => {
+    /*
+     * The point of the whole arrangement. Soldiers are not in formation -- they
+     * notice after a few paces and then hurry, which reads as people following
+     * somebody rather than as a parade.
+     */
+    const sim = theExample();
+    const camp = sim.camps.get("ada")!;
+    run(sim, 60);
+
+    orderHero(sim, camp.x + 22, camp.y + 10);
+    run(sim, 900);
+
+    const hero = yourHero(sim)!;
+    const soldiers = sim.actors.filter((actor) => actor.role === "soldier");
+    const near = soldiers.filter(
+      (soldier) => Math.hypot(soldier.x - hero.x, soldier.y - hero.y) < CAMP_RADIUS + 4,
+    );
+    expect(near.length).toBeGreaterThan(soldiers.length / 2);
+  });
+
+  it("puts the hero where it was told, and leaves them there", () => {
+    /*
+     * Two claims, and the second is the one that was broken. A hero used to
+     * walk to where they were sent, arrive, notice they were a long way from
+     * their camp and walk straight back -- which makes the one thing the player
+     * can do in this game pointless. Where they were sent becomes where they
+     * hold.
+     *
+     * The tolerance is a camp's width rather than a pixel because a hero
+     * standing exactly still on the spot they were sent to is a statue. They
+     * arrive and then mill about it, which is what everybody else does too.
+     */
+    const sim = theExample();
+    const camp = sim.camps.get("ada")!;
+    orderHero(sim, camp.x + 12, camp.y - 6);
+    run(sim, 600);
+
+    const hero = yourHero(sim)!;
+    expect(hero.station).toEqual({ x: camp.x + 12, y: camp.y - 6 });
+    expect(Math.hypot(hero.x - (camp.x + 12), hero.y - (camp.y - 6))).toBeLessThan(CAMP_RADIUS);
+    expect(Math.hypot(hero.x - camp.x, hero.y - camp.y)).toBeGreaterThan(CAMP_RADIUS);
+  });
+
+  it("refuses to order anybody else's hero", () => {
+    /*
+     * Marching a colleague around the map would be a toy, and the only thing in
+     * this game that changes what somebody else sees.
      */
     const sim = createSim();
-    const first = muster(sim, { id: "a", name: "a", kind: "codex", work: "bug" });
-    const again = muster(sim, { id: "a", name: "a", kind: "codex", work: "bug" });
+    setRoster(sim, {
+      heroes: [{ uid: "grace", name: "Grace", characterClass: "codex" }],
+      soldiers: [],
+      /* No `youUid`: the viewer is not on this team. */
+    });
+    expect(orderHero(sim, 10, 10)).toBe(false);
+    expect(sim.actors.every((actor) => !actor.ordered)).toBe(true);
+  });
+});
 
-    expect(sim.actors).toHaveLength(1);
-    expect(again).toBe(first);
+describe("the Unmade", () => {
+  it("comes for a hero whose session is on a fault", () => {
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [{ id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" }],
+      youUid: "ada",
+    });
+    expect(besieged(sim)).toEqual(["ada"]);
+    run(sim, 300);
+    expect(sim.spawned).toBeGreaterThan(0);
   });
 
-  it("raises the watch only once, however often it is asked", () => {
-    const sim = createSim();
-    garrisonSoldiers(sim);
-    const after = sim.actors.length;
-    garrisonSoldiers(sim);
-    expect(sim.actors).toHaveLength(after);
+  it("leaves alone a hero who is only building", () => {
+    const sim = theExample();
+    /* Ten features and three idle: nothing broken, so nothing comes. */
+    run(sim, 600);
+    expect(sim.actors.some((actor) => actor.side === "unmade")).toBe(false);
   });
 
-  it("gives every garrison somebody to stand in it", () => {
+  it("comes to the right camp", () => {
     const sim = createSim();
-    garrisonSoldiers(sim);
-    for (const garrison of GARRISONS) {
-      expect(sim.actors.some((actor) => actor.home === garrison.id)).toBe(true);
+    setRoster(sim, {
+      heroes: [
+        { uid: "ada", name: "Ada", characterClass: "codex" },
+        { uid: "alan", name: "Alan", characterClass: "codex" },
+      ],
+      soldiers: [{ id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" }],
+      youUid: "ada",
+    });
+    run(sim, 200);
+    const adaCamp = sim.camps.get("ada")!;
+    const unmade = sim.actors.filter((actor) => actor.side === "unmade");
+    expect(unmade.length).toBeGreaterThan(0);
+    for (const foe of unmade) {
+      expect(foe.heroUid).toBe("ada");
+      expect(Math.hypot(foe.x - adaCamp.x, foe.y - adaCamp.y)).toBeLessThan(30);
     }
+  });
+
+  it("is bounded however long it runs", () => {
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [{ id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" }],
+      youUid: "ada",
+    });
+    run(sim, 6000);
+    expect(sim.actors.filter((actor) => actor.side === "unmade").length).toBeLessThanOrEqual(18);
+  });
+
+  it("gets felled, and the count says so", () => {
+    const sim = createSim();
+    garrisonSoldiers(sim);
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: Array.from({ length: 4 }, (_, index) => ({
+        id: `a${index}`,
+        name: "fix: it",
+        kind: "codex",
+        work: "bug" as Work,
+        heroUid: "ada",
+      })),
+      youUid: "ada",
+    });
+    run(sim, 3000);
+    expect(sim.felled).toBeGreaterThan(0);
+  });
+
+  it("never kills anybody who stands for something real", () => {
+    /*
+     * A hero is a person and a soldier is a running session. Neither stops
+     * existing because something bit it: they are set back on their feet at
+     * their camp, which reads as being driven off. Only the Unmade die.
+     */
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [{ id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" }],
+      youUid: "ada",
+    });
+    run(sim, 4000);
+    expect(sim.actors.filter((actor) => actor.role === "hero")).toHaveLength(1);
+    expect(sim.actors.filter((actor) => actor.role === "soldier")).toHaveLength(1);
   });
 });
 
 describe("running", () => {
   it("moves people when it is ticked", () => {
-    const sim = fieldOf(4);
+    const sim = theExample();
     const before = sim.actors.map((actor) => `${actor.x},${actor.y}`);
     run(sim, 120);
-    const after = sim.actors.map((actor) => `${actor.x},${actor.y}`);
-    expect(after).not.toEqual(before);
+    expect(sim.actors.map((actor) => `${actor.x},${actor.y}`)).not.toEqual(before);
   });
 
   it("does not shake", () => {
@@ -100,13 +381,10 @@ describe("running", () => {
      * The bug this whole file was written for. A wright that cannot reach where
      * it is going re-decides every tick and spends its life turning round; on
      * screen that reads as violent vibration. Counting direction reversals is
-     * how it was found and is the only honest way to say it is gone.
-     *
-     * Walking a curved path reverses facing occasionally, so the bar is not
-     * zero. It is "far less often than every other tick", which is where the
-     * broken version sat.
+     * how it was found and the only honest way to say it is gone.
      */
-    const sim = fieldOf(6);
+    const sim = theExample();
+    garrisonSoldiers(sim);
     const TICKS = 900;
     const facing = new Map(sim.actors.map((actor) => [actor.id, actor.facing]));
     const reversals = new Map(sim.actors.map((actor) => [actor.id, 0]));
@@ -122,12 +400,12 @@ describe("running", () => {
       }
     }
 
-    const worst = Math.max(...reversals.values());
-    expect(worst).toBeLessThan(TICKS / 20);
+    expect(Math.max(...reversals.values())).toBeLessThan(TICKS / 20);
   });
 
-  it("keeps everybody inside the country", () => {
-    const sim = fieldOf(6);
+  it("keeps everybody on the map", () => {
+    const sim = theExample();
+    garrisonSoldiers(sim);
     run(sim, 1200);
     for (const actor of sim.actors) {
       expect(Number.isFinite(actor.x)).toBe(true);
@@ -137,66 +415,9 @@ describe("running", () => {
     }
   });
 
-  it("keeps a wright near the garrison it belongs to", () => {
-    /* Milling about is the intent; wandering off across the map is not. */
-    const sim = fieldOf(4, "feature");
-    run(sim, 1200);
-    const home = garrisonFor("feature");
-    for (const actor of sim.actors) {
-      if (!actor.session) continue;
-      expect(Math.hypot(actor.x - home.x, actor.y - home.y))
-        .toBeLessThanOrEqual(home.radius + 6);
-    }
-  });
-});
-
-describe("the Unmade", () => {
-  it("arrives when there is a fault being worked on", () => {
-    const sim = fieldOf(3, "bug");
-    run(sim, 600);
-    expect(sim.spawned).toBeGreaterThan(0);
-  });
-
-  it("stays away when nobody is fighting anything", () => {
-    /*
-     * The enemy is a consequence of the work, not a timer. An account with
-     * nothing broken should show a quiet map, because that is the truth.
-     */
-    const sim = createSim();
-    garrisonSoldiers(sim);
-    muster(sim, { id: "a", name: "a", kind: "codex", work: "feature" });
-    run(sim, 600);
-    expect(sim.actors.some((actor) => actor.side === "unmade")).toBe(false);
-  });
-
-  it("is bounded, however long it runs", () => {
-    const sim = fieldOf(6, "bug");
-    run(sim, 6000);
-    expect(sim.actors.filter((actor) => actor.side === "unmade").length)
-      .toBeLessThanOrEqual(14);
-  });
-
-  it("gets felled, and the count says so", () => {
-    const sim = fieldOf(6, "bug");
-    run(sim, 3000);
-    expect(sim.felled).toBeGreaterThan(0);
-  });
-});
-
-describe("what the renderer reads", () => {
-  it("clears its own effects and marks rather than growing forever", () => {
-    /*
-     * Every effect is a pooled sprite on the other side of this. A list that
-     * only grows is a leak that shows up as a frame rate, hours in.
-     */
-    const sim = fieldOf(6, "bug");
-    run(sim, 3000);
-    expect(sim.effects.length).toBeLessThan(200);
-    expect(sim.marks.length).toBeLessThan(200);
-  });
-
   it("never reports an action it cannot draw", () => {
-    const sim = fieldOf(6, "bug");
+    const sim = theExample();
+    garrisonSoldiers(sim);
     for (let index = 0; index < 900; index += 1) {
       tickSim(sim);
       for (const actor of sim.actors) {
@@ -205,5 +426,24 @@ describe("what the renderer reads", () => {
         expect(actor.hp).toBeLessThanOrEqual(actor.maxHp);
       }
     }
+  });
+
+  it("clears its own effects rather than growing forever", () => {
+    const sim = createSim();
+    garrisonSoldiers(sim);
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: Array.from({ length: 4 }, (_, index) => ({
+        id: `a${index}`,
+        name: "fix: it",
+        kind: "codex",
+        work: "bug" as Work,
+        heroUid: "ada",
+      })),
+      youUid: "ada",
+    });
+    run(sim, 3000);
+    expect(sim.effects.length).toBeLessThan(200);
+    expect(sim.marks.length).toBeLessThan(200);
   });
 });

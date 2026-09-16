@@ -1,89 +1,150 @@
 import { kindForCommand } from "../../lib/session-kinds";
-import type { SessionRecord } from "../../lib/api";
+import type { Member, SessionRecord } from "../../lib/api";
 import { workFor, type Work } from "../world/work";
+import type { HeroInput, SoldierInput } from "../world/sim";
 
 export { workFor };
 export type { Work };
 
 /**
- * Turning real sessions into a garrison.
+ * The team and its sessions, as the field needs them.
  *
- * This is the seam where the game stops being a toy: the wrights on the field
- * are the sessions in the account, their class is the harness that session is
- * running, and what they are doing is read from what the session is called.
+ * The join this whole file exists for: **a soldier belongs to the hero who owns
+ * its session.** Ten Claude Code sessions and three OpenClaw sessions owned by
+ * one person are thirteen soldiers of two classes, all of them hers.
  *
  * `kindForCommand` is reused rather than reimplemented. It already knows that
  * `claude --resume abc` is Claude Code and that `npm run claude-thing` is not,
  * including how to see through the `sh -c` wrapper a browser-started session
- * arrives in. A second copy of that knowledge here would drift from it and the
- * game would start disagreeing with the session list about what things are.
+ * arrives in. A second copy of that knowledge here would drift, and the game
+ * would start disagreeing with the session list about what things are.
  */
 
-export interface Muster {
-  id: string;
-  name: string;
-  kind: string;
-  work: Work;
-  /**
-   * The facts the inspection panel shows when a wright is clicked.
-   *
-   * Carried through rather than looked up again later: by the time somebody
-   * clicks a figure on the map, the session list may have been polled a dozen
-   * times, and the answer should be about the session this wright *is*.
-   */
-  session: { id: string; startedAt: number; host: string; command: string };
+export interface Roster {
+  heroes: HeroInput[];
+  soldiers: SoldierInput[];
+  youUid?: string;
 }
 
-/** Whether a session should be on the field at all. */
+/**
+ * Whether a session is still running, and so still has a soldier.
+ *
+ * A closed session is work that is finished. It counts towards experience,
+ * which the service works out separately; it does not stand on the field.
+ */
 export function isOnTheField(session: SessionRecord): boolean {
-  /* Finished sessions have gone home. The Chronicle remembers them. */
-  return !session.closedAt;
+  return session.closedAt === undefined;
 }
 
 /**
- * The garrison, from the session list.
+ * Whose session this is.
  *
- * Sorted by when they started, so the field does not reshuffle every time the
- * list is polled and somebody's position jumps for no reason.
+ * Rows from before sessions recorded an owner have none, and a soldier with no
+ * hero is a figure standing in open country with nobody to follow. So: the
+ * owner if there is one, else whoever it was handed to, else the person looking
+ * at it -- who can only be seeing it because it is theirs or their team's, and
+ * of those two the first is much the likelier for a row this old.
  */
-export function garrisonFrom(sessions: SessionRecord[]): Muster[] {
-  return sessions
-    .filter(isOnTheField)
-    .slice()
-    .sort((a, b) => a.startedAt - b.startedAt)
-    .map((session) => {
-      const label = session.name || session.command;
-      return {
-        id: session.id,
-        name: label,
-        kind: kindForCommand(session.command).id,
-        work: workFor(`${session.name ?? ""} ${session.command}`),
-        session: {
-          id: session.id,
-          startedAt: session.startedAt,
-          host: session.host,
-          command: session.command,
-        },
-      };
-    });
+export function ownerOf(session: SessionRecord, viewerUid: string): string {
+  return (
+    session.ownerUid ??
+    session.assigneeUids?.[0] ??
+    session.assigneeUid ??
+    viewerUid
+  );
+}
+
+/** What to call somebody: their name, or the part of their address before the @. */
+export function nameOf(member: { name?: string; email?: string; uid: string }): string {
+  const named = member.name?.trim();
+  if (named) return named;
+  const email = member.email ?? "";
+  const local = email.slice(0, email.indexOf("@"));
+  return local || member.uid.slice(0, 8);
 }
 
 /**
- * What changed between one garrison and the next.
+ * Which class a hero is drawn as.
  *
- * The field is not rebuilt when the session list is polled; wrights that are
- * still there keep walking, new ones march in through the gate, and finished
- * ones leave. Rebuilding would teleport everybody to the gate every four
- * seconds, which is what the poll interval is.
+ * The harness they run most. Their own chosen class is in their own saved game,
+ * which this account cannot read for anybody else -- and asking the service to
+ * publish it would be storing a second fact that can disagree with the first.
+ * What everybody *can* see is what a colleague is running, so that is what
+ * decides how they are drawn, and it has the advantage of being true.
+ *
+ * Your own choice still wins for your own hero; `GameRoute` applies it, because
+ * only your browser knows it.
  */
-export function difference(
-  present: { id: string }[],
-  wanted: Muster[],
-): { arrived: Muster[]; left: string[] } {
-  const here = new Set(present.map((wright) => wright.id));
-  const should = new Set(wanted.map((entry) => entry.id));
-  return {
-    arrived: wanted.filter((entry) => !here.has(entry.id)),
-    left: present.filter((wright) => !should.has(wright.id)).map((wright) => wright.id),
-  };
+export function classFor(sessions: SessionRecord[]): string {
+  const counts = new Map<string, number>();
+  for (const session of sessions) {
+    const kind = kindForCommand(session.command).id;
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  let best = "terminal";
+  let most = 0;
+  /* Sorted, so a tie does not depend on the order sessions came back in. */
+  for (const kind of [...counts.keys()].sort()) {
+    const count = counts.get(kind) ?? 0;
+    if (count > most) {
+      most = count;
+      best = kind;
+    }
+  }
+  return best;
+}
+
+export function rosterFrom(
+  sessions: SessionRecord[],
+  members: Member[],
+  you?: { uid: string },
+): Roster {
+  const viewerUid = you?.uid ?? "";
+  const live = sessions.filter(isOnTheField);
+
+  const byOwner = new Map<string, SessionRecord[]>();
+  for (const session of live) {
+    const owner = ownerOf(session, viewerUid);
+    const held = byOwner.get(owner) ?? [];
+    held.push(session);
+    byOwner.set(owner, held);
+  }
+
+  /*
+   * Every member is a hero, whether or not they have anything running. A
+   * colleague with nothing open is still on the team, so they are still
+   * somewhere on the map; it is the soldiers around them that come and go.
+   *
+   * An owner who is not on the member list gets a hero too. That happens when
+   * somebody has left the team and their session is still running, and a
+   * session with no hero would be a soldier standing in open country with
+   * nobody to follow.
+   */
+  const uids = new Set<string>([...members.map((member) => member.uid), ...byOwner.keys()]);
+  const named = new Map(members.map((member) => [member.uid, member]));
+
+  const heroes: HeroInput[] = [...uids].sort().map((uid) => {
+    const member = named.get(uid);
+    return {
+      uid,
+      name: member ? nameOf(member) : `${uid.slice(0, 8)} (left the team)`,
+      characterClass: classFor(byOwner.get(uid) ?? []),
+    };
+  });
+
+  const soldiers: SoldierInput[] = live.map((session) => ({
+    id: session.id,
+    name: session.name?.trim() || session.command,
+    kind: kindForCommand(session.command).id,
+    work: workFor(session.name || session.command || ""),
+    heroUid: ownerOf(session, viewerUid),
+    session: {
+      id: session.id,
+      startedAt: session.startedAt,
+      host: session.host,
+      command: session.command,
+    },
+  }));
+
+  return { heroes, soldiers, youUid: you?.uid };
 }

@@ -7,7 +7,7 @@ import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import type { Scene } from "./PixiStage";
 import { GARRISONS } from "../world/marches";
-import { createSim, garrisonSoldiers, muster, tickSim, type Actor, type Mark, type Sim } from "../world/sim";
+import { createSim, garrisonSoldiers, orderHero, tickSim, yourHero, type Actor, type Mark, type Sim } from "../world/sim";
 
 /**
  * The Marches, assembled and running.
@@ -23,8 +23,10 @@ const RIDE_LIFT = 150;
 
 export interface KeepHandle {
   sim: Sim;
-  /** Called when a wright standing for a real session is clicked. */
+  /** Called when a hero or a soldier is clicked. */
   onPick?: (actor: Actor | undefined) => void;
+  /** Called when the ground is clicked and the player's hero was sent there. */
+  onOrder?: (x: number, y: number) => void;
   select(id: string | undefined): void;
   /** The skin worn by this player's own wrights. */
   wear(tint: number): void;
@@ -54,7 +56,6 @@ export async function buildKeepScene(
   app: Application,
   viewport: Viewport,
   handle: KeepHandle,
-  roster: { id: string; name: string; kind: string; work: "bug" | "feature" | "idle"; session?: Actor["session"] }[],
 ): Promise<Scene> {
   const [art, fx] = await Promise.all([loadArt(), loadEffects()]);
   const { root, things, labels, signs } = buildWorld(app, art);
@@ -64,7 +65,6 @@ export async function buildKeepScene(
 
   const sim = handle.sim;
   garrisonSoldiers(sim);
-  for (const entry of roster) muster(sim, entry);
 
   let selected: string | undefined;
   const actors = new ActorLayer(art, things, labels);
@@ -137,22 +137,70 @@ export async function buildKeepScene(
     let nearest: Actor | undefined;
     let nearestDistance = PICK_RADIUS;
     for (const actor of sim.actors) {
-      if (!actor.session) continue;
+      /* Heroes and soldiers can be inspected. The watch and the Unmade cannot. */
+      if (actor.role !== "hero" && actor.role !== "soldier") continue;
       const distance = Math.hypot(actor.x - tile.x, actor.y - tile.y);
-      if (distance < nearestDistance) {
+      /* A hero is a bigger figure, so it is a bigger thing to hit. */
+      const reach = actor.role === "hero" ? PICK_RADIUS * 1.6 : PICK_RADIUS;
+      if (distance < Math.min(nearestDistance, reach)) {
         nearestDistance = distance;
         nearest = actor;
       }
     }
 
-    selected = nearest?.id;
-    handle.onPick?.(nearest);
+    if (nearest) {
+      selected = nearest.id;
+      handle.onPick?.(nearest);
+      return;
+    }
+
+    /*
+     * Nothing under the click: it is an order, not an inspection.
+     *
+     * Clicking a figure inspects it and clicking the ground moves your hero,
+     * which is the arrangement every game of this shape uses and the one
+     * nobody has to be taught. Ordering also clears the inspect panel, because
+     * the panel is about a thing you pointed at and you have just pointed
+     * somewhere else.
+     */
+    if (orderHero(sim, tile.x, tile.y)) {
+      selected = undefined;
+      handle.onPick?.(undefined);
+      handle.onOrder?.(tile.x, tile.y);
+    }
   };
   app.stage.on("pointertap", onTap);
 
   const home = homeView();
   viewport.setZoom(home.zoom, true);
   viewport.moveCenter(home.x, home.y);
+
+  /*
+   * Once the roster arrives, the view moves to the player's own hero.
+   *
+   * It opens on the Keep because that is all there is to open on: the scene is
+   * built before the first roster comes back, and a map this size has to start
+   * somewhere. But the Keep is not where the player's own company is, and
+   * arriving at somebody else's landmark and having to go looking for yourself
+   * is a poor first thirty seconds.
+   *
+   * Once only. Re-centring on every poll would drag the view back every four
+   * seconds, out from under whoever was reading a signpost.
+   */
+  let found = false;
+  const findYou = () => {
+    if (found) return;
+    const hero = yourHero(sim);
+    if (!hero) return;
+    found = true;
+    const seat = toScreen(hero.x, hero.y);
+    viewport.animate({
+      position: { x: seat.x, y: seat.y - RIDE_LIFT },
+      scale: 1,
+      time: 700,
+      ease: "easeInOutSine",
+    });
+  };
 
   /*
    * Signs keep roughly the same size on screen at any zoom, and the sentence
@@ -199,6 +247,7 @@ export async function buildKeepScene(
         owed -= TICK_MS;
         tickSim(sim);
       }
+      findYou();
       actors.sync(sim, selected);
       blows.sync(sim);
       birds.tick(deltaMs);

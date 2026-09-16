@@ -27,12 +27,19 @@ export const CAMP_RADIUS = 7;
 /** How many sites are solved for. Beyond this, heroes share ground. */
 const SITES = 14;
 
-/** Clear of a holding by this much, so the two never read as one place. */
-const FROM_HOLDING = 7;
+/**
+ * The clearances, which are what decide how many camps there are room for.
+ *
+ * Generous ones left room for seven sites on a map that wants fourteen, which
+ * meant a team of eight had two people sharing ground. These are the smallest
+ * that still keep a camp from reading as part of a holding, or from having a
+ * road through the middle of it.
+ */
+const FROM_HOLDING = 3;
 /** Clear of a road, so a camp never has a road through the middle of it. */
-const FROM_ROAD = 5;
-/** Clear of each other. */
-const FROM_CAMP = 5;
+const FROM_ROAD = 3;
+/** Clear of each other, so two camps never read as one. */
+const FROM_CAMP = 4;
 
 function roadPoints(): { x: number; y: number }[] {
   const points: { x: number; y: number }[] = [];
@@ -100,7 +107,12 @@ function solveCamps(): Camp[] {
        * up along the same two highways.
        */
       const outward = Math.hypot(x - middle.x, y - middle.y);
-      const score = -Math.abs(outward - 30) * 2 + Math.min(nearestRoad, 18);
+      /*
+       * Wanted: a ring about thirty tiles out, and as far from a road as that
+       * allows. The distance term is weighted lightly, because weighting it
+       * heavily packs every camp onto one circle and then runs out of room.
+       */
+      const score = -Math.abs(outward - 30) + Math.min(nearestRoad, 16);
       candidates.push({ camp: { x, y }, score });
     }
   }

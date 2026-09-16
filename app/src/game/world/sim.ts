@@ -1,33 +1,47 @@
-import { GARRISONS, garrisonFor, type Garrison } from "./marches";
+import { GARRISONS, type Garrison } from "./marches";
+import { assignCamps, CAMP_RADIUS, type Camp } from "./camps";
 import type { Work } from "./work";
 
 /**
  * Who is on the Marches, and what they are doing.
  *
- * A rewrite of the old yard simulation, and much simpler for one reason: the
- * map is open country. The old one spent most of its code steering around the
- * one building in the middle of the one yard, and every version of that
- * steering shook — the wright re-decided which way to go thirty times a second
- * and spent its time turning round rather than walking.
+ * The shape of it: **a hero is a person, a soldier is a session, and a soldier
+ * belongs to the hero who owns it.** Somebody with ten Claude Code sessions and
+ * three OpenClaw sessions has thirteen soldiers of two classes, all of them
+ * theirs, all of them around their camp. That is the whole model, and every
+ * rule below follows from it.
  *
- * Here there is nowhere that has to be gone around. A wright walks to the
- * garrison its work belongs to and mills about inside it; the buildings sit in
- * the middle and everybody else keeps to the apron. No avoidance, no corner
- * routing, no oscillation. The fix for the shaking was mostly deleting the
- * thing that shook.
+ * Heroes exist whether or not anything is running. That matters: a team member
+ * with nothing open is still on the team, so they are still somewhere on the
+ * map. It is the soldiers around them that come and go.
  *
- * Everything here is a plain object advanced by pure functions, with no Pixi in
+ * There is no obstacle avoidance and there never will be. The map is open
+ * country, and the version that had some spent most of its code steering round
+ * the one building in the one yard -- every version of which shook, because a
+ * wright that cannot reach where it is going re-decides thirty times a second
+ * and spends its life turning round. The fix was deleting the thing that shook.
+ *
+ * Everything here is plain objects advanced by pure functions, with no Pixi in
  * it, so a thousand ticks can be run in a test and looked at.
  */
 
-/* Defined in world/work.ts, which the service shares; re-exported for ease. */
 export type { Work };
 export type Side = "garrison" | "unmade";
+
+/**
+ * What an actor is, which decides how it moves.
+ *
+ * `hero` and `soldier` stand for something in the account. `watch` is scenery:
+ * a keep with five people in it does not look like a keep, and a fault met by
+ * one wright does not look like a battle. `unmade` is the fault itself.
+ */
+export type Role = "hero" | "soldier" | "watch" | "unmade";
 
 export interface Actor {
   id: string;
   side: Side;
-  /** For a wright, the session kind. For the rest, which sprite to draw. */
+  role: Role;
+  /** For a soldier, the session kind. For the rest, which sprite to draw. */
   kind: string;
   /** Shown on the plate, and in the panel when clicked. */
   name: string;
@@ -45,17 +59,41 @@ export interface Actor {
   /** What the renderer draws: standing, walking, or mid-blow. */
   action: "stand" | "walk" | "attack";
   actionUntil: number;
-  /** Ticks to mill about before choosing somewhere new inside the garrison. */
+  /** Ticks to mill about before choosing somewhere new. */
   rest: number;
-  /** Which holding this actor belongs to. */
+  /** Which holding this actor belongs to, for the watch. */
   home: string;
+  /**
+   * Whose this is.
+   *
+   * A hero's own account id, or for a soldier the id of the hero who owns it.
+   * This is the join the whole model turns on: it is what puts a session's
+   * soldier beside the right person.
+   */
+  heroUid?: string;
+  /**
+   * A hero walking where the player pointed.
+   *
+   * Only ever true of the player's own hero. Cleared on arrival, and it is what
+   * makes an order outrank milling about.
+   */
+  ordered?: boolean;
+  /**
+   * Where a hero has been told to hold.
+   *
+   * Set when an order finishes, and it becomes the ground they mill about and
+   * the ground their retinue gathers on. Without it a hero walked to where they
+   * were sent, arrived, noticed they were a long way from their camp, and
+   * immediately walked back -- which makes the one thing the player can do in
+   * this game pointless.
+   */
+  station?: { x: number; y: number };
   /** Who it is fighting, held until that one dies or wanders off. */
   targetId?: string;
   /**
-   * A real session, rather than one of the garrison's own soldiers.
+   * A real session, rather than a hero or one of the watch.
    *
-   * Only these are worth clicking: they stand for something in the account.
-   * The rest are there so a battle looks like a battle.
+   * Only these stand for something running. The rest are a person, or scenery.
    */
   session?: { id: string; startedAt: number; host: string; command: string };
 }
@@ -89,11 +127,17 @@ export interface Sim {
   raised: number;
   /** Ticks until the next of the Unmade arrives. */
   nextSpawn: number;
+  /** Where each hero holds, by account id. */
+  camps: Map<string, Camp>;
+  /** Which hero is the player's, so only that one takes orders. */
+  youUid?: string;
 }
 
 /** Tiles a second. */
 const WALK = 1.9;
 const CHARGE = 2.4;
+/** A hero walks a little faster, so a following retinue strings out behind. */
+const HERO_WALK = 2.7;
 /** Thirty ticks a second, matching the renderer's fixed step. */
 const PER_TICK = 1 / 30;
 
@@ -105,9 +149,17 @@ const HURT_TICKS = 6;
 const MARK_TICKS = 45;
 const EFFECT_TICKS = 18;
 const SPAWN_EVERY = 90;
-const MAX_UNMADE = 14;
-/** Beyond this a fight is abandoned and another chosen. */
+const MAX_UNMADE = 18;
+/** Beyond this a fight is abandoned, and outside it none is started. */
 const ABANDON_AT = 9;
+
+/**
+ * How far a soldier lets its hero get before it goes after them.
+ *
+ * Loose on purpose. A retinue that holds formation reads as a parade; one that
+ * notices after a few paces and then hurries reads as people following someone.
+ */
+const LEASH = CAMP_RADIUS + 1.5;
 
 export function createSim(): Sim {
   return {
@@ -119,6 +171,7 @@ export function createSim(): Sim {
     felled: 0,
     raised: 0,
     nextSpawn: 40,
+    camps: new Map(),
   };
 }
 
@@ -137,20 +190,15 @@ function hashId(id: string): number {
   return Math.abs(value);
 }
 
-/**
- * Somewhere to stand inside a holding.
- *
- * On the apron, not the middle: the middle is where the buildings are, and a
- * soldier standing inside a church looks like a bug even when it is only a
- * missing collision.
- */
-function spotIn(garrison: Garrison, seed: number): { x: number; y: number } {
+/** Somewhere to stand around a point, on the apron rather than the middle. */
+function spotAround(x: number, y: number, radius: number, seed: number): { x: number; y: number } {
   const angle = noise(seed) * Math.PI * 2;
-  const distance = garrison.radius * (0.55 + noise(seed * 7) * 0.4);
-  return {
-    x: garrison.x + Math.cos(angle) * distance,
-    y: garrison.y + Math.sin(angle) * distance * 0.85,
-  };
+  const distance = radius * (0.35 + noise(seed * 7) * 0.6);
+  return { x: x + Math.cos(angle) * distance, y: y + Math.sin(angle) * distance * 0.85 };
+}
+
+function spotIn(garrison: Garrison, seed: number): { x: number; y: number } {
+  return spotAround(garrison.x, garrison.y, garrison.radius, seed);
 }
 
 let nextEffect = 1;
@@ -163,67 +211,173 @@ function addMark(sim: Sim, text: string, x: number, y: number, kind: Mark["kind"
   sim.marks.push({ id: nextEffect++, text, x, y, life: MARK_TICKS, maxLife: MARK_TICKS, kind });
 }
 
-/** Adds a wright for a real session, at the garrison its work belongs to. */
-export function muster(
-  sim: Sim,
-  input: { id: string; name: string; kind: string; work: Work; session?: Actor["session"] },
-): Actor {
-  /*
-   * Mustering the same id twice returns the one already on the field.
-   *
-   * A Sim outlives the scene drawn from it -- React remounts an effect in
-   * development, the roster poll returns the same session again -- and without
-   * this each of those puts a second copy of the same wright on the map,
-   * standing in the same spot, fighting the same foe twice.
-   */
-  const standing = sim.actors.find((actor) => actor.id === input.id);
-  if (standing) return standing;
+/* ---- the roster ---------------------------------------------------------- */
 
-  const garrison = garrisonFor(input.work);
-  const spot = spotIn(garrison, hashId(input.id));
-  const actor: Actor = {
-    ...input,
-    side: "garrison",
-    x: spot.x,
-    y: spot.y + 4,
-    toX: spot.x,
-    toY: spot.y,
-    facing: 1,
-    moving: true,
-    hp: 20,
-    maxHp: 20,
-    hurt: 0,
-    action: "walk",
-    actionUntil: 0,
-    rest: 0,
-    home: garrison.id,
-  };
-  sim.actors.push(actor);
-  return actor;
+export interface HeroInput {
+  uid: string;
+  name: string;
+  /** The class they chose, which is only how their own figure is drawn. */
+  characterClass: string;
+}
+
+export interface SoldierInput {
+  id: string;
+  name: string;
+  /** The harness this session runs, which is the soldier's class. */
+  kind: string;
+  work: Work;
+  /** Whose session it is. */
+  heroUid: string;
+  session?: Actor["session"];
 }
 
 /**
- * The garrison's own soldiers.
+ * Brings the field in line with the team and its sessions, in one call.
  *
- * They are not sessions and they never will be. They are here because a keep
- * with five people in it does not look like a keep, and a fault met by one
- * wright does not look like a battle. Clicking one says as much rather than
- * pretending it stands for something.
+ * All at once rather than one muster at a time, because the camps have to be
+ * solved for the whole roster: two members handed the same ground reads as a
+ * rendering fault rather than as a crowded team, and that cannot be decided one
+ * member at a time.
+ *
+ * It is idempotent, which the poll depends on. The roster arrives every few
+ * seconds and is usually identical; anybody already on the field stays exactly
+ * where they are, and only arrivals and departures cost anything.
+ */
+export function setRoster(
+  sim: Sim,
+  roster: { heroes: HeroInput[]; soldiers: SoldierInput[]; youUid?: string },
+): void {
+  sim.youUid = roster.youUid;
+  sim.camps = assignCamps(roster.heroes.map((hero) => hero.uid));
+
+  const wanted = new Set<string>();
+
+  for (const hero of roster.heroes) {
+    const id = `hero-${hero.uid}`;
+    wanted.add(id);
+    const standing = sim.actors.find((actor) => actor.id === id);
+    if (standing) {
+      standing.name = hero.name;
+      standing.kind = hero.characterClass || standing.kind;
+      continue;
+    }
+    const camp = sim.camps.get(hero.uid) ?? { x: 64, y: 62 };
+    sim.actors.push({
+      id,
+      side: "garrison",
+      role: "hero",
+      kind: hero.characterClass || "terminal",
+      name: hero.name,
+      work: "idle",
+      x: camp.x,
+      y: camp.y,
+      toX: camp.x,
+      toY: camp.y,
+      facing: 1,
+      moving: false,
+      hp: 60,
+      maxHp: 60,
+      hurt: 0,
+      action: "stand",
+      actionUntil: 0,
+      rest: 0,
+      home: "camp",
+      heroUid: hero.uid,
+    });
+  }
+
+  for (const soldier of roster.soldiers) {
+    const id = `soldier-${soldier.id}`;
+    wanted.add(id);
+    const standing = sim.actors.find((actor) => actor.id === id);
+    if (standing) {
+      standing.work = soldier.work;
+      standing.name = soldier.name;
+      continue;
+    }
+    const camp = sim.camps.get(soldier.heroUid) ?? { x: 64, y: 62 };
+    const spot = spotAround(camp.x, camp.y, CAMP_RADIUS, hashId(id));
+    sim.actors.push({
+      id,
+      side: "garrison",
+      role: "soldier",
+      kind: soldier.kind,
+      name: soldier.name,
+      work: soldier.work,
+      x: spot.x,
+      y: spot.y,
+      toX: spot.x,
+      toY: spot.y,
+      facing: 1,
+      moving: false,
+      hp: 20,
+      maxHp: 20,
+      hurt: 0,
+      action: "stand",
+      actionUntil: 0,
+      rest: 0,
+      home: "camp",
+      heroUid: soldier.heroUid,
+      session: soldier.session,
+    });
+  }
+
+  /*
+   * Anybody no longer on the roster leaves. The watch and the Unmade are not on
+   * it and are not touched: scenery and faults are not people.
+   */
+  sim.actors = sim.actors.filter(
+    (actor) => (actor.role !== "hero" && actor.role !== "soldier") || wanted.has(actor.id),
+  );
+}
+
+/** The player's own hero, if they have one on the field. */
+export function yourHero(sim: Sim): Actor | undefined {
+  if (!sim.youUid) return undefined;
+  return sim.actors.find((actor) => actor.role === "hero" && actor.heroUid === sim.youUid);
+}
+
+/**
+ * Orders a hero to walk somewhere.
+ *
+ * Only ever the player's own. Being able to march a colleague around the map
+ * would be a toy, and it would be the only thing in this game that changes what
+ * somebody else sees.
+ */
+export function orderHero(sim: Sim, x: number, y: number): boolean {
+  const hero = yourHero(sim);
+  if (!hero) return false;
+  hero.toX = x;
+  hero.toY = y;
+  hero.moving = true;
+  hero.ordered = true;
+  hero.action = "walk";
+  hero.rest = 0;
+  return true;
+}
+
+/**
+ * The garrison's own watch.
+ *
+ * Not sessions and never will be. They are here because a keep with five people
+ * in it does not look like a keep, and a fault met by one wright does not look
+ * like a battle. Clicking one says as much rather than pretending otherwise.
  */
 export function garrisonSoldiers(sim: Sim): void {
   for (const garrison of GARRISONS) {
     const count = garrison.draws === "bug" ? 6 : 3;
     for (let index = 0; index < count; index += 1) {
-      const id = `${garrison.id}-soldier-${index}`;
-      /* Same reason as `muster`: calling this twice must not double the watch. */
+      const id = `${garrison.id}-watch-${index}`;
+      /* Calling this twice must not double the watch. */
       if (sim.actors.some((actor) => actor.id === id)) continue;
       const spot = spotIn(garrison, hashId(id));
       sim.actors.push({
         id,
         side: "garrison",
+        role: "watch",
         kind: "soldier",
         name: `${garrison.name} watch`,
-        work: garrison.draws === "bug" ? "bug" : "idle",
+        work: "idle",
         x: spot.x,
         y: spot.y,
         toX: spot.x,
@@ -242,47 +396,53 @@ export function garrisonSoldiers(sim: Sim): void {
   }
 }
 
-/**
- * Whether a real session is working on a fault, which is what draws the Unmade.
- *
- * Only sessions count. The garrison's own watch is drawn standing at a
- * bug-facing holding and would otherwise make this permanently true, so the
- * Unmade arrived on a map where nothing at all was broken -- which would make
- * the battle scenery rather than a read-out of the account. A quiet map is the
- * correct picture of a quiet day, and it is the reason a loud one means
- * something.
- */
-function underAttack(sim: Sim): boolean {
-  return sim.actors.some(
-    (actor) => actor.side === "garrison" && actor.work === "bug" && actor.session !== undefined,
-  );
-}
+/* ---- the Unmade ---------------------------------------------------------- */
 
 const UNMADE_KINDS = [
-  { kind: "mite", hp: 6, speed: 1.0 },
-  { kind: "crawler", hp: 12, speed: 0.85 },
-  { kind: "heisenbug", hp: 20, speed: 0.7 },
+  { kind: "mite", hp: 6 },
+  { kind: "crawler", hp: 12 },
+  { kind: "heisenbug", hp: 20 },
 ];
 
-function spawnUnmade(sim: Sim): void {
+/**
+ * Which heroes have a fault being worked on, and so have something coming.
+ *
+ * Per hero, not per map. The Unmade are somebody's bugs: they come to the camp
+ * of the person whose session is fixing something. A team where nobody is
+ * fixing anything has a quiet map, which is the correct picture of a quiet day
+ * and the reason a loud one means anything.
+ */
+export function besieged(sim: Sim): string[] {
+  const under = new Set<string>();
+  for (const actor of sim.actors) {
+    if (actor.role !== "soldier" || actor.work !== "bug" || !actor.heroUid) continue;
+    under.add(actor.heroUid);
+  }
+  return [...under].sort();
+}
+
+function spawnUnmade(sim: Sim, heroUid: string): void {
+  const camp = sim.camps.get(heroUid);
+  if (!camp) return;
   sim.spawned += 1;
-  const watch = GARRISONS.find((garrison) => garrison.draws === "bug") ?? GARRISONS[0];
+
   const roll = noise(sim.spawned * 977);
   const choice = UNMADE_KINDS[Math.min(2, Math.floor(roll * UNMADE_KINDS.length))];
 
-  /* Out of the open country north-east of the Watch, never through a gate. */
-  const angle = -Math.PI / 4 + (noise(sim.spawned * 31) - 0.5) * 1.4;
-  const distance = watch.radius + 5 + noise(sim.spawned * 53) * 5;
+  /* Out of the open country, from a different quarter each time. */
+  const angle = noise(sim.spawned * 31) * Math.PI * 2;
+  const distance = CAMP_RADIUS + 6 + noise(sim.spawned * 53) * 6;
   sim.actors.push({
     id: `unmade-${sim.spawned}`,
     side: "unmade",
+    role: "unmade",
     kind: choice.kind,
     name: choice.kind,
     work: "bug",
-    x: watch.x + Math.cos(angle) * distance,
-    y: watch.y + Math.sin(angle) * distance,
-    toX: watch.x,
-    toY: watch.y,
+    x: camp.x + Math.cos(angle) * distance,
+    y: camp.y + Math.sin(angle) * distance * 0.85,
+    toX: camp.x,
+    toY: camp.y,
     facing: -1,
     moving: true,
     hp: choice.hp,
@@ -291,9 +451,13 @@ function spawnUnmade(sim: Sim): void {
     action: "walk",
     actionUntil: 0,
     rest: 0,
-    home: watch.id,
+    home: "camp",
+    /* Whose fault it is, so it makes for the right camp. */
+    heroUid,
   });
 }
+
+/* ---- fighting ------------------------------------------------------------ */
 
 function blow(kind: string): number {
   switch (kind) {
@@ -322,7 +486,11 @@ function chooseEnemy(sim: Sim, actor: Actor): Actor | undefined {
   }
 
   let best: Actor | undefined;
-  let bestDistance = Infinity;
+  /*
+   * Bounded, so nobody sets off across the map after a fight two camps away.
+   * Unbounded, one besieged camp pulled every soldier on the field towards it.
+   */
+  let bestDistance = ABANDON_AT;
   for (const other of sim.actors) {
     if (other.side === actor.side || other.hp <= 0) continue;
     const distance = Math.hypot(other.x - actor.x, other.y - actor.y);
@@ -353,14 +521,56 @@ function stepTo(actor: Actor, toX: number, toY: number, speed: number): boolean 
   return true;
 }
 
+/**
+ * Where an actor belongs when there is nothing else to do.
+ *
+ * A soldier belongs wherever its hero is, which is what makes a retinue follow
+ * rather than sit in an abandoned camp. Falling back to the camp covers the
+ * moment between a hero leaving the roster and their soldiers going with them.
+ */
+function anchorFor(sim: Sim, actor: Actor, heroes: Map<string, Actor>): { x: number; y: number } {
+  if (actor.role === "watch") {
+    const garrison = GARRISONS.find((holding) => holding.id === actor.home) ?? GARRISONS[0];
+    return { x: garrison.x, y: garrison.y };
+  }
+  if (actor.role === "hero" && actor.station) return actor.station;
+  if (actor.heroUid) {
+    if (actor.role === "soldier") {
+      const hero = heroes.get(actor.heroUid);
+      if (hero) return { x: hero.x, y: hero.y };
+    }
+    const camp = sim.camps.get(actor.heroUid);
+    if (camp) return camp;
+  }
+  return { x: actor.x, y: actor.y };
+}
+
+function radiusFor(actor: Actor): number {
+  if (actor.role !== "watch") return CAMP_RADIUS;
+  const garrison = GARRISONS.find((holding) => holding.id === actor.home) ?? GARRISONS[0];
+  return garrison.radius;
+}
+
 export function tickSim(sim: Sim): void {
   sim.clock += 1;
 
-  if (underAttack(sim) && sim.actors.filter((a) => a.side === "unmade").length < MAX_UNMADE) {
+  /*
+   * An index, built once a tick. A soldier has to find its hero every tick to
+   * know where to stand, and scanning the whole field to do it is the sort of
+   * quadratic that only shows up on somebody else's large team.
+   */
+  const heroes = new Map<string, Actor>();
+  for (const actor of sim.actors) {
+    if (actor.role === "hero" && actor.heroUid) heroes.set(actor.heroUid, actor);
+  }
+
+  const under = besieged(sim);
+  if (under.length > 0 && sim.actors.filter((actor) => actor.side === "unmade").length < MAX_UNMADE) {
     sim.nextSpawn -= 1;
     if (sim.nextSpawn <= 0) {
       sim.nextSpawn = SPAWN_EVERY;
-      spawnUnmade(sim);
+      /* Round the besieged camps in turn, so one is not singled out. */
+      spawnUnmade(sim, under[sim.spawned % under.length]);
     }
   }
 
@@ -375,8 +585,39 @@ export function tickSim(sim: Sim): void {
       actor.action = actor.moving ? "walk" : "stand";
     }
 
-    /* Anyone who fights looks for someone to fight. */
-    const fights = actor.side === "unmade" || actor.work === "bug";
+    /*
+     * An order outranks everything.
+     *
+     * A hero who stops to fight whatever wanders past is a hero you cannot
+     * steer, and steering is the one thing in this game the player actually
+     * does. Their retinue keeps fighting; the hero goes where they were sent.
+     */
+    if (actor.ordered) {
+      if (stepTo(actor, actor.toX, actor.toY, HERO_WALK)) {
+        actor.moving = true;
+        if (actor.action !== "attack") actor.action = "walk";
+      } else {
+        actor.moving = false;
+        actor.ordered = false;
+        actor.action = "stand";
+        actor.rest = 30;
+        /* Where they were sent is where they now hold. See `station`. */
+        actor.station = { x: actor.x, y: actor.y };
+      }
+      continue;
+    }
+
+    /*
+     * Who fights: the Unmade, heroes, the watch, and soldiers whose session is
+     * on a fault. A soldier building a feature does not drop its work because
+     * something walked past.
+     */
+    const fights =
+      actor.role === "unmade" ||
+      actor.role === "hero" ||
+      actor.role === "watch" ||
+      actor.work === "bug";
+
     if (fights) {
       const enemy = chooseEnemy(sim, actor);
       if (enemy) {
@@ -391,7 +632,8 @@ export function tickSim(sim: Sim): void {
           actor.moving = false;
           if (Math.abs(dx) > 0.02) actor.facing = dx > 0 ? 1 : -1;
           if ((sim.clock + hashId(actor.id)) % SWING_EVERY === 0) {
-            const damage = blow(actor.kind);
+            /* A hero hits twice as hard as anyone they brought with them. */
+            const damage = blow(actor.kind) * (actor.role === "hero" ? 2 : 1);
             actor.action = "attack";
             actor.actionUntil = sim.clock + SWING_ANIM;
             addEffect(sim, ranged(actor.kind) ? "cast" : "hit", enemy.x, enemy.y);
@@ -408,12 +650,27 @@ export function tickSim(sim: Sim): void {
       }
     }
 
-    /* Nobody to fight: mill about inside the holding. */
-    if (!actor.moving) {
+    const anchor = anchorFor(sim, actor, heroes);
+    const radius = radiusFor(actor);
+    const away = Math.hypot(actor.x - anchor.x, actor.y - anchor.y);
+
+    /*
+     * Too far from where they belong: go there now, without waiting out the
+     * rest. For a soldier that means their hero has walked off, and this is
+     * the whole of what makes a retinue follow.
+     */
+    if (away > LEASH) {
+      if (!actor.moving || Math.hypot(actor.toX - anchor.x, actor.toY - anchor.y) > LEASH) {
+        const spot = spotAround(anchor.x, anchor.y, radius, hashId(actor.id) + sim.clock);
+        actor.toX = spot.x;
+        actor.toY = spot.y;
+        actor.moving = true;
+        actor.action = "walk";
+      }
+    } else if (!actor.moving) {
       actor.rest -= 1;
       if (actor.rest > 0) continue;
-      const garrison = GARRISONS.find((g) => g.id === actor.home) ?? GARRISONS[0];
-      const spot = spotIn(garrison, hashId(actor.id) + sim.clock);
+      const spot = spotAround(anchor.x, anchor.y, radius, hashId(actor.id) + sim.clock);
       actor.toX = spot.x;
       actor.toY = spot.y;
       actor.moving = true;
@@ -421,7 +678,7 @@ export function tickSim(sim: Sim): void {
       continue;
     }
 
-    if (!stepTo(actor, actor.toX, actor.toY, WALK)) {
+    if (actor.moving && !stepTo(actor, actor.toX, actor.toY, actor.role === "hero" ? HERO_WALK : WALK)) {
       actor.moving = false;
       actor.action = "stand";
       actor.rest = Math.round(20 + noise(hashId(actor.id) + sim.clock) * 70);
@@ -439,28 +696,36 @@ export function tickSim(sim: Sim): void {
     for (const actor of sim.actors) {
       if (actor.targetId && gone.has(actor.targetId)) actor.targetId = undefined;
     }
+
     /*
-     * A garrison soldier who falls is back on watch shortly. They are scenery,
-     * and scenery that thins out over an afternoon leaves an empty map.
+     * Anybody who stands for something real comes back.
+     *
+     * A hero is a person and a soldier is a running session; neither stops
+     * existing because something bit it. They are set back on their feet at
+     * their camp, which reads as being driven off rather than killed. Only the
+     * Unmade actually die, and theirs is the only death the game counts.
      */
     for (const dead of fallen) {
-      if (dead.side === "garrison" && dead.kind === "soldier") {
-        const garrison = GARRISONS.find((g) => g.id === dead.home) ?? GARRISONS[0];
-        const spot = spotIn(garrison, hashId(dead.id) + sim.clock);
-        sim.actors.push({
-          ...dead,
-          x: spot.x,
-          y: spot.y,
-          toX: spot.x,
-          toY: spot.y,
-          hp: dead.maxHp,
-          hurt: 0,
-          action: "stand",
-          moving: false,
-          targetId: undefined,
-          rest: 90,
-        });
-      }
+      if (dead.side === "unmade") continue;
+      const home =
+        dead.role === "watch"
+          ? (GARRISONS.find((holding) => holding.id === dead.home) ?? GARRISONS[0])
+          : { ...(sim.camps.get(dead.heroUid ?? "") ?? { x: 64, y: 62 }), radius: CAMP_RADIUS };
+      const spot = spotAround(home.x, home.y, home.radius, hashId(dead.id) + sim.clock);
+      sim.actors.push({
+        ...dead,
+        x: spot.x,
+        y: spot.y,
+        toX: spot.x,
+        toY: spot.y,
+        hp: dead.maxHp,
+        hurt: 0,
+        action: "stand",
+        moving: false,
+        ordered: false,
+        targetId: undefined,
+        rest: Math.round(60 + noise(hashId(dead.id)) * 60),
+      });
     }
   }
 }

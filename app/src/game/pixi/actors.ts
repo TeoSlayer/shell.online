@@ -35,8 +35,20 @@ const UNIT_FOR: Record<string, string> = {
 /** The Unmade are tinted cold; everything else on this map is warm. */
 const UNMADE_TINT = 0x6fd6c0;
 
-/** How much bigger than drawn a figure is. See `make`. */
+/** How much bigger than drawn a soldier is. See `make`. */
 const FIGURE = 1.25;
+
+/**
+ * How much bigger again a hero is.
+ *
+ * Twice the soldier, which sounds like a lot and is barely enough. A hero is a
+ * person and everything around them is their work; drawn at the same size they
+ * were indistinguishable from their own retinue, which is the one thing about
+ * this map that has to be legible at a glance. The map is also large enough
+ * now that a figure you cannot pick out at a distance is a figure you will
+ * never find.
+ */
+const HERO = 2.1;
 
 /** A few pixels of deterministic vertical stagger, so boards do not stack. */
 function lift(id: string): number {
@@ -72,6 +84,7 @@ export class ActorLayer {
   /** The last zoom the plates were sized for; see `zoomed`. */
   private plateScale = 1;
   private platesShown = true;
+  private soldierPlatesShown = true;
 
   /** Called when a skin is bought or changed in the shop. */
   wear(tint: number): void {
@@ -92,24 +105,38 @@ export class ActorLayer {
   zoomed(scale: number): void {
     this.plateScale = Math.min(1.7, Math.max(0.6, 1 / scale));
     /*
-     * Shown at every zoom the wheel allows. An earlier version hid them below
-     * two thirds, which was a guess, and it turned out to be exactly the zoom
-     * the opening view needs to get all six holdings on screen -- so the first
-     * thing the game showed was a map with nobody named on it.
+     * A hero is named at almost any zoom; a soldier only close up.
+     *
+     * They are named at different distances because they are different kinds of
+     * thing. A hero is a person and there are a handful of them on the map, so
+     * knowing which is which from across the country is the point. A soldier is
+     * one session out of a camp's worth, and a dozen boards over one camp
+     * interleave into an unreadable stack -- which is what happened the moment
+     * everybody's sessions were gathered in one place instead of spread over
+     * the holdings by what they were doing.
      */
     this.platesShown = scale > 0.44;
-    for (const piece of this.pieces.values()) {
+    this.soldierPlatesShown = scale > 0.85;
+    for (const [id, piece] of this.pieces) {
       if (!piece.plate) continue;
       piece.plate.scale.set(this.plateScale);
-      piece.plate.visible = this.platesShown;
+      piece.plate.visible = this.shows(id.startsWith("hero-"));
     }
+  }
+
+  /** Whether a name board of this kind is shown at the current zoom. */
+  private shows(isHero: boolean): boolean {
+    return isHero ? this.platesShown : this.soldierPlatesShown;
   }
 
   private make(actor: Actor): Piece {
     const root = new Container();
+    const size = actor.role === "hero" ? HERO : FIGURE;
 
     const shadow = new Graphics();
-    shadow.ellipse(0, 0, 16, 7).fill({ color: 0x1a1008, alpha: 0.32 });
+    shadow
+      .ellipse(0, 0, (16 * size) / FIGURE, (7 * size) / FIGURE)
+      .fill({ color: 0x1a1008, alpha: 0.32 });
     root.addChild(shadow);
 
     const texture = this.art.frame(UNIT_FOR[actor.kind] ?? UNIT_FOR.terminal);
@@ -121,7 +148,7 @@ export class ActorLayer {
      * speck next to a church -- correct, and useless, because the wrights are
      * the thing the game is about and the buildings are where they stand.
      */
-    sprite.scale.set(FIGURE);
+    sprite.scale.set(size);
     sprite.position.set(0, TILE_H * 0.25);
     if (actor.side === "unmade") sprite.tint = UNMADE_TINT;
     root.addChild(sprite);
@@ -138,7 +165,7 @@ export class ActorLayer {
      * the map with labels that stand for nothing.
      */
     let plate: Container | undefined;
-    if (actor.session) {
+    if (actor.role === "hero" || actor.role === "soldier") {
       /*
        * A little board, for the same reason the garrison signs are boards: a
        * name in outlined text over grass, roofs and road was unreadable at the
@@ -151,7 +178,9 @@ export class ActorLayer {
         style: {
           fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
           fontSize: 16,
-          fill: 0xf0d9a8,
+          fontWeight: actor.role === "hero" ? "700" : "400",
+          /* A hero's name is brass; a soldier's is parchment. */
+          fill: actor.role === "hero" ? 0xf0c04a : 0xf0d9a8,
         },
       });
       text.anchor.set(0.5, 0);
@@ -166,7 +195,7 @@ export class ActorLayer {
       plate = new Container();
       plate.addChild(board, text);
       plate.scale.set(this.plateScale);
-      plate.visible = this.platesShown;
+      plate.visible = this.shows(actor.role === "hero");
       /*
        * Staggered by the id, so two wrights standing together do not lay their
        * boards on top of one another. Deterministic, so a name does not hop to
@@ -198,7 +227,8 @@ export class ActorLayer {
       if (piece.plate) piece.plate.position.set(x, y + TILE_H * 0.4 + lift(actor.id));
 
       /* Facing, as a mirror rather than a second sprite. */
-      piece.sprite.scale.x = actor.facing === 1 ? FIGURE : -FIGURE;
+      const size = actor.role === "hero" ? HERO : FIGURE;
+      piece.sprite.scale.x = actor.facing === 1 ? size : -size;
 
       /*
        * A blow is a lunge rather than a different drawing. Kenney's units have
@@ -218,7 +248,7 @@ export class ActorLayer {
         ? 0xffffff
         : actor.side === "unmade"
           ? UNMADE_TINT
-          : actor.session
+          : actor.heroUid && actor.heroUid === sim.youUid
             ? this.skinTint
             : 0xffffff;
       piece.sprite.alpha = actor.hurt > 0 ? 0.75 : 1;

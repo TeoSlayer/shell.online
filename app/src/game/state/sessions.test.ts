@@ -1,130 +1,210 @@
 import { describe, expect, it } from "vitest";
-import { difference, garrisonFrom, isOnTheField, workFor } from "./sessions";
-import type { SessionRecord } from "../../lib/api";
+import { classFor, nameOf, ownerOf, rosterFrom, workFor } from "./sessions";
+import type { Member, SessionRecord } from "../../lib/api";
 
-function session(overrides: Partial<SessionRecord> = {}): SessionRecord {
-  return {
-    id: "s1",
-    uid: "u1",
-    command: "claude",
-    shareUrl: "https://shell.online/s/s1",
-    readOnly: false,
-    encrypted: true,
-    persistent: false,
-    host: "laptop",
-    startedAt: 1000,
-    ...overrides,
-  } as SessionRecord;
-}
+/**
+ * Turning a team and its sessions into a field.
+ *
+ * The join everything else rests on: a soldier belongs to the hero who owns its
+ * session. Ten Claude Code sessions and three OpenClaw ones owned by one person
+ * are thirteen soldiers of two classes, all of them hers -- which is the
+ * worked example in the specification and the first test below.
+ */
 
-describe("reading what a session is doing", () => {
-  it("knows mending from the words people already use", () => {
+const session = (over: Partial<SessionRecord> = {}): SessionRecord => ({
+  id: `s-${Math.random().toString(36).slice(2)}`,
+  shareUrl: "https://example.invalid/s",
+  command: "npm run dev",
+  readOnly: false,
+  encrypted: true,
+  persistent: false,
+  host: "laptop",
+  startedAt: 1000,
+  ...over,
+});
+
+const member = (uid: string, over: Partial<Member> = {}): Member => ({
+  orgId: "org-1",
+  uid,
+  email: `${uid}@example.invalid`,
+  name: "",
+  role: "member",
+  joinedAt: 1000,
+  ...over,
+});
+
+describe("reading the work", () => {
+  it("reads mending first", () => {
+    /*
+     * "fix the new importer" is a fix. Reading it as a feature because it
+     * contains "new" would be exactly backwards, and fixes are the more
+     * specific claim.
+     */
     expect(workFor("fix: audit seal")).toBe("bug");
-    expect(workFor("hotfix the relay")).toBe("bug");
-    expect(workFor("debug the importer")).toBe("bug");
-  });
-
-  it("knows making", () => {
-    expect(workFor("feat: session board")).toBe("feature");
-    expect(workFor("add a roster panel")).toBe("feature");
-    expect(workFor("refactor the store")).toBe("feature");
-  });
-
-  it("reads a fix to a new thing as a fix", () => {
-    /*
-     * "fix the new importer" contains both. Calling it a feature because of
-     * "new" would be exactly backwards: the fix is the more specific claim.
-     */
     expect(workFor("fix the new importer")).toBe("bug");
-    expect(workFor("add a fix for the importer")).toBe("bug");
-  });
-
-  it("says nothing rather than guessing", () => {
-    /* Pretending to know is worse than showing that you do not. */
+    expect(workFor("feat: session board")).toBe("feature");
     expect(workFor("npm run dev")).toBe("idle");
-    expect(workFor("")).toBe("idle");
-    expect(workFor("htop")).toBe("idle");
-  });
-
-  it("is not fooled by a word inside another word", () => {
-    expect(workFor("prefixes")).toBe("idle");
-    expect(workFor("addendum")).toBe("idle");
   });
 });
 
-describe("who is on the field", () => {
-  it("leaves out sessions that have finished", () => {
-    expect(isOnTheField(session())).toBe(true);
-    expect(isOnTheField(session({ closedAt: 2000 }))).toBe(false);
+describe("whose session it is", () => {
+  it("takes the owner when there is one", () => {
+    expect(ownerOf(session({ ownerUid: "ada" }), "viewer")).toBe("ada");
   });
 
-  it("gives each wright the class of its harness", () => {
-    const garrison = garrisonFrom([
-      session({ id: "a", command: "claude --resume x" }),
-      session({ id: "b", command: "codex resume last" }),
-      session({ id: "c", command: "npm run dev" }),
-    ]);
-    expect(garrison.map((entry) => entry.kind)).toEqual(["claude-code", "codex", "terminal"]);
+  it("falls back to whoever it was handed to", () => {
+    expect(ownerOf(session({ assigneeUids: ["grace"] }), "viewer")).toBe("grace");
+    expect(ownerOf(session({ assigneeUid: "alan" }), "viewer")).toBe("alan");
   });
 
-  it("sees through the shell a browser-started session arrives in", () => {
-    /* The same unwrapping the session list does; see lib/session-kinds.ts. */
-    const [wright] = garrisonFrom([session({ command: `sh -c "claude --model opus"` })]);
-    expect(wright.kind).toBe("claude-code");
-  });
-
-  it("prefers the operator's name over the command", () => {
-    const [wright] = garrisonFrom([session({ name: "fix: audit seal", command: "claude" })]);
-    expect(wright.name).toBe("fix: audit seal");
-    expect(wright.work).toBe("bug");
-  });
-
-  it("falls back to the command when there is no name", () => {
-    const [wright] = garrisonFrom([session({ command: "htop" })]);
-    expect(wright.name).toBe("htop");
-  });
-
-  it("keeps a stable order, so the field does not reshuffle on every poll", () => {
-    const first = garrisonFrom([
-      session({ id: "b", startedAt: 20 }),
-      session({ id: "a", startedAt: 10 }),
-    ]);
-    const second = garrisonFrom([
-      session({ id: "a", startedAt: 10 }),
-      session({ id: "b", startedAt: 20 }),
-    ]);
-    expect(first.map((entry) => entry.id)).toEqual(second.map((entry) => entry.id));
-  });
-});
-
-/** A roster entry, with the session facts the panel needs. */
-const muster = (id: string) => ({
-  id,
-  name: id,
-  kind: "terminal",
-  work: "idle" as const,
-  session: { id, startedAt: 0, host: "laptop", command: "htop" },
-});
-
-describe("keeping the field in step with the list", () => {
-  it("brings in the new and sends home the finished", () => {
-    const present = [{ id: "a" }, { id: "b" }];
-    const wanted = [muster("b"), muster("c")];
-    const { arrived, left } = difference(present, wanted);
-    expect(arrived.map((entry) => entry.id)).toEqual(["c"]);
-    expect(left).toEqual(["a"]);
-  });
-
-  it("leaves everybody alone when nothing has changed", () => {
+  it("falls back to the viewer for a row too old to say", () => {
     /*
-     * The point of the whole function: the list is polled every few seconds,
-     * and rebuilding the field each time would teleport the garrison back to
-     * the gate at exactly that interval.
+     * A soldier with no hero is a figure standing in open country with nobody
+     * to follow. Rows from before sessions recorded an owner have none, and the
+     * person looking can only be seeing it because it is theirs or their team's
+     * -- of which the first is much the likelier for a row that old.
      */
-    const present = [{ id: "a" }, { id: "b" }];
-    const wanted = [muster("a"), muster("b")];
-    const { arrived, left } = difference(present, wanted);
-    expect(arrived).toHaveLength(0);
-    expect(left).toHaveLength(0);
+    expect(ownerOf(session(), "viewer")).toBe("viewer");
+  });
+});
+
+describe("what to call somebody", () => {
+  it("uses their name", () => {
+    expect(nameOf(member("ada", { name: "Ada Lovelace" }))).toBe("Ada Lovelace");
+  });
+
+  it("falls back to the part of the address before the at sign", () => {
+    expect(nameOf(member("ada"))).toBe("ada");
+  });
+
+  it("falls back to a short id when there is neither", () => {
+    expect(nameOf({ uid: "0123456789abcdef" })).toBe("01234567");
+  });
+});
+
+describe("which class a hero is drawn as", () => {
+  it("is the harness they run most", () => {
+    /*
+     * Their own chosen class lives in their own saved game, which this account
+     * cannot read for anybody else. What everybody can see is what a colleague
+     * is running, so that is what decides how they are drawn -- and it has the
+     * advantage of being true.
+     */
+    expect(
+      classFor([
+        session({ command: "claude" }),
+        session({ command: "claude --resume abc" }),
+        session({ command: "codex" }),
+      ]),
+    ).toBe("claude-code");
+  });
+
+  it("is a footman when they are running nothing", () => {
+    expect(classFor([])).toBe("terminal");
+  });
+
+  it("does not depend on the order sessions came back in", () => {
+    const one = session({ command: "codex" });
+    const two = session({ command: "claude" });
+    expect(classFor([one, two])).toBe(classFor([two, one]));
+  });
+});
+
+describe("the roster", () => {
+  it("gives one person thirteen soldiers of two classes", () => {
+    const sessions = [
+      ...Array.from({ length: 10 }, () => session({ command: "claude", ownerUid: "ada" })),
+      ...Array.from({ length: 3 }, () => session({ command: "openclaw", ownerUid: "ada" })),
+    ];
+    const roster = rosterFrom(sessions, [member("ada")], { uid: "ada" });
+
+    expect(roster.soldiers).toHaveLength(13);
+    expect(roster.soldiers.every((soldier) => soldier.heroUid === "ada")).toBe(true);
+    expect(new Set(roster.soldiers.map((soldier) => soldier.kind))).toEqual(
+      new Set(["claude-code", "openclaw"]),
+    );
+  });
+
+  it("makes a hero of every member, running or not", () => {
+    const roster = rosterFrom([], [member("ada"), member("grace")], { uid: "ada" });
+    expect(roster.heroes.map((hero) => hero.uid)).toEqual(["ada", "grace"]);
+    expect(roster.soldiers).toHaveLength(0);
+  });
+
+  it("makes a hero of somebody who has left but whose session is still up", () => {
+    /*
+     * Otherwise that session's soldier stands in open country with nobody to
+     * follow. The name says what happened rather than pretending they are on
+     * the team.
+     */
+    const roster = rosterFrom(
+      [session({ ownerUid: "departed", command: "claude" })],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.heroes.map((hero) => hero.uid).sort()).toEqual(["ada", "departed"]);
+    expect(roster.heroes.find((hero) => hero.uid === "departed")?.name).toContain("left the team");
+  });
+
+  it("leaves closed sessions off the field", () => {
+    /*
+     * A closed session is work that is finished. It counts towards experience,
+     * which the service works out separately; it does not stand on the field.
+     */
+    const roster = rosterFrom(
+      [
+        session({ ownerUid: "ada", command: "claude" }),
+        session({ ownerUid: "ada", command: "claude", closedAt: 2000 }),
+      ],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers).toHaveLength(1);
+  });
+
+  it("marks which hero is yours", () => {
+    const roster = rosterFrom([], [member("ada"), member("grace")], { uid: "grace" });
+    expect(roster.youUid).toBe("grace");
+  });
+
+  it("names a soldier after the session, falling back to the command", () => {
+    const roster = rosterFrom(
+      [
+        session({ ownerUid: "ada", name: "fix: audit seal", command: "claude" }),
+        session({ ownerUid: "ada", command: "npm run dev" }),
+      ],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers.map((soldier) => soldier.name).sort()).toEqual([
+      "fix: audit seal",
+      "npm run dev",
+    ]);
+  });
+
+  it("reads a soldier's work from its name before its command", () => {
+    const roster = rosterFrom(
+      [session({ ownerUid: "ada", name: "fix: the thing", command: "claude" })],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers[0].work).toBe("bug");
+  });
+
+  it("gives each soldier the session facts the panel needs", () => {
+    const roster = rosterFrom(
+      [session({ ownerUid: "ada", command: "claude", host: "workshop", startedAt: 4242 })],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers[0].session).toMatchObject({ host: "workshop", startedAt: 4242 });
+  });
+
+  it("puts the heroes in a stable order", () => {
+    /* So that a camp does not move because the service replied differently. */
+    const members = [member("grace"), member("ada"), member("alan")];
+    const first = rosterFrom([], members, { uid: "ada" });
+    const again = rosterFrom([], [...members].reverse(), { uid: "ada" });
+    expect(again.heroes.map((hero) => hero.uid)).toEqual(first.heroes.map((hero) => hero.uid));
   });
 });
