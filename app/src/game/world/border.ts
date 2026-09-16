@@ -1,5 +1,5 @@
 import { MAP } from "./marches";
-import { TILE_H, TILE_W } from "../pixi/iso";
+import { TILE_H, TILE_W } from "./iso";
 
 /**
  * The wood that closes the Marches in.

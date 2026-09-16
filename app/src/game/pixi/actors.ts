@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { atWork, heroPlate, soldierPlate, type Plate } from "./plates";
-import { depthOf, TILE_H, toScreen } from "./iso";
+import { depthOf, TILE_H, toScreen } from "../world/iso";
 import type { Loaded } from "./scene";
 import type { Actor, Sim } from "../world/sim";
 
@@ -180,16 +180,23 @@ export class ActorLayer {
     if (actor.side === "unmade") sprite.tint = UNMADE_TINT;
     root.addChild(sprite);
 
-    /* Health, shown only once something has been taken off it. */
+    /*
+     * Health over the sprite, shown only once something has been taken off it,
+     * and only for figures whose plate does not already carry one.
+     *
+     * A hero's plate has its own health bar, so drawing this as well gave them
+     * two -- at different widths, in slightly different places, showing the
+     * same number.
+     */
     const bar = new Graphics();
     bar.position.set(0, -sprite.height - 4);
     bar.visible = false;
-    root.addChild(bar);
+    if (actor.role !== "hero") root.addChild(bar);
 
     /*
-     * Only real sessions carry a name and only real sessions can be clicked.
-     * The garrison's own soldiers are scenery; giving them plates would fill
-     * the map with labels that stand for nothing.
+     * Heroes and soldiers carry a name; the watch and the Unmade do not.
+     * Scenery with a label on it is a label that stands for nothing, and a map
+     * covered in those is a map nobody reads.
      */
     /*
      * The board above the head, which is a different thing for each of them.
@@ -285,7 +292,7 @@ export class ActorLayer {
 
       if (actor.hp !== piece.lastHp) {
         piece.lastHp = actor.hp;
-        const hurt = actor.hp < actor.maxHp;
+        const hurt = actor.hp < actor.maxHp && actor.role !== "hero";
         piece.bar.visible = hurt;
         if (hurt) {
           piece.bar.clear();

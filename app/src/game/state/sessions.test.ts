@@ -162,6 +162,36 @@ describe("the roster", () => {
     expect(roster.soldiers).toHaveLength(1);
   });
 
+  it("draws your own hero as the class you chose", () => {
+    /*
+     * Your choice lives in your own saved game and only this browser can read
+     * it, so it wins for your own hero and nobody else's. A colleague is drawn
+     * as the harness they run most, which is the only thing about them that is
+     * both visible and true.
+     */
+    const roster = rosterFrom(
+      [
+        session({ ownerUid: "ada", command: "claude" }),
+        session({ ownerUid: "grace", command: "claude" }),
+      ],
+      [member("ada"), member("grace")],
+      { uid: "ada" },
+      "hermes",
+    );
+    expect(roster.heroes.find((hero) => hero.uid === "ada")?.characterClass).toBe("hermes");
+    expect(roster.heroes.find((hero) => hero.uid === "grace")?.characterClass).toBe("claude-code");
+  });
+
+  it("falls back to what you run when you have chosen nothing", () => {
+    const roster = rosterFrom(
+      [session({ ownerUid: "ada", command: "codex" })],
+      [member("ada")],
+      { uid: "ada" },
+      "",
+    );
+    expect(roster.heroes[0].characterClass).toBe("codex");
+  });
+
   it("marks which hero is yours", () => {
     const roster = rosterFrom([], [member("ada"), member("grace")], { uid: "grace" });
     expect(roster.youUid).toBe("grace");

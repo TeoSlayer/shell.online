@@ -39,13 +39,30 @@ that is lying about your week.
 ### Heroes
 
 One hero per team member. A hero is **not** a session; they exist whether or not
-that member has anything running. Heroes are drawn considerably larger than
-soldiers — they are the thing the map is about, and a hero the same size as
-their own soldiers is a hero nobody can find.
+that member has anything running, because a colleague with nothing open is still
+on the team.
 
-Each hero holds a **camp**: a barracks, a banner in their colour, and the ground
-around it. Camp positions are derived from the member's `uid`, so they are
-stable across sessions and the same for everybody looking at the same team.
+Heroes are drawn at **twice the size of a soldier**. At the same size they were
+indistinguishable from their own retinue, which is the one thing on this map
+that has to be legible at a glance.
+
+Above each hero: a **shield bearing their initials**, their name in brass, a
+**health bar**, and a **mana bar**. The mana bar is a read-out like everything
+else — it is the share of that person's sessions doing something rather than
+sitting at a prompt. Nothing consumes it and it cannot be spent; "mana" is the
+skin's word for how much is in flight.
+
+Each hero holds a **camp**: a barracks, a muster tent and a gate, with their
+soldiers around it. Camp positions are *solved for* from the member's `uid`, not
+stored — the same person gets the same ground on every machine for everybody
+looking at the same team, so storing it would mean two places that could
+disagree. They are assigned for the whole roster at once, because "no two
+members share ground" is not a property a hash can promise one member at a time.
+
+A hero's class is the harness they run most. Their own chosen class lives in
+their own saved game, which no other account can read, and asking the service to
+publish it would store a second fact that can disagree with the first. Your own
+choice still wins for your own hero, because only your browser knows it.
 
 ### Soldiers
 
@@ -53,20 +70,18 @@ A soldier is one session, and belongs to the hero who owns it. A member with ten
 Claude Code sessions and three OpenClaw sessions has **thirteen soldiers of two
 classes**, all of them theirs, all of them around their camp.
 
-The class is the harness, and it is visible: each class has its own unit sprite
-and its own sigil on the roster.
+Above each soldier: a **coloured chip naming its class**, and the session's name.
+The chip is separate from the name rather than run together with it, because a
+company of mixed classes is what this map is about.
 
-| Class | Harness | Sprite |
-|---|---|---|
-| Artificer | `claude-code` | `Unit_05` |
-| Arcanist | `codex` | `Unit_01` |
-| Herald | `hermes` | `Unit_11` |
-| Beastmaster | `openclaw` | `Unit_07` |
-| Footman | `terminal` | `Unit_17` |
+Every board above a head — hero or soldier — is visible at **every zoom**, and
+**scales against the zoom**: it grows as the map shrinks, because zoomed out is
+exactly when you need to find your own company and exactly when the figure under
+the board is smallest.
 
 Soldiers stay with their hero. They mill about the camp when the hero is still,
-and follow when the hero moves — not in formation, which reads as a parade, but
-loosely, arriving at their own pace.
+and follow when the hero moves — loosely, arriving at their own pace, because a
+retinue in formation reads as a parade.
 
 ### The Unmade
 
@@ -79,18 +94,20 @@ a loud one mean something.
 
 ## 3. Movement
 
-**Point and click, as in an ARTS.** Left-click on the ground orders *your own*
-hero to walk there. Their soldiers follow. Nobody else's hero can be ordered —
-they move as their own soldiers' work dictates.
+**Point and click, as in an ARTS.** Left-click on open ground orders *your own*
+hero to walk there; their soldiers follow. Where they are sent becomes where they
+hold, so they do not wander back to camp.
 
-Clicking a figure inspects it instead of moving; the inspect panel is what tells
-you which session a soldier is.
+Nobody else's hero can be ordered. Marching a colleague around the map would be a
+toy, and it would be the only thing in this game that changes what somebody else
+sees.
 
-This is the one piece of the game that is not a read-out, and it is deliberately
-the only one: walking your hero around changes nothing about your account. It is
-there because a map you can only look at is a diagram.
+Clicking a figure inspects it instead of moving — a hero or a soldier, not the
+watch and not the Unmade. This is the one piece of the game that is not a
+read-out, and deliberately the only one: walking your hero around changes nothing
+about your account. It is there because a map you can only look at is a diagram.
 
----
+The view opens on **your own hero** once the roster arrives, not on the Keep.
 
 ## 4. The nine holdings
 
@@ -110,26 +127,28 @@ hero's camp.
 | The Chronicle | The audit log |
 | Ravens' Roost | Your inbox |
 
-The country is 128 tiles across and ends in old-growth forest, so that zooming
-out shows a place with edges rather than a polygon in a void.
-
----
+The country is 128 tiles across and ends in **old-growth forest**: a thicket of
+oversized trees, boulders and the occasional ruin hugging the edge, and a baked
+canopy carried far past the playable bounds so that zooming out shows a place
+with edges rather than a polygon in a void. The treeline wanders in and out by a
+couple of tiles, because a wood whose inner edge is a perfect straight line does
+not hide a straight line — it draws a second one beside it.
 
 ## 5. The shop
 
-Cosmetic by construction, and a test asserts it stays that way. Two kinds of
-thing:
+Cosmetic by construction, and a test asserts it stays that way. Two shelves,
+because they are two different choices:
 
-- **Hero skins** — the colours your own hero is drawn in. Only your hero; you
-  cannot reskin a colleague.
-- **Retinue colours** — the wash over your own soldiers, so a team of several
-  heroes reads as several companies.
+- **What you wear** — hero skins, the colours your own figure is drawn in. Some
+  are cut for one class.
+- **What your soldiers wear** — retinue liveries, washed over the soldiers that
+  stand for your sessions, so a map with several companies reads as several
+  companies. Never class-bound: a livery dresses a company of mixed classes.
 
-Nothing sold makes anything stronger, faster or more valuable. Marks come from
-levelling and levelling comes from work that already happened, so the shop is
-downstream of the read-out and can never feed back into it.
-
----
+Neither ever touches anybody else's figures. Nothing sold makes anything
+stronger, faster or more valuable. Marks come from levelling and levelling comes
+from work that already happened, so the shop is downstream of the read-out and
+can never feed back into it.
 
 ## 6. Where the numbers come from
 
@@ -172,17 +191,19 @@ Today the field runs on a stand-in garrison when the service cannot be reached,
 and the HUD says so rather than pretending. The steps to make it live, in order,
 each one useful on its own:
 
-**7.1 — The roster.** `GET /api/sessions` already returns `{ sessions, members,
-you }`. Poll it, build heroes from `members`, soldiers from `sessions` grouped by
-`ownerUid ?? uid`, and mark your own hero from `you.uid`. *No server change.*
+**7.1 — The roster. Done.** `GET /api/sessions` returns `{ sessions, members,
+you }`. It is polled every four seconds; heroes are built from `members`,
+soldiers from `sessions` grouped by owner, and your own hero from `you.uid`. A
+session with no recorded owner falls back to its assignee and then to the
+viewer. *No server change was needed.*
 
-**7.2 — Camps.** Derive each camp from the member's `uid` — a stable hash to a
-position in the open country, clear of holdings, roads and water. *No server
-change, no storage.* A camp is not a thing to be saved; it is a fact about a uid.
+**7.2 — Camps. Done.** Solved from the map, then assigned to members by hash
+with probing so no two share ground. *No server change, no storage.*
 
-**7.3 — Live work.** A soldier's work already comes from the session name and
+**7.3 — Live work. Done.** A soldier's work comes from the session name and
 command through `world/work.ts`, which the service shares. Sessions arriving and
-leaving the roster muster and dismiss soldiers. *No server change.*
+leaving the roster muster and dismiss soldiers, and `setRoster` is idempotent so
+the poll costs nothing when nothing has changed. *No server change.*
 
 **7.4 — Acting on sessions from the field.** The inspect panel gains the actions
 the session list has — stop, rename, hand off — calling the same functions in

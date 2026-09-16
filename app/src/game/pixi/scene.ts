@@ -2,7 +2,7 @@ import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import type { Application } from "pixi.js";
 import { GARRISONS, MAP, type Garrison } from "../world/marches";
 import { campSites } from "../world/camps";
-import { depthOf, TILE_H, TILE_W, toScreen } from "./iso";
+import { depthOf, TILE_H, TILE_W, toScreen } from "../world/iso";
 import { buildGroundLayer } from "./ground";
 import { buildBorder } from "./border";
 import { buildScatter } from "./scatter";

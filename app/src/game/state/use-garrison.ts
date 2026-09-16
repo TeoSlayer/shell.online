@@ -36,7 +36,7 @@ export interface GarrisonState {
  * an account with no sessions, and it is also a terrible first impression: a
  * country with nobody in it and no way to tell whether that is the point.
  */
-export function useGarrison(sim: Sim, standIn: Roster): GarrisonState {
+export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): GarrisonState {
   const [state, setState] = useState<GarrisonState>({
     loading: true,
     error: "",
@@ -47,6 +47,9 @@ export function useGarrison(sim: Sim, standIn: Roster): GarrisonState {
   /* Read by the poll without restarting it when the stand-in is rebuilt. */
   const fallback = useRef(standIn);
   fallback.current = standIn;
+  /* Read by the poll without restarting it when the player changes class. */
+  const chosen = useRef(yourClass);
+  chosen.current = yourClass;
 
   useEffect(() => {
     let live = true;
@@ -55,7 +58,7 @@ export function useGarrison(sim: Sim, standIn: Roster): GarrisonState {
       try {
         const result = await fetchSessions();
         if (!live) return;
-        const roster = rosterFrom(result.sessions, result.members, result.you);
+        const roster = rosterFrom(result.sessions, result.members, result.you, chosen.current);
         const demo = roster.soldiers.length === 0;
         const shown = demo ? fallback.current : roster;
         setRoster(sim, shown);

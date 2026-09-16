@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import { scatterProps, type Prop } from "../world/scatter";
-import { depthOf, TILE_H, toScreen } from "./iso";
+import { depthOf, TILE_H, toScreen } from "../world/iso";
 import type { Loaded } from "./scene";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAP } from "../world/marches";
+import { MAP } from "./marches";
 import { depthOf, diamond, ORIGIN_X, TILE_H, TILE_W, toScreen, toTile } from "./iso";
 
 /**

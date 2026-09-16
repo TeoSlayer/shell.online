@@ -1,5 +1,5 @@
 import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
-import { depthOf, toScreen } from "./iso";
+import { depthOf, toScreen } from "../world/iso";
 import { GARRISONS, groundTiles, MAP, type Ground } from "../world/marches";
 import type { Actor, Effect, Mark, Sim } from "../world/sim";
 

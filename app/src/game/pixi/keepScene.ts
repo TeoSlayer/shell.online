@@ -2,7 +2,7 @@ import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildWorld, homeView, loadArt } from "./scene";
-import { toScreen, toTile } from "./iso";
+import { toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import type { Scene } from "./PixiStage";

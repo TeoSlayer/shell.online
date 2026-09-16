@@ -98,6 +98,15 @@ export function rosterFrom(
   sessions: SessionRecord[],
   members: Member[],
   you?: { uid: string },
+  /**
+   * The class this browser's owner chose for themselves.
+   *
+   * It wins for their own hero and nobody else's, because it lives in their own
+   * saved game and only this browser can read it. Everybody else is drawn as
+   * the harness they run most, which is the only thing about a colleague that
+   * is both visible and true.
+   */
+  yourClass?: string,
 ): Roster {
   const viewerUid = you?.uid ?? "";
   const live = sessions.filter(isOnTheField);
@@ -128,7 +137,8 @@ export function rosterFrom(
     return {
       uid,
       name: member ? nameOf(member) : `${uid.slice(0, 8)} (left the team)`,
-      characterClass: classFor(byOwner.get(uid) ?? []),
+      characterClass:
+        uid === you?.uid && yourClass ? yourClass : classFor(byOwner.get(uid) ?? []),
     };
   });
 

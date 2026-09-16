@@ -69,17 +69,23 @@ imports from here except through the seams above.
 ## Layout
 
 ```
-world/     the map, the simulation, the scatter. No Pixi in any of it
-pixi/      what gets drawn, and the camera: scene, actors, ground, ambience
+world/     the map, the projection, the simulation, the scatter, the border
+pixi/      what gets drawn, and the camera: scene, actors, plates, ground, ambience
 engine/    input, the focus grid, the fixed-step loop
-state/     options, progress, the shop, what is saved, what the service says
+state/     options, progress, the shop, the roster, what is saved
 ui/        the DOM interface over the canvas: HUD, menus, shop, the gathering
 lore/      names, flavour, and the codex
 ```
 
-`world/` knowing nothing about Pixi is the rule that matters. It is what lets a
-thousand ticks of the simulation be run in a test and looked at, which is how
-the shaking was found: by counting direction reversals, not by watching.
+**`world/` imports nothing from `pixi/`, and nothing from `pixi.js`.** That is
+the rule the layout is for, and it is what lets a thousand ticks of the
+simulation be run in a test and looked at -- which is how the shaking was found,
+by counting direction reversals rather than by watching.
+
+The projection lives in `world/iso.ts` for that reason. It was in `pixi/` at
+first, which was wrong twice over: it is pure arithmetic about the shape of the
+map with no Pixi in it, and once the border and the camps needed it, `world/`
+was importing upwards out of the renderer while this file claimed it did not.
 
 ## Running it
 

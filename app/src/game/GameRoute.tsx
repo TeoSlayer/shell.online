@@ -203,7 +203,7 @@ export default function GameRoute() {
    * Who is on the field: the account's live sessions, polled, with the
    * stand-in garrison when there are none or the service cannot be reached.
    */
-  const garrison = useGarrison(sim.current, DEMO_ROSTER);
+  const garrison = useGarrison(sim.current, DEMO_ROSTER, save.characterClass);
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that

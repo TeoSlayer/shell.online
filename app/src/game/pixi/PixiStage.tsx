@@ -15,7 +15,7 @@ import { Application, Container } from "pixi.js";
 import "pixi.js/unsafe-eval";
 import { Viewport } from "pixi-viewport";
 import { MAP } from "../world/marches";
-import { TILE_H, TILE_W } from "./iso";
+import { TILE_H, TILE_W } from "../world/iso";
 import { widestZoom } from "./scene";
 
 export interface Scene {

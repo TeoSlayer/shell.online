@@ -10,7 +10,7 @@
  * which is how nearly every 2D isometric game has ever worked, and what lets
  * artwork drawn face-on sit convincingly on a tilted floor.
  */
-import { MAP } from "../world/marches";
+import { MAP } from "./marches";
 
 /** Half the width and half the height of a tile diamond, in world units. */
 export const TILE_W = 64;

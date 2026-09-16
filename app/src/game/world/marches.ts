@@ -230,10 +230,13 @@ export function garrisonById(id: string): Garrison | undefined {
   return GARRISONS.find((garrison) => garrison.id === id);
 }
 
-/** The garrison a piece of work is posted to. */
-export function garrisonFor(work: "bug" | "feature" | "idle"): Garrison {
-  return GARRISONS.find((garrison) => garrison.draws === work) ?? GARRISONS[0];
-}
+/*
+ * There was a `garrisonFor(work)` here, which sent a wright to the holding that
+ * matched what its session was doing. It has no callers now and is deliberately
+ * not kept: soldiers gather at their own hero's camp, and a function that says
+ * otherwise is a description of a model this no longer has. `draws` survives
+ * because it still decides how heavy a holding's own watch is.
+ */
 
 /** The whole map, in tiles. Bigger than any window, which is the point. */
 export const MAP = { width: 128, height: 128 } as const;

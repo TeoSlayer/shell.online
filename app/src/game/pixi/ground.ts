@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import { GARRISONS, groundTiles, MAP, type Ground } from "../world/marches";
-import { diamond, TILE_H, TILE_W, toScreen } from "./iso";
+import { diamond, TILE_H, TILE_W, toScreen } from "../world/iso";
 
 /**
  * The ground of the Marches, drawn once into a handful of objects.
