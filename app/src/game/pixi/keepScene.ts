@@ -6,6 +6,7 @@ import { toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import { Banners } from "./banners";
+import { loadSigils } from "./sigils";
 import type { Scene } from "./PixiStage";
 import { GARRISONS } from "../world/marches";
 import { createSim, garrisonSoldiers, orderHero, tickSim, yourHero, type Actor, type Mark, type Sim } from "../world/sim";
@@ -58,7 +59,7 @@ export async function buildKeepScene(
   viewport: Viewport,
   handle: KeepHandle,
 ): Promise<Scene> {
-  const [art, fx] = await Promise.all([loadArt(), loadEffects()]);
+  const [art, fx, sigils] = await Promise.all([loadArt(), loadEffects(), loadSigils()]);
   const { root, camps, banners, things, labels, signs } = buildWorld(app, art);
 
   const world = new Container();
@@ -68,7 +69,7 @@ export async function buildKeepScene(
   garrisonSoldiers(sim);
 
   let selected: string | undefined;
-  const actors = new ActorLayer(art, things, labels);
+  const actors = new ActorLayer(art, things, labels, sigils);
   const companies = new Banners(banners);
 
   const birds = new Birds(things);

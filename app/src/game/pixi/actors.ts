@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { atWork, heroPlate, soldierPlate, type Plate } from "./plates";
+import type { Sigils } from "./sigils";
 import { depthOf, TILE_H, toScreen } from "../world/iso";
 import type { Loaded } from "./scene";
 import type { Actor, Sim } from "../world/sim";
@@ -96,6 +97,8 @@ export class ActorLayer {
     private readonly parent: Container,
     /* Name boards go here, above the world, so nothing can stand in front. */
     private readonly labels: Container,
+    /** Each harness's own mark, for the badge on a soldier's plate. */
+    private readonly sigils: Sigils,
   ) {}
 
   /** The last zoom the plates were sized for; see `zoomed`. */
@@ -209,7 +212,7 @@ export class ActorLayer {
      */
     let plate: Plate | undefined;
     if (actor.role === "hero" || actor.role === "soldier") {
-      plate = actor.role === "hero" ? heroPlate(actor) : soldierPlate(actor);
+      plate = actor.role === "hero" ? heroPlate(actor) : soldierPlate(actor, this.sigils);
       /*
        * Hung by its bottom edge, so the board grows upwards out of the head
        * rather than downwards into it. A container positioned by its top would

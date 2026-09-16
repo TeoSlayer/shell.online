@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type { Actor } from "../world/sim";
-import { CLASS_LORE } from "../lore/world";
+import { sigilFor, type Sigils } from "./sigils";
 
 /**
  * What stands above somebody's head.
@@ -162,61 +162,39 @@ export function heroPlate(actor: Actor): Plate {
   return { root, height, bars };
 }
 
-/** A soldier's plate: what it is, and which session it is. */
-export function soldierPlate(actor: Actor): Plate {
+/**
+ * A soldier's plate: its class as a sigil, and which session it is.
+ *
+ * The class used to be spelled out -- "ARTIFICER", "BEASTMASTER" -- which is a
+ * lot of letters to say the same five things over and over, and at a camp with
+ * a dozen soldiers in it the words were most of what was on screen. A mark says
+ * it in one glance and a quarter of the width, and it is the same mark the
+ * session list uses, so the two agree about what a tool looks like.
+ */
+export function soldierPlate(actor: Actor, sigils: Sigils): Plate {
   const root = new Container();
-
-  const lore = CLASS_LORE[actor.kind];
-  const className = (lore?.title ?? actor.kind).toUpperCase();
-
-  const badge = new Text({
-    text: className,
-    style: { fontFamily: FONT, fontSize: 16, fontWeight: "700", fill: 0x241d15 },
-  });
-  badge.anchor.set(0, 0);
 
   const name = new Text({
     text: actor.name.length > 24 ? `${actor.name.slice(0, 23)}…` : actor.name,
     style: { fontFamily: FONT, fontSize: 16, fill: 0xf0d9a8 },
   });
-  name.anchor.set(0, 0);
+  name.anchor.set(0, 0.5);
 
-  const PAD = 5;
-  const chip = badge.width + PAD * 2;
-  const width = chip + name.width + PAD * 2;
-  const height = Math.max(badge.height, name.height) + PAD * 2;
+  const PAD = 6;
+  const SIGIL = 22;
+  const width = SIGIL + PAD * 3 + name.width;
+  const height = SIGIL + PAD;
 
   const board = new Graphics();
   board
     .rect(-width / 2, 0, width, height)
     .fill({ color: 0x241d15, alpha: 0.85 })
     .stroke({ color: 0xc9a06a, width: 1, alignment: 1 });
-  /*
-   * The class sits in a coloured chip rather than in the same run of text as
-   * the session name. A company of mixed classes is the thing this map is
-   * about, and telling them apart has to survive being read at a glance.
-   */
-  board.rect(-width / 2, 0, chip, height).fill({ color: classColour(actor.kind) });
 
-  badge.position.set(-width / 2 + PAD, PAD);
-  name.position.set(-width / 2 + chip + PAD, PAD);
+  const badge = sigilFor(actor.kind, sigils, SIGIL);
+  badge.position.set(-width / 2 + PAD + SIGIL / 2, height / 2);
+  name.position.set(-width / 2 + PAD * 2 + SIGIL, height / 2);
 
   root.addChild(board, badge, name);
   return { root, height };
-}
-
-/** One colour per class, matching the unit sprites they are drawn with. */
-function classColour(kind: string): number {
-  switch (kind) {
-    case "claude-code":
-      return 0xe8a355;
-    case "codex":
-      return 0x7fd0e8;
-    case "hermes":
-      return 0xc9a6e8;
-    case "openclaw":
-      return 0xe88a8a;
-    default:
-      return 0xc9c2b4;
-  }
 }
