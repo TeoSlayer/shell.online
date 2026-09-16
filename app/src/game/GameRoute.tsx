@@ -307,6 +307,8 @@ export default function GameRoute() {
             characterClass={save.characterClass || "terminal"}
             wearing={save.skinId}
             shopOpen={rank.level >= 2}
+            elixir={elixir}
+            garrison={tally.wrights.length}
             onBuy={(skinId) => {
               const result = buy(purse, skinId);
               if (!result.ok) return;

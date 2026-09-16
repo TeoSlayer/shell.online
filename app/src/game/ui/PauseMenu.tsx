@@ -30,6 +30,8 @@ export function PauseMenu({
   characterClass,
   wearing,
   shopOpen,
+  elixir,
+  garrison,
   onBuy,
   onWear,
 }: {
@@ -39,6 +41,9 @@ export function PauseMenu({
   wearing: string;
   /** The pedlar starts calling at level two; before that the row says so. */
   shopOpen: boolean;
+  /** Tokens the gathering has spent, and who is on the field. */
+  elixir: number;
+  garrison: number;
   onBuy: (skinId: string) => void;
   onWear: (skinId: string) => void;
 }) {
@@ -145,6 +150,18 @@ export function PauseMenu({
           <h2>{title}</h2>
           {pane === "root" && <span className="keep-pause-who">{lore.title}</span>}
         </header>
+
+        {/*
+          * The figures the HUD carries on a wide screen and drops on a narrow
+          * one. Here rather than only there, so a phone loses nothing.
+          */}
+        {pane === "root" && (
+          <p className="keep-pause-stats">
+            <span>◈ {purse.marks.toLocaleString()} marks</span>
+            <span>{garrison} on the field</span>
+            <span>{elixir > 0 ? `${elixir.toLocaleString()} tokens` : "not gathering"}</span>
+          </p>
+        )}
 
         {pane === "root" && (
           <Menu

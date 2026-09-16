@@ -292,20 +292,34 @@
  * fold. A dialog whose close is off screen is a dialog somebody is stuck in.
  */
 .keep-pause-panel {
-  display: grid;
+  display: flex;
   width: min(560px, 100%);
   max-height: 100%;
   padding: var(--keep-space-3);
+  flex-direction: column;
   gap: var(--keep-space-2);
-  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+/*
+ * The scrolling child is named rather than positioned.
+ *
+ * This was a three-row grid, which broke the moment a fourth child was added:
+ * the row that was meant to scroll became whichever one happened to be second.
+ * Saying which element scrolls cannot go wrong when the panel gains a line.
+ */
 .keep-pause-panel > .keep-menu,
 .keep-pause-panel > .keep-options,
 .keep-pause-panel > .keep-shop,
 .keep-pause-panel > .keep-codex {
   min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
+}
+
+.keep-pause-panel > .keep-pause-head,
+.keep-pause-panel > .keep-pause-stats,
+.keep-pause-panel > .keep-pause-foot {
+  flex: none;
 }
 
 .keep-pause-head {
@@ -834,7 +848,89 @@
 
 @media (width <= 900px) {
   .keep-standing {
-    min-width: 100%;
+    min-width: calc(200px * var(--keep-scale));
+  }
+}
+
+/*
+ * On a phone the HUD shows less rather than smaller.
+ *
+ * Four panels at full detail stacked into a column and covered most of the
+ * field, which is the one thing worth looking at. The floor this file holds
+ * itself to is a floor -- text does not shrink to fit -- so what gives is the
+ * content: the bars keep their numbers, the explanations go, and the detail
+ * they carried is a tap away in the pause menu.
+ */
+@media (width <= 640px) {
+  .keep-hud-bar {
+    flex-wrap: nowrap;
+    gap: calc(var(--keep-space) / 2);
+  }
+
+  /*
+   * Four panels cannot fit 390 pixels at a 16px floor, and squeezing them
+   * clipped every one of them. So three of them leave: the purse, the vial and
+   * the garrison count are all repeated in the pause menu, which is one tap
+   * away and is the right home for a number you look up rather than glance at.
+   */
+  .keep-purse,
+  .keep-elixir-panel,
+  .keep-roster-button {
+    display: none;
+  }
+
+  .keep-hud-bar > .keep-panel {
+    min-width: 0;
+    padding: calc(var(--keep-space) / 2) var(--keep-space);
+    gap: var(--keep-space);
+  }
+
+  .keep-standing {
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* The explanations, which are the first thing that can go. */
+  .keep-standing-level,
+  .keep-meter-label,
+  .keep-meter-detail,
+  .keep-elixir-label,
+  .keep-roster-detail,
+  .keep-purse-label {
+    display: none;
+  }
+
+  /* Names shorten to their first word rather than wrapping to three lines. */
+  .keep-standing-class,
+  .keep-roster-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .keep-sigil {
+    width: calc(28px * var(--keep-scale));
+    height: calc(28px * var(--keep-scale));
+  }
+
+  .keep-vial {
+    width: calc(14px * var(--keep-scale));
+    height: calc(26px * var(--keep-scale));
+  }
+
+  .keep-elixir-value {
+    display: block;
+    font-size: var(--keep-text-sm);
+  }
+
+  /* The pause control keeps its full target; it is the way out. */
+  .keep-pause-button {
+    padding: 0 var(--keep-space);
+  }
+
+  /* The class is already named on the HUD behind this; here it only clips. */
+  .keep-pause-who {
+    display: none;
   }
 }
 
@@ -857,6 +953,7 @@
   animation: keep-fade var(--keep-normal) ease-out;
 }
 
+/* Header and footer pinned, choices scroll. Same reason as the pause panel. */
 .keep-opening {
   display: flex;
   width: min(760px, 100%);
@@ -864,6 +961,16 @@
   padding: var(--keep-space-3);
   flex-direction: column;
   gap: var(--keep-space-2);
+}
+
+.keep-opening > .keep-opening-head,
+.keep-opening > .keep-pause-foot {
+  flex: none;
+}
+
+.keep-opening > .keep-opening-choose {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
 }
 
@@ -1070,4 +1177,14 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "title" "list" "detail";
   }
+}
+
+/* The figures the HUD drops on a narrow screen, repeated in the pause menu. */
+.keep-pause-stats {
+  display: flex;
+  margin: 0;
+  flex-flow: row wrap;
+  gap: var(--keep-space) var(--keep-space-3);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
 }
