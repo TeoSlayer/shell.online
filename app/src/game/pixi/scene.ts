@@ -122,10 +122,17 @@ export function signFor(garrison: Garrison): Container {
   const name = new Text({
     text: garrison.name,
     style: {
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-      fontSize: 20,
-      fontWeight: "700",
-      letterSpacing: 1.5,
+      /*
+       * The one place in the game set in blackletter: the name of a place.
+       *
+       * Everything else is monospace, because everything else is read in a
+       * hurry and this is not -- you stop walking to read a signpost. The
+       * sentence underneath stays monospace for that reason, so the two are
+       * doing different jobs and look like it.
+       */
+      fontFamily: '"Pirata One", Georgia, serif',
+      fontSize: 26,
+      letterSpacing: 1,
       fill: 0xf0d9a8,
       align: "center",
       wordWrap: true,

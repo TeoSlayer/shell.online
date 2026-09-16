@@ -1,3 +1,23 @@
+@font-face {
+  /*
+   * The face the holdings' signs are lettered in.
+   *
+   * Declared here rather than in tokens.css so it travels in the lazy game
+   * chunk: it is worth eight kilobytes to the person who opened the game and
+   * nothing at all to the person who did not.
+   *
+   * It is used for the names of places and nowhere else. A whole interface set
+   * in blackletter is an interface nobody can read in a hurry, and the rules
+   * this file holds itself to are about reading in a hurry. Pirata One, SIL
+   * Open Font License; see public/fonts/OFL-Pirata-One.txt and the notices.
+   */
+  font-family: "Pirata One";
+  src: url("/fonts/pirata-one.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 /*
  * Shell Keep — the game skin.
  *
@@ -299,6 +319,106 @@
   text-transform: uppercase;
 }
 
+/* ---- the Barrow -------------------------------------------------------- */
+
+.keep-barrow {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-barrow-note,
+.keep-barrow-unknown {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+/* Unknown is a state, so it carries a rule as well as a colour. */
+.keep-barrow-unknown {
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-gold);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+}
+
+.keep-barrow-rows {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-barrow-row {
+  display: flex;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-barrow-mark {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  flex: none;
+}
+
+.keep-barrow-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-barrow-label {
+  color: var(--keep-parchment);
+  font-weight: 700;
+}
+
+.keep-barrow-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-barrow-count {
+  display: flex;
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+
+/* What each is worth, so the sum can be checked by hand. */
+.keep-barrow-each {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  font-weight: 400;
+}
+
+.keep-barrow-total {
+  display: flex;
+  margin: 0;
+  padding: var(--keep-space-2);
+  border: 2px solid var(--keep-gold);
+  background: rgb(0 0 0 / 30%);
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.keep-barrow-total strong {
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-xl);
+}
+
 /* ---- the road book ---------------------------------------------------- */
 
 /*
@@ -559,6 +679,7 @@
 .keep-pause-panel > .keep-options,
 .keep-pause-panel > .keep-shop,
 .keep-pause-panel > .keep-marches,
+.keep-pause-panel > .keep-barrow,
 .keep-pause-panel > .keep-gathering,
 .keep-pause-panel > .keep-codex {
   min-height: 0;

@@ -68,7 +68,23 @@ export async function buildKeepScene(
   viewport: Viewport,
   handle: KeepHandle,
 ): Promise<Scene> {
-  const [art, fx, sigils] = await Promise.all([loadArt(), loadEffects(), loadSigils()]);
+  const [art, fx, sigils] = await Promise.all([
+    loadArt(),
+    loadEffects(),
+    loadSigils(),
+    /*
+     * The signs' face, waited for before anything is drawn.
+     *
+     * Pixi rasterises a Text when the object is made, not when it is shown, so
+     * a webfont that arrives a moment later arrives too late: the signs come
+     * out in the fallback serif and stay that way until the scene is rebuilt.
+     * `font-display: swap` fixes this for the DOM and does nothing for a canvas.
+     *
+     * It fails soft. A sign in Georgia is a sign; a map that would not open
+     * because a font did not is not.
+     */
+    document.fonts?.load('26px "Pirata One"').catch(() => undefined),
+  ]);
   const { root, camps, banners, things, labels, signs } = buildWorld(app, art);
 
   const world = new Container();

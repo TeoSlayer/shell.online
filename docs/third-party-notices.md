@@ -55,6 +55,16 @@ paletted, and `app/scripts/import-fantasy-ui.mjs` rewrites the one palette
 entry that is not transparent. That script also records which borders were
 taken, so the choice can be revisited against a newer release.
 
+## Pirata One — SIL Open Font License 1.1
+
+Copyright (c) 2012 Rodrigo Fuenzalida and Nicolas Massi, with Reserved Font Name
+"Pirata". Licensed under the SIL Open Font License, Version 1.1; the full text is
+vendored beside the font at `app/public/fonts/OFL-Pirata-One.txt`.
+
+Used by the game skin only, for the names on the holdings' signposts, and
+declared inside the game's own stylesheet so it travels in the lazy chunk rather
+than in the bundle everybody downloads.
+
 ## PixiJS — MIT
 
 Copyright (c) 2013-2023 Mathew Groves, Chad Engler. The MIT license above

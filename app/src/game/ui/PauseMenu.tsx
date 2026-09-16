@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { BORING_UI, KEEP_BUILD } from "../keep";
 import { CLASS_LORE } from "../lore/world";
 import type { Purse } from "../state/shop";
+import type { Earned } from "../state/progress";
 import { useGameShell } from "../state/context";
 import { Codex } from "./Codex";
+import { Barrow } from "./Barrow";
 import { Gathering } from "./Gathering";
 import { Marches } from "./Marches";
 import { Menu, type MenuItem } from "./Menu";
@@ -12,7 +14,7 @@ import { OptionsPanel } from "./OptionsPanel";
 import { Prompt } from "./Prompt";
 import { Shop } from "./Shop";
 
-type Pane = "root" | "marches" | "gathering" | "options" | "shop" | "codex";
+type Pane = "root" | "marches" | "barrow" | "gathering" | "options" | "shop" | "codex";
 
 /**
  * The pause screen, and everything reached from it.
@@ -40,6 +42,8 @@ export function PauseMenu({
   onTravel,
   gathering,
   onGathering,
+  earned,
+  counted,
   openAt,
 }: {
   onResume: () => void;
@@ -60,6 +64,9 @@ export function PauseMenu({
   /** Whether the account has agreed to its machines being read. */
   gathering: boolean;
   onGathering: (on: boolean) => void;
+  /** What the finished sessions came to, for the Barrow. */
+  earned: Earned;
+  counted: boolean;
   /** Which pane to open on, so the vial can lead straight to the bill. */
   openAt?: "gathering";
 }) {
@@ -128,6 +135,14 @@ export function PauseMenu({
       onSelect: () => setPane("marches"),
     },
     {
+      id: "barrow",
+      label: "The Barrow",
+      detail: counted
+        ? `${earned.sessions.toLocaleString()} sessions run to the end`
+        : "Not counted yet",
+      onSelect: () => setPane("barrow"),
+    },
+    {
       id: "gathering",
       label: "The gathering",
       detail: gathering
@@ -159,6 +174,7 @@ export function PauseMenu({
   const TITLES: Record<Pane, string> = {
     root: "Paused",
     marches: "The Marches",
+    barrow: "The Barrow",
     gathering: "The gathering",
     options: "Options",
     shop: "The pedlar",
@@ -213,6 +229,9 @@ export function PauseMenu({
             }}
             onBack={() => setPane("root")}
           />
+        )}
+        {pane === "barrow" && (
+          <Barrow earned={earned} counted={counted} onBack={() => setPane("root")} />
         )}
         {pane === "gathering" && (
           <Gathering

@@ -177,7 +177,7 @@ export function Hud({
                 ? unlock
                   ? `${unlock.name} at level ${unlock.level}`
                   : "Nothing left to unlock"
-                : "Not counted yet — the service did not answer"
+                : "An example standing — the service did not answer"
             }
           />
         </div>

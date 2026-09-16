@@ -1,4 +1,5 @@
 import type { Roster } from "./sessions";
+import type { Earned } from "./progress";
 import type { Work } from "../world/work";
 
 /**
@@ -38,6 +39,30 @@ const WORK: { id: string; name: string; kind: string; work: Work; owner: string 
   { id: "demo-8", name: "feat: the border wood", kind: "openclaw", work: "feature", owner: "demo-alan" },
   { id: "demo-9", name: "debug the importer", kind: "hermes", work: "bug", owner: "demo-alan" },
 ];
+
+/**
+ * What the example team is supposed to have done.
+ *
+ * The stand-in used to be a roster and nothing else, which left the rest of the
+ * game unreachable whenever the service could not be reached: no finished
+ * sessions means no experience, no experience means level one, level one means
+ * no marks and a shop that will not open. Somebody looking at the example
+ * garrison could see the map and none of what the map is for.
+ *
+ * So the example has an example history too. It is labelled everywhere the
+ * roster is -- the HUD says "Example garrison" and the Barrow says the service
+ * did not answer -- because a number that looks real and is not is worse than
+ * no number. What it buys is the ability to open the shop, spend, and see a
+ * skin land on a figure, which cannot otherwise be tried at all without a
+ * working service and a week of sessions behind it.
+ */
+export const DEMO_EARNED: Earned = {
+  sessions: 34,
+  days: 11,
+  machines: 3,
+  mended: 14,
+  made: 9,
+};
 
 export const DEMO_ROSTER: Roster = {
   heroes: PEOPLE,

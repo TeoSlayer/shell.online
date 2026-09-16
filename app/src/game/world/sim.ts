@@ -35,8 +35,14 @@ export type Side = "garrison" | "unmade";
  * `hero` and `soldier` stand for something in the account. `watch` is scenery:
  * a keep with five people in it does not look like a keep, and a fault met by
  * one wright does not look like a battle. `unmade` is the fault itself.
+ *
+ * `fallen` is a soldier whose session has closed, walking to the Barrow. It is
+ * a role rather than an immediate removal because a session ending is the most
+ * important thing that happens in this game -- it is where the experience comes
+ * from -- and a figure that blinks out of existence is the one way of showing
+ * that which says nothing at all.
  */
-export type Role = "hero" | "soldier" | "watch" | "unmade";
+export type Role = "hero" | "soldier" | "watch" | "unmade" | "fallen";
 
 export interface Actor {
   id: string;
@@ -128,6 +134,8 @@ export interface Sim {
   raised: number;
   /** Ticks until the next of the Unmade arrives. */
   nextSpawn: number;
+  /** How many sessions have closed while this field has been watched. */
+  finished: number;
   /** Where each hero holds, by account id. */
   camps: Map<string, Camp>;
   /**
@@ -193,6 +201,7 @@ export function createSim(): Sim {
     felled: 0,
     raised: 0,
     nextSpawn: 40,
+    finished: 0,
     camps: new Map(),
     banners: new Map(),
   };
@@ -347,11 +356,28 @@ export function setRoster(
   }
 
   /*
-   * Anybody no longer on the roster leaves. The watch and the Unmade are not on
-   * it and are not touched: scenery and faults are not people.
+   * A soldier no longer on the roster has had its session close. It does not
+   * vanish: it turns for the Barrow and walks there, and is taken off the field
+   * when it arrives.
+   *
+   * Heroes do vanish, because a member leaving a team is an administrative fact
+   * rather than an event on the map, and marching them to a graveyard would be
+   * saying something quite different and untrue.
    */
+  const barrow = GARRISONS.find((holding) => holding.id === "barrow");
+  for (const actor of sim.actors) {
+    if (actor.role !== "soldier" || wanted.has(actor.id)) continue;
+    actor.role = "fallen";
+    actor.targetId = undefined;
+    actor.moving = true;
+    actor.action = "walk";
+    actor.toX = barrow?.x ?? 46;
+    actor.toY = barrow?.y ?? 22;
+    sim.finished += 1;
+  }
+
   sim.actors = sim.actors.filter(
-    (actor) => (actor.role !== "hero" && actor.role !== "soldier") || wanted.has(actor.id),
+    (actor) => actor.role !== "hero" || wanted.has(actor.id),
   );
 }
 
@@ -517,6 +543,8 @@ function chooseEnemy(sim: Sim, actor: Actor): Actor | undefined {
   let bestDistance = ABANDON_AT;
   for (const other of sim.actors) {
     if (other.side === actor.side || other.hp <= 0) continue;
+    /* Nobody harries the dead on their way to the Barrow. */
+    if (other.role === "fallen") continue;
     const distance = Math.hypot(other.x - actor.x, other.y - actor.y);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -620,6 +648,19 @@ export function tickSim(sim: Sim): void {
     if (actor.hurt > 0) actor.hurt -= 1;
     if (actor.action !== "stand" && sim.clock >= actor.actionUntil) {
       actor.action = actor.moving ? "walk" : "stand";
+    }
+
+    /*
+     * The fallen walk to the Barrow and are taken off when they get there.
+     *
+     * They do not fight, are not fought, and answer to nothing else. A session
+     * that has finished is finished.
+     */
+    if (actor.role === "fallen") {
+      if (!stepTo(actor, actor.toX, actor.toY, WALK)) {
+        actor.hp = 0;
+      }
+      continue;
     }
 
     /*
@@ -762,6 +803,8 @@ export function tickSim(sim: Sim): void {
      */
     for (const dead of fallen) {
       if (dead.side === "unmade") continue;
+      /* A session that finished stays finished. */
+      if (dead.role === "fallen") continue;
       const home =
         dead.role === "watch"
           ? (GARRISONS.find((holding) => holding.id === dead.home) ?? GARRISONS[0])

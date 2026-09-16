@@ -211,6 +211,54 @@ describe("heroes and their soldiers", () => {
     expect(sim.actors.filter((actor) => actor.role === "hero")).toHaveLength(1);
   });
 
+  it("marches a finished session to the Barrow rather than blinking it out", () => {
+    /*
+     * A session ending is the most important thing that happens in this game --
+     * it is where the experience comes from -- and a figure that vanishes is
+     * the one way of showing that which says nothing at all.
+     */
+    const sim = theExample();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: [],
+      youUid: "ada",
+    });
+
+    const marching = sim.actors.filter((actor) => actor.role === "fallen");
+    expect(marching).toHaveLength(13);
+    expect(sim.finished).toBe(13);
+
+    const barrow = GARRISONS.find((holding) => holding.id === "barrow")!;
+    for (const one of marching) {
+      expect(one.toX).toBe(barrow.x);
+      expect(one.toY).toBe(barrow.y);
+    }
+  });
+
+  it("takes them off the field once they arrive", () => {
+    const sim = theExample();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: [],
+      youUid: "ada",
+    });
+    run(sim, 3000);
+    expect(sim.actors.filter((actor) => actor.role === "fallen")).toHaveLength(0);
+    expect(sim.actors.filter((actor) => actor.role === "hero")).toHaveLength(1);
+  });
+
+  it("does not bring the finished back", () => {
+    /* A session that finished stays finished; only the living are set back up. */
+    const sim = theExample();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "claude-code" }],
+      soldiers: [],
+      youUid: "ada",
+    });
+    run(sim, 6000);
+    expect(sim.actors.filter((actor) => actor.role === "soldier")).toHaveLength(0);
+  });
+
   it("does not dismiss the watch along with the roster", () => {
     const sim = theExample();
     garrisonSoldiers(sim);

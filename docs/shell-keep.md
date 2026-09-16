@@ -33,6 +33,7 @@ that is lying about your week.
 | **Camp** | That member's working area | Derived: placed from their `uid` |
 | **The Unmade** | Faults being worked on | Sessions whose work reads as `bug` |
 | **Holding** | A part of the product | Fixed; see §4 |
+| **The Barrow** | Sessions that have closed | `game-stats` counts; see §4 |
 | **Marks** | — | Derived from level |
 | **Elixir** | Tokens the gathering has spent | `game_collection_runs` |
 
@@ -45,6 +46,13 @@ on the team.
 Heroes are drawn at **twice the size of a soldier**. At the same size they were
 indistinguishable from their own retinue, which is the one thing on this map
 that has to be legible at a glance.
+
+Every hero commands **ground washed in their own colour** — an ellipse that
+follows them, so a company reads as an area rather than a crowd. Yours is washed
+stronger and rimmed brighter, and never colour alone: yours is also the one the
+view opens on, the one the HUD names, and the only one that answers a click. The
+colours are derived from the account id and assigned across the roster at once,
+so no two collide and nobody is green, because the map is grass.
 
 Above each hero: a **shield bearing their initials**, their name in brass, a
 **health bar**, and a **mana bar**. The mana bar is a read-out like everything
@@ -70,9 +78,11 @@ A soldier is one session, and belongs to the hero who owns it. A member with ten
 Claude Code sessions and three OpenClaw sessions has **thirteen soldiers of two
 classes**, all of them theirs, all of them around their camp.
 
-Above each soldier: a **coloured chip naming its class**, and the session's name.
-The chip is separate from the name rather than run together with it, because a
-company of mixed classes is what this map is about.
+Above each soldier: **its harness's own logo** on a brass-rimmed disc, and the
+session's name. The logos are the ones in `public/icons/`, which is where the
+session list gets them — a soldier *is* a session, so the mark over its head
+should be the mark beside it in the console. Spelling the class out in words was
+most of what was on screen at a camp of a dozen.
 
 Every board above a head — hero or soldier — is visible at **every zoom**, and
 **scales against the zoom**: it grows as the map shrinks, because zoomed out is
@@ -86,9 +96,24 @@ retinue in formation reads as a parade.
 ### The Unmade
 
 Faults, made visible. They come for a hero who has soldiers doing bug work, and
-they come to **that hero's camp**. A team where nobody is fixing anything has a
-quiet map, and that is the correct picture of a quiet day; it is also what makes
-a loud one mean something.
+they come to **that hero's camp**, in numbers, continuously. Each besieged camp
+takes a share rather than one drawing the whole wave.
+
+A team where nobody is fixing anything has a quiet map, and that is the correct
+picture of a quiet day; it is also what makes a loud one mean something. Soldiers
+doing feature work **visibly build** for the same reason — a map where only
+broken things move would quietly teach everybody that only broken things count.
+
+### The fallen
+
+When a session closes, its soldier does not blink out. It turns for **the
+Barrow** and walks there, and is taken off the field when it arrives. A session
+ending is where experience comes from, and a figure that vanishes is the one way
+of showing that which says nothing.
+
+The Barrow's screen is the ledger behind the experience bar, written out: every
+count, what each is worth, and the sum. A progress bar with no derivation behind
+it is one you have to take on faith.
 
 ---
 
@@ -103,13 +128,16 @@ toy, and it would be the only thing in this game that changes what somebody else
 sees.
 
 Clicking a figure inspects it instead of moving — a hero or a soldier, not the
-watch and not the Unmade. This is the one piece of the game that is not a
+watch and not the Unmade. **The card stands beside whoever was clicked and walks
+with them**; every fact on it carries a mark as well as a word, and what it shows
+depends on what was clicked: a hero shows the company they command, a soldier
+shows whose company it is in. This is the one piece of the game that is not a
 read-out, and deliberately the only one: walking your hero around changes nothing
 about your account. It is there because a map you can only look at is a diagram.
 
 The view opens on **your own hero** once the roster arrives, not on the Keep.
 
-## 4. The nine holdings
+## 4. The ten holdings
 
 Fixed landmarks. They are the country's geography and its lore, and they are
 where the roads go. They are *not* where soldiers are posted — that is the
@@ -126,6 +154,7 @@ hero's camp.
 | Pedlar's Gate | The shop |
 | The Chronicle | The audit log |
 | Ravens' Roost | Your inbox |
+| The Barrow | Sessions that have closed, and what they came to |
 
 The country is 128 tiles across and ends in **old-growth forest**: a thicket of
 oversized trees, boulders and the occasional ruin hugging the edge, and a baked
@@ -233,7 +262,23 @@ Nothing about other members is stored by the game.
 
 ---
 
-## 8. Accessibility and input
+## 8. The interface
+
+The HUD lives in the **corners**, not in a strip. Everything on it is glanced at
+rather than read, and things that are glanced at belong at the edges of the eye:
+who you are top left, what you have bottom left, who is out bottom right, pause
+top right, the key prompt at the foot.
+
+The names of places are lettered in **Pirata One** (SIL OFL, vendored), and
+nothing else is. A whole interface in blackletter is one nobody can read in a
+hurry; you stop walking to read a signpost, which is exactly the difference.
+
+When the service cannot be reached the game shows an **example** team with an
+example history, labelled as such in the HUD and in the Barrow. Without it the
+map is visible and nothing the map is for is reachable: no finished sessions, no
+experience, no marks, and a shop that will not open.
+
+## 9. Accessibility and input
 
 Held to the `game-ui-design` skill, enforced by `scripts/check-game-ui.mjs` in
 `npm test`:
@@ -251,7 +296,7 @@ Held to the `game-ui-design` skill, enforced by `scripts/check-game-ui.mjs` in
 
 ---
 
-## 9. What it costs the corporate view
+## 10. What it costs the corporate view
 
 One lazily imported chunk, one icon and one route: **2.07 kB gzipped** measured
 against a baseline build. `scripts/check-bundle.mjs` fails the build if any game

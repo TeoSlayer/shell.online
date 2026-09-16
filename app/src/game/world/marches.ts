@@ -53,7 +53,7 @@ export interface Garrison {
 }
 
 /**
- * The nine holdings.
+ * The ten holdings.
  *
  * The Keep in the middle and eight around it, roughly on the compass points, so
  * that the map has a centre and every road out of it leads somewhere. Laid out
@@ -209,6 +209,25 @@ export const GARRISONS: Garrison[] = [
     ],
   },
   {
+    id: "barrow",
+    name: "The Barrow",
+    purpose: "Every session that finished. They are not gone; they are done.",
+    truth: "Sessions that have closed. Their work is what your levels are made of.",
+    x: 46,
+    y: 22,
+    radius: 6,
+    ground: "stone",
+    draws: "none",
+    buildings: [
+      { sprite: "Structure_12", x: 44, y: 20.5 },
+      { sprite: "Structure_12", x: 48, y: 20.5 },
+      { sprite: "Structure_12", x: 42.5, y: 23 },
+      { sprite: "Structure_12", x: 46, y: 23.5, scale: 1.2 },
+      { sprite: "Structure_12", x: 49.5, y: 23 },
+      { sprite: "Structure_04", x: 46, y: 19, scale: 1.1 },
+    ],
+  },
+  {
     id: "roost",
     name: "Ravens' Roost",
     purpose: "Every raven ever sent for you is waiting in the rafters.",
@@ -258,6 +277,7 @@ export const ROADS: { from: string; to: string }[] = [
   { from: "keep", to: "pedlar" },
   { from: "keep", to: "chronicle" },
   { from: "keep", to: "roost" },
+  { from: "relay", to: "barrow" },
   /* Two that do not touch the Keep, so the network is a country and not a wheel. */
   { from: "forge", to: "relay" },
   { from: "muster", to: "pedlar" },

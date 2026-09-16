@@ -9,7 +9,7 @@ import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { DEMO_ROSTER } from "./state/demo-garrison";
+import { DEMO_EARNED, DEMO_ROSTER } from "./state/demo-garrison";
 import { useGarrison } from "./state/use-garrison";
 import { buy, skinById, tintFor } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
@@ -156,7 +156,14 @@ export default function GameRoute() {
    * promises at the top of the file that nothing here does. The simulation is
    * spectacle now and earns nothing; what earns is a session that finished.
    */
-  const { earned, known } = useEarned();
+  const { earned: counted, known } = useEarned();
+  /*
+   * The example team's example history, when the field is showing the example
+   * team. Labelled as an example everywhere it appears -- and it is what makes
+   * the shop, the Barrow and levelling reachable at all without a working
+   * service and a week of sessions behind you.
+   */
+  const earned = known ? counted : DEMO_EARNED;
   const rank = standing(experienceFrom(earned));
 
   /* Earned by levelling, less what has been spent with the pedlar. */
@@ -386,6 +393,8 @@ export default function GameRoute() {
             garrison={tally.wrights.length}
             onTravel={(id) => handle.current.lookAt(id)}
             gathering={save.gathering}
+            earned={earned}
+            counted={known}
             onGathering={(on) => setSave({ ...save, gathering: on })}
             openAt={pauseAt}
             onBuy={(skinId) => {
