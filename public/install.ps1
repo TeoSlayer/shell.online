@@ -10,9 +10,17 @@ $ErrorActionPreference = "Stop"
 # went: one request carrying a single word and the binary name, nothing else,
 # so that a platform that keeps failing gets noticed and fixed. Set
 # SHELL_ONLINE_INSTALL_REPORT=0 to skip it.
+# A run that is only a check, a monitor or a CI job, should set
+# SHELL_ONLINE_INSTALL_CHECK=1: every request then carries the user agent
+# shell.online-install-check, which the site counts as a monitor and not as
+# a person, and nothing is reported.
+$web = @{ UseBasicParsing = $true }
+if ($env:SHELL_ONLINE_INSTALL_CHECK -eq "1") { $web.UserAgent = "shell.online-install-check" }
+
 $script:reported = $false
 function Report([string]$Outcome) {
   if ($env:SHELL_ONLINE_INSTALL_REPORT -eq "0") { return }
+  if ($web.ContainsKey("UserAgent")) { return }
   if ($BaseUrl -notmatch '^https?://') { return }
   $script:reported = $true
   $platform = if ($script:artifact) { $script:artifact } else { "unknown" }
@@ -48,8 +56,8 @@ $manifestPath = Join-Path $temporaryDirectory "SHA256SUMS"
 
 try {
   New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
-  Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/downloads/$artifact" -OutFile $binaryPath
-  Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/downloads/SHA256SUMS" -OutFile $manifestPath
+  Invoke-WebRequest @web -Uri "$BaseUrl/downloads/$artifact" -OutFile $binaryPath
+  Invoke-WebRequest @web -Uri "$BaseUrl/downloads/SHA256SUMS" -OutFile $manifestPath
   $manifest = Get-Content -Raw $manifestPath
   $match = [regex]::Match($manifest, "(?m)^([a-f0-9]{64})  " + [regex]::Escape($artifact) + "$")
   if (-not $match.Success) { Fail "release manifest has no valid checksum for $artifact" "manifest_missing" }

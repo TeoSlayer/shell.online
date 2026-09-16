@@ -6,6 +6,7 @@ import {
   type StatsRetentionCohort,
   type StatsSeriesPoint,
   type StatsSnapshot,
+  type UniqueSurface,
 } from "../shared/stats";
 import { peopleCountedSince } from "../shared/stats-snapshot";
 import {
@@ -23,7 +24,7 @@ import {
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import "./stats.css";
 
-type SeriesKey = "sessions" | "shares" | "collaborations" | "pageViews";
+type SeriesKey = "sessions" | "started" | "shares" | "collaborations" | "pageViews" | "installs";
 
 interface ChartSeries {
   key: SeriesKey;
@@ -37,7 +38,7 @@ const ACTIVITY_SERIES: ChartSeries[] = [
   { key: "collaborations", label: "Collaborated", color: "#d7a6ff" },
 ];
 const TRAFFIC_SERIES: ChartSeries[] = [
-  { key: "pageViews", label: "Page views", color: "#9ab7e8" },
+  { key: "pageViews", label: "Page views by people", color: "#9ab7e8" },
 ];
 let activeDashboardCleanup: (() => void) | null = null;
 let statsRenderId = 0;
@@ -357,7 +358,8 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
    */
   const peopleSince = peopleCountedSince(people, snapshot.rangeStart);
   /* Plain text: renderKpi escapes its detail. */
-  const sinceNote = peopleSince === null ? "" : ` · counted since ${formatDay(peopleSince)}`;
+  const visitorsNote = peopleNote(snapshot, "site");
+  const machinesNote = peopleNote(snapshot, "cli");
   const totalViews = metrics.landingViews + metrics.docsViews;
   const otherViews = audiences.views.tools + audiences.views.unknown;
   const ctaByLink = snapshot.targets
@@ -390,9 +392,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       ${renderKpi(
         "Visitors",
         people.configured ? site.unique : "—",
-        people.configured
-          ? `${integerFormatter.format(site.new)} new · ${integerFormatter.format(site.returning)} returning${sinceNote}`
-          : "people are not counted yet",
+        people.configured ? visitorsNote : "people are not counted yet",
         snapshot.trend,
         "pageViews",
         "silver",
@@ -416,7 +416,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
           ? "no installer runs in this range"
           : `${formatPercent(ratio(figures.installs, figures.installerRuns))} of ${integerFormatter.format(figures.installerRuns)} installer run${figures.installerRuns === 1 ? "" : "s"}`,
         snapshot.trend,
-        "sessions",
+        "installs",
         "amber",
         delta(figures.installs, previous?.figures.installs),
       )}
@@ -424,10 +424,10 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "Sessions started",
         figures.sessionsStarted,
         people.configured
-          ? `on ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"}, ${integerFormatter.format(cli.new)} new${sinceNote}`
+          ? `on ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"} · ${machinesNote}`
           : `${integerFormatter.format(metrics.sessionsCreated)} created`,
         snapshot.trend,
-        "sessions",
+        "started",
         "violet",
         delta(figures.sessionsStarted, previous?.figures.sessionsStarted),
       )}
@@ -461,7 +461,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         <span class="panel-range">${escapeHtml(rangeLabel)}</span>
       </header>
       <p class="panel-insight">${escapeHtml(funnelInsight(snapshot))}</p>
-      ${renderFunnel(snapshot, peopleSince)}
+      ${renderFunnel(snapshot)}
       ${peopleSince === null ? "" : `<p class="cohort-empty">People have been counted since ${escapeHtml(formatDay(peopleSince))}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.</p>`}
       ${renderInstallConversion(snapshot)}
       ${renderUniquesStrip(snapshot)}
@@ -748,9 +748,16 @@ function renderTimeChart(
   `;
 }
 
-function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): string {
+/** Which surface a funnel step's people are counted on, for the day their count starts. */
+const STEP_SURFACES: Record<string, UniqueSurface> = { visited: "site", installer: "install", session: "cli", opened: "viewer" };
+
+function renderFunnel(snapshot: StatsSnapshot): string {
   const steps = snapshot.funnel;
-  const since = peopleSince === null ? "" : ` since ${escapeHtml(formatDay(peopleSince))}`;
+  const sinceFor = (key: string): string => {
+    const surface = STEP_SURFACES[key];
+    const since = surface === undefined ? null : peopleCountedSince(snapshot.uniques, snapshot.rangeStart, surface);
+    return since === null ? "" : ` since ${escapeHtml(formatDay(since))}`;
+  };
   const colors = ["#9ab7e8", "#8eafff", "#819de5", "#f4bd78", "#8eafff", "#75dac2", "#d7a6ff"];
   const maximum = Math.max(1, ...steps.map((step) => step.count));
   return `
@@ -771,7 +778,7 @@ function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): stri
         return `
           <div class="funnel-step">
             <span>${escapeHtml(step.label)}</span>
-            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${since}</small>`}</b>
+            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${sinceFor(step.key)}</small>`}</b>
             <div><i style="width:${width}%;--funnel:${colors[index % colors.length]}"></i></div>
             <em>${escapeHtml(share)}</em>
             ${excluded}
@@ -799,15 +806,30 @@ function renderInstallConversion(snapshot: StatsSnapshot): string {
   return `<p class="cohort-empty">${escapeHtml(verdict)} Machines are followed by address from the binary download to the first session.</p>`;
 }
 
+/*
+ * What to say beside a people figure. New means first seen since the range
+ * began, so until a whole range has passed since this surface's people were
+ * first counted, everyone is new and the split says nothing: name the day it
+ * starts to. The 24h range counts people by UTC day, which is two of them.
+ */
+function peopleNote(snapshot: StatsSnapshot, surface: UniqueSurface): string {
+  const count = snapshot.uniques.surfaces[surface];
+  const days = snapshot.range === "24h" ? " · by UTC day, so two days" : "";
+  const since = peopleCountedSince(snapshot.uniques, snapshot.rangeStart, surface);
+  if (since === null) return `${integerFormatter.format(count.new)} new · ${integerFormatter.format(count.returning)} returning${days}`;
+  const knownFrom = formatDay(since + (snapshot.generatedAt - snapshot.rangeStart));
+  return `counted since ${formatDay(since)}; new or returning cannot be told until ${knownFrom}${days}`;
+}
+
 function renderUniquesStrip(snapshot: StatsSnapshot): string {
   const people = snapshot.uniques;
-  const cell = (label: string, surface: keyof typeof people.surfaces): string => {
+  const cell = (label: string, surface: UniqueSurface): string => {
     const count = people.surfaces[surface];
     return `
       <span>
         <small>${escapeHtml(label)}</small>
         <b>${people.configured ? integerFormatter.format(count.unique) : "—"}</b>
-        <em>${people.configured ? `${integerFormatter.format(count.new)} new · ${integerFormatter.format(count.returning)} back` : "not counted"}</em>
+        <em>${people.configured ? escapeHtml(peopleNote(snapshot, surface)) : "not counted"}</em>
       </span>
     `;
   };

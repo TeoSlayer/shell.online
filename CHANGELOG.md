@@ -4,6 +4,28 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- The scheduled download check installed on three fresh GitHub runners every
+  half hour and was counted as installs, installer runs, installer outcomes
+  and new machines, which is where a dashboard day of ninety installs and
+  fifty-six new machines came from. Both install scripts now take
+  `SHELL_ONLINE_INSTALL_CHECK=1`, which puts a check user agent on every
+  request and reports nothing; the workflow sets it, and the site counts
+  that agent, and monitors in general, as crawlers.
+- HTTP libraries and PowerShell's web cmdlets were classified as desktop
+  browsers, so a Node script or a Windows install read as a person reading
+  the installer. They are tools now, and a Windows install counts as a run.
+- The installs tile drew the sessions line. The trend now carries installs
+  and started sessions as their own series, crawlers left out of every line.
+- "New" people are measured from the day a surface's people were first
+  counted, per surface, and while a whole range has not yet passed since
+  that day the split is replaced by the day it becomes meaningful. Machine
+  rows keyed the old way are dropped once, so they do not sit in the cohorts
+  as machines that never came back.
+- Pages a browser fetched ahead of time (prefetch, prerender) are not views.
+- The 24h range says that people are counted by UTC day, so over two days.
+
 ## [0.16.0] — 2026-09-15
 
 ### Changed

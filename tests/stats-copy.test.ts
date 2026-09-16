@@ -55,6 +55,7 @@ function rows(overrides: Partial<StatsSnapshotRows> = {}): StatsSnapshotRows {
     installConversion: null,
     uniquesConfigured: true,
     uniquesSince: dayStart(now - 20 * DAY_MS),
+    uniquesSinceBySurface: [],
     ...overrides,
   };
 }

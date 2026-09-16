@@ -163,4 +163,19 @@ if grep -q "install/report" "$report_log"; then
   exit 1
 fi
 
+# A check run says so on every request and reports nothing, even when
+# reporting is otherwise on.
+: > "$report_log"
+if output=$(SHELL_ONLINE_INSTALL_REPORT=1 SHELL_ONLINE_INSTALL_CHECK=1 SHELL_ONLINE_TEST_REPORT_LOG=$report_log \
+  SHELL_ONLINE_BASE_URL=https://installer.invalid SHELL_ONLINE_INSTALL_DIR=$test_root/report-install \
+  PATH=$report_bin:$PATH sh "$installer" 2>&1); then
+  printf 'Installer with a failing download unexpectedly succeeded.\n' >&2
+  exit 1
+fi
+assert_contains "$(cat "$report_log")" "-A shell.online-install-check https://installer.invalid/downloads/shell-"
+if grep -q "install/report" "$report_log"; then
+  printf 'A check run reported its outcome.\n' >&2
+  exit 1
+fi
+
 printf 'Installer integration scenarios passed.\n'

@@ -33,10 +33,16 @@ export interface StatsInstallConversion {
 
 export interface StatsSeriesPoint {
   at: number;
+  /** Sessions created. */
   sessions: number;
+  /** Sessions whose host connected. */
+  started: number;
   shares: number;
   collaborations: number;
+  /** Landing and documentation views, crawlers left out. */
   pageViews: number;
+  /** Release binaries served, crawlers left out. */
+  installs: number;
 }
 
 export interface StatsBreakdownItem {
@@ -61,6 +67,13 @@ export interface StatsUniqueCount {
   new: number;
   /** Of those, seen before the range began. */
   returning: number;
+  /**
+   * Midnight UTC of the earliest day this surface's people were counted, or
+   * null. Surfaces start on different days: machines were re-keyed after
+   * visitors were first counted, so a "new" machine and a "new" visitor are
+   * measured from different starts.
+   */
+  since: number | null;
 }
 
 export interface StatsUniqueDay {

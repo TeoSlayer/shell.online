@@ -8,6 +8,8 @@ import {
   collectStatsRows,
   HOUR_MS,
   initializeStatsSchema,
+  MACHINE_KEY_DAY,
+  migrateStatsData,
   parseStatsPresence,
   parseStatsRecord,
   recordStatsEvent,
@@ -101,6 +103,19 @@ describe("the dashboard's database", () => {
     const day = collectStatsRows(sql, "24h", false, now);
     expect(day.rows.summary).toEqual([]);
     expect(day.rows.previous).toMatchObject({ rangeStart: now - 2 * DAY_MS, summary: [{ count: 2 }] });
+
+    /* Crawlers stay out of the charts, and installs and started sessions join them. */
+    recordStatsEvent(sql, event(daysAgo(1), "page_view", "landing", { device: "bot", client: "bot" }));
+    recordStatsEvent(sql, event(daysAgo(1), "binary_download", "linux-amd64", { device: "cli", client: "curl" }));
+    recordStatsEvent(sql, event(daysAgo(1), "binary_download", "linux-amd64", { device: "bot", client: "bot" }));
+    recordStatsEvent(sql, event(daysAgo(1), "session_started", "cli", { device: "cli", client: "shell/0.16.0" }));
+    const charted = collectStatsRows(sql, "7d", false, now).rows.trend;
+    const hour = Math.floor(daysAgo(1) / HOUR_MS) * HOUR_MS;
+    expect(charted).toEqual([
+      { bucket: hour, event: "binary_download", count: 1 },
+      { bucket: hour, event: "page_view", count: 2 },
+      { bucket: hour, event: "session_started", count: 1 },
+    ]);
   });
 
   it("splits the counted events by device class and ranks dimensions by count", () => {
@@ -140,6 +155,10 @@ describe("the dashboard's database", () => {
 
     const { rows } = collectStatsRows(sql, "7d", true, now);
     expect(rows.uniquesSince).toBe(dayStart(daysAgo(10)));
+    expect(rows.uniquesSinceBySurface).toEqual([
+      { surface: "cli", minimum: dayStart(daysAgo(1)) },
+      { surface: "site", minimum: dayStart(daysAgo(10)) },
+    ]);
     expect(bySurface(rows.uniques)).toEqual([
       { surface: "cli", unique_count: 1, new_count: 1 },
       { surface: "site", unique_count: 2, new_count: 1 },
@@ -190,6 +209,38 @@ describe("the dashboard's database", () => {
     expect(INSTALL_CONVERSION_DAYS).toBe(7);
     expect(collectStatsRows(sql, "30d", false, now).rows.installConversion).toBeNull();
     expect(collectStatsRows(sql, "all", true, now).rows.installConversion).toMatchObject({ installers: 6 });
+  });
+
+  it("drops the machine rows keyed the old way once, and never again", () => {
+    const sql = freshDatabase();
+    /* A database from before the mark existed. */
+    sql.exec("DELETE FROM dashboard_marks");
+    const cutover = MACHINE_KEY_DAY + 6 * HOUR_MS;
+    recordStatsEvent(sql, event(cutover - DAY_MS, "session_created", "cli", { device: "cli", visitor: hash("o") }));
+    recordStatsEvent(sql, event(cutover, "binary_download", "darwin-arm64", { device: "cli", visitor: hash("p") }));
+    recordStatsEvent(sql, event(cutover - DAY_MS, "page_view", "landing", { visitor: hash("v") }));
+    recordStatsEvent(sql, event(cutover + DAY_MS, "session_created", "cli", { device: "cli", visitor: hash("n") }));
+    /* Seen before and after the cut-over: the row survives, its first day with it. */
+    recordStatsEvent(sql, event(cutover - DAY_MS, "session_created", "cli", { device: "cli", visitor: hash("k") }));
+    recordStatsEvent(sql, event(cutover + DAY_MS, "session_created", "cli", { device: "cli", visitor: hash("k") }));
+
+    migrateStatsData(sql);
+    const left = sql.exec<{ surface: string; visitor: string; first_day: number }>(
+      "SELECT surface, visitor, first_day FROM visitors ORDER BY surface, visitor",
+    ).toArray();
+    expect(left).toEqual([
+      { surface: "cli", visitor: hash("k"), first_day: dayStart(cutover - DAY_MS) },
+      { surface: "cli", visitor: hash("n"), first_day: dayStart(cutover + DAY_MS) },
+      { surface: "site", visitor: hash("v"), first_day: dayStart(cutover - DAY_MS) },
+    ]);
+    expect(sql.exec<{ day: number }>("SELECT day FROM visitor_days WHERE visitor = ? ORDER BY day", hash("k")).toArray())
+      .toEqual([{ day: dayStart(cutover + DAY_MS) }]);
+
+    /* Done once: a later old-looking row is left alone. */
+    recordStatsEvent(sql, event(cutover - DAY_MS, "session_created", "cli", { device: "cli", visitor: hash("z") }));
+    initializeStatsSchema(sql);
+    migrateStatsData(sql);
+    expect(sql.exec<{ visitor: string }>("SELECT visitor FROM visitors WHERE visitor = ?", hash("z")).toArray()).toHaveLength(1);
   });
 
   it("keeps a live presence lease until it ends, and drops it when told", () => {
