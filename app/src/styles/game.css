@@ -1188,3 +1188,22 @@
   color: var(--keep-mist);
   font-size: var(--keep-text-sm);
 }
+
+/* The Pixi canvas fills its host; the renderer sizes itself to this element. */
+.keep-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.keep-stage-failed {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--keep-space-3);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-lg);
+  text-align: center;
+  place-content: center;
+}

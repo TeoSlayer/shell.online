@@ -33,6 +33,8 @@
     "jose": "^6.2.12",
     "oidc-client-ts": "^3.5.0",
     "pg": "^8.23.0",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.20.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3"

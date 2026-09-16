@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePageTitle } from "../lib/page-title";
-import { Stage } from "./engine/Stage";
+import { PixiStage } from "./pixi/PixiStage";
+import { buildKeepScene } from "./pixi/keepScene";
 import { useInputDevice } from "./engine/use-input-device";
 import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { drawField, HOLDING, layout, STARTING_BASE } from "./scenes/field";
-import { drawLife } from "./scenes/life";
-import { drawWrights } from "./scenes/wrights";
-import { drawFoes, drawSites } from "./scenes/foes";
-import { drawFx } from "./scenes/fx";
-import { createWorld, DEMO_GARRISON, tickWorld, type Wright } from "./state/world";
+import { createWorld, DEMO_GARRISON, type Wright } from "./state/world";
 import { useGarrison } from "./state/use-garrison";
 import { buy } from "./state/shop";
-import { experienceFrom, fortification, marksEarnedTo, standing } from "./state/progress";
+import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
 import { loadSave, reconcile, storeSave } from "./state/remote";
 import { ChooseCharacter } from "./ui/ChooseCharacter";
@@ -146,9 +142,6 @@ export default function GameRoute() {
     days: 0,
   }));
 
-  /* The holding is however fortified this level has earned. */
-  const base = { ...STARTING_BASE, ...fortification(rank.level) };
-
   /* Earned by levelling, less what has been spent with the pedlar. */
   const purse = {
     marks: marksLeft(marksEarnedTo(rank.level), save),
@@ -237,34 +230,10 @@ export default function GameRoute() {
           * across the top of it is a browser tab's job.
           */}
         <main className="keep-field">
-          <Stage
-            label="The holding, seen from above: a walled courtyard with towers at its corners and the keep at its middle"
-            staticKey={`${base.ground}:${base.wallTier}:${base.keepTier}:${base.towerTier}`}
-            motionless={reducedMotion}
-            drawStatic={(draw) => drawField(draw, base)}
-            onTick={() => {
-              if (!paused) tickWorld(world.current);
-            }}
-            drawFrame={(draw) => {
-              /*
-               * The courtyard is only known once the stage has measured the
-               * window. One tile in from the wall on every side, which is the
-               * part of the yard anybody can actually walk on.
-               */
-              const { left, top } = layout(draw);
-              world.current.bounds = {
-                left: left + 1.5,
-                top: top + 2,
-                right: left + HOLDING.w - 2.5,
-                bottom: top + HOLDING.h - 2,
-              };
-
-              drawLife(draw);
-              drawSites(draw, world.current);
-              drawWrights(draw, world.current);
-              drawFoes(draw, world.current);
-              drawFx(draw, world.current);
-            }}
+          <PixiStage
+            label="The Marches: garrisons spread over open country, seen from above and tilted"
+            paused={paused}
+            build={buildKeepScene}
           />
         </main>
 

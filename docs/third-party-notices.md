@@ -28,3 +28,27 @@ Copyright (c) 2011 Einar Otto Stangvik; Copyright (c) 2013 Arnout Kazemier and c
 ## Uncut Sans — SIL Open Font License 1.1
 
 The bundled font is Copyright (c) 2022 Kasper Nordkvist. “Uncut Sans” is a trademark of Kasper Nordkvist. Its full license is included at [`public/fonts/OFL-Uncut-Sans.txt`](../public/fonts/OFL-Uncut-Sans.txt).
+
+## Kenney game assets — Creative Commons Zero (CC0 1.0)
+
+The game skin's artwork is by Kenney Vleugels (https://kenney.nl), released
+into the public domain under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Kenney's licence
+states these assets may be used in personal and commercial projects, and that
+credit is appreciated but not required. It is given here anyway.
+
+| What | Pack | Source |
+|---|---|---|
+| Structures, units, terrain and environment | RTS Pack: Medieval | https://kenney.nl/assets/medieval-rts |
+| Particle textures for the game's effects | Particle Pack | https://kenney.nl/assets/particle-pack |
+
+The vendored files are `app/public/game/medieval-rts.png` (Kenney's own
+spritesheet, unmodified) and `app/public/game/fx-*.png` (selected particle
+textures, unmodified). `app/public/game/medieval-rts.json` is generated from
+Kenney's spritesheet XML by `app/scripts/import-kenney.mjs`, which records how
+to regenerate it against a newer release of the pack.
+
+## PixiJS — MIT
+
+Copyright (c) 2013-2023 Mathew Groves, Chad Engler. The MIT license above
+applies. Used by the game skin only, and only in its lazily-loaded chunk.

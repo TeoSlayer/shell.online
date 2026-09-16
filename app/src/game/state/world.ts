@@ -57,6 +57,25 @@ export interface Wright {
    * way until it is clear.
    */
   detour: 0 | 1 | -1;
+  /**
+   * The corner being walked to, while going around something.
+   *
+   * Committed rather than recomputed. Choosing the best corner afresh every
+   * tick looks correct and is the cause of the shaking: as the actor moves,
+   * which corner is cheapest flips between two candidates, so it turns round,
+   * which makes the other one cheapest, so it turns round again. Thirty times
+   * a second that is not a detour, it is a seizure.
+   */
+  waypointX?: number;
+  waypointY?: number;
+  /**
+   * The fault being fought, held until it dies or gets far away.
+   *
+   * Same disease, different cause: two faults roughly equidistant swap places
+   * as "nearest" whenever either of them moves, and the wright walks between
+   * them for ever without reaching either.
+   */
+  targetId?: string;
 }
 
 /** A bolt in the air, from an Arcanist to whatever it named. */
@@ -311,7 +330,30 @@ function stepToward(
   /* Straight at it, whenever that is possible. Nothing is being gone around. */
   if (take(ux, uy)) {
     actor.detour = 0;
+    actor.waypointX = undefined;
+    actor.waypointY = undefined;
     return true;
+  }
+
+  /*
+   * Already going around something: keep going to the same corner.
+   *
+   * This is the whole fix for the shaking. The corner is chosen once, when the
+   * way is first found to be blocked, and held until it is reached or the way
+   * ahead opens up. Re-choosing it every tick is what made the garrison
+   * vibrate: the cheapest corner flips as the actor moves, so it turns round,
+   * which makes the other one cheapest, so it turns round again.
+   */
+  if (actor.waypointX !== undefined && actor.waypointY !== undefined) {
+    const toCorner = Math.hypot(actor.waypointX - actor.x, actor.waypointY - actor.y);
+    if (toCorner > step) {
+      if (take((actor.waypointX - actor.x) / toCorner, (actor.waypointY - actor.y) / toCorner)) {
+        return true;
+      }
+    }
+    /* Reached it, or it turned out to be no use. Choose again below. */
+    actor.waypointX = undefined;
+    actor.waypointY = undefined;
   }
 
   /*
@@ -367,6 +409,9 @@ function stepToward(
     const cornerDistance = Math.hypot(cx - actor.x, cy - actor.y);
     if (take((cx - actor.x) / cornerDistance, (cy - actor.y) / cornerDistance)) {
       actor.detour = 1;
+      /* Committed. See the note on waypointX. */
+      actor.waypointX = cx;
+      actor.waypointY = cy;
       return true;
     }
   }
@@ -569,8 +614,40 @@ function siteFor(world: World, wright: Wright): Site {
   return site;
 }
 
-/** The nearest fault to a wright, or nothing when the field is clear. */
-function nearestFoe(world: World, wright: Wright): Foe | undefined {
+/**
+ * Turns a wright to face the way it actually moved.
+ *
+ * Not the way the target lies, which was the old rule and the third cause of
+ * the shaking: a wright going *around* something walks away from its target
+ * for several seconds, and facing the target the whole time made the sprite
+ * flip back and forth against its own travel. The deadband is there so that a
+ * wright that has stopped does not spin on the spot.
+ */
+function faceTravel(wright: Wright, fromX: number): void {
+  const moved = wright.x - fromX;
+  if (Math.abs(moved) > 0.004) wright.facing = moved > 0 ? 1 : -1;
+}
+
+/**
+ * How far a fault can wander before a wright gives up on it and picks another.
+ *
+ * Generous on purpose: switching is the expensive thing, not walking.
+ */
+const ABANDON_AT = 7;
+
+/**
+ * The fault a wright is fighting.
+ *
+ * Sticky. A wright keeps the one it chose until that fault dies or gets a long
+ * way off, and only then looks for another. Picking the nearest every tick is
+ * the obvious implementation and it shakes: two faults at roughly equal
+ * distance swap places as "nearest" whenever either of them moves, and the
+ * wright walks back and forth between them without ever arriving.
+ */
+function chooseFoe(world: World, wright: Wright): Foe | undefined {
+  const held = world.foes.find((foe) => foe.id === wright.targetId);
+  if (held && Math.hypot(held.x - wright.x, held.y - wright.y) < ABANDON_AT) return held;
+
   let best: Foe | undefined;
   let bestDistance = Infinity;
   for (const foe of world.foes) {
@@ -580,6 +657,7 @@ function nearestFoe(world: World, wright: Wright): Foe | undefined {
       best = foe;
     }
   }
+  wright.targetId = best?.id;
   return best;
 }
 
@@ -697,9 +775,10 @@ export function tickWorld(world: World): void {
       const distance = Math.hypot(dx, dy);
 
       if (distance > REACH) {
+        const from = wright.x;
         wright.moving = stepToward(world, wright, site.x, site.y, SPEED);
         wright.action = "walk";
-        if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+        faceTravel(wright, from);
       } else {
         wright.moving = false;
         if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
@@ -720,7 +799,7 @@ export function tickWorld(world: World): void {
     }
 
     if (wright.work === "bug") {
-      const foe = nearestFoe(world, wright);
+      const foe = chooseFoe(world, wright);
       if (foe) {
         const dx = foe.x - wright.x;
         const dy = foe.y - wright.y;
@@ -735,9 +814,10 @@ export function tickWorld(world: World): void {
         const reach = ranged(wright.kind) ? CAST_REACH : REACH;
 
         if (distance > reach) {
+          const from = wright.x;
           wright.moving = stepToward(world, wright, foe.x, foe.y, SPEED);
           wright.action = "walk";
-          if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+          faceTravel(wright, from);
         } else {
           wright.moving = false;
           if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
@@ -788,7 +868,7 @@ export function tickWorld(world: World): void {
       continue;
     }
 
-    const dx = wright.toX - wright.x;
+    const from = wright.x;
 
     if (!stepToward(world, wright, wright.toX, wright.toY, SPEED)) {
       wright.moving = false;
@@ -799,8 +879,7 @@ export function tickWorld(world: World): void {
       continue;
     }
 
-    /* Only turn on a real horizontal move, or they flip on the spot. */
-    if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+    faceTravel(wright, from);
   }
 }
 
