@@ -22,6 +22,7 @@ const FILES = [
   { vendored: "src/terminal/terminal-grid.ts", source: "shared/terminal-grid.ts" },
   { vendored: "src/terminal/terminal-fit.ts", source: "web/terminal-fit.ts" },
   { vendored: "src/terminal/terminal-metrics.ts", source: "web/terminal-metrics.ts" },
+  { vendored: "src/terminal/host-presence.ts", source: "shared/host-presence.ts" },
 ];
 
 /* Copies kept in step within this repository rather than with shell.online. */

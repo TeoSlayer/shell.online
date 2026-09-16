@@ -6,6 +6,7 @@ import {
   MOBILE_TERMINAL_GRID,
   type TerminalGrid,
 } from "./terminal-grid";
+import type { HostPresence } from "./host-presence";
 
 export type ConnectionStatus =
   | "connecting"
@@ -17,8 +18,23 @@ export type ConnectionStatus =
   | "missing"
   | "error";
 
+/** What the relay says about the machine hosting the session. */
+export interface HostState {
+  presence: HostPresence;
+  /** ISO timestamp of when that machine was last connected. */
+  lastSeenAt?: string;
+  /** ISO timestamp of the kept screen the relay may replay while it is away. */
+  screenCapturedAt?: string;
+}
+
 export interface ConnectionEvents {
   onStatus(status: ConnectionStatus, detail?: string): void;
+  /*
+   * The machine's state, which is not this viewer's connection state. A viewer
+   * can be connected to a session whose machine is asleep; saying so is the
+   * difference between an explained pause and a terminal that never appears.
+   */
+  onHostState?(state: HostState): void;
   /** Terminal bytes to write. `reset` means the screen should be cleared first. */
   onData(bytes: Uint8Array, reset: boolean): void;
   onReadOnly(readOnly: boolean): void;
@@ -49,6 +65,12 @@ export interface ConnectionOptions {
 }
 
 const MAX_BACKOFF_MS = 10_000;
+
+const HOST_PRESENCES: readonly HostPresence[] = ["waiting", "connected", "disconnected", "exited"];
+
+function isHostPresence(value: unknown): value is HostPresence {
+  return typeof value === "string" && (HOST_PRESENCES as readonly string[]).includes(value);
+}
 
 const CLOSE_ENDED = 4000;
 const CLOSE_MISSING = 4004;
@@ -273,7 +295,15 @@ export class TerminalConnection {
   }
 
   private handleControl(raw: string): void {
-    let message: { readOnly?: unknown; status?: unknown; type?: unknown; cols?: unknown; rows?: unknown };
+    let message: {
+      readOnly?: unknown;
+      status?: unknown;
+      type?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+      hostLastSeenAt?: unknown;
+      lastScreenAt?: unknown;
+    };
     try {
       message = JSON.parse(raw) as typeof message;
     } catch {
@@ -282,6 +312,13 @@ export class TerminalConnection {
     if (typeof message.readOnly === "boolean") {
       this.readOnly = message.readOnly;
       this.options.events.onReadOnly(message.readOnly);
+    }
+    if (message.type === "status" && isHostPresence(message.status)) {
+      this.options.events.onHostState?.({
+        presence: message.status,
+        lastSeenAt: typeof message.hostLastSeenAt === "string" ? message.hostLastSeenAt : undefined,
+        screenCapturedAt: typeof message.lastScreenAt === "string" ? message.lastScreenAt : undefined,
+      });
     }
     if (message.status === "exited") {
       this.options.events.onStatus("ended");

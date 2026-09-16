@@ -345,6 +345,65 @@ button.tab {
   animation: spin 1.4s linear infinite;
 }
 
+/*
+ * ---- The machine behind the session is away ----
+ *
+ * Not the same thing as this viewer losing its socket, and not a dead session
+ * either: the laptop is asleep, rebooting or off a network, and it comes back.
+ * Centred while there is nothing to look at, a strip over the kept screen when
+ * there is, so an empty terminal never has to explain itself.
+ */
+.pane-offline {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  gap: 6px;
+  width: min(420px, calc(100% - 40px));
+  padding: 18px 20px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--white);
+  box-shadow: 0 22px 60px rgb(26 31 22 / 14%);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.pane-offline strong {
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+
+.pane-offline.over-screen {
+  top: 30px;
+  width: min(540px, calc(100% - 24px));
+  padding: 11px 15px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--white) 94%, transparent);
+  backdrop-filter: blur(3px);
+  font-size: 12.5px;
+}
+
+/* A kept screen is not a live one, and should not be read as one. */
+.pane:has(.pane-offline) .pane-screen { opacity: 0.55; }
+
+@media (max-width: 640px) {
+  .pane-offline {
+    width: calc(100% - 20px);
+    padding: 15px 16px;
+  }
+
+  .pane-offline.over-screen {
+    top: 26px;
+    width: calc(100% - 16px);
+  }
+}
+
 /* ---- Gate shown over the screen for a password, or a dead session ---- */
 
 .pane-gate {

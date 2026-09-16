@@ -10,6 +10,7 @@ import {
   Opcode,
 } from "../shared/protocol";
 import { readOnlyFromControlMessage } from "../shared/session-access";
+import { hostIsAway, hostNotice } from "../shared/host-presence";
 import {
   isSessionFullClose,
   MAX_SESSION_VIEWERS,
@@ -707,6 +708,7 @@ function renderTerminal(sessionId: string): void {
       <div id="terminal-wrap" class="terminal-wrap">
         <div id="refstream-toolbar" class="refstream-toolbar" aria-label="Refstream terminal tools"></div>
         <div id="terminal" class="terminal" aria-label="Shared interactive terminal"></div>
+        <div id="session-offline" class="session-offline" role="status" aria-live="polite" hidden></div>
         ${showRefstreamNotice ? '<div id="refstream-alpha-notice" class="refstream-alpha-notice" role="status">Refstream is an experimental alpha renderer and may still be unstable.</div>' : ""}
         <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
@@ -810,6 +812,7 @@ function renderTerminal(sessionId: string): void {
   const terminalWrap = requiredElement("terminal-wrap");
   const refstreamToolbar = requiredElement("refstream-toolbar");
   const terminalInputWarning = requiredElement("terminal-input-warning");
+  const offlineNotice = requiredElement("session-offline");
   const mobileKeyButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>("#mobile-terminal-keys [data-terminal-key]"),
   );
@@ -960,6 +963,17 @@ function renderTerminal(sessionId: string): void {
   let waitingForCapacity = false;
   let outgoingFrames = Promise.resolve();
   let incomingFrames = Promise.resolve();
+  /*
+   * The machine's own state, which is not this viewer's connection state. A
+   * viewer can be perfectly connected to a session whose machine has closed
+   * its lid, and until this was shown that read as a terminal that simply
+   * failed to appear.
+   */
+  let hostStatus: string | undefined;
+  let hostLastSeenAt: string | undefined;
+  let screenCapturedAt: string | undefined;
+  let hasTerminalContent = false;
+  let offlineNoticeTimer: number | undefined;
 
   const syncMobileKeys = (): void => {
     const disabled = stopped || readOnly || waitingForEncryptionKey ||
@@ -1221,6 +1235,51 @@ function renderTerminal(sessionId: string): void {
     renderLatencyGraph();
   };
 
+  /*
+   * Says out loud that the machine is away. Without it the only sign is a grey
+   * dot in the header, next to a terminal that has drawn nothing, which reads
+   * as a broken page rather than a sleeping laptop.
+   */
+  const renderHostPresence = (): void => {
+    window.clearTimeout(offlineNoticeTimer);
+    const ended = stopped || lastStatus === "exited" || lastStatus === "missing";
+    const away = !ended && hostIsAway(hostStatus);
+    sessionPage.classList.toggle("session-host-away", away);
+    if (!away) {
+      offlineNotice.hidden = true;
+      offlineNotice.replaceChildren();
+      return;
+    }
+
+    const notice = hostNotice({
+      status: hostStatus,
+      hostLastSeenAt,
+      screenCapturedAt: screenCapturedAt,
+      hasScreen: hasTerminalContent,
+      now: Date.now(),
+    });
+    if (!notice) {
+      offlineNotice.hidden = true;
+      return;
+    }
+
+    offlineNotice.classList.toggle("over-screen", notice.showingKeptScreen);
+    const heading = document.createElement("strong");
+    heading.textContent = notice.heading;
+    const body = document.createElement("span");
+    body.textContent = notice.body;
+    offlineNotice.replaceChildren(heading, body);
+    offlineNotice.hidden = false;
+    /* "4 minutes ago" has to keep being true while nobody touches the page. */
+    offlineNoticeTimer = window.setTimeout(renderHostPresence, 30_000);
+  };
+
+  const markTerminalContent = (): void => {
+    if (hasTerminalContent) return;
+    hasTerminalContent = true;
+    renderHostPresence();
+  };
+
   const setStatus = (status: string): void => {
     const wasConnected = lastStatus === "connected";
     lastStatus = status;
@@ -1231,6 +1290,7 @@ function renderTerminal(sessionId: string): void {
       scheduleLatencyProbe(0);
     }
     renderConnectionStatus();
+    renderHostPresence();
     syncMobileKeys();
   };
 
@@ -1496,7 +1556,9 @@ function renderTerminal(sessionId: string): void {
             if (generation === terminalSnapshotGeneration) rendererInputSuppressed = false;
           });
           snapshotRequestPending = false;
+          markTerminalContent();
         } else if (frame[0] === Opcode.Output) {
+          markTerminalContent();
           if (!terminalWrites.enqueue(frame.subarray(1)) && !snapshotRequestPending) {
             snapshotRequestPending = true;
             if (socket?.readyState === WebSocket.OPEN) {
@@ -1544,6 +1606,8 @@ function renderTerminal(sessionId: string): void {
       type?: unknown;
       status?: unknown;
       label?: unknown;
+      hostLastSeenAt?: unknown;
+      lastScreenAt?: unknown;
       viewerId?: unknown;
       viewers?: unknown;
       localTypingAt?: unknown;
@@ -1600,6 +1664,13 @@ function renderTerminal(sessionId: string): void {
     }
 
     if (message.type === "status" && typeof message.status === "string") {
+      /*
+       * The relay's status is the machine's, not this viewer's socket, which is
+       * why it is kept apart from lastStatus.
+       */
+      hostStatus = message.status;
+      hostLastSeenAt = typeof message.hostLastSeenAt === "string" ? message.hostLastSeenAt : undefined;
+      screenCapturedAt = typeof message.lastScreenAt === "string" ? message.lastScreenAt : undefined;
       setStatus(message.status);
       if (typeof message.label === "string") {
         labelElement.textContent = message.label;

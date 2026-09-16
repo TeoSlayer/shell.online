@@ -3,7 +3,8 @@ import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/ui.css";
-import { TerminalConnection, type ConnectionStatus } from "./connection";
+import { TerminalConnection, type ConnectionStatus, type HostState } from "./connection";
+import { hostIsAway, hostNotice } from "./host-presence";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
@@ -166,9 +167,27 @@ export function TerminalPane({
 
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [detail, setDetail] = useState("");
+  /*
+   * The machine's own state, reported by the relay. It is not this viewer's
+   * connection: a pane can be fully connected to a session whose machine is
+   * asleep, and saying nothing about that is how a terminal appears to be
+   * missing rather than paused.
+   */
+  const [hostState, setHostState] = useState<HostState | null>(null);
+  const [hasScreen, setHasScreen] = useState(false);
+  /* Re-read on a timer so "4 minutes ago" keeps being true on an idle page. */
+  const [now, setNow] = useState(() => Date.now());
   const [readOnly, setReadOnly] = useState(false);
   const [password, setPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+
+  /* Ticks only while the machine is away, and only to keep "ago" honest. */
+  useEffect(() => {
+    if (!hostIsAway(hostState?.presence)) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [hostState?.presence, hostState?.lastSeenAt]);
 
   /*
    * Assignment can change while this pane is open. Read the current answer
@@ -369,7 +388,9 @@ export function TerminalPane({
            */
           if (worked.source !== "vault") void keepIfMissing(sessionId, worked.password);
         },
+        onHostState: (next) => { setHostState(next); },
         onData: (bytes, reset) => {
+          if (bytes.byteLength > 0) setHasScreen(true);
           if (!reset) {
             term.write(bytes);
             return;
@@ -561,6 +582,17 @@ export function TerminalPane({
   }
 
   const locked = status === "needs-password";
+  const sessionOver = status === "ended" || status === "missing" || status === "error";
+  const machineAway = !locked && !sessionOver && hostIsAway(hostState?.presence);
+  const notice = machineAway
+    ? hostNotice({
+        status: hostState?.presence,
+        hostLastSeenAt: hostState?.lastSeenAt,
+        screenCapturedAt: hostState?.screenCapturedAt,
+        hasScreen,
+        now,
+      })
+    : null;
 
   return (
     <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
@@ -641,6 +673,18 @@ export function TerminalPane({
 
       {!canType && status === "connected" && (
         <div className="pane-banner pane-watching">Watching. Only the owner and assignees can type.</div>
+      )}
+
+      {/*
+        * The machine, not this viewer. Shown over a kept screen as a strip, and
+        * in the middle of the pane when there is no screen to keep, so an empty
+        * terminal is never left to speak for itself.
+        */}
+      {notice && (
+        <div className={notice.showingKeptScreen ? "pane-offline over-screen" : "pane-offline"} role="status">
+          <strong>{notice.heading}</strong>
+          <span>{notice.body}</span>
+        </div>
       )}
 
       {status === "disconnected" && (

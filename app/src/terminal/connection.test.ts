@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TerminalConnection, type ConnectionStatus } from "./connection";
+import { TerminalConnection, type ConnectionStatus, type HostState } from "./connection";
 import { Opcode, encodeFrame } from "./protocol";
 import { BrowserFrameCipher } from "./e2ee";
 import {
@@ -68,10 +68,11 @@ interface Recorded {
   writes: { text: string; reset: boolean }[];
   readOnly: boolean[];
   grids: TerminalGrid[];
+  hostStates: HostState[];
 }
 
 function connect(fragment = "") {
-  const recorded: Recorded = { statuses: [], writes: [], readOnly: [], grids: [] };
+  const recorded: Recorded = { statuses: [], writes: [], readOnly: [], grids: [], hostStates: [] };
   const connection = new TerminalConnection({
     url: "ws://localhost:5173/relay/api/sessions/x/ws",
     fragment,
@@ -81,6 +82,7 @@ function connect(fragment = "") {
       onData: (bytes, reset) => recorded.writes.push({ text: new TextDecoder().decode(bytes), reset }),
       onReadOnly: (value) => recorded.readOnly.push(value),
       onGrid: (grid) => recorded.grids.push(grid),
+      onHostState: (state) => recorded.hostStates.push(state),
     },
   });
   return { connection, recorded };
@@ -476,5 +478,63 @@ describe("the session grid", () => {
 
     expect(FakeSocket.created).toBe(2);
     expect(connection.grid).toEqual(MOBILE_TERMINAL_GRID);
+  });
+});
+
+/*
+ * The relay reports the machine's state on every status message. Before this
+ * the app read only "exited" and left the rest on the floor, so a viewer whose
+ * machine had gone offline sat in front of a blank terminal that claimed to be
+ * connected. The reproduction was a laptop that rebooted mid-session: the
+ * session stayed on the relay for twelve hours, and every viewer since got an
+ * empty screen with nothing said about it.
+ */
+describe("the machine behind the session", () => {
+  async function connected() {
+    const { connection, recorded } = connect();
+    await connection.start();
+    FakeSocket.last!.opened();
+    return { connection, recorded, socket: FakeSocket.last! };
+  }
+
+  it("reports a machine that is away, with when it was last seen", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({
+      type: "status",
+      status: "disconnected",
+      hostLastSeenAt: "2026-09-15T20:42:00.000Z",
+      lastScreenAt: "2026-09-15T20:41:00.000Z",
+    });
+
+    expect(recorded.hostStates).toEqual([{
+      presence: "disconnected",
+      lastSeenAt: "2026-09-15T20:42:00.000Z",
+      screenCapturedAt: "2026-09-15T20:41:00.000Z",
+    }]);
+    /* The viewer's own socket is fine; only the machine is away. */
+    expect(recorded.statuses.at(-1)?.status).toBe("connected");
+  });
+
+  it("reports a session whose machine has never connected", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({ type: "status", status: "waiting" });
+    expect(recorded.hostStates).toEqual([{
+      presence: "waiting",
+      lastSeenAt: undefined,
+      screenCapturedAt: undefined,
+    }]);
+  });
+
+  it("reports the machine coming back", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({ type: "status", status: "disconnected" });
+    socket.control({ type: "status", status: "connected" });
+    expect(recorded.hostStates.map((state) => state.presence)).toEqual(["disconnected", "connected"]);
+  });
+
+  it("ignores a status it does not know", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({ type: "status", status: "something-new" });
+    expect(recorded.hostStates).toEqual([]);
   });
 });

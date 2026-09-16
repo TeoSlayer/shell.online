@@ -60,6 +60,24 @@ const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
 const MAX_ENCRYPTION_OVERHEAD_BYTES = 29;
+/*
+ * The last screen a host sent is kept so a viewer arriving while that machine
+ * is away sees what it was doing instead of a blank terminal. Durable Object
+ * values stop at 128 KiB, so a snapshot is stored in chunks under one prefix
+ * and deleted with the rest of the session when it expires.
+ */
+const SCREEN_CHUNK_BYTES = 64 * 1024;
+const SCREEN_CHUNK_PREFIX = "screen:";
+const MAX_SCREEN_CHUNKS = 16;
+/* How stale a cached screen may get while a host is connected. */
+const SCREEN_REFRESH_MS = 5 * 60 * 1_000;
+/* The shortest gap between two keeps, so a busy session does not write on every join. */
+const SCREEN_WRITE_INTERVAL_MS = 2_000;
+/*
+ * The viewer id a keep-the-screen request is addressed to. No viewer is ever
+ * given it, so the reply is cached and delivered to nobody.
+ */
+const SCREEN_CACHE_VIEWER_ID = 0;
 const TRAFFIC_WINDOW_MS = 10_000;
 const HOST_WINDOW_BYTES = 40 * 1024 * 1024;
 const VIEWER_WINDOW_BYTES = 1024 * 1024;
@@ -120,6 +138,14 @@ interface SessionMeta {
   presenceKey?: string;
   localAttached?: boolean;
   persistent: boolean;
+  /*
+   * When a host socket was last open. A viewer that finds the machine away is
+   * told how long it has been away rather than left reading an empty screen.
+   */
+  hostLastSeenAt?: number;
+  /** When the cached screen below was captured, and how many chunks it spans. */
+  lastScreenAt?: number;
+  lastScreenChunks?: number;
 }
 
 interface SocketAttachment {
@@ -1021,7 +1047,7 @@ export class TerminalSession extends DurableObject<Env> {
       : analyticsContext;
     const attachment: SocketAttachment = {
       role,
-      id: role === "viewer" ? randomUint32() : 0,
+      id: role === "viewer" ? randomViewerId() : 0,
       guestNumber,
       colorIndex: guestNumber === undefined ? undefined : (guestNumber - 1) % 8,
       device: analyticsContext.device,
@@ -1039,6 +1065,7 @@ export class TerminalSession extends DurableObject<Env> {
       const firstStart = this.meta.startedAt === undefined;
       if (firstStart) this.meta.startedAt = Date.now();
       this.meta.status = "connected";
+      this.meta.hostLastSeenAt = Date.now();
       this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
       delete this.meta.exitCode;
       await this.persistMeta();
@@ -1091,6 +1118,8 @@ export class TerminalSession extends DurableObject<Env> {
       for (const host of this.state.getWebSockets("host")) {
         sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
       }
+      /* Nobody to ask: show the last screen this session was seen at. */
+      if (!this.hostIsConnected()) await this.sendCachedScreen(server);
       this.broadcastPresence();
     }
 
@@ -1159,6 +1188,15 @@ export class TerminalSession extends DurableObject<Env> {
         if (now - (attachment.snapshotRequestedAt ?? 0) < 1_000) return;
         attachment.snapshotRequestedAt = now;
         socket.serializeAttachment(attachment);
+        /*
+         * A viewer asks again once it can decrypt, which is usually after the
+         * password gate. With the machine away there is nobody to ask, so the
+         * kept screen answers instead.
+         */
+        if (!this.hostIsConnected()) {
+          await this.sendCachedScreen(socket);
+          return;
+        }
         for (const host of this.state.getWebSockets("host")) {
           sendJson(host, { type: "snapshot_request", viewerId: attachment.id });
         }
@@ -1253,15 +1291,20 @@ export class TerminalSession extends DurableObject<Env> {
           return;
         }
         const targetId = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(1);
+        const outbound = new Uint8Array(frame.byteLength - 4);
+        outbound[0] = Opcode.Snapshot;
+        outbound.set(frame.subarray(5), 1);
         const target = this.state
           .getWebSockets("viewer")
           .find((candidate) => readAttachment(candidate)?.id === targetId);
-        if (target) {
-          const outbound = new Uint8Array(frame.byteLength - 4);
-          outbound[0] = Opcode.Snapshot;
-          outbound.set(frame.subarray(5), 1);
-          safeSend(target, outbound);
-        }
+        if (target) safeSend(target, outbound);
+        /*
+         * Kept whether or not a viewer was waiting for it: the periodic refresh
+         * addresses viewer 0, which no viewer ever is, precisely so a screen can
+         * be kept without disturbing anyone. Throttled, because a room filling
+         * up produces one of these per person arriving.
+         */
+        await this.cacheScreen(outbound);
         return;
       }
 
@@ -1273,6 +1316,8 @@ export class TerminalSession extends DurableObject<Env> {
         // Preserve the opcode because E2EE authenticates it as associated data.
         // The browser treats FinalSnapshot as a full screen replacement too.
         this.broadcastBinary(frame, "viewer");
+        /* The last thing this session ever drew, so it is kept unconditionally. */
+        await this.cacheScreen(frame, true);
         return;
 
       case Opcode.BroadcastSnapshot:
@@ -1283,6 +1328,7 @@ export class TerminalSession extends DurableObject<Env> {
         // Preserve the opcode: encrypted frames authenticate it as associated
         // data, and rewriting it makes a valid recovery snapshot undecryptable.
         this.broadcastBinary(frame, "viewer");
+        await this.cacheScreen(frame);
         return;
 
       case Opcode.Pong:
@@ -1456,6 +1502,7 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
     this.meta.status = "disconnected";
+    this.meta.hostLastSeenAt = Date.now();
     this.meta.expiresAt = disconnectedSessionExpiry(Date.now(), this.meta.persistent);
     await this.persistMeta();
     await this.refreshLivePresence(true, socket);
@@ -1470,7 +1517,19 @@ export class TerminalSession extends DurableObject<Env> {
       .some((socket) => socket.readyState === 1);
     if (hostIsOpen) {
       this.meta.status = "connected";
+      this.meta.hostLastSeenAt = Date.now();
       this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
+      /*
+       * A host only sends a screen when it is asked, so without this the kept
+       * screen would be as old as the last viewer to join. Asking on behalf of
+       * viewer 0 caps how stale it can be for the cost of one snapshot per
+       * five minutes of a live session.
+       */
+      if (Date.now() - (this.meta.lastScreenAt ?? 0) >= SCREEN_REFRESH_MS) {
+        for (const host of this.state.getWebSockets("host")) {
+          sendJson(host, { type: "snapshot_request", viewerId: SCREEN_CACHE_VIEWER_ID });
+        }
+      }
       await this.persistMeta();
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1631,7 +1690,91 @@ export class TerminalSession extends DurableObject<Env> {
       persistent: this.meta?.persistent === true,
       exitCode: this.meta?.exitCode,
       expiresAt: this.meta ? new Date(this.meta.expiresAt).toISOString() : undefined,
+      /*
+       * A viewer cannot tell an idle terminal from an absent machine. These two
+       * say which it is looking at: when the machine was last connected, and how
+       * old the screen it is being shown is.
+       */
+      hostLastSeenAt: this.meta?.hostLastSeenAt === undefined
+        ? undefined
+        : new Date(this.meta.hostLastSeenAt).toISOString(),
+      lastScreenAt: this.meta?.lastScreenAt === undefined
+        ? undefined
+        : new Date(this.meta.lastScreenAt).toISOString(),
     };
+  }
+
+  private hostIsConnected(): boolean {
+    return this.state.getWebSockets("host").some((socket) => socket.readyState === 1);
+  }
+
+  /*
+   * Keeps the most recent full screen, exactly as a viewer would have received
+   * it. For an encrypted session that is ciphertext the relay cannot read: the
+   * opcode is authenticated as associated data, so the bytes are stored and
+   * replayed untouched rather than re-framed.
+   */
+  private async cacheScreen(frame: Uint8Array, force = false): Promise<void> {
+    if (!this.meta || frame.byteLength === 0) return;
+    /*
+     * Sixteen people opening a link at once produces sixteen of these. Writing
+     * every one would cost half a megabyte of storage each for no better
+     * answer, so only the first in a window is kept.
+     */
+    if (!force && Date.now() - (this.meta.lastScreenAt ?? 0) < SCREEN_WRITE_INTERVAL_MS) return;
+    const chunkCount = Math.ceil(frame.byteLength / SCREEN_CHUNK_BYTES);
+    if (chunkCount > MAX_SCREEN_CHUNKS) return;
+
+    const writes: Record<string, ArrayBuffer> = {};
+    for (let index = 0; index < chunkCount; index += 1) {
+      const start = index * SCREEN_CHUNK_BYTES;
+      writes[`${SCREEN_CHUNK_PREFIX}${index}`] = frame
+        .slice(start, Math.min(start + SCREEN_CHUNK_BYTES, frame.byteLength))
+        .buffer;
+    }
+    await this.state.storage.put(writes);
+
+    const previousChunks = this.meta.lastScreenChunks ?? 0;
+    if (previousChunks > chunkCount) {
+      await this.state.storage.delete(
+        Array.from({ length: previousChunks - chunkCount }, (_, offset) =>
+          `${SCREEN_CHUNK_PREFIX}${chunkCount + offset}`),
+      );
+    }
+    this.meta.lastScreenAt = Date.now();
+    this.meta.lastScreenChunks = chunkCount;
+    await this.persistMeta();
+  }
+
+  private async cachedScreen(): Promise<Uint8Array | undefined> {
+    const chunkCount = this.meta?.lastScreenChunks ?? 0;
+    if (chunkCount === 0) return undefined;
+    const keys = Array.from({ length: chunkCount }, (_, index) => `${SCREEN_CHUNK_PREFIX}${index}`);
+    const stored = await this.state.storage.get<ArrayBuffer>(keys);
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    for (const key of keys) {
+      const value = stored.get(key);
+      /* A partially written cache is not a screen; showing nothing beats showing half. */
+      if (value === undefined) return undefined;
+      const part = new Uint8Array(value);
+      parts.push(part);
+      total += part.byteLength;
+    }
+    const frame = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      frame.set(part, offset);
+      offset += part.byteLength;
+    }
+    return frame;
+  }
+
+  /* Replays the last screen to one viewer while its machine is away. */
+  private async sendCachedScreen(socket: WebSocket): Promise<void> {
+    if (this.hostIsConnected()) return;
+    const screen = await this.cachedScreen();
+    if (screen) safeSend(socket, screen);
   }
 
   private isReadOnly(): boolean {
@@ -1881,6 +2024,15 @@ function randomToken(byteCount: number): string {
 
 function randomUint32(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0];
+}
+
+/*
+ * Viewer ids skip zero, which addresses the relay's own screen-keeping request
+ * rather than a person. Without that a one-in-four-billion viewer would be sent
+ * a screen refresh it never asked for.
+ */
+function randomViewerId(): number {
+  return randomUint32() || 1;
 }
 
 async function sha256Hex(value: string): Promise<string> {
