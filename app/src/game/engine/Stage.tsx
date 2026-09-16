@@ -47,6 +47,7 @@ export function pixelScale(viewportWidth: number, viewportHeight: number): numbe
 export function Stage({
   drawStatic,
   drawFrame,
+  onTick,
   /** Change this to have the static layer redrawn. */
   staticKey,
   motionless = false,
@@ -54,6 +55,11 @@ export function Stage({
 }: {
   drawStatic: (draw: DrawContext) => void;
   drawFrame: (draw: DrawContext) => void;
+  /**
+   * Advance the world by one fixed step. Separate from drawing on purpose:
+   * see loop.ts for why the simulation must not run at the display's rate.
+   */
+  onTick?: (tick: number) => void;
   staticKey: string;
   motionless?: boolean;
   label: string;
@@ -68,9 +74,11 @@ export function Stage({
    */
   const drawStaticRef = useRef(drawStatic);
   const drawFrameRef = useRef(drawFrame);
+  const onTickRef = useRef(onTick);
   const motionlessRef = useRef(motionless);
   drawStaticRef.current = drawStatic;
   drawFrameRef.current = drawFrame;
+  onTickRef.current = onTick;
   motionlessRef.current = motionless;
 
   /* Redraws the static layer. Called on resize and when staticKey changes. */
@@ -123,11 +131,7 @@ export function Stage({
 
     const started = performance.now();
     const stop = startLoop({
-      /*
-       * Nothing to advance yet: the scenes that own moving things keep their
-       * own state and are ticked from here once they exist.
-       */
-      tick: () => {},
+      tick: (tick) => onTickRef.current?.(tick),
       draw: () => {
         const context = front.getContext("2d");
         if (!context) return;

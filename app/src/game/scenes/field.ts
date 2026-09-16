@@ -62,7 +62,7 @@ export const STARTING_BASE: Base = {
 };
 
 /** Where the holding sits, in tiles, given how much ground is visible. */
-function layout(draw: DrawContext) {
+export function layout(draw: DrawContext) {
   const cols = Math.ceil(draw.width / TILE);
   const rows = Math.ceil(draw.height / TILE);
   return {
@@ -249,3 +249,9 @@ export function drawField(draw: DrawContext, base: Base): void {
 
 /** Named so the vertical gate is not dropped before the second gate uses it. */
 export const GATE_NORTH_SOUTH = GATE_VERTICAL;
+
+/**
+ * The size of the holding, in tiles, for anything that needs to know where its
+ * parts are without redrawing them.
+ */
+export const HOLDING = { w: HOLDING_W, h: HOLDING_H } as const;

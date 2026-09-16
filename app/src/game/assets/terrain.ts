@@ -117,11 +117,18 @@ export const ROAD: Sprite[] = [DIRT, DIRT_B];
 export const FLAGSTONE: Sprite = generateTile("stone", 31, (noise, x, y) => {
   const course = Math.floor(y / 8);
   const shifted = (x + course * 4) % 8;
-  if (y % 8 === 0) return "6";
+  /*
+   * Joints one step either side of the stone, not four.
+   *
+   * The first version lit the top of every course with the palest colour in
+   * the palette. Laid out across a courtyard that is a bright line every eight
+   * pixels all the way across, and the yard read as decking rather than as
+   * paving. Real stone has joints you have to look for.
+   */
+  if (y % 8 === 0) return "5";
   if (y % 8 === 7) return "3";
   if (shifted === 0) return "3";
-  if (noise > 0.9) return "6";
-  if (noise > 0.66) return "5";
+  if (noise > 0.92) return "5";
   return "4";
 });
 
@@ -131,11 +138,10 @@ export const FLAGSTONE_B: Sprite = generateTile("stone", 32, (noise, x, y) => {
   const shifted = (x + course * 4) % 8;
   const cracked = hash(Math.floor(x / 8), course, 51) > 0.7;
   if (cracked && shifted === 4 && y % 8 > 1 && y % 8 < 7) return "3";
-  if (y % 8 === 0) return "6";
+  if (y % 8 === 0) return "5";
   if (y % 8 === 7) return "3";
   if (shifted === 0) return "3";
-  if (noise > 0.88) return "6";
-  if (noise > 0.6) return "5";
+  if (noise > 0.9) return "5";
   return "4";
 });
 
@@ -148,12 +154,13 @@ export const PAVING: Sprite[] = [FLAGSTONE, FLAGSTONE_B];
  * look assembled out of tiles. A course of dressed stone along the join is
  * what a real yard would have, and it hides the seam at the same time.
  */
-export const KERB: Sprite = generateTile("stone", 41, (noise, _x, y) => {
-  if (y < 2) return "3";
-  if (y < 4) return "5";
-  if (y < 5) return "6";
-  if (noise > 0.9) return "6";
-  if (noise > 0.66) return "5";
+export const KERB: Sprite = generateTile("stone", 41, (noise, x, y) => {
+  if (y < 2) return "2";
+  if (y < 4) return "3";
+  if (y < 6) return "5";
+  /* A dressed course, wider than the yard's, so the edge reads as an edge. */
+  if (y % 8 === 6 || (x + Math.floor(y / 8) * 6) % 12 === 0) return "3";
+  if (noise > 0.92) return "5";
   return "4";
 });
 

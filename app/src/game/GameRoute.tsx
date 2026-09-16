@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePageTitle } from "../lib/page-title";
 import { Stage } from "./engine/Stage";
 import { useInputDevice } from "./engine/use-input-device";
@@ -6,7 +6,10 @@ import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { drawField, STARTING_BASE } from "./scenes/field";
+import { drawField, HOLDING, layout, STARTING_BASE } from "./scenes/field";
+import { drawLife } from "./scenes/life";
+import { drawWrights } from "./scenes/wrights";
+import { createWorld, DEMO_GARRISON, muster, tickWorld } from "./state/world";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Prompt } from "./ui/Prompt";
 import "../styles/game.css";
@@ -60,6 +63,20 @@ export default function GameRoute() {
    * layer replaces this with the team's own saved base.
    */
   const base = STARTING_BASE;
+
+  /*
+   * The world, in a ref rather than in state.
+   *
+   * It changes thirty times a second; putting it in state would re-render the
+   * whole route at that rate to redraw a canvas React does not manage anyway.
+   * The loop mutates it and the renderer reads it, and React is told about it
+   * only when something it actually draws in the DOM changes.
+   *
+   * The courtyard bounds are set on the first frame, once the stage knows how
+   * much ground is visible; until then there is nowhere to stand.
+   */
+  const world = useRef(createWorld({ left: 0, top: 0, right: 0, bottom: 0 }));
+  const mustered = useRef(false);
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -129,13 +146,31 @@ export default function GameRoute() {
             staticKey={`${base.ground}:${base.wallTier}:${base.keepTier}:${base.towerTier}`}
             motionless={reducedMotion}
             drawStatic={(draw) => drawField(draw, base)}
-            /*
-             * Nothing moves on the field yet: the heroes are the live
-             * sessions, and they arrive with the state layer. The front canvas
-             * is mounted and cleared each frame so that when they do, nothing
-             * about the loop has to change.
-             */
-            drawFrame={() => {}}
+            onTick={() => {
+              if (!paused) tickWorld(world.current);
+            }}
+            drawFrame={(draw) => {
+              /*
+               * The courtyard is only known once the stage has measured the
+               * window, so the garrison is mustered on the first frame rather
+               * than on mount. One tile in from the wall on every side, which
+               * is the walkable yard.
+               */
+              const { left, top } = layout(draw);
+              world.current.bounds = {
+                left: left + 1.5,
+                top: top + 2,
+                right: left + HOLDING.w - 2.5,
+                bottom: top + HOLDING.h - 2,
+              };
+              if (!mustered.current) {
+                mustered.current = true;
+                for (const entry of DEMO_GARRISON) muster(world.current, entry);
+              }
+
+              drawLife(draw);
+              drawWrights(draw, world.current);
+            }}
           />
         </main>
 
