@@ -86,7 +86,8 @@ export async function buildKeepScene(
      */
     document.fonts?.load('26px "Pirata One"').catch(() => undefined),
   ]);
-  const { root, camps, campBanners, banners, things, labels, signs } = buildWorld(app, art, kingdom);
+  const { root, camps, campBanners, campLights, lanterns, banners, things, labels, signs } =
+    buildWorld(app, art, kingdom);
 
   const world = new Container();
   world.addChild(root);
@@ -118,6 +119,12 @@ export async function buildKeepScene(
     birds.still(stop);
     smoke.still(stop);
     dust.still(stop);
+    /*
+     * The lamps hold at full brightness rather than going out. Everything else
+     * that moves here is ornament; a lamp is what makes the ground under it
+     * legible, so the setting takes the flicker and leaves the light.
+     */
+    lanterns.still(stop);
   };
   handle.lookAt = (garrisonId) => {
     const garrison = GARRISONS.find((holding) => holding.id === garrisonId);
@@ -230,10 +237,22 @@ export async function buildKeepScene(
     heldFor = sim.camps.size;
     held = new Set([...sim.camps.values()].map((camp) => `${camp.x},${camp.y}`));
 
-    /* Each standing camp flies its holder's colour. */
+    /* Each standing camp flies its holder's colour, and lights its own gate. */
     for (const [uid, camp] of sim.camps) {
-      const standard = campBanners.get(`${camp.x},${camp.y}`);
+      const key = `${camp.x},${camp.y}`;
+      const standard = campBanners.get(key);
       if (standard) standard.tint = sim.banners.get(uid) ?? 0xffffff;
+    }
+
+    /*
+     * The lamps, which are the reason a banner at dusk can be made out at all.
+     * Lit with the camp rather than always, because a lamp burning over ground
+     * nobody holds says somebody is standing there who is not.
+     */
+    for (const [key, lit] of campLights) {
+      const on = held.has(key);
+      lit.glow.visible = on;
+      for (const lamp of lit.lamps) lamp.visible = on;
     }
   };
 
@@ -324,6 +343,7 @@ export async function buildKeepScene(
       orderMark.tick(deltaMs);
       actors.sync(sim, selected);
       blows.sync(sim);
+      lanterns.tick(deltaMs);
       birds.tick(deltaMs);
       smoke.tick(deltaMs);
       dust.tick(sim, deltaMs);

@@ -171,6 +171,53 @@ with edges rather than a polygon in a void. The treeline wanders in and out by a
 couple of tiles, because a wood whose inner edge is a perfect straight line does
 not hide a straight line — it draws a second one beside it.
 
+### The roads, and what stands beside them
+
+The lanes between holdings **bend**. Every road used to be a ruled line from
+one gate to the next, and nine of them out of one Keep made a wheel with
+spokes: a diagram of how the holdings connect rather than a picture of a
+country somebody walks through. Each road now takes a bow whose size and
+direction come out of its own two endpoints, with a small wander over the top
+and a width that swells and narrows, and it is stamped as a disc per step so
+the edge is ragged at the scale the ground is drawn at.
+
+The line is worked out **once** and read by both the ground and the scatter's
+clearance. They used to walk a straight line each, which agreed only because
+identical expressions cannot disagree; a curve can, and the failure would be a
+tree standing in the middle of a lane.
+
+Beside the lanes: **fences** in runs along one side, **hay bales** in twos and
+threes set back off the verge, and **lanterns**. None of the three is in any
+art pack the game has, so all three are drawn — a fence is posts and rails
+following the diamond grid, a bale is a cylinder on its side, a lantern is a
+post with a light on it.
+
+### Dusk
+
+The map is lit for evening. Not one dark sheet over the picture, which dims
+the thing you are looking at by exactly as much as the thing you are not, but
+three tints by distance: the far wood deepest and coldest, the ground behind
+it less so, the buildings and the people least of all. The tints are cold
+rather than merely dark, because reducing every channel equally reads as
+somebody turning the brightness down and pulling the red hardest reads as
+evening.
+
+What lifts it back is the lamps, and that is what makes them worth having
+rather than ornaments: they are the only warm thing left out there. A lamp
+casts a **pool on the ground**, under everything standing on it, because that
+is where lamplight goes — drawn over the top it washes out the very figures it
+is meant to be lighting. The pools are the one layer dusk is not applied to.
+
+Each camp gets a pair of lamps at its gate, lit only while somebody holds it.
+They are there for one job: the banners stand at that gate, and a banner
+nobody can make out is a banner that does not say whose ground this is.
+
+The flicker is a few percent of wander, each lamp on its own phase so a road
+of them does not pulse in unison. Under reduced motion the lamps **hold at
+full brightness rather than going out** — everything else that moves here is
+ornament and is hidden outright, but a lamp is what makes the ground under it
+legible, so the setting takes the movement and leaves the light.
+
 ### Landmarks and the imported art
 
 The holdings carry a handful of pieces from a medieval art pack, placed on the

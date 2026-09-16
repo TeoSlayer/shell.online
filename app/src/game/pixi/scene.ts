@@ -6,6 +6,7 @@ import { depthOf, TILE_H, TILE_W, toScreen } from "../world/iso";
 import { buildGroundLayer } from "./ground";
 import { buildBorder } from "./border";
 import { buildScatter } from "./scatter";
+import { buildRoadside, type Lanterns } from "./roadside";
 
 /**
  * Everything standing on the ground: buildings, signs, trees, and the people.
@@ -19,6 +20,29 @@ import { buildScatter } from "./scatter";
 
 /** Where the art lives. See scripts/import-kenney.mjs and the notices file. */
 const ATLAS = "/game/medieval-rts.json";
+
+/**
+ * Dusk, as three tints rather than one dark sheet over the top.
+ *
+ * A single wash across the whole picture dims the thing you are looking at by
+ * exactly as much as the thing you are not, which is the opposite of what
+ * evening does. Tinting the layers separately puts the dark where distance is:
+ * the far wood goes deepest and coldest, the ground behind it less so, and the
+ * buildings and the people least of all -- so figures stay readable while the
+ * country around them drops away.
+ *
+ * The tints are cold rather than merely dark. Reducing every channel equally
+ * gives a picture somebody has turned the brightness down on; pulling red
+ * hardest and leaving blue is what the eye reads as evening light.
+ *
+ * What lifts it back is the lanterns, which is what makes them worth having
+ * rather than ornaments: they are the only warm thing left on the map.
+ */
+const DUSK = {
+  wood: 0x707f9e,
+  ground: 0x8e97ba,
+  things: 0xa9afc9,
+} as const;
 
 /**
  * The banners that stand at a camp, and the conifers in the border wood.
@@ -250,6 +274,10 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   /** Between the ground and the figures: the colour each hero commands. */
   banners: Container;
   things: Container;
+  /** Every camp's lamps and their light, by the same key the camps use. */
+  campLights: Map<string, { lamps: Sprite[]; glow: Container }>;
+  /** The lamps, for the scene to flicker and for reduced motion to hold still. */
+  lanterns: Lanterns;
   labels: Container;
   signs: Container;
 } {
@@ -271,6 +299,7 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * everything, like the garrison signs, because that is what a label is.
    */
   const banners = new Container();
+  const lights = new Container();
   const labels = new Container();
   const signs = new Container();
   things.sortableChildren = true;
@@ -284,6 +313,16 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    */
   const scatter = buildScatter(art, things);
   ground.addChild(scatter.shadows);
+
+  /*
+   * And what people left beside the roads: fences, bales, and the lamps.
+   *
+   * After the scatter because it reads the same road lines, and its shadows go
+   * into the ground for the same reason the scatter's do -- a shadow on flat
+   * earth cannot move and never needs sorting against anything.
+   */
+  const roadside = buildRoadside(app, things, lights);
+  ground.addChild(roadside.shadows);
 
   /*
    * A barracks, a muster tent and a gate on every camp site -- built once for
@@ -382,8 +421,46 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
     signs.addChild(signFor(garrison));
   }
 
-  root.addChild(border.canopy, ground, banners, border.thicket, things, labels, signs);
-  return { root, ground, camps, campBanners, banners, things, labels, signs };
+  /*
+   * Dusk. Applied to the containers rather than painted over them, so that a
+   * sprite added later cannot miss it -- a wash is a thing you can forget to
+   * put something under, and a tint on the parent is not.
+   */
+  border.canopy.tint = DUSK.wood;
+  border.thicket.tint = DUSK.wood;
+  ground.tint = DUSK.ground;
+  things.tint = DUSK.things;
+
+  /*
+   * The lamps' pools go straight on top of the terrain and under everything
+   * that stands on it. Lamplight falls on the ground; drawn over the top of
+   * the map it washes out the very figures it is supposed to be lighting.
+   *
+   * They are the one layer with no dusk on them, which is what makes them
+   * read as the only warm thing left out there.
+   */
+  root.addChild(
+    border.canopy,
+    ground,
+    lights,
+    banners,
+    border.thicket,
+    things,
+    labels,
+    signs,
+  );
+  return {
+    root,
+    ground,
+    camps,
+    campBanners,
+    campLights: roadside.campLights,
+    lanterns: roadside.lanterns,
+    banners,
+    things,
+    labels,
+    signs,
+  };
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */

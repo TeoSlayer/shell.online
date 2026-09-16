@@ -284,6 +284,135 @@ export const ROADS: { from: string; to: string }[] = [
 ];
 
 /**
+ * Deterministic noise, from whatever is fed to it.
+ *
+ * The murmur3 finaliser, the same one the scatter uses. Roads have to look the
+ * same every time the map is opened, for the same reason the woods do: a
+ * country whose lanes are somewhere else on reload tells you, below the level
+ * of noticing, that none of this is a place.
+ */
+function wobble(a: number, b: number, channel: number): number {
+  let h = Math.imul(a, 0x27d4eb2d) ^ Math.imul(b, 0x165667b1) ^ Math.imul(channel + 1, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4_294_967_296;
+}
+
+/** A point on a road, and how wide the road is there. */
+export interface RoadStep {
+  x: number;
+  y: number;
+  /** In tiles, from the middle out. Varies along the run. */
+  width: number;
+}
+
+/**
+ * The line a road actually takes between two holdings.
+ *
+ * Not a straight one. Every road used to be a ruled line from one gate to the
+ * next, and nine of them out of one Keep made a wheel with spokes -- which is
+ * a diagram of how the holdings are connected rather than a picture of a
+ * country somebody walks through. Roads in a country bend around what was in
+ * the way a long time ago, and the bend is most of what makes them read as
+ * having been worn rather than drawn.
+ *
+ * So: a quadratic bow, with the control point pushed sideways off the midpoint
+ * by an amount and a direction taken from the two endpoints, plus a small
+ * wander laid over the top of it and a width that swells and narrows. None of
+ * it is random -- all three come out of `wobble`, keyed on where the road
+ * starts and ends, so the same road is the same road forever.
+ *
+ * Both the ground and the scatter's clearance read this. They used to each
+ * walk their own straight line, which agreed only because two identical
+ * expressions cannot disagree; with a curve they could, and a tree standing in
+ * the middle of a lane is the kind of thing that sends somebody looking for a
+ * collision bug that is not there.
+ */
+export function roadPath(from: Garrison, to: Garrison): RoadStep[] {
+  /*
+   * Worked out in one fixed direction and reversed if it was asked for in the
+   * other, rather than merely seeded in a fixed order.
+   *
+   * Seeding alone is not enough and a test caught it: the bow is measured
+   * perpendicular to `to - from`, and the width and the wander are functions
+   * of how far along from `from` a step is, so all three flip when the ends
+   * are swapped. The same two gates came out joined by two different lanes
+   * depending on which one was named first. Nothing asks for it backwards
+   * today, which is exactly the condition under which something will.
+   */
+  if (from.id > to.id) return roadPath(to, from).reverse();
+
+  const span = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(8, Math.ceil(span * 2));
+
+  const seed = Math.round(from.x * 131 + from.y);
+  const seedTwo = Math.round(to.x * 131 + to.y);
+
+  /*
+   * How far the middle is pushed off the straight line, as a share of the run.
+   * Never past a fifth of it: past that a road stops looking like it goes
+   * round something and starts looking like it is lost.
+   */
+  const bow = (wobble(seed, seedTwo, 1) - 0.5) * 0.38 * span;
+  /* Perpendicular to the run, which is where a bow has to go to be a bow. */
+  const nx = -(to.y - from.y) / (span || 1);
+  const ny = (to.x - from.x) / (span || 1);
+  const midX = (from.x + to.x) / 2 + nx * bow;
+  const midY = (from.y + to.y) / 2 + ny * bow;
+
+  /* Two wanders at different rates, so the edge is rough rather than wavy. */
+  const phase = wobble(seed, seedTwo, 2) * Math.PI * 2;
+  const phaseTwo = wobble(seed, seedTwo, 3) * Math.PI * 2;
+
+  const path: RoadStep[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps;
+    const u = 1 - t;
+    /* The quadratic through from, the pushed midpoint, and to. */
+    let x = u * u * from.x + 2 * u * t * midX + t * t * to.x;
+    let y = u * u * from.y + 2 * u * t * midY + t * t * to.y;
+
+    /*
+     * The wander is damped to nothing at both ends. A road that wobbles as it
+     * arrives misses the gate it was going to, and a lane that stops three
+     * tiles short of a holding is worse than a straight one.
+     */
+    const damp = Math.sin(t * Math.PI);
+    const drift =
+      Math.sin(t * 9 + phase) * 1.5 + Math.sin(t * 23 + phaseTwo) * 0.6;
+    x += nx * drift * damp;
+    y += ny * drift * damp;
+
+    /*
+     * Width swells and narrows along the run, between about one and a half
+     * tiles and three. A road of constant width is a ribbon; a road that is
+     * broad where it is used and thin where it is not is a road.
+     */
+    const width = 0.95 + (Math.sin(t * 7 + phase) * 0.5 + 0.5) * 0.85;
+    path.push({ x, y, width });
+  }
+
+  return path;
+}
+
+/**
+ * Every road's line, worked out once.
+ *
+ * Cached for the same reason the ground is: two consumers need it, it is a few
+ * thousand points of trigonometry, and computing it twice would make it
+ * possible for the two to disagree.
+ */
+let roadCache: RoadStep[][] | undefined;
+
+export function roadPaths(): RoadStep[][] {
+  return (roadCache ??= ROADS.map((road) => {
+    const from = garrisonById(road.from);
+    const to = garrisonById(road.to);
+    return from && to ? roadPath(from, to) : [];
+  }));
+}
+
+/**
  * The ground of the whole map, worked out once.
  *
  * A flat array rather than a function called per tile per frame: the map is
@@ -356,19 +485,32 @@ export function buildGround(): Ground[] {
     }
   }
 
-  /* Roads, laid after the holdings so they run up to the gates. */
-  for (const road of ROADS) {
-    const from = garrisonById(road.from);
-    const to = garrisonById(road.to);
-    if (!from || !to) continue;
-    const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) * 2);
-    for (let step = 0; step <= steps; step += 1) {
-      const t = step / steps;
-      const x = Math.round(from.x + (to.x - from.x) * t);
-      const y = Math.round(from.y + (to.y - from.y) * t);
-      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1]] as const) {
-        if (isWater(x + dx, y + dy)) continue;
-        put(x + dx, y + dy, "dirt");
+  /*
+   * Roads, laid after the holdings so they run up to the gates.
+   *
+   * Stamped as a disc at every step rather than a fixed three-tile block. The
+   * block was what made the lanes read as drawn: a constant width with two
+   * straight edges, which is a ribbon laid over a field rather than ground
+   * that has been walked flat. A disc whose radius breathes along the run
+   * gives an edge that is ragged at the tile scale, which is the scale the
+   * ground is drawn at.
+   */
+  for (const path of roadPaths()) {
+    for (const step of path) {
+      const reach = Math.ceil(step.width);
+      for (let dy = -reach; dy <= reach; dy += 1) {
+        for (let dx = -reach; dx <= reach; dx += 1) {
+          const tx = Math.round(step.x) + dx;
+          const ty = Math.round(step.y) + dy;
+          /*
+           * The threshold is nudged per tile, so the boundary itself is rough
+           * rather than a clean circle drawn in pixels.
+           */
+          const edge = step.width + (wobble(tx, ty, 4) - 0.5) * 0.7;
+          if (Math.hypot(dx, dy) > edge) continue;
+          if (isWater(tx, ty)) continue;
+          put(tx, ty, "dirt");
+        }
       }
     }
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GARRISONS, groundTiles, MAP, ROADS, garrisonById } from "./marches";
+import { GARRISONS, groundTiles, MAP } from "./marches";
 import { scatterProps, WOODS } from "./scatter";
 
 /**
@@ -64,24 +64,23 @@ describe("where nothing may grow", () => {
      * The one that matters most. A tree in the middle of a road is not a
      * charming detail; it is the thing that makes somebody look for the
      * collision bug that is not there.
+     *
+     * Checked against the worn earth itself rather than against the line the
+     * roads take. This used to walk its own copy of that line, which agreed
+     * with the map only because two identical straight-line expressions cannot
+     * disagree; when the roads were given a curve, the copy went on describing
+     * the old ones and the test failed on props that were nowhere near a lane.
+     *
+     * Reading `groundTiles` keeps the check independent of `roadPaths` -- it
+     * asks whether a prop is standing on ground the renderer draws as earth,
+     * which is the thing that would actually be seen -- while removing the
+     * duplicate that broke.
      */
-    const onRoad = (x: number, y: number) => {
-      for (const road of ROADS) {
-        const from = garrisonById(road.from);
-        const to = garrisonById(road.to);
-        if (!from || !to) continue;
-        const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) * 2);
-        for (let step = 0; step <= steps; step += 1) {
-          const t = step / steps;
-          const rx = from.x + (to.x - from.x) * t;
-          const ry = from.y + (to.y - from.y) * t;
-          if (Math.abs(rx - x) <= 1 && Math.abs(ry - y) <= 1) return true;
-        }
-      }
-      return false;
-    };
-
-    for (const prop of props) expect(onRoad(prop.x, prop.y)).toBe(false);
+    for (const prop of props) {
+      const tx = Math.round(prop.x);
+      const ty = Math.round(prop.y);
+      expect(tiles[ty * MAP.width + tx]).not.toBe("dirt");
+    }
   });
 
   it("stays on the map", () => {

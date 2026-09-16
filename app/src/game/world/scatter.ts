@@ -1,4 +1,4 @@
-import { GARRISONS, groundTiles, MAP, ROADS, garrisonById } from "./marches";
+import { GARRISONS, groundTiles, MAP, roadPaths } from "./marches";
 import { campSites, CAMP_RADIUS } from "./camps";
 
 /**
@@ -148,17 +148,18 @@ function cleared(): Set<number> {
     }
   }
 
-  for (const road of ROADS) {
-    const from = garrisonById(road.from);
-    const to = garrisonById(road.to);
-    if (!from || !to) continue;
-    const steps = Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) * 2);
-    for (let step = 0; step <= steps; step += 1) {
-      const t = step / steps;
-      const x = from.x + (to.x - from.x) * t;
-      const y = from.y + (to.y - from.y) * t;
-      for (let dy = -2; dy <= 2; dy += 1) {
-        for (let dx = -2; dx <= 2; dx += 1) mark(x + dx, y + dy);
+  /*
+   * The roads, along the line they actually take. This reads `roadPaths` for
+   * the same reason the ground does -- the two used to each walk their own
+   * copy of a straight line, which agreed because identical expressions
+   * cannot disagree. A curve can, and the failure is a tree standing in the
+   * middle of a lane.
+   */
+  for (const path of roadPaths()) {
+    for (const step of path) {
+      const reach = Math.ceil(step.width) + 1;
+      for (let dy = -reach; dy <= reach; dy += 1) {
+        for (let dx = -reach; dx <= reach; dx += 1) mark(step.x + dx, step.y + dy);
       }
     }
   }
