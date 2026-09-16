@@ -26,6 +26,13 @@ export interface HudProps {
   wrights: Actor[];
   /** True when the field is showing a stand-in garrison, not real sessions. */
   demo: boolean;
+  /**
+   * Whether the service has told us what has been earned.
+   *
+   * Unreachable is not nothing earned, and a bar reading zero because a
+   * request failed is a bar telling somebody their week did not count.
+   */
+  counted: boolean;
   onOpenRoster: () => void;
 }
 
@@ -104,6 +111,7 @@ export function Hud({
   characterClass,
   wrights,
   demo,
+  counted,
   onOpenRoster,
 }: HudProps) {
   const lore = CLASS_LORE[characterClass] ?? CLASS_LORE.terminal;
@@ -128,7 +136,13 @@ export function Hud({
           value={standing.into}
           of={standing.needed}
           tone="xp"
-          detail={unlock ? `${unlock.name} at level ${unlock.level}` : "Nothing left to unlock"}
+          detail={
+            counted
+              ? unlock
+                ? `${unlock.name} at level ${unlock.level}`
+                : "Nothing left to unlock"
+              : "Not counted yet — the service did not answer"
+          }
         />
       </div>
 

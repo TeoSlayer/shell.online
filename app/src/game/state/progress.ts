@@ -13,33 +13,61 @@
  * a session they did not need, and this is a tool people use for work.
  */
 
+/**
+ * The counted work, exactly as the service derives it.
+ *
+ * These field names are the service's: see `server/lib/game-stats.ts`, which
+ * counts them from the caller's own sessions. Nothing in this shape can be
+ * produced by the game, which is the point -- an earlier version fed this the
+ * *simulation's* tally of faults put down, so a tab left open overnight
+ * levelled you up, which is the exact opposite of what the paragraph above
+ * promises.
+ */
 export interface Earned {
-  /** Faults put down. */
-  felled: number;
-  /** Structures finished. */
-  raised: number;
   /** Sessions that ran and ended cleanly. */
   sessions: number;
-  /** Days on which anything at all happened. */
+  /** Days on which anything at all was started. */
   days: number;
+  /** Machines that have answered the muster. */
+  machines: number;
+  /** Finished sessions that read as fixing something. */
+  mended: number;
+  /** Finished sessions that read as making something. */
+  made: number;
 }
 
-export const NOTHING_EARNED: Earned = { felled: 0, raised: 0, sessions: 0, days: 0 };
+export const NOTHING_EARNED: Earned = {
+  sessions: 0,
+  days: 0,
+  machines: 0,
+  mended: 0,
+  made: 0,
+};
 
-/** What each kind of work is worth. */
+/**
+ * What each kind of work is worth.
+ *
+ * Mending and making are worth more than a session on its own, and a session
+ * is counted for them as well: finishing a fix is finishing a session and also
+ * putting a fault down. Days are worth the most of any single unit, because
+ * coming back on another day is the only one of these that cannot be farmed by
+ * starting five sessions in a minute.
+ */
 export const AWARD = {
-  felled: 4,
-  raised: 25,
   session: 10,
   day: 15,
+  machine: 20,
+  mended: 14,
+  made: 25,
 } as const;
 
 export function experienceFrom(earned: Earned): number {
   return (
-    earned.felled * AWARD.felled +
-    earned.raised * AWARD.raised +
     earned.sessions * AWARD.session +
-    earned.days * AWARD.day
+    earned.days * AWARD.day +
+    earned.machines * AWARD.machine +
+    earned.mended * AWARD.mended +
+    earned.made * AWARD.made
   );
 }
 

@@ -13,6 +13,7 @@ import { DEMO_GARRISON } from "./state/demo-garrison";
 import { useGarrison } from "./state/use-garrison";
 import { buy, tintFor } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
+import { useEarned } from "./state/use-earned";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
 import { loadSave, reconcile, storeSave } from "./state/remote";
 import { ChooseCharacter } from "./ui/ChooseCharacter";
@@ -133,16 +134,15 @@ export default function GameRoute() {
   }, []);
 
   /*
-   * Experience from work that actually happened. Sessions and days come from
-   * the service once the state layer lands; until then the field's own tally
-   * is the honest part of it.
+   * Experience from work that actually happened, counted by the service.
+   *
+   * It used to be fed the field's own tally of faults put down, which meant a
+   * tab left open overnight levelled you up -- the exact thing progress.ts
+   * promises at the top of the file that nothing here does. The simulation is
+   * spectacle now and earns nothing; what earns is a session that finished.
    */
-  const rank = standing(experienceFrom({
-    felled: tally.felled,
-    raised: tally.raised,
-    sessions: 0,
-    days: 0,
-  }));
+  const { earned, known } = useEarned();
+  const rank = standing(experienceFrom(earned));
 
   /* Earned by levelling, less what has been spent with the pedlar. */
   const purse = {
@@ -270,6 +270,7 @@ export default function GameRoute() {
               characterClass={save.characterClass || "terminal"}
               wrights={tally.wrights}
               demo={garrison.demo}
+              counted={known}
               onOpenRoster={() => setPaused(true)}
             />
             <button

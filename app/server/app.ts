@@ -50,6 +50,7 @@ import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./route
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
 import { emptyProfile, profileForApi, readProfile } from "./routes/game";
+import { deriveStats } from "./lib/game-stats";
 import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats";
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
@@ -708,6 +709,23 @@ export function createApp(options: AppOptions) {
         if (!caller) return send(response, 401, { error: "sign in first" });
         const profile = (await store.gameProfile(caller.uid)) ?? emptyProfile(caller.uid, Date.now());
         return send(response, 200, { game: profileForApi(profile) });
+      }
+
+      /*
+       * What a level is worth, counted from the caller's own sessions.
+       *
+       * Derived here rather than stored, and derived rather than sent up by
+       * the browser, so the experience bar is a read-out of work that happened
+       * and not of a tab left open. Nothing in the reply came from inside a
+       * session: these are counts of rows and the names people gave their own
+       * sessions, which is all the service can see of an encrypted session and
+       * all it should ever want to.
+       */
+      if (route === "GET /api/game/stats") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const sessions = await store.listSessions(caller.uid);
+        return send(response, 200, { stats: deriveStats(sessions) });
       }
 
       if (route === "PUT /api/game") {

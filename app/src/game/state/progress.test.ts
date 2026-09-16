@@ -19,15 +19,35 @@ describe("what work is worth", () => {
     expect(levelFor(0)).toBe(1);
   });
 
-  it("pays more for finishing something than for fixing something", () => {
-    /* A raised structure is a shipped feature; a felled fault is one bug. */
-    expect(AWARD.raised).toBeGreaterThan(AWARD.felled);
+  it("pays more for making something than for mending something", () => {
+    /* Shipping a feature is a larger piece of work than closing one fault. */
+    expect(AWARD.made).toBeGreaterThan(AWARD.mended);
+  });
+
+  it("pays most for coming back another day", () => {
+    /*
+     * Days are the one thing on this list that cannot be farmed by starting
+     * five sessions in a minute, so a day is worth more than a session.
+     */
+    expect(AWARD.day).toBeGreaterThan(AWARD.session);
   });
 
   it("adds up every kind of work", () => {
-    const earned = { felled: 2, raised: 1, sessions: 3, days: 4 };
+    const earned = { sessions: 3, days: 4, machines: 2, mended: 5, made: 1 };
     expect(experienceFrom(earned)).toBe(
-      2 * AWARD.felled + AWARD.raised + 3 * AWARD.session + 4 * AWARD.day,
+      3 * AWARD.session + 4 * AWARD.day + 2 * AWARD.machine + 5 * AWARD.mended + AWARD.made,
+    );
+  });
+
+  it("cannot be earned by anything the simulation does", () => {
+    /*
+     * The rule the file is written around, asserted rather than promised. Every
+     * field of `Earned` is a fact the service counted from finished sessions;
+     * an earlier version took the field's own tally of faults put down, and a
+     * tab left open overnight levelled you up.
+     */
+    expect(Object.keys(NOTHING_EARNED).sort()).toEqual(
+      ["days", "machines", "made", "mended", "sessions"],
     );
   });
 });

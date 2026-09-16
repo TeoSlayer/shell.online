@@ -1,4 +1,5 @@
 import { GARRISONS, garrisonFor, type Garrison } from "./marches";
+import type { Work } from "./work";
 
 /**
  * Who is on the Marches, and what they are doing.
@@ -19,7 +20,8 @@ import { GARRISONS, garrisonFor, type Garrison } from "./marches";
  * it, so a thousand ticks can be run in a test and looked at.
  */
 
-export type Work = "bug" | "feature" | "idle";
+/* Defined in world/work.ts, which the service shares; re-exported for ease. */
+export type { Work };
 export type Side = "garrison" | "unmade";
 
 export interface Actor {

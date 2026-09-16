@@ -1,6 +1,9 @@
 import { kindForCommand } from "../../lib/session-kinds";
 import type { SessionRecord } from "../../lib/api";
-import type { Work } from "../world/sim";
+import { workFor, type Work } from "../world/work";
+
+export { workFor };
+export type { Work };
 
 /**
  * Turning real sessions into a garrison.
@@ -15,32 +18,6 @@ import type { Work } from "../world/sim";
  * arrives in. A second copy of that knowledge here would drift from it and the
  * game would start disagreeing with the session list about what things are.
  */
-
-/**
- * Whether a session looks like fixing something or making something.
- *
- * Read from the name and the command, because that is all there is without
- * asking the machine — and the conventions people already use are strong. A
- * branch called `fix/...`, a session named `fix: audit seal`, a commit style
- * of `feat:`; these are not guesses so much as an existing vocabulary.
- *
- * Anything unrecognised is neither, and shows as a wright going about the yard
- * rather than being forced into a category it does not belong in. Pretending
- * to know is worse than showing that you do not.
- */
-const MENDING = /\b(fix|fixes|fixing|bug|bugs|hotfix|patch|repair|revert|debug|issue)\b/i;
-const MAKING = /\b(feat|feature|add|adds|adding|build|implement|create|new|refactor|migrate)\b/i;
-
-export function workFor(text: string): Work {
-  /*
-   * Mending is checked first. "fix the new importer" is a fix; reading it as a
-   * feature because it contains "new" would be exactly backwards, and fixes
-   * are the more specific claim.
-   */
-  if (MENDING.test(text)) return "bug";
-  if (MAKING.test(text)) return "feature";
-  return "idle";
-}
 
 export interface Muster {
   id: string;
