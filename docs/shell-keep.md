@@ -55,7 +55,11 @@ colours are derived from the account id and assigned across the roster at once,
 so no two collide and nobody is green, because the map is grass.
 
 Above each hero: a **shield bearing their initials**, their name in brass, a
-**health bar**, and a **mana bar**. The mana bar is a read-out like everything
+**health bar**, and a **mana bar**. On *your own* hero the board's rim, its
+shield and its lettering are **turquoise**, and nothing else on the map is. The
+ground wash already says which company is yours, but a wash is on the floor and
+the board is where the eye goes; across a country with four companies on it,
+this is what answers "which one am I". It is a second signal, not the only one. The mana bar is a read-out like everything
 else — it is the share of that person's sessions doing something rather than
 sitting at a prompt. Nothing consumes it and it cannot be spent; "mana" is the
 skin's word for how much is in flight.
@@ -128,7 +132,11 @@ toy, and it would be the only thing in this game that changes what somebody else
 sees.
 
 Clicking a figure inspects it instead of moving — a hero or a soldier, not the
-watch and not the Unmade. **The card stands beside whoever was clicked and walks
+watch and not the Unmade. **The whole drawn body answers**, not the tile it
+stands on: a figure rises well over a hundred pixels out of its own tile, so
+testing in tile space meant only the feet were clickable and a click on the
+chest asked about whatever field was behind them. Where two figures overlap,
+the one drawn on top is the one that answers. **The card stands beside whoever was clicked and walks
 with them**; every fact on it carries a mark as well as a word, and what it shows
 depends on what was clicked: a hero shows the company they command, a soldier
 shows whose company it is in. This is the one piece of the game that is not a
@@ -162,6 +170,25 @@ canopy carried far past the playable bounds so that zooming out shows a place
 with edges rather than a polygon in a void. The treeline wanders in and out by a
 couple of tiles, because a wood whose inner edge is a perfect straight line does
 not hide a straight line — it draws a second one beside it.
+
+### Landmarks and the imported art
+
+The holdings carry a handful of pieces from a medieval art pack, placed on the
+holdings they belong to rather than scattered: a **castle on Prompt Keep**,
+because the Keep is the account itself and the middle of the map, and two
+**siege engines at Watchmen's Rise**, where faults are met. A landmark that is
+everywhere is scenery.
+
+Each standing camp flies **two kinds of banner**: red flags for "a camp", and
+one grey standard dyed to its holder's colour for "whose". The dye is the whole
+reason the grey render is there — the flat red-on-gold flags cannot be tinted
+to anybody's colours without going muddy, and grey takes a tint cleanly.
+
+The pack is not vendored whole. It is roughly two hundred files, most of a
+gigabyte of it in print-resolution renders, and the game uses about a dozen;
+`scripts/import-kingdom.mjs` records exactly which files were taken and what
+was done to each, so the choice can be revisited without anybody guessing.
+Provenance is in `docs/third-party-notices.md`.
 
 ## 5. The shop
 
