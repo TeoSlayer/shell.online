@@ -58,21 +58,25 @@ jobs:
             script: powershell
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    # Forty-eight installs a day from fresh runner addresses would read as
+    # people on the statistics dashboard. The check agent on every request,
+    # the scripts' own included, tells the site this is a monitor.
     env:
       ORIGIN: ${{ inputs.origin || 'https://shell.online' }}
+      SHELL_ONLINE_INSTALL_CHECK: "1"
     steps:
       - name: Install with the documented command
         if: matrix.script == 'posix'
         run: |
           export SHELL_ONLINE_INSTALL_DIR="$RUNNER_TEMP/shell-online"
-          curl -fsSL "$ORIGIN/install" | sh
+          curl -fsSL -A shell.online-install-check "$ORIGIN/install" | sh
           "$SHELL_ONLINE_INSTALL_DIR/shell" --version
       - name: Install with the documented command
         if: matrix.script == 'powershell'
         shell: pwsh
         run: |
           $env:SHELL_ONLINE_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "shell-online"
-          Invoke-RestMethod "$env:ORIGIN/install.ps1" | Invoke-Expression
+          Invoke-RestMethod -UserAgent shell.online-install-check "$env:ORIGIN/install.ps1" | Invoke-Expression
           & (Join-Path $env:SHELL_ONLINE_INSTALL_DIR "shell.exe") --version
 
   report:

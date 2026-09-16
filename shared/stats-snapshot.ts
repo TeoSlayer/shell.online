@@ -90,6 +90,12 @@ export interface AudienceRow extends Record<string, string | number | null> {
   count: number;
 }
 
+/** The earliest day people were counted on one surface. */
+export interface SurfaceSinceRow extends Record<string, string | number | null> {
+  surface: string;
+  minimum: number | null;
+}
+
 /** Distinct visitor hashes seen on one surface in a period. */
 export interface PeriodUniqueRow extends Record<string, string | number | null> {
   surface: string;
@@ -125,6 +131,8 @@ export interface StatsSnapshotRows {
   uniquesConfigured: boolean;
   /** Midnight UTC of the earliest visitor day still kept, or null when there is none. */
   uniquesSince: number | null;
+  /** The same, per surface. */
+  uniquesSinceBySurface: SurfaceSinceRow[];
 }
 
 /** Midnight UTC of the day that contains `at`. */
@@ -507,13 +515,18 @@ export function buildRetentionCohorts(
 
 function buildUniques(rows: StatsSnapshotRows): StatsUniques {
   const surfaces = Object.fromEntries(
-    UNIQUE_SURFACES.map((surface): [UniqueSurface, StatsUniqueCount] => [surface, { unique: 0, new: 0, returning: 0 }]),
+    UNIQUE_SURFACES.map((surface): [UniqueSurface, StatsUniqueCount] => [surface, { unique: 0, new: 0, returning: 0, since: null }]),
   ) as Record<UniqueSurface, StatsUniqueCount>;
   for (const row of rows.uniques) {
     if (!isUniqueSurface(row.surface)) continue;
     const unique = Number(row.unique_count);
     const fresh = Math.min(unique, Number(row.new_count));
-    surfaces[row.surface] = { unique, new: fresh, returning: unique - fresh };
+    surfaces[row.surface] = { ...surfaces[row.surface], unique, new: fresh, returning: unique - fresh };
+  }
+  if (rows.uniquesConfigured) {
+    for (const row of rows.uniquesSinceBySurface) {
+      if (isUniqueSurface(row.surface) && row.minimum !== null) surfaces[row.surface].since = Number(row.minimum);
+    }
   }
   const days = new Map<number, StatsUniqueDay>();
   for (const row of rows.uniqueDays) {
@@ -541,11 +554,14 @@ function buildUniques(rows: StatsSnapshotRows): StatsUniques {
  * range has to say so, or 29,333 views next to 84 people reads as nonsense.
  */
 export function peopleCountedSince(
-  uniques: Pick<StatsUniques, "configured" | "since">,
+  uniques: Pick<StatsUniques, "configured" | "since"> & { surfaces?: Record<UniqueSurface, Pick<StatsUniqueCount, "since">> },
   rangeStart: number,
+  surface?: UniqueSurface,
 ): number | null {
-  if (!uniques.configured || uniques.since === null) return null;
-  return uniques.since > dayStart(rangeStart) ? uniques.since : null;
+  if (!uniques.configured) return null;
+  const since = surface === undefined ? uniques.since : uniques.surfaces?.[surface]?.since ?? null;
+  if (since === null) return null;
+  return since > dayStart(rangeStart) ? since : null;
 }
 
 export function statsRangeStart(
@@ -578,7 +594,7 @@ function buildTrend(
   const end = Math.floor(now / stepMs) * stepMs;
   const points = new Map<number, StatsSeriesPoint>();
   for (let at = start; at <= end; at += stepMs) {
-    points.set(at, { at, sessions: 0, shares: 0, collaborations: 0, pageViews: 0 });
+    points.set(at, { at, sessions: 0, started: 0, shares: 0, collaborations: 0, pageViews: 0, installs: 0 });
   }
   for (const row of rows) {
     const at = Math.floor(Number(row.bucket) / stepMs) * stepMs;
@@ -586,9 +602,11 @@ function buildTrend(
     if (!point) continue;
     const count = Number(row.count);
     if (row.event === "session_created") point.sessions += count;
+    if (row.event === "session_started") point.started += count;
     if (row.event === "share_opened") point.shares += count;
     if (row.event === "collaboration_started") point.collaborations += count;
     if (row.event === "page_view") point.pageViews += count;
+    if (row.event === "binary_download") point.installs += count;
   }
   return Array.from(points.values()).slice(-180);
 }

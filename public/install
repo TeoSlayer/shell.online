@@ -6,6 +6,17 @@ set -eu
 # checksum_mismatch, ...) and the binary name, nothing else, so that a
 # platform that keeps failing gets noticed and fixed. Set
 # SHELL_ONLINE_INSTALL_REPORT=0 to skip it.
+#
+# A run that is only a check, a monitor or a CI job, should set
+# SHELL_ONLINE_INSTALL_CHECK=1: every request then carries the user agent
+# shell.online-install-check, which the site counts as a monitor and not as
+# a person, and nothing is reported.
+curl_agent=
+wget_agent=
+if [ "${SHELL_ONLINE_INSTALL_CHECK:-0}" = 1 ]; then
+  curl_agent="-A shell.online-install-check"
+  wget_agent="-U shell.online-install-check"
+fi
 
 fail() {
   printf 'shell.online: %s\n' "$1" >&2
@@ -15,6 +26,7 @@ fail() {
 
 report() {
   [ "${SHELL_ONLINE_INSTALL_REPORT:-1}" != 0 ] || return 0
+  [ -z "$curl_agent" ] || return 0
   case "${base_url:-}" in
     http://*|https://*) ;;
     *) return 0 ;;
@@ -101,12 +113,15 @@ binary_url="$base_url/downloads/$binary_name"
 download() {
   source_url=$1
   destination=$2
+  # The agent flags are two words or none, on purpose unquoted.
   if command -v curl >/dev/null 2>&1; then
-    if ! curl -fsSL "$source_url" -o "$destination"; then
+    # shellcheck disable=SC2086
+    if ! curl -fsSL $curl_agent "$source_url" -o "$destination"; then
       fail "download failed: $source_url" download_failed
     fi
   elif command -v wget >/dev/null 2>&1; then
-    if ! wget -q "$source_url" -O "$destination"; then
+    # shellcheck disable=SC2086
+    if ! wget -q $wget_agent "$source_url" -O "$destination"; then
       fail "download failed: $source_url" download_failed
     fi
   else

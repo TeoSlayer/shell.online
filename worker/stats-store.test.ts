@@ -40,6 +40,7 @@ describe("statistics live presence", () => {
       installConversion: null,
       uniquesConfigured: false,
       uniquesSince: null,
+      uniquesSinceBySurface: [],
     }, "all", now, collectingSince);
 
     expect(snapshot.metrics).toMatchObject({
@@ -73,6 +74,7 @@ describe("statistics live presence", () => {
       installConversion: null,
       uniquesConfigured: false,
       uniquesSince: null,
+      uniquesSinceBySurface: [],
     }, "24h", now, now - 24 * 60 * 60 * 1_000);
 
     expect(snapshot.metrics.activeSessions).toBe(0);
@@ -151,6 +153,12 @@ describe("people and the funnel", () => {
     installConversion: { installers: 12, matured: 9, started: 4 },
     uniquesConfigured: true,
     uniquesSince: dayStart(now - 20 * DAY_MS),
+    /* Machines were re-keyed after visitors were first counted, so their start is later. */
+    uniquesSinceBySurface: [
+      { surface: "site", minimum: dayStart(now - 20 * DAY_MS) },
+      { surface: "cli", minimum: dayStart(now - 2 * DAY_MS) },
+      { surface: "install", minimum: dayStart(now - 2 * DAY_MS) },
+    ],
   };
 
   it("keeps docs, unknown paths and 404s apart and counts people beside events", () => {
@@ -164,8 +172,8 @@ describe("people and the funnel", () => {
       ctaClicks: 12,
       binaryDownloads: 4,
     });
-    expect(snapshot.uniques.surfaces.site).toEqual({ unique: 400, new: 350, returning: 50 });
-    expect(snapshot.uniques.surfaces.cli).toEqual({ unique: 9, new: 2, returning: 7 });
+    expect(snapshot.uniques.surfaces.site).toEqual({ unique: 400, new: 350, returning: 50, since: dayStart(now - 20 * DAY_MS) });
+    expect(snapshot.uniques.surfaces.cli).toEqual({ unique: 9, new: 2, returning: 7, since: dayStart(now - 2 * DAY_MS) });
     expect(snapshot.uniques.daily.map((day) => [day.site, day.cli])).toEqual([[120, 4], [140, 0]]);
     expect(snapshot.rates.signup).toBeCloseTo(12 / 969);
     expect(snapshot.breakdowns.pages.map((page) => page.label)).toEqual(["landing", "unknown_path", "docs_app", "docs", "not_found"]);
@@ -310,6 +318,22 @@ describe("people and the funnel", () => {
     expect(buildStatsSnapshot({ ...rows, previous: null }, "all", now, now - 30 * DAY_MS).previous).toBeNull();
   });
 
+  it("draws installs and started sessions as their own lines", () => {
+    const hour = 60 * 60 * 1_000;
+    const bucket = Math.floor((now - DAY_MS) / hour) * hour;
+    const snapshot = buildStatsSnapshot({
+      ...rows,
+      trend: [
+        { bucket, event: "session_created", count: 4 },
+        { bucket, event: "session_started", count: 3 },
+        { bucket, event: "binary_download", count: 2 },
+        { bucket, event: "page_view", count: 9 },
+      ],
+    }, "7d", now, rangeStart);
+    const point = snapshot.trend.find((candidate) => candidate.at === Math.floor(bucket / (6 * hour)) * 6 * hour);
+    expect(point).toMatchObject({ sessions: 4, started: 3, installs: 2, pageViews: 9, shares: 0, collaborations: 0 });
+  });
+
   it("follows machines from the installer to a first session", () => {
     const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
     expect(snapshot.installConversion).toEqual({ installers: 12, matured: 9, started: 4 });
@@ -323,7 +347,7 @@ describe("people and the funnel", () => {
     expect(snapshot.uniques.since).toBeNull();
     expect(snapshot.installConversion).toBeNull();
     expect(snapshot.funnel[0].unique).toBeNull();
-    expect(snapshot.uniques.surfaces.site).toEqual({ unique: 0, new: 0, returning: 0 });
+    expect(snapshot.uniques.surfaces.site).toEqual({ unique: 0, new: 0, returning: 0, since: null });
   });
 
   /*
@@ -341,6 +365,16 @@ describe("people and the funnel", () => {
     const partial = buildStatsSnapshot({ ...rows, uniquesSince: yesterday }, "30d", now, now - 30 * DAY_MS);
     expect(partial.uniques.since).toBe(yesterday);
     expect(peopleCountedSince(partial.uniques, partial.rangeStart)).toBe(yesterday);
+
+    /* Each surface starts on its own day: visitors cover the week, machines do not. */
+    expect(covered.uniques.surfaces.site.since).toBe(dayStart(now - 20 * DAY_MS));
+    expect(covered.uniques.surfaces.cli.since).toBe(dayStart(now - 2 * DAY_MS));
+    expect(covered.uniques.surfaces.viewer.since).toBeNull();
+    expect(peopleCountedSince(covered.uniques, rangeStart, "site")).toBeNull();
+    expect(peopleCountedSince(covered.uniques, rangeStart, "cli")).toBe(dayStart(now - 2 * DAY_MS));
+    expect(peopleCountedSince(covered.uniques, rangeStart, "viewer")).toBeNull();
+    const unconfigured = buildStatsSnapshot({ ...rows, uniquesConfigured: false }, "7d", now, rangeStart);
+    expect(unconfigured.uniques.surfaces.cli.since).toBeNull();
 
     /* People are kept by day, so a range that starts inside their first day is covered. */
     expect(peopleCountedSince({ configured: true, since: dayStart(rangeStart) }, rangeStart + 60_000)).toBeNull();
