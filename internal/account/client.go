@@ -383,6 +383,33 @@ func (client *Client) PollCommands(
 	return decoded.Commands, nil
 }
 
+// GatheredStats is what one gathering run found, as counts.
+//
+// Counts, and a sentence saying what went wrong. There is deliberately nowhere
+// in this struct for a branch name, a commit message, a path or a line of
+// output: the service on the other end refuses anything else, and a shape that
+// cannot carry those cannot leak them because somebody later found it
+// convenient. See internal/stats for the collection itself.
+type GatheredStats struct {
+	// ID names the run, so reporting twice after a lost reply costs nothing.
+	ID           string `json:"id"`
+	Tokens       int64  `json:"tokens"`
+	PullRequests int64  `json:"pull_requests"`
+	Commits      int64  `json:"commits"`
+	Insertions   int64  `json:"insertions"`
+	Deletions    int64  `json:"deletions"`
+	Error        string `json:"error,omitempty"`
+}
+
+// ReportStats sends what a gathering run found.
+//
+// Authenticated as the machine. This is the one figure in the game a browser
+// may not set, because it stands for money somebody has actually spent.
+func (client *Client) ReportStats(ctx context.Context, accessToken string, run GatheredStats) error {
+	_, err := client.do(ctx, http.MethodPost, "/api/agent/stats", accessToken, run)
+	return err
+}
+
 // FinishCommand reports a command as done, with an error when it failed.
 func (client *Client) FinishCommand(
 	ctx context.Context, accessToken, id string, failure error,

@@ -121,6 +121,8 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runAccountCommand(arguments, stdout, stderr)
 	case "agent":
 		return runAgent(arguments[1:], stdout, stderr), true
+	case "stats":
+		return runStats(context.Background(), stdout, stderr, arguments[1:]), true
 	case "daemon":
 		return runDaemonCommand(arguments[1:], stdout, stderr), true
 	case "service":

@@ -39,6 +39,7 @@ Machine services
   shell agent                      Watch for browser-started sessions in this terminal
   shell daemon status|start|stop   Manage browser-started sessions in the background
   shell service install|status     Keep the machine agent running across restarts
+  shell stats                      Show what this machine would report to the game
 
 Common options
   --read-only                      View only
@@ -203,6 +204,28 @@ Running against a local stack
 
 Credentials live in your user config directory, readable only by you. Set
 SHELL_ONLINE_CONFIG to keep them somewhere else.
+		`)
+	case "stats":
+		fmt.Fprint(stdout, `What this machine would report
+
+  shell stats [--json] [--days N] [--dir PATH]
+
+Prints the numbers a statistics run would send to the game, and sends nothing.
+
+The game's elixir vial is filled by these runs, and they happen on this machine
+rather than on the server because sessions are encrypted end to end: the server
+holds no key and cannot read one. So the reading happens where the plaintext
+already is, and what leaves is counts.
+
+What it reads: how many commits and how many lines changed in this repository,
+how many pull requests you have open if the GitHub CLI is here, and how many
+tokens your coding agents have spent, from their own local files.
+
+What it never reads: terminal output, file contents, diffs, commit messages,
+branch names, prompts or replies. Run it with --json to see the exact report.
+
+Nothing is gathered unless you have turned the gathering on in the game, and
+this command does not turn it on or send anything anywhere.
 		`)
 	case "agent":
 		fmt.Fprint(stdout, `Machine agent

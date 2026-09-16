@@ -85,14 +85,32 @@ function Meter({
  * gauge should be able to see at a glance that the gauge is their own spend,
  * and clicking it says where every drop went.
  */
+/**
+ * How full the vial looks, which is not how many tokens there are.
+ *
+ * Logarithmic, because the range this has to cover is absurd. A light week is
+ * a few hundred thousand tokens and a heavy one is hundreds of millions -- a
+ * real machine reported eighty-three million for three days of ordinary work.
+ * On the linear scale this used to have, which filled at a million, that pinned
+ * the vial at the top on the first run and it never said anything again.
+ *
+ * A decade of tokens is a fifth of the vial: a hundred thousand is a third
+ * full, ten million is two thirds, a billion is the top. The exact number is
+ * printed beside it, which is where precision belongs; this is for the glance.
+ */
+function vialFill(tokens: number): number {
+  if (tokens <= 0) return 0;
+  const decades = Math.log10(tokens) / 9;
+  return Math.min(100, Math.max(4, decades * 100));
+}
+
 function Elixir({ tokens, gathering }: { tokens: number; gathering: boolean }) {
   return (
     <div className="keep-elixir">
       <span className="keep-vial" aria-hidden="true">
         <span
           className="keep-vial-fill"
-          /* Full at a million tokens; it is a feel, and the number is beside it. */
-          style={{ height: `${Math.min(100, (tokens / 1_000_000) * 100)}%` }}
+          style={{ height: `${vialFill(tokens)}%` }}
         />
       </span>
       <span className="keep-elixir-text">

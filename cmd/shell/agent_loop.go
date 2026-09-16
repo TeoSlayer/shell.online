@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"shell.online/internal/account"
+	"shell.online/internal/stats"
 )
 
 // agentPollInterval is how often the machine asks for queued work.
@@ -107,7 +108,10 @@ func (loop *agentLoop) run(ctx context.Context) error {
 			fmt.Fprintf(loop.report, "shell: %v\n", pollErr)
 		}
 		for _, command := range commands {
-			runErr := performAgentCommand(ctx, loop.self, agentKey, command, loop.report)
+			gather := func(ctx context.Context, run account.GatheredStats) error {
+				return client.ReportStats(ctx, loop.credentials.AccessToken, run)
+			}
+			runErr := performAgentCommand(ctx, loop.self, agentKey, command, loop.report, gather)
 			if finishErr := client.FinishCommand(ctx, loop.credentials.AccessToken, command.ID, runErr); finishErr != nil {
 				fmt.Fprintf(loop.report, "shell: could not report a command as done: %v\n", finishErr)
 			}
@@ -131,6 +135,10 @@ func performAgentCommand(
 	agentKey *account.AgentKey,
 	command account.AgentCommand,
 	report io.Writer,
+	// gather sends what a statistics run found. A parameter rather than a
+	// client, so a test can watch what a probe reports without a server, and so
+	// that this function keeps having one job: carry out a command.
+	gather func(context.Context, account.GatheredStats) error,
 ) error {
 	switch command.Kind {
 	case "start":
@@ -182,6 +190,33 @@ func performAgentCommand(
 			return fmt.Errorf("stop %s: %w", shortSessionID(command.SessionID), err)
 		}
 		return nil
+
+	case "probe":
+		// The browser asked this machine to gather statistics for the game.
+		//
+		// The command carries no arguments at all, and that is the point: one
+		// that could name a directory or a repository would be a way to ask
+		// somebody's machine to go and look somewhere on a browser's behalf.
+		// What is read is decided here, on the machine, by internal/stats.
+		fmt.Fprintf(report, "  gather statistics\n")
+		if gather == nil {
+			return errors.New("nowhere to report statistics")
+		}
+		// Everything this reads is decided on this machine. What leaves is
+		// counts; see internal/stats for why the shape has nowhere to put
+		// anything else.
+		found := stats.Collect(ctx, stats.Options{})
+		return gather(ctx, account.GatheredStats{
+			// Named after the command, so a report that was sent and whose
+			// reply was lost costs nothing when it is sent again.
+			ID:           "run_" + command.ID,
+			Tokens:       found.Tokens,
+			PullRequests: found.PullRequests,
+			Commits:      found.Commits,
+			Insertions:   found.Insertions,
+			Deletions:    found.Deletions,
+			Error:        found.Error,
+		})
 
 	default:
 		return fmt.Errorf("unknown command %q", command.Kind)

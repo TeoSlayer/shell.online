@@ -61,7 +61,16 @@ describe("reading a report", () => {
      * tokens is not a display bug that can be refreshed away; it is the
      * account's total, for good.
      */
-    expect(readRun({ tokens: 1e18 }).tokens).toBeLessThanOrEqual(100_000_000);
+    expect(readRun({ tokens: 1e18 }).tokens).toBeLessThanOrEqual(10_000_000_000);
+  });
+
+  it("does not clip a heavy but honest week", () => {
+    /*
+     * A real machine reported eighty-three million tokens for three days of
+     * ordinary work. A cap that clips an honest report is worse than no cap:
+     * the number it produces is wrong and looks reasonable.
+     */
+    expect(readRun({ tokens: 83_000_000 }).tokens).toBe(83_000_000);
   });
 
   it("rounds rather than storing a fraction of a token", () => {

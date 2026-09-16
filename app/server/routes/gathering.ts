@@ -19,8 +19,17 @@ import type { Device, GameCollectionRun } from "../lib/types";
  * it should be hard, and it should be argued about here.
  */
 
-/** A cap on any single figure, so one bad report cannot make the vial absurd. */
-const MOST = 100_000_000;
+/**
+ * A cap on any single figure, so one bad report cannot make the vial absurd.
+ *
+ * Ten billion, not a hundred million. A real machine reported eighty-three
+ * million tokens for three days of ordinary work the first time this was run
+ * against one, which is most of the way to the tighter cap -- and a cap that
+ * clips honest reports is worse than no cap at all, because the number it
+ * produces is wrong and looks reasonable. This one exists to stop nonsense, not
+ * to bound real use.
+ */
+const MOST = 10_000_000_000;
 
 /** What a run may say, before any of it is believed. */
 export interface ReportedRun {
