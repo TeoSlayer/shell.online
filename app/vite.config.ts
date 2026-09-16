@@ -57,6 +57,29 @@ export default defineConfig(({ mode }) => {
    */
   const authHeaders = browserSecurityHeaders(env.VITE_OIDC_ISSUER?.trim());
 
+  /*
+   * The dev server needs one relaxation the others must not have.
+   *
+   * @vitejs/plugin-react injects its Fast Refresh preamble as an inline
+   * <script type="module"> into every page it serves. Under script-src 'self'
+   * the browser refuses to run it, and because that preamble runs before
+   * main.tsx, the refusal takes the whole application with it: `npm run dev`
+   * served a blank page and one CSP error, on every route.
+   *
+   * So the dev server, and only the dev server, also allows inline scripts.
+   * `preview` keeps the strict policy, and preview is the one that matters for
+   * the guarantee above: it serves the real production build, which has no
+   * inline script in it, so a policy problem that would break a deployment
+   * still surfaces before the deployment.
+   */
+  const devHeaders = {
+    ...authHeaders,
+    "Content-Security-Policy": authHeaders["Content-Security-Policy"].replace(
+      "script-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+    ),
+  };
+
   return {
     plugins: [react()],
     define: { __SHELL_ONLINE_VERSION__: JSON.stringify(appVersion) },
@@ -75,7 +98,7 @@ export default defineConfig(({ mode }) => {
      * chunk that is fetched when somebody asks for the game and not before.
      */
     server: {
-      headers: authHeaders,
+      headers: devHeaders,
       /*
        * The relay refuses a WebSocket whose Origin is not its own
        * (worker/index.ts, "origin not allowed"). In production the app is

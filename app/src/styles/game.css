@@ -69,6 +69,22 @@
   --keep-fast: calc(120ms * var(--keep-motion));
   --keep-normal: calc(220ms * var(--keep-motion));
 
+  /*
+   * The game's own font stack, rather than tokens.css's --mono.
+   *
+   * This stylesheet travels in the lazy chunk and tokens.css does not, so
+   * borrowing a variable from it is a dependency on load order that happens to
+   * hold. It did not hold in the preview harness, where the whole interface
+   * fell back to the browser's default serif and looked nothing like a game.
+   * A stack of its own costs a line and cannot come apart.
+   *
+   * Monospace on purpose. A true pixel typeface at 16px is charming and hard
+   * to read across a room, and legibility is the rule this file is held to.
+   * The uppercase and the letter-spacing do the period work instead.
+   */
+  --keep-font: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
   position: fixed;
   inset: 0;
   z-index: var(--keep-z-field);
@@ -76,7 +92,7 @@
   background:
     radial-gradient(circle at 50% 35%, #232719 0%, var(--keep-stone-dark) 70%);
   color: var(--keep-parchment);
-  font-family: var(--mono);
+  font-family: var(--keep-font);
   font-size: var(--keep-text);
   line-height: 1.45;
   -webkit-font-smoothing: none;
