@@ -1,5 +1,3 @@
-import { reskin, STONE, type Palette } from "../assets/palette";
-
 /**
  * What marks can be spent on.
  *
@@ -22,15 +20,23 @@ export interface Skin {
   cost: number;
   /** Which class it dresses, or "any" for the whole garrison. */
   fits: string | "any";
-  /** The slots it changes. A skin is a handful of colours, nothing more. */
-  changes: Partial<Record<number, string>>;
+  /**
+   * The colour the wright is washed in.
+   *
+   * A skin used to be a sixteen-slot palette swap, because the artwork was
+   * palette-indexed text authored in this repository. The artwork is now
+   * Kenney's, which is ordinary PNG, so a skin is a tint: one number
+   * multiplied over the sprite by the renderer. Simpler, and it survives the
+   * artwork being replaced again.
+   */
+  tint: number;
 }
 
 /**
  * The catalogue.
  *
  * Costs rise with how loud the skin is, which is the only balancing this
- * needs: the quiet ones are affordable early, and the one that makes your
+ * needs: the quiet ones are affordable early, and the one that turns your
  * whole garrison gold is a thing you save for.
  */
 export const SKINS: Skin[] = [
@@ -40,7 +46,7 @@ export const SKINS: Skin[] = [
     note: "Whatever it was before, it has been through a fire since.",
     cost: 40,
     fits: "any",
-    changes: { 8: "#2b2b2b", 9: "#4a4a4a", 10: "#6e6e6e", 11: "#9a9a9a" },
+    tint: 0x9a9a9a,
   },
   {
     id: "moss",
@@ -48,7 +54,7 @@ export const SKINS: Skin[] = [
     note: "Issued to whoever was last through the gate.",
     cost: 40,
     fits: "any",
-    changes: { 8: "#25401c", 9: "#3d6b2c", 10: "#5c963f", 11: "#8bc45c" },
+    tint: 0x76b055,
   },
   {
     id: "wine",
@@ -56,7 +62,7 @@ export const SKINS: Skin[] = [
     note: "Dyed properly, once, by somebody who was owed a favour.",
     cost: 80,
     fits: "any",
-    changes: { 8: "#3d1226", 9: "#6b2040", 10: "#9c3560", 11: "#c96a92" },
+    tint: 0xc96a92,
   },
   {
     id: "frost",
@@ -64,7 +70,7 @@ export const SKINS: Skin[] = [
     note: "Cold colours on a warm march. It does not help.",
     cost: 80,
     fits: "codex",
-    changes: { 8: "#123244", 9: "#1d5570", 10: "#2f86a8", 11: "#63c2dd" },
+    tint: 0x7fd0e8,
   },
   {
     id: "forge",
@@ -72,7 +78,7 @@ export const SKINS: Skin[] = [
     note: "The Artificers had these made. Nobody asked for them.",
     cost: 120,
     fits: "claude-code",
-    changes: { 8: "#5e1c08", 9: "#953210", 10: "#d15a1c", 11: "#ffa03c" },
+    tint: 0xff9a3c,
   },
   {
     id: "gilt",
@@ -80,7 +86,7 @@ export const SKINS: Skin[] = [
     note: "The Castellan's own colours. Wear them and mean it.",
     cost: 260,
     fits: "any",
-    changes: { 8: "#5a4208", 9: "#8f6a12", 10: "#c79a24", 11: "#f2d357" },
+    tint: 0xf2d357,
   },
 ];
 
@@ -131,19 +137,12 @@ export const REFUSALS: Record<Refusal, string> = {
   poor: "Not enough marks.",
 };
 
-/**
- * The palette a wright wears.
- *
- * A skin is the same kind of thing as a class: a handful of slots swapped on
- * the one figure. That is why the renderer never has to know which of the two
- * it has been handed.
- */
-export function paletteFor(base: Palette, skinId?: string): Palette {
-  const skin = skinId ? skinById(skinId) : undefined;
-  return skin ? reskin(base, skin.changes) : base;
+/** The tint a wright wears. White is "as drawn", which is no skin at all. */
+export function tintFor(skinId?: string): number {
+  return (skinId ? skinById(skinId)?.tint : undefined) ?? 0xffffff;
 }
 
-/** A palette for a preview swatch, without needing the class it belongs to. */
-export function previewPalette(skinId: string): Palette {
-  return paletteFor(STONE, skinId);
+/** The same number as a CSS colour, for the swatch in the shop. */
+export function swatchFor(skinId: string): string {
+  return `#${tintFor(skinId).toString(16).padStart(6, "0")}`;
 }

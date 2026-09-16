@@ -1,6 +1,6 @@
 import { kindForCommand } from "../../lib/session-kinds";
 import type { SessionRecord } from "../../lib/api";
-import type { Work } from "./world";
+import type { Work } from "../world/sim";
 
 /**
  * Turning real sessions into a garrison.

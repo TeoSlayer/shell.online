@@ -1,4 +1,4 @@
-import { STRUCTURES } from "../assets/structures";
+import { GARRISONS } from "../world/marches";
 import { CLASS_LORE, FOE_LORE, WORLD } from "../lore/world";
 
 /**
@@ -80,12 +80,19 @@ export function Codex({ onBack }: { onBack: () => void }) {
       </section>
 
       <section className="keep-codex-section">
-        <h3>The holding</h3>
+        <h3>The holdings</h3>
+        <p className="keep-codex-intro">
+          Every one of these is somewhere on the map, with its name and its purpose on a
+          board outside it. This is the index, not the source: the Marches are meant to be
+          walked.
+        </p>
         <dl className="keep-codex-list">
-          {Object.entries(STRUCTURES).map(([id, art]) => (
-            <div key={id}>
-              <dt>{art.name}</dt>
-              <dd>{art.blurb}</dd>
+          {GARRISONS.map((garrison) => (
+            <div key={garrison.id}>
+              <dt>{garrison.name}</dt>
+              <dd>
+                <em>{garrison.purpose}</em> {garrison.truth}
+              </dd>
             </div>
           ))}
         </dl>

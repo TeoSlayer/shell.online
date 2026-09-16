@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STONE } from "../assets/palette";
-import { buy, fitsClass, paletteFor, SKINS, skinById, type Purse } from "./shop";
+import { buy, fitsClass, SKINS, skinById, swatchFor, tintFor, type Purse } from "./shop";
 
 const purse = (marks: number, owned: string[] = []): Purse => ({ marks, owned });
 
@@ -14,14 +13,11 @@ describe("the catalogue", () => {
      */
     for (const skin of SKINS) {
       expect(Object.keys(skin)).toEqual(
-        expect.arrayContaining(["id", "name", "note", "cost", "fits", "changes"]),
+        expect.arrayContaining(["id", "name", "note", "cost", "fits", "tint"]),
       );
-      const slots = Object.keys(skin.changes).map(Number);
-      expect(slots.length).toBeGreaterThan(0);
-      for (const slot of slots) {
-        expect(slot).toBeGreaterThanOrEqual(0);
-        expect(slot).toBeLessThanOrEqual(15);
-      }
+      /* A colour and nothing else: no stats, no reach, no damage. */
+      expect(skin.tint).toBeGreaterThanOrEqual(0);
+      expect(skin.tint).toBeLessThanOrEqual(0xffffff);
     }
   });
 
@@ -88,17 +84,23 @@ describe("buying", () => {
 });
 
 describe("wearing it", () => {
-  it("changes the colours it says it changes, and nothing else", () => {
-    const skin = skinById("gilt")!;
-    const worn = paletteFor(STONE, "gilt");
-    worn.forEach((colour, slot) => {
-      if (slot in skin.changes) expect(colour).toBe(skin.changes[slot]);
-      else expect(colour).toBe(STONE[slot]);
-    });
+  it("washes the figure in the colour it advertises", () => {
+    expect(tintFor("gilt")).toBe(skinById("gilt")!.tint);
   });
 
-  it("wears the class colours when nothing is equipped", () => {
-    expect(paletteFor(STONE, undefined)).toEqual(STONE);
-    expect(paletteFor(STONE, "nonsense")).toEqual(STONE);
+  it("leaves the art as drawn when nothing is equipped", () => {
+    /* White multiplied over a sprite is the sprite. */
+    expect(tintFor(undefined)).toBe(0xffffff);
+    expect(tintFor("nonsense")).toBe(0xffffff);
+  });
+
+  it("shows the same colour in the shop as on the field", () => {
+    /*
+     * The swatch is not a decorative approximation of the skin: it is the
+     * skin. A preview that drifts from the thing being sold is a small lie.
+     */
+    for (const skin of SKINS) {
+      expect(swatchFor(skin.id)).toBe(`#${skin.tint.toString(16).padStart(6, "0")}`);
+    }
   });
 });

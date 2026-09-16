@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { CLASS_LORE, WORLD } from "../lore/world";
-import { buy, fitsClass, previewPalette, REFUSALS, SKINS, type Purse } from "../state/shop";
-import { SLOT } from "../assets/palette";
+import { buy, fitsClass, REFUSALS, SKINS, swatchFor, type Purse } from "../state/shop";
 
 /**
  * The pedlar at the gate.
@@ -55,20 +54,18 @@ export function Shop({
           const owned = purse.owned.includes(skin.id);
           const worn = wearing === skin.id;
           const wearable = fitsClass(skin, characterClass);
-          const palette = previewPalette(skin.id);
 
           return (
             <li key={skin.id} className="keep-shop-item">
               {/*
-                * The swatch shows the four colours the skin actually changes,
-                * which is a more honest preview than a picture of a hero would
-                * be: those four colours are the entire product.
+                * The swatch is the colour itself, which is the whole product:
+                * a skin washes the figure in this and changes nothing else.
                 */}
-              <span className="keep-swatch" aria-hidden="true">
-                {[SLOT.accentDark, SLOT.accent, SLOT.accentLit, SLOT.accentBright].map((slot) => (
-                  <span key={slot} style={{ background: palette[slot] }} />
-                ))}
-              </span>
+              <span
+                className="keep-swatch"
+                aria-hidden="true"
+                style={{ background: swatchFor(skin.id) }}
+              />
 
               <span className="keep-shop-text">
                 <span className="keep-shop-name">{skin.name}</span>

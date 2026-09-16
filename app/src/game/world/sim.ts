@@ -166,6 +166,17 @@ export function muster(
   sim: Sim,
   input: { id: string; name: string; kind: string; work: Work; session?: Actor["session"] },
 ): Actor {
+  /*
+   * Mustering the same id twice returns the one already on the field.
+   *
+   * A Sim outlives the scene drawn from it -- React remounts an effect in
+   * development, the roster poll returns the same session again -- and without
+   * this each of those puts a second copy of the same wright on the map,
+   * standing in the same spot, fighting the same foe twice.
+   */
+  const standing = sim.actors.find((actor) => actor.id === input.id);
+  if (standing) return standing;
+
   const garrison = garrisonFor(input.work);
   const spot = spotIn(garrison, hashId(input.id));
   const actor: Actor = {
@@ -202,6 +213,8 @@ export function garrisonSoldiers(sim: Sim): void {
     const count = garrison.draws === "bug" ? 6 : 3;
     for (let index = 0; index < count; index += 1) {
       const id = `${garrison.id}-soldier-${index}`;
+      /* Same reason as `muster`: calling this twice must not double the watch. */
+      if (sim.actors.some((actor) => actor.id === id)) continue;
       const spot = spotIn(garrison, hashId(id));
       sim.actors.push({
         id,
@@ -227,9 +240,20 @@ export function garrisonSoldiers(sim: Sim): void {
   }
 }
 
-/** Whether anybody is working on a fault, which is what draws the Unmade. */
+/**
+ * Whether a real session is working on a fault, which is what draws the Unmade.
+ *
+ * Only sessions count. The garrison's own watch is drawn standing at a
+ * bug-facing holding and would otherwise make this permanently true, so the
+ * Unmade arrived on a map where nothing at all was broken -- which would make
+ * the battle scenery rather than a read-out of the account. A quiet map is the
+ * correct picture of a quiet day, and it is the reason a loud one means
+ * something.
+ */
 function underAttack(sim: Sim): boolean {
-  return sim.actors.some((actor) => actor.side === "garrison" && actor.work === "bug");
+  return sim.actors.some(
+    (actor) => actor.side === "garrison" && actor.work === "bug" && actor.session !== undefined,
+  );
 }
 
 const UNMADE_KINDS = [

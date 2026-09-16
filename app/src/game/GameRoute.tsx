@@ -9,9 +9,9 @@ import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { DEMO_GARRISON } from "./state/world";
+import { DEMO_GARRISON } from "./state/demo-garrison";
 import { useGarrison } from "./state/use-garrison";
-import { buy } from "./state/shop";
+import { buy, tintFor } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
 import { loadSave, reconcile, storeSave } from "./state/remote";
@@ -173,6 +173,7 @@ export default function GameRoute() {
     sim: sim.current,
     select: () => {},
     lookAt: () => {},
+    wear: () => {},
   });
   handle.current.onPick = setPicked;
 
@@ -321,7 +322,11 @@ export default function GameRoute() {
                 skinId: save.skinId || skinId,
               });
             }}
-            onWear={(skinId) => setSave({ ...save, skinId })}
+            onWear={(skinId) => {
+              setSave({ ...save, skinId });
+              /* The field shows it at once, rather than on the next reload. */
+              handle.current.wear(tintFor(skinId));
+            }}
           />
         )}
 

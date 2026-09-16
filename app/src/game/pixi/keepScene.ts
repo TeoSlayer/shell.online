@@ -2,6 +2,7 @@ import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildWorld, homePosition, loadArt } from "./scene";
+import { toTile } from "./iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, loadEffects, Smoke } from "./ambience";
 import type { Scene } from "./PixiStage";
@@ -21,6 +22,8 @@ export interface KeepHandle {
   /** Called when a wright standing for a real session is clicked. */
   onPick?: (actor: Actor | undefined) => void;
   select(id: string | undefined): void;
+  /** The skin worn by this player's own wrights. */
+  wear(tint: number): void;
   /** Centres the view on a garrison, for the map menu. */
   lookAt(x: number, y: number): void;
 }
@@ -42,7 +45,7 @@ function numberFor(text: string, kind: Mark["kind"]): Container {
 }
 
 export async function buildKeepScene(
-  _app: Application,
+  app: Application,
   viewport: Viewport,
   handle: KeepHandle,
   roster: { id: string; name: string; kind: string; work: "bug" | "feature" | "idle"; session?: Actor["session"] }[],
@@ -58,10 +61,7 @@ export async function buildKeepScene(
   for (const entry of roster) muster(sim, entry);
 
   let selected: string | undefined;
-  const actors = new ActorLayer(art, things, (id) => {
-    selected = id;
-    handle.onPick?.(sim.actors.find((actor) => actor.id === id));
-  });
+  const actors = new ActorLayer(art, things);
 
   const birds = new Birds(things);
   const smoke = new Smoke(things, fx["fx-smoke_01"]);
@@ -70,18 +70,53 @@ export async function buildKeepScene(
   handle.select = (id) => {
     selected = id;
   };
+  handle.wear = (tint) => actors.wear(tint);
   handle.lookAt = (x, y) => {
     viewport.animate({ position: { x, y }, scale: 1.1, time: 450, ease: "easeInOutSine" });
   };
 
-  /* Clicking bare ground clears the selection, which is what closes the panel. */
-  viewport.eventMode = "static";
-  const clearPick = (event: { target: unknown }) => {
-    if (event.target !== viewport) return;
-    selected = undefined;
-    handle.onPick?.(undefined);
+  /*
+   * Picking is done by finding the nearest wright to where the map was
+   * clicked, rather than by giving every figure its own hit area.
+   *
+   * Two reasons. A wright is about twenty pixels tall and zooms down to seven,
+   * and asking somebody to hit that exactly is asking them to miss; a generous
+   * radius around the click is what makes small figures selectable at all.
+   * And it means one hit test against the world instead of one display object
+   * per actor in the interaction tree, which is cheaper and, unlike per-sprite
+   * hit areas, actually worked.
+   */
+  /*
+   * The listener goes on the stage, with a hit area the size of the screen.
+   *
+   * A Pixi container only hit-tests its children unless it is given one of its
+   * own, so taps on open grass -- which is most of the map -- reached nothing
+   * and the handler on the viewport never fired. A stage-wide hit area means
+   * every click inside the canvas arrives, and where it landed is then a
+   * question about coordinates rather than about the display list.
+   */
+  app.stage.eventMode = "static";
+  app.stage.hitArea = app.screen;
+  const PICK_RADIUS = 1.4;
+  const onTap = (event: { global: { x: number; y: number } }) => {
+    const world = viewport.toWorld(event.global.x, event.global.y);
+    const tile = toTile(world.x, world.y);
+
+    let nearest: Actor | undefined;
+    let nearestDistance = PICK_RADIUS;
+    for (const actor of sim.actors) {
+      if (!actor.session) continue;
+      const distance = Math.hypot(actor.x - tile.x, actor.y - tile.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = actor;
+      }
+    }
+
+    selected = nearest?.id;
+    handle.onPick?.(nearest);
   };
-  viewport.on("pointertap", clearPick);
+  app.stage.on("pointertap", onTap);
 
   const home = homePosition();
   viewport.setZoom(0.9, true);
@@ -128,7 +163,7 @@ export async function buildKeepScene(
     destroy() {
       viewport.off("zoomed", rescaleSigns);
       viewport.off("moved", rescaleSigns);
-      viewport.off("pointertap", clearPick);
+      app.stage.off("pointertap", onTap);
       actors.destroy();
       birds.destroy();
       smoke.destroy();

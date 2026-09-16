@@ -47,11 +47,18 @@ interface Piece {
 export class ActorLayer {
   private readonly pieces = new Map<string, Piece>();
 
+  /** The skin the player is wearing, washed over their own sessions' wrights. */
+  private skinTint = 0xffffff;
+
   constructor(
     private readonly art: Loaded,
     private readonly parent: Container,
-    private readonly onPick: (id: string) => void,
   ) {}
+
+  /** Called when a skin is bought or changed in the shop. */
+  wear(tint: number): void {
+    this.skinTint = tint;
+  }
 
   private make(actor: Actor): Piece {
     const root = new Container();
@@ -95,13 +102,6 @@ export class ActorLayer {
       plate.scale.set(0.8);
       root.addChild(plate);
 
-      root.eventMode = "static";
-      root.cursor = "pointer";
-      /* A little larger than the sprite, because a 20px figure is a small target. */
-      root.hitArea = {
-        contains: (x: number, y: number) => Math.abs(x) < 22 && y > -44 && y < 14,
-      };
-      root.on("pointertap", () => this.onPick(actor.id));
     }
 
     this.parent.addChild(root);
@@ -136,12 +136,18 @@ export class ActorLayer {
       piece.sprite.position.x = lunging ? actor.facing * 5 : 0;
       piece.sprite.position.y = TILE_H * 0.25 + (actor.moving ? Math.sin(sim.clock / 3) * 1.5 : 0);
 
-      /* White when struck. Never colour alone: a number flies off as well. */
+      /*
+       * White when struck. Never colour alone: a number flies off as well.
+       * Otherwise the Unmade are cold, a real session wears whatever skin has
+       * been bought, and the garrison's own soldiers are as drawn.
+       */
       piece.sprite.tint = actor.hurt > 0
         ? 0xffffff
         : actor.side === "unmade"
           ? UNMADE_TINT
-          : 0xffffff;
+          : actor.session
+            ? this.skinTint
+            : 0xffffff;
       piece.sprite.alpha = actor.hurt > 0 ? 0.75 : 1;
 
       if (actor.hp !== piece.lastHp) {
