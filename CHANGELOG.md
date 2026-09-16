@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.16.0] — 2026-09-15
+
 ### Changed
 
 - Added optional standards-based OpenID Connect sign-in using Authorization
