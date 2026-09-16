@@ -26,6 +26,7 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameCollectionRun,
   GameProfile,
   Notification,
   SessionKeyShare,
@@ -1710,6 +1711,82 @@ export class PostgresStore implements Store {
         profile.updatedAt,
       ],
     );
+  }
+
+  /**
+   * One run, and its cost, in a single transaction.
+   *
+   * The total on the profile is the sum of these rows, so the two have to move
+   * together or the vial can disagree with the breakdown behind it. The insert
+   * makes the profile when there is not one: the agent reporting is proof the
+   * account is real, and losing somebody's first run because they had not
+   * opened the game yet would be a hole in the account nobody could explain.
+   */
+  async recordCollectionRun(run: GameCollectionRun): Promise<void> {
+    /*
+     * One statement, so the row and the total cannot come apart.
+     *
+     * The total on the profile is the sum of these rows, and the second insert
+     * draws its numbers from what the first one actually wrote -- so a run that
+     * was already recorded inserts nothing and therefore adds nothing. Written
+     * as two statements in a transaction, the conflict clause skipped the
+     * duplicate row and the token add ran anyway, which doubled the bill of any
+     * agent that reported, lost the reply and retried. The bill is the one
+     * number in this game that stands for real money.
+     *
+     * The profile is made when there is not one: the agent reporting is proof
+     * the account is real, and losing somebody's first run because they had not
+     * opened the keep yet would be a hole nobody could explain afterwards.
+     */
+    await this.pool.query(
+      `WITH recorded AS (
+         INSERT INTO game_collection_runs
+           (id, uid, device_id, device_name, ran_at, tokens,
+            pull_requests, commits, insertions, deletions, error)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING uid, tokens, ran_at
+       )
+       INSERT INTO game_profiles (uid, gathering, tokens, created_at, updated_at)
+       SELECT uid, TRUE, tokens, ran_at, ran_at FROM recorded
+       ON CONFLICT (uid) DO UPDATE SET
+         tokens = game_profiles.tokens + EXCLUDED.tokens,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        run.id,
+        run.uid,
+        run.deviceId,
+        run.deviceName,
+        run.ranAt,
+        run.tokens,
+        run.pullRequests,
+        run.commits,
+        run.insertions,
+        run.deletions,
+        run.error,
+      ],
+    );
+  }
+
+  async listCollectionRuns(uid: string, limit = 20): Promise<GameCollectionRun[]> {
+    const rows = await this.rows(
+      `SELECT * FROM game_collection_runs
+       WHERE uid = $1 ORDER BY ran_at DESC LIMIT $2`,
+      [uid, limit],
+    );
+    return rows.map((row) => ({
+      id: row.id as string,
+      uid: row.uid as string,
+      deviceId: row.device_id as string,
+      deviceName: row.device_name as string,
+      ranAt: Number(row.ran_at),
+      tokens: Number(row.tokens),
+      pullRequests: Number(row.pull_requests),
+      commits: Number(row.commits),
+      insertions: Number(row.insertions),
+      deletions: Number(row.deletions),
+      error: row.error as string,
+    }));
   }
 
   /* ---- App events ---- */

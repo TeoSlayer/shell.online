@@ -5,13 +5,14 @@ import { CLASS_LORE } from "../lore/world";
 import type { Purse } from "../state/shop";
 import { useGameShell } from "../state/context";
 import { Codex } from "./Codex";
+import { Gathering } from "./Gathering";
 import { Marches } from "./Marches";
 import { Menu, type MenuItem } from "./Menu";
 import { OptionsPanel } from "./OptionsPanel";
 import { Prompt } from "./Prompt";
 import { Shop } from "./Shop";
 
-type Pane = "root" | "marches" | "options" | "shop" | "codex";
+type Pane = "root" | "marches" | "gathering" | "options" | "shop" | "codex";
 
 /**
  * The pause screen, and everything reached from it.
@@ -36,6 +37,9 @@ export function PauseMenu({
   onBuy,
   onWear,
   onTravel,
+  gathering,
+  onGathering,
+  openAt,
 }: {
   onResume: () => void;
   purse: Purse;
@@ -50,9 +54,14 @@ export function PauseMenu({
   onWear: (skinId: string) => void;
   /** Rides to a holding and closes the menu. The map is too big to walk. */
   onTravel: (garrisonId: string) => void;
+  /** Whether the account has agreed to its machines being read. */
+  gathering: boolean;
+  onGathering: (on: boolean) => void;
+  /** Which pane to open on, so the vial can lead straight to the bill. */
+  openAt?: "gathering";
 }) {
   const navigate = useNavigate();
-  const [pane, setPane] = useState<Pane>("root");
+  const [pane, setPane] = useState<Pane>(openAt ?? "root");
   const { options } = useGameShell();
   const panel = useRef<HTMLDivElement>(null);
   /* Where the root menu was, so a side trip does not reset it. */
@@ -116,6 +125,14 @@ export function PauseMenu({
       onSelect: () => setPane("marches"),
     },
     {
+      id: "gathering",
+      label: "The gathering",
+      detail: gathering
+        ? `${elixir.toLocaleString()} tokens spent`
+        : "Off. Nothing is being read",
+      onSelect: () => setPane("gathering"),
+    },
+    {
       id: "codex",
       label: "The Chronicle",
       detail: "What everything here is a name for",
@@ -139,6 +156,7 @@ export function PauseMenu({
   const TITLES: Record<Pane, string> = {
     root: "Paused",
     marches: "The Marches",
+    gathering: "The gathering",
     options: "Options",
     shop: "The pedlar",
     codex: "The Chronicle",
@@ -190,6 +208,15 @@ export function PauseMenu({
               onTravel(id);
               onResume();
             }}
+            onBack={() => setPane("root")}
+          />
+        )}
+        {pane === "gathering" && (
+          <Gathering
+            on={gathering}
+            tokens={elixir}
+            onAgree={() => onGathering(true)}
+            onStop={() => onGathering(false)}
             onBack={() => setPane("root")}
           />
         )}

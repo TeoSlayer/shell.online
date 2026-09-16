@@ -34,6 +34,8 @@ export interface HudProps {
    */
   counted: boolean;
   onOpenRoster: () => void;
+  /** Opens the gathering: the notice when it is off, the bill when it is on. */
+  onOpenGathering: () => void;
 }
 
 /** A bar with its numbers beside it, never colour alone. */
@@ -85,7 +87,7 @@ function Meter({
  */
 function Elixir({ tokens, gathering }: { tokens: number; gathering: boolean }) {
   return (
-    <div className="keep-elixir" title={gathering ? undefined : "Not gathering yet"}>
+    <div className="keep-elixir">
       <span className="keep-vial" aria-hidden="true">
         <span
           className="keep-vial-fill"
@@ -113,6 +115,7 @@ export function Hud({
   demo,
   counted,
   onOpenRoster,
+  onOpenGathering,
 }: HudProps) {
   const lore = CLASS_LORE[characterClass] ?? CLASS_LORE.terminal;
   const unlock = nextUnlock(standing.level);
@@ -154,9 +157,20 @@ export function Hud({
         </span>
       </div>
 
-      <div className="keep-hud-cell keep-elixir-panel">
+      {/*
+        * The vial is a way in, not an ornament. A figure that stands for money
+        * somebody's machine has spent should be one press from the account of
+        * what spent it -- and while it is off, one press from the notice
+        * explaining what turning it on would read.
+        */}
+      <button
+        type="button"
+        className="keep-hud-cell keep-elixir-panel"
+        onClick={onOpenGathering}
+        title={gathering ? "What the gathering has cost" : "Nothing is being read. What this is"}
+      >
         <Elixir tokens={elixir} gathering={gathering} />
-      </div>
+      </button>
 
       <button type="button" className="keep-hud-cell keep-roster-button" onClick={onOpenRoster}>
         <span className="keep-roster-count">{wrights.length}</span>

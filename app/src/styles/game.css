@@ -370,6 +370,150 @@
   font-style: italic;
 }
 
+/* ---- the gathering ----------------------------------------------------- */
+
+/*
+ * Written plainly, and looking it. Everywhere else the game is brass and stone;
+ * this screen is a notice, and a consent notice dressed as a fantasy scroll is
+ * a consent notice designed not to be read.
+ */
+.keep-gathering {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-gathering-state {
+  margin: 0;
+  padding: var(--keep-space-2);
+  border-left: 4px solid var(--keep-elixir);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+}
+
+.keep-gathering-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-notice h3,
+.keep-gathering-heading {
+  margin: var(--keep-space) 0 0;
+  color: var(--keep-gold);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-gathering-notice ul {
+  display: flex;
+  margin: 0;
+  padding-left: var(--keep-space-3);
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keep-gathering-notice li,
+.keep-gathering-notice p {
+  margin: 0;
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+.keep-gathering-cost {
+  color: var(--keep-mist) !important;
+}
+
+.keep-gathering-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-said,
+.keep-gathering-refusal,
+.keep-gathering-empty,
+.keep-gathering-foot {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+/* A refusal is a state, so it carries a word as well as a colour. */
+.keep-gathering-refusal {
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-blood);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+}
+
+.keep-gathering-runs {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-gathering-run {
+  display: grid;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  gap: 2px;
+  grid-template-columns: 1fr auto;
+}
+
+.keep-gathering-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-run-where {
+  color: var(--keep-parchment);
+  font-weight: 700;
+}
+
+.keep-gathering-run-when {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-gathering-run-found,
+.keep-gathering-run-error {
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+  grid-column: 1;
+}
+
+.keep-gathering-run-error {
+  color: var(--keep-blood);
+}
+
+/* The cost, set apart, because it is the figure the vial is showing. */
+.keep-gathering-run-cost {
+  align-self: center;
+  color: var(--keep-elixir);
+  font-weight: 700;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.keep-gathering code {
+  padding: 1px 5px;
+  background: rgb(0 0 0 / 40%);
+  color: var(--keep-elixir);
+  font-family: inherit;
+}
+
 /* ---- pause ------------------------------------------------------------ */
 
 .keep-pause {
@@ -421,6 +565,7 @@
 .keep-pause-panel > .keep-options,
 .keep-pause-panel > .keep-shop,
 .keep-pause-panel > .keep-marches,
+.keep-pause-panel > .keep-gathering,
 .keep-pause-panel > .keep-codex {
   min-height: 0;
   flex: 1 1 auto;

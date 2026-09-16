@@ -184,6 +184,12 @@ export default function GameRoute() {
   const sim = useRef(createSim());
   /* The one clicked wright, which is the only game state React needs. */
   const [picked, setPicked] = useState<Actor | undefined>();
+  /*
+   * Which pane the pause menu should open on, set by whatever opened it. The
+   * vial on the field leads straight to the account of what the gathering has
+   * cost; everything else opens the menu where it was left.
+   */
+  const [pauseAt, setPauseAt] = useState<"gathering" | undefined>();
   const handle = useRef<KeepHandle>({
     sim: sim.current,
     select: () => {},
@@ -289,6 +295,10 @@ export default function GameRoute() {
               wrights={tally.wrights}
               demo={garrison.demo}
               counted={known}
+              onOpenGathering={() => {
+                setPauseAt("gathering");
+                setPaused(true);
+              }}
               onOpenRoster={() => setPaused(true)}
             />
             <button
@@ -319,7 +329,14 @@ export default function GameRoute() {
 
         {paused && (
           <PauseMenu
-            onResume={() => setPaused(false)}
+            onResume={() => {
+              setPaused(false);
+              /*
+               * Forgotten on the way out, or every later press of Escape would
+               * reopen the pane the vial last asked for rather than the menu.
+               */
+              setPauseAt(undefined);
+            }}
             purse={purse}
             characterClass={save.characterClass || "terminal"}
             wearing={save.skinId}
@@ -327,6 +344,9 @@ export default function GameRoute() {
             elixir={elixir}
             garrison={tally.wrights.length}
             onTravel={(id) => handle.current.lookAt(id)}
+            gathering={save.gathering}
+            onGathering={(on) => setSave({ ...save, gathering: on })}
+            openAt={pauseAt}
             onBuy={(skinId) => {
               const result = buy(purse, skinId);
               if (!result.ok) return;

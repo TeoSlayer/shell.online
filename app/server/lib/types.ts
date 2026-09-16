@@ -267,7 +267,15 @@ export interface AgentCommand {
   id: string;
   uid: string;
   deviceId: string;
-  kind: "start" | "kill";
+  /**
+   * "probe" asks the machine to gather statistics and report numbers back.
+   *
+   * It carries no arguments at all, which is the point: a command that could
+   * name a directory, a repository or a file would be a way to ask somebody's
+   * machine to look somewhere on behalf of a browser. The agent decides what it
+   * reads, on the machine, from its own configuration.
+   */
+  kind: "start" | "kill" | "probe";
   /** For "start": the command line to wrap. */
   command?: string;
   /** For "start": what to call the session in the UI. */
@@ -292,6 +300,36 @@ export interface AgentCommand {
  * this interface so the production implementation (Firestore, D1) can drop in
  * without touching route code.
  */
+
+/**
+ * One gathering run, and what it cost.
+ *
+ * The elixir vial shows a total, and a total on its own is a number somebody
+ * has to take on trust. This is what it is made of. A person who has agreed to
+ * their machine being read is owed an itemised account of it rather than a
+ * running figure.
+ *
+ * Every field is a count. There is no branch name here, no commit message, no
+ * diff and no session output -- the agent that fills these in runs on the
+ * operator's own machine and reports numbers, and this service could not read
+ * a session if it wanted to.
+ */
+export interface GameCollectionRun {
+  id: string;
+  uid: string;
+  deviceId: string;
+  /** What the machine calls itself, so the breakdown reads as places. */
+  deviceName: string;
+  ranAt: number;
+  /** What the run spent. The figure in the vial is the sum of these. */
+  tokens: number;
+  pullRequests: number;
+  commits: number;
+  insertions: number;
+  deletions: number;
+  /** Empty when it worked. A run that failed still happened. */
+  error: string;
+}
 
 /**
  * One account's saved game.

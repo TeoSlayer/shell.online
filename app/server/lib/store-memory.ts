@@ -24,6 +24,7 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameCollectionRun,
   GameProfile,
   Notification,
   SessionKeyShare,
@@ -79,6 +80,7 @@ interface Shape {
   appEvents: { event: AppEvent; day: number; count: number }[];
   teamKeys: TeamKey[];
   gameProfiles: GameProfile[];
+  collectionRuns: GameCollectionRun[];
   teamKeyShares: TeamKeyShare[];
 }
 
@@ -86,7 +88,7 @@ const EMPTY: Shape = {
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
-  accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [], gameProfiles: [],
+  accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [], gameProfiles: [], collectionRuns: [],
 };
 
 /**
@@ -156,6 +158,7 @@ export class MemoryStore implements Store {
         appEvents: parsed.appEvents ?? [],
         teamKeys: parsed.teamKeys ?? [],
         gameProfiles: parsed.gameProfiles ?? [],
+        collectionRuns: parsed.collectionRuns ?? [],
         teamKeyShares: parsed.teamKeyShares ?? [],
       };
     } catch {
@@ -730,6 +733,52 @@ export class MemoryStore implements Store {
     if (at >= 0) this.data.gameProfiles[at] = stored;
     else this.data.gameProfiles.push(stored);
     await this.flush();
+  }
+
+  async recordCollectionRun(run: GameCollectionRun): Promise<void> {
+    /*
+     * The run's own id makes this idempotent. An agent that reports, loses the
+     * reply and retries must not double somebody's bill -- and the bill is the
+     * one number in this game that stands for real money.
+     */
+    if (this.data.collectionRuns.some((entry) => entry.id === run.id)) return;
+    this.data.collectionRuns.push({ ...run });
+    /*
+     * The total and the rows move together, so the vial can never disagree
+     * with the breakdown behind it. A profile that does not exist yet is made
+     * here rather than refusing: the agent reporting is proof the account is
+     * real, and losing the first run because nobody had opened the game would
+     * be a hole in the account nobody could explain.
+     */
+    const at = this.data.gameProfiles.findIndex((entry) => entry.uid === run.uid);
+    if (at >= 0) {
+      this.data.gameProfiles[at] = {
+        ...this.data.gameProfiles[at],
+        tokens: this.data.gameProfiles[at].tokens + run.tokens,
+        updatedAt: run.ranAt,
+      };
+    } else {
+      this.data.gameProfiles.push({
+        uid: run.uid,
+        characterClass: "",
+        skinId: "",
+        owned: [],
+        spent: 0,
+        gathering: true,
+        tokens: run.tokens,
+        createdAt: run.ranAt,
+        updatedAt: run.ranAt,
+      });
+    }
+    await this.flush();
+  }
+
+  async listCollectionRuns(uid: string, limit = 20): Promise<GameCollectionRun[]> {
+    return this.data.collectionRuns
+      .filter((run) => run.uid === uid)
+      .sort((a, b) => b.ranAt - a.ranAt)
+      .slice(0, limit)
+      .map((run) => ({ ...run }));
   }
 
   async teamKey(orgId: string): Promise<TeamKey | null> {

@@ -5,6 +5,7 @@ import type {
   AppEventCount,
   AccountKey,
   AgentCommand,
+  GameCollectionRun,
   AuditEvent,
   AuthorizationCode,
   CliToken,
@@ -185,6 +186,17 @@ export interface Store {
   gameProfile(uid: string): Promise<GameProfile | null>;
   /** Writes the whole profile. Creates it on first save. */
   putGameProfile(profile: GameProfile): Promise<void>;
+  /**
+   * Records one gathering run, and adds what it cost to the account's total.
+   *
+   * One call rather than two, because the total in the profile is the sum of
+   * these rows: a writer that could record a run without adding its cost, or
+   * add a cost without recording the run, is a writer that can make the vial
+   * disagree with the breakdown behind it.
+   */
+  recordCollectionRun(run: GameCollectionRun): Promise<void>;
+  /** The most recent runs, newest first, for the breakdown behind the vial. */
+  listCollectionRuns(uid: string, limit?: number): Promise<GameCollectionRun[]>;
 
   /* ---- Team audit key ---- */
   teamKey(orgId: string): Promise<TeamKey | null>;

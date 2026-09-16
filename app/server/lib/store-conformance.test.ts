@@ -590,6 +590,102 @@ for (const implementation of implementations) {
         expect(await store.gameProfile("uid-nobody")).toBeNull();
       });
 
+      /* ---- what the gathering cost ---- */
+
+      const run = (overrides: Record<string, unknown> = {}) => ({
+        id: "run-1",
+        uid: "uid-1",
+        deviceId: "dev-1",
+        deviceName: "laptop",
+        ranAt: 5000,
+        tokens: 1200,
+        pullRequests: 3,
+        commits: 9,
+        insertions: 410,
+        deletions: 88,
+        error: "",
+        ...overrides,
+      });
+
+      it("has no runs for somebody who has never gathered", async () => {
+        expect(await store.listCollectionRuns("uid-nobody")).toEqual([]);
+      });
+
+      it("keeps a run and hands it back whole", async () => {
+        await store.recordCollectionRun(run());
+        expect(await store.listCollectionRuns("uid-1")).toEqual([run()]);
+      });
+
+      it("adds what a run cost to the account's total", async () => {
+        /*
+         * The figure in the vial is the sum of these rows. A writer that could
+         * record a run without adding its cost would let the vial disagree with
+         * the breakdown behind it, which is the one thing the breakdown exists
+         * to prevent.
+         */
+        await store.putGameProfile(profile({ tokens: 0 }));
+        await store.recordCollectionRun(run({ tokens: 500 }));
+        await store.recordCollectionRun(run({ id: "run-2", tokens: 700, ranAt: 6000 }));
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(1200);
+      });
+
+      it("records a run for an account that has not opened the game", async () => {
+        /*
+         * The agent reporting is proof the account is real. Losing somebody's
+         * first run because they had not opened the keep yet would be a hole in
+         * the account that nobody could explain afterwards.
+         */
+        await store.recordCollectionRun(run({ uid: "uid-new", tokens: 90 }));
+        const made = await store.gameProfile("uid-new");
+        expect(made?.tokens).toBe(90);
+        expect(await store.listCollectionRuns("uid-new")).toHaveLength(1);
+      });
+
+      it("hands back the newest run first", async () => {
+        await store.recordCollectionRun(run({ id: "old", ranAt: 1000 }));
+        await store.recordCollectionRun(run({ id: "new", ranAt: 9000 }));
+        await store.recordCollectionRun(run({ id: "middle", ranAt: 5000 }));
+        expect((await store.listCollectionRuns("uid-1")).map((entry) => entry.id))
+          .toEqual(["new", "middle", "old"]);
+      });
+
+      it("keeps one account's runs out of another's", async () => {
+        await store.recordCollectionRun(run());
+        await store.recordCollectionRun(run({ id: "run-2", uid: "uid-2" }));
+        expect(await store.listCollectionRuns("uid-1")).toHaveLength(1);
+        expect(await store.listCollectionRuns("uid-2")).toHaveLength(1);
+      });
+
+      it("keeps a run that failed", async () => {
+        /* A run that failed still happened, and hiding it makes the vial wrong. */
+        await store.recordCollectionRun(run({ tokens: 40, error: "no git on PATH" }));
+        const [only] = await store.listCollectionRuns("uid-1");
+        expect(only.error).toBe("no git on PATH");
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(40);
+      });
+
+      it("takes the same run twice without charging for it twice", async () => {
+        /*
+         * An agent that reports, loses the reply and retries must not double
+         * somebody's bill, and the bill is the one number in this game that
+         * stands for real money. The run's own id is what makes the write
+         * idempotent -- and the total has to be idempotent with it, which is
+         * the half that is easy to miss: skipping the duplicate row while
+         * adding its tokens anyway looks correct and is not.
+         */
+        await store.recordCollectionRun(run({ tokens: 300 }));
+        await store.recordCollectionRun(run({ tokens: 300 }));
+        expect(await store.listCollectionRuns("uid-1")).toHaveLength(1);
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(300);
+      });
+
+      it("limits how many runs it hands back", async () => {
+        for (let index = 0; index < 8; index += 1) {
+          await store.recordCollectionRun(run({ id: `run-${index}`, ranAt: 1000 + index }));
+        }
+        expect(await store.listCollectionRuns("uid-1", 3)).toHaveLength(3);
+      });
+
       it("keeps a profile and hands it back whole", async () => {
         await store.putGameProfile(profile());
         expect(await store.gameProfile("uid-1")).toEqual(profile());
