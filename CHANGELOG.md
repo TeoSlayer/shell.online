@@ -4,6 +4,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A game skin over the web app, reached from a controller at the right of the
+  top bar and left again through a pause screen whose last item is "Quit to
+  boring UI". The holding is seen from above: live sessions are wrights on the
+  field, their class is the harness each one runs, and what they are doing is
+  read from what the session is called — a fix sends them out to fight a
+  fault, a feature sets them building. Levels come from work that has already
+  happened, marks from levelling, and the pedlar sells cloth and dye and
+  nothing that changes a number. The Chronicle explains what each thing in the
+  keep is a name for.
+
+  It costs the session list nothing: the whole game is one lazily imported
+  chunk, and the build fails if any of it reaches the bundle everybody else
+  downloads. It honours reduced motion, offers a safe-area inset for
+  televisions, an interface-size slider and colourblind palettes, and is
+  navigable with a keyboard or a pad throughout.
+
 ## [0.16.0] — 2026-09-15
 
 ### Changed
