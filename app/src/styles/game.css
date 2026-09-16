@@ -1,0 +1,582 @@
+/*
+ * Shell Keep — the game skin.
+ *
+ * Imported by src/game/GameRoute.tsx and nowhere else, so it travels in the
+ * lazy game chunk and costs the corporate view nothing.
+ *
+ * The palette is not invented. It is the product's own tokens from tokens.css
+ * read as materials: --terminal is stone, --paper is parchment, --blue is
+ * arcane light and --acid is elixir. That is what stops this looking like a
+ * generic pixel game wearing our name — it is the same product in armour.
+ *
+ * Rules this file holds itself to, from the game-ui-design skill:
+ *   · nothing readable outside the safe area, which the player can widen
+ *   · 16px floor for body text, 24px for anything that matters in a hurry
+ *   · 48px minimum for anything you can hit
+ *   · every state carries an icon or a word, never colour alone
+ *   · interface motion at or under 300ms, and none at all on request
+ *   · z-index never above 400
+ */
+
+.keep {
+  /* ---- materials ---- */
+  --keep-stone: #1d201b;
+  --keep-stone-lit: #343a2e;
+  --keep-stone-dark: #0d1009;
+  --keep-parchment: #f3f1e9;
+  --keep-parchment-shade: #ded9c8;
+  --keep-ink: #191b18;
+  --keep-arcane: #4267f5;
+  --keep-elixir: #c8ff4d;
+  --keep-gold: #e8b44a;
+  --keep-blood: #c2412c;
+  --keep-heal: #4e9e74;
+  --keep-mist: #8d9382;
+
+  /* ---- scale ----
+   * Every size below is a multiple of these two, so the interface-size slider
+   * moves the whole thing together instead of leaving text large in boxes that
+   * stayed small. --keep-scale is set from options; see state/options.ts.
+   */
+  --keep-scale: 1;
+  --keep-safe: 5%;
+  --keep-motion: 1;
+
+  --keep-text: calc(16px * var(--keep-scale));
+  --keep-text-sm: calc(16px * var(--keep-scale));
+  --keep-text-lg: calc(20px * var(--keep-scale));
+  --keep-text-xl: calc(26px * var(--keep-scale));
+  --keep-text-huge: calc(34px * var(--keep-scale));
+
+  --keep-space: calc(8px * var(--keep-scale));
+  --keep-space-2: calc(16px * var(--keep-scale));
+  --keep-space-3: calc(24px * var(--keep-scale));
+  --keep-space-4: calc(32px * var(--keep-scale));
+
+  /* The smallest thing a thumb or a stick should ever have to land on. */
+  --keep-hit: calc(48px * var(--keep-scale));
+
+  /* ---- layer scale ----
+   * Named, bounded, and nowhere near four digits. A z-index war is a symptom
+   * of not having a scale, so here is the scale.
+   */
+  --keep-z-field: 1;
+  --keep-z-hud: 100;
+  --keep-z-modal: 200;
+  --keep-z-tooltip: 300;
+  --keep-z-toast: 400;
+
+  --keep-fast: calc(120ms * var(--keep-motion));
+  --keep-normal: calc(220ms * var(--keep-motion));
+
+  position: fixed;
+  inset: 0;
+  z-index: var(--keep-z-field);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, #232719 0%, var(--keep-stone-dark) 70%);
+  color: var(--keep-parchment);
+  font-family: var(--mono);
+  font-size: var(--keep-text);
+  line-height: 1.45;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/*
+ * Colourblind palettes.
+ *
+ * These widen the gaps between the hues the game leans on. They are a second
+ * line of defence, not the first: every state in the keep already carries an
+ * icon and a word, because a palette cannot help somebody reading a screenshot.
+ */
+.keep[data-colour="deuteranopia"],
+.keep[data-colour="protanopia"] {
+  --keep-blood: #e07a3c;
+  --keep-heal: #4a7fd4;
+  --keep-elixir: #f2e94b;
+}
+
+.keep[data-colour="tritanopia"] {
+  --keep-blood: #d94a6a;
+  --keep-heal: #2fa8a0;
+  --keep-elixir: #b6f24b;
+  --keep-arcane: #7a4ad9;
+}
+
+/* ---- safe area -------------------------------------------------------- */
+
+/*
+ * Televisions crop the edges. The field is allowed to bleed into that crop;
+ * anything a player has to read is not, so it lives in here.
+ */
+.keep-safe {
+  display: flex;
+  height: 100%;
+  padding: var(--keep-safe);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+/* ---- pixel panels ----------------------------------------------------- */
+
+/*
+ * A carved stone panel. The bevel is drawn with inset shadows rather than a
+ * gradient so it stays hard-edged at any zoom — a soft edge is the one thing
+ * that makes pixel art look like a mistake rather than a choice.
+ */
+.keep-panel {
+  border: 4px solid var(--keep-stone-dark);
+  background: var(--keep-stone);
+  box-shadow:
+    inset 0 4px 0 0 var(--keep-stone-lit),
+    inset 4px 0 0 0 var(--keep-stone-lit),
+    inset -4px 0 0 0 var(--keep-stone-dark),
+    inset 0 -4px 0 0 var(--keep-stone-dark);
+}
+
+/* ---- HUD -------------------------------------------------------------- */
+
+.keep-hud {
+  display: flex;
+  z-index: var(--keep-z-hud);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--keep-space-2);
+  flex: none;
+}
+
+.keep-wordmark {
+  margin: 0;
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-xl);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  /*
+   * A hard outline, not a soft shadow. HUD text sits over whatever the field
+   * happens to be drawing, and a dark banner one second is a pale wall the
+   * next; the outline is what keeps it readable over both.
+   */
+  text-shadow:
+    2px 0 0 var(--keep-stone-dark),
+    -2px 0 0 var(--keep-stone-dark),
+    0 2px 0 var(--keep-stone-dark),
+    0 -2px 0 var(--keep-stone-dark);
+}
+
+/* ---- buttons ---------------------------------------------------------- */
+
+.keep-button {
+  display: inline-flex;
+  min-height: var(--keep-hit);
+  padding: 0 var(--keep-space-3);
+  border: 4px solid var(--keep-stone-dark);
+  background: var(--keep-stone);
+  box-shadow:
+    inset 0 4px 0 0 var(--keep-stone-lit),
+    inset 0 -4px 0 0 var(--keep-stone-dark);
+  color: var(--keep-parchment);
+  font-family: inherit;
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  align-items: center;
+  justify-content: center;
+  gap: var(--keep-space);
+  cursor: pointer;
+  transition: background var(--keep-fast) linear, transform var(--keep-fast) linear;
+}
+
+.keep-button:hover {
+  background: var(--keep-stone-lit);
+}
+
+/*
+ * Pressed moves down by the height of its own bevel, so the button looks like
+ * it went in rather than like it changed colour.
+ */
+.keep-button:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 4px 0 0 var(--keep-stone-dark);
+}
+
+.keep-pause-button {
+  flex: none;
+}
+
+/* ---- field ------------------------------------------------------------ */
+
+.keep-field {
+  display: flex;
+  position: relative;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+  flex: 1;
+}
+
+.keep-field-placeholder {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-lg);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- button prompts --------------------------------------------------- */
+
+.keep-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--keep-space);
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.keep-key {
+  display: inline-flex;
+  min-width: calc(44px * var(--keep-scale));
+  min-height: calc(30px * var(--keep-scale));
+  padding: 0 var(--keep-space);
+  border: 3px solid var(--keep-parchment-shade);
+  background: var(--keep-parchment);
+  color: var(--keep-ink);
+  font-family: inherit;
+  font-size: var(--keep-text-sm);
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- pause ------------------------------------------------------------ */
+
+.keep-pause {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-modal);
+  padding: var(--keep-safe);
+  align-items: center;
+  justify-content: center;
+  /*
+   * Dimmed, not hidden. Seeing the field you paused stops the menu feeling
+   * like it left the game, and it is the difference between a pause screen and
+   * a loading screen.
+   */
+  background: rgb(9 11 7 / 78%);
+  animation: keep-fade var(--keep-normal) ease-out;
+}
+
+@keyframes keep-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.keep-pause-panel {
+  display: flex;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: var(--keep-space-3);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+  overflow-y: auto;
+}
+
+.keep-pause-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-pause-head h2 {
+  margin: 0;
+  font-size: var(--keep-text-huge);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.keep-pause-glyph {
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-xl);
+}
+
+.keep-pause-foot {
+  display: flex;
+  padding-top: var(--keep-space-2);
+  border-top: 4px solid var(--keep-stone-dark);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--keep-space-2);
+}
+
+.keep-build {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- menus ------------------------------------------------------------ */
+
+.keep-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-menu-item {
+  display: flex;
+  min-height: var(--keep-hit);
+  padding: var(--keep-space) var(--keep-space-2);
+  border: 4px solid transparent;
+  background: transparent;
+  color: var(--keep-parchment);
+  font-family: inherit;
+  font-size: var(--keep-text);
+  text-align: left;
+  align-items: center;
+  gap: var(--keep-space-2);
+  cursor: pointer;
+  transition: background var(--keep-fast) linear;
+}
+
+.keep-menu-item:hover:not(:disabled) {
+  background: var(--keep-stone-lit);
+}
+
+/*
+ * The focused item, marked by more than colour: it gains a border and a caret
+ * as well, so it is still obvious in a palette somebody cannot separate and in
+ * a screenshot with no cursor in it.
+ */
+.keep-menu-item:focus-visible,
+.keep-menu-item.is-current:focus {
+  outline: none;
+  border-color: var(--keep-elixir);
+  background: var(--keep-stone-lit);
+}
+
+.keep-menu-item:focus-visible::before,
+.keep-menu-item.is-current:focus::before {
+  content: "▶";
+  margin-right: calc(-1 * var(--keep-space));
+  color: var(--keep-elixir);
+}
+
+.keep-menu-item:disabled {
+  color: var(--keep-mist);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Marked by a word and a rule above it, not by being red on its own. */
+.keep-menu-item.is-danger {
+  margin-top: var(--keep-space);
+  border-top: 4px solid var(--keep-stone-dark);
+  color: var(--keep-blood);
+}
+
+.keep-menu-item.is-danger:focus-visible {
+  border-color: var(--keep-blood);
+}
+
+.keep-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.keep-menu-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-menu-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.02em;
+}
+
+/* ---- options ---------------------------------------------------------- */
+
+.keep-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space-3);
+}
+
+.keep-option-group {
+  margin: 0;
+  padding: var(--keep-space-2);
+  border: 4px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 18%);
+}
+
+.keep-option-group legend {
+  padding: 0 var(--keep-space);
+  color: var(--keep-elixir);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.keep-option-why {
+  margin: 0 0 var(--keep-space-2);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  line-height: 1.5;
+}
+
+.keep-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-slider input[type="range"] {
+  min-height: var(--keep-hit);
+  flex: 1;
+  accent-color: var(--keep-elixir);
+}
+
+.keep-slider output {
+  min-width: calc(64px * var(--keep-scale));
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  text-align: right;
+}
+
+/*
+ * The safe-area calibration target. It is inset by exactly the amount the
+ * slider sets, so "can you see all four corners" is answerable by looking.
+ */
+.keep-safe-test {
+  position: relative;
+  height: calc(72px * var(--keep-scale));
+  margin-top: var(--keep-space-2);
+  border: 3px dashed var(--keep-stone-lit);
+}
+
+.keep-safe-corner {
+  position: absolute;
+  width: calc(20px * var(--keep-scale));
+  height: calc(20px * var(--keep-scale));
+  border: 4px solid var(--keep-elixir);
+}
+
+.keep-safe-corner.is-tl { top: var(--keep-safe); left: var(--keep-safe); border-right: 0; border-bottom: 0; }
+.keep-safe-corner.is-tr { top: var(--keep-safe); right: var(--keep-safe); border-bottom: 0; border-left: 0; }
+.keep-safe-corner.is-bl { bottom: var(--keep-safe); left: var(--keep-safe); border-top: 0; border-right: 0; }
+.keep-safe-corner.is-br { bottom: var(--keep-safe); right: var(--keep-safe); border-top: 0; border-left: 0; }
+
+.keep-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-choices.is-inline {
+  flex-flow: row wrap;
+}
+
+.keep-choice {
+  display: flex;
+  min-height: var(--keep-hit);
+  padding: var(--keep-space);
+  border: 4px solid transparent;
+  align-items: center;
+  gap: var(--keep-space-2);
+  cursor: pointer;
+}
+
+.keep-choice:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-choice:focus-within {
+  border-color: var(--keep-elixir);
+}
+
+.keep-choice input {
+  width: calc(22px * var(--keep-scale));
+  height: calc(22px * var(--keep-scale));
+  accent-color: var(--keep-elixir);
+  flex: none;
+}
+
+.keep-choice-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.keep-choice-label {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.keep-choice-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- focus, everywhere ------------------------------------------------ */
+
+/*
+ * One visible focus ring for anything the menu system does not style itself.
+ * Without this a pad can move focus somewhere invisible, which is the same as
+ * losing it.
+ */
+.keep :focus-visible {
+  outline: 4px solid var(--keep-elixir);
+  outline-offset: 2px;
+}
+
+/* ---- reduced motion --------------------------------------------------- */
+
+/*
+ * Two ways in: the player's own choice, which sets --keep-motion to 0 and
+ * collapses every duration above, and the system setting, which is honoured
+ * even before the game has read its options.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .keep *,
+  .keep *::before,
+  .keep *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+.keep[data-motion="reduced"] *,
+.keep[data-motion="reduced"] *::before,
+.keep[data-motion="reduced"] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+}
+
+/* ---- small screens ---------------------------------------------------- */
+
+/*
+ * A phone has no overscan, so the safe area is wasted margin there; it is
+ * clamped rather than removed, because the notch is a crop of its own.
+ */
+@media (width <= 640px) {
+  .keep {
+    --keep-safe: max(12px, env(safe-area-inset-left));
+  }
+
+  .keep-pause-panel {
+    width: 100%;
+  }
+}

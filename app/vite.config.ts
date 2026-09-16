@@ -60,6 +60,20 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: { __SHELL_ONLINE_VERSION__: JSON.stringify(appVersion) },
+    /*
+     * The game skin is deliberately NOT given a manualChunks entry.
+     *
+     * Naming it as a manual chunk looks tidier and is a trap: Vite treats a
+     * manual chunk as part of the initial graph, so index.html came back with
+     * a `modulepreload` for the game and a `<link rel="stylesheet">` for its
+     * stylesheet. Every visitor then downloaded the keep on their way to the
+     * session list, which is the exact thing the lazy import exists to
+     * prevent. `npm run verify:bundle` is what caught it and what will catch
+     * it again.
+     *
+     * Left alone, the dynamic import in src/App.tsx produces a true async
+     * chunk that is fetched when somebody asks for the game and not before.
+     */
     server: {
       headers: authHeaders,
       /*

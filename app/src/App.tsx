@@ -1,5 +1,7 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
+import { Booting } from "./components/Booting";
 import { RequireAuth, RedirectIfAuthed } from "./auth/RequireAuth";
 import { SignIn } from "./routes/SignIn";
 import AuthCallback from "./routes/AuthCallback";
@@ -19,6 +21,22 @@ import { CliAuthorize } from "./routes/CliAuthorize";
 import { VaultProvider } from "./vault/VaultProvider";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 import { FeedbackProvider } from "./feedback/FeedbackProvider";
+
+/*
+ * The game skin, and the only reference to it anywhere outside src/game.
+ *
+ * Imported this way on purpose: the keep carries an engine, a sprite atlas and
+ * a stylesheet of its own, and none of that belongs in the bundle somebody
+ * downloads to look at a list of sessions. The dynamic import puts all of it in
+ * a separate chunk that is fetched the first time somebody asks for it, and
+ * `npm run verify:bundle` fails the build if it ever leaks back into the entry
+ * chunk.
+ *
+ * The fallback is the app's ordinary Booting card rather than something
+ * game-shaped, for the same reason: anything prettier would have to be imported
+ * here, and then it would not be in the game's chunk either.
+ */
+const GameRoute = lazy(() => import("./game/GameRoute"));
 
 export default function App() {
   return (
@@ -100,6 +118,17 @@ export default function App() {
             element={
               <RequireAuth>
                 <Workspace />
+              </RequireAuth>
+            }
+          />
+          {/* The same product, in armour. See src/game/GameRoute.tsx. */}
+          <Route
+            path="/game"
+            element={
+              <RequireAuth>
+                <Suspense fallback={<Booting label="Opening the keep" />}>
+                  <GameRoute />
+                </Suspense>
               </RequireAuth>
             }
           />

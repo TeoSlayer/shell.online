@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check, Warning, ChatCircleDots,
+  GameController,
 } from "@phosphor-icons/react";
 import { Inbox } from "./Inbox";
 import { Avatar } from "./Avatar";
@@ -43,6 +44,87 @@ export function LinkHint({ className = "rail-hint" }: { className?: string }) {
           <Warning size={13} weight="fill" />
           {COPY_FAILED}
         </p>
+      )}
+    </div>
+  );
+}
+
+/*
+ * A tooltip is not worth a flash. Hovering across a row of controls on the way
+ * somewhere else should not leave a trail of labels behind it, so the label
+ * waits to see whether the pointer meant to stop.
+ */
+const TOOLTIP_DELAY_MS = 300;
+
+/**
+ * The way into the game skin.
+ *
+ * Deliberately the last thing in the bar: it is a different way to look at the
+ * same product rather than another destination within it, and putting it in the
+ * rail with Sessions and Machines would have said otherwise.
+ *
+ * Pointing at it fetches the game's chunk. The click then has nothing to wait
+ * for, while somebody who never points at it never downloads it -- which is the
+ * whole reason the game is a separate chunk in the first place.
+ */
+function LaunchGame() {
+  const [hinting, setHinting] = useState(false);
+  const timer = useRef(0);
+  const warmed = useRef(false);
+
+  const warm = () => {
+    if (warmed.current) return;
+    warmed.current = true;
+    /*
+     * The same specifier App.tsx lazily imports, so this warms that chunk
+     * rather than fetching a second copy of it. A failure here is not worth
+     * reporting: the click will simply load it the ordinary way.
+     */
+    void import("../game/GameRoute").catch(() => {
+      warmed.current = false;
+    });
+  };
+
+  const show = () => {
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setHinting(true), TOOLTIP_DELAY_MS);
+  };
+
+  const hide = () => {
+    window.clearTimeout(timer.current);
+    setHinting(false);
+  };
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  return (
+    <div className="launch-game">
+      <Link
+        to="/game"
+        className="launch-game-button"
+        /*
+         * The accessible name is on the control itself. The tooltip below is
+         * decoration for people using a pointer; it is not what a screen reader
+         * or a keyboard user has to rely on.
+         */
+        aria-label="Launch Game"
+        onMouseEnter={() => {
+          warm();
+          show();
+        }}
+        onMouseLeave={hide}
+        onFocus={() => {
+          warm();
+          setHinting(true);
+        }}
+        onBlur={hide}
+      >
+        <GameController size={20} weight="fill" />
+      </Link>
+      {hinting && (
+        <span className="launch-game-hint" role="presentation">
+          Launch Game
+        </span>
       )}
     </div>
   );
@@ -204,6 +286,8 @@ export function AppShell({ title, aside, children }: AppShellProps) {
               <span className="topbar-account">
                 <AccountMenu />
               </span>
+              {/* Last in the bar, on purpose: see LaunchGame. */}
+              <LaunchGame />
             </div>
           </div>
         </header>
