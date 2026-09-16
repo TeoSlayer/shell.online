@@ -285,22 +285,29 @@ export default function GameRoute() {
           * the crop; the things you need to read may not.
           */}
         <div className="keep-safe">
-          <header className="keep-hud">
-            <Hud
-              standing={rank}
-              marks={purse.marks}
-              elixir={elixir}
-              gathering={save.gathering}
-              characterClass={save.characterClass || "terminal"}
-              wrights={tally.wrights}
-              demo={garrison.demo}
-              counted={known}
-              onOpenGathering={() => {
-                setPauseAt("gathering");
-                setPaused(true);
-              }}
-              onOpenRoster={() => setPaused(true)}
-            />
+          <Hud
+            standing={rank}
+            marks={purse.marks}
+            elixir={elixir}
+            gathering={save.gathering}
+            characterClass={save.characterClass || "terminal"}
+            wrights={tally.wrights}
+            demo={garrison.demo}
+            counted={known}
+            onOpenGathering={() => {
+              setPauseAt("gathering");
+              setPaused(true);
+            }}
+            onOpenRoster={() => setPaused(true)}
+          />
+
+          {/*
+            * The pause button holds the corner the HUD leaves for it, and the
+            * key prompt the one below. Both belong to the same ring of things
+            * around the edge of the eye; they are here rather than in `Hud`
+            * only because they are the route's to open and to label.
+            */}
+          <div className="keep-corner is-top-right">
             <button
               type="button"
               className="keep-button keep-pause-button"
@@ -309,11 +316,11 @@ export default function GameRoute() {
               <span aria-hidden="true">❙❙</span>
               Pause
             </button>
-          </header>
+          </div>
 
-          <footer className="keep-foot">
+          <div className="keep-corner is-bottom-centre">
             <Prompt action="pause" verb="open the menu" />
-          </footer>
+          </div>
         </div>
 
         {picked && (

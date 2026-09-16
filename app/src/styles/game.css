@@ -139,14 +139,9 @@
  * does not land on an invisible box.
  */
 .keep-safe {
-  display: flex;
   position: absolute;
   inset: 0;
   z-index: var(--keep-z-hud);
-  padding: var(--keep-safe);
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--keep-space-2);
   pointer-events: none;
 }
 
@@ -201,24 +196,6 @@
   background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 30%) padding-box;
   image-rendering: pixelated;
   box-shadow: 0 calc(6px * var(--keep-scale)) 0 0 rgb(0 0 0 / 50%);
-}
-
-/* ---- HUD -------------------------------------------------------------- */
-
-.keep-hud {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: var(--keep-space-2);
-  flex: none;
-}
-
-.keep-foot {
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: var(--keep-space-2);
-  flex: none;
 }
 
 /* ---- buttons ---------------------------------------------------------- */
@@ -914,90 +891,104 @@
   pointer-events: none;
 }
 
-/* ---- HUD bar ---------------------------------------------------------- */
+/* ---- the HUD, in the corners ------------------------------------------- */
 
 /*
- * The strip along the top: standing, purse, elixir, garrison.
+ * Four corners rather than a bar across the top.
  *
- * One framed strip divided by brass rules, not four floating panels. Four
- * panels over a map read as four things that happen to be near each other, and
- * at the sizes their contents want they collided; a single bar reads as the
- * instrument panel it is, and a divider costs two pixels where a frame costs
- * sixteen on each side.
+ * A strip was one panel wide enough to reach edge to edge and tall enough for
+ * three rows, and what it mostly did was cover the map. Everything on it is
+ * glanced at rather than read, and things that are glanced at belong at the
+ * edges of the eye.
  *
- * It wraps rather than shrinks. On a narrow window these become two rows of
- * readable cells instead of four unreadable ones, which is the right trade
- * when the alternative is text below the floor this file holds itself to.
+ * Each corner is pinned inside the safe area, so a television's crop takes the
+ * same bite out of all four. They do not take pointer events; their contents
+ * do, so a click on the gap between two panels reaches the map underneath.
  */
-.keep-hud-bar {
+.keep-corner {
   display: flex;
-  flex-flow: row wrap;
-  align-items: stretch;
-  /* Hugs its contents. A bar stretched to the window is a bar with a hole in it. */
-  flex: 0 1 auto;
-  min-width: 0;
-  margin-right: auto;
-  padding: 0;
+  position: absolute;
+  z-index: var(--keep-z-hud);
+  gap: var(--keep-space);
+  pointer-events: none;
 }
 
-.keep-hud-cell {
-  display: flex;
-  padding: var(--keep-space) var(--keep-space-2);
+.keep-corner > * {
+  pointer-events: auto;
+}
+
+.keep-corner.is-top-left {
+  top: var(--keep-safe);
+  left: var(--keep-safe);
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.keep-corner.is-top-right {
+  top: var(--keep-safe);
+  right: var(--keep-safe);
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-left {
+  bottom: var(--keep-safe);
+  left: var(--keep-safe);
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-right {
+  right: var(--keep-safe);
+  bottom: var(--keep-safe);
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-centre {
+  bottom: var(--keep-safe);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/*
+ * A crest rather than a square.
+ *
+ * The rest of the interface is brass on stone; this is the one piece that says
+ * whose interface it is, so it takes the shape a device takes -- a shield,
+ * pointed at the foot. A clip path rather than an image, because it is four
+ * straight lines and a point.
+ */
+.keep-crest {
+  display: inline-flex;
+  width: calc(38px * var(--keep-scale));
+  height: calc(42px * var(--keep-scale));
+  background: var(--keep-gold);
   align-items: center;
-  gap: var(--keep-space-2);
-  /* Reset, because one of these is a button and buttons bring their own. */
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
+  justify-content: center;
+  flex: none;
+  clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%);
 }
 
-/*
- * A hairline between cells rather than around each one.
- *
- * `:not(:first-child)` and not a `+` rule, so a cell that has been hidden on a
- * narrow window does not leave the one after it without its divider.
- */
-.keep-hud-cell:not(:first-child) {
-  border-left: 2px solid rgb(232 180 74 / 35%);
-}
-
-/* The one cell you can press says so when pressed, like every other control. */
-.keep-roster-button {
-  cursor: pointer;
-  transition: background var(--keep-fast) linear;
-}
-
-.keep-roster-button:hover {
-  background: rgb(232 180 74 / 12%);
+.keep-crest-letter {
+  color: var(--keep-stone-dark);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  line-height: 1;
+  /* Off the geometric middle, because the point below drags the eye down. */
+  transform: translateY(calc(-3px * var(--keep-scale)));
 }
 
 .keep-standing {
-  min-width: calc(260px * var(--keep-scale));
+  display: flex;
+  min-width: calc(240px * var(--keep-scale));
+  max-width: calc(320px * var(--keep-scale));
   flex-direction: column;
-  align-items: stretch !important;
-  gap: var(--keep-space) !important;
+  gap: var(--keep-space);
 }
 
 .keep-standing-head {
   display: flex;
   align-items: center;
   gap: var(--keep-space-2);
-}
-
-.keep-sigil {
-  display: inline-flex;
-  width: calc(34px * var(--keep-scale));
-  height: calc(34px * var(--keep-scale));
-  border: 3px solid var(--keep-gold);
-  background: var(--keep-stone-dark);
-  color: var(--keep-gold);
-  font-size: var(--keep-text-lg);
-  font-weight: 700;
-  align-items: center;
-  justify-content: center;
-  flex: none;
 }
 
 .keep-standing-text,
@@ -1015,12 +1006,34 @@
   text-transform: uppercase;
 }
 
+.keep-purse,
+.keep-elixir-panel,
+.keep-roster-button {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-roster-button,
+.keep-elixir-panel {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--keep-fast) linear;
+}
+
+.keep-roster-button:hover,
+.keep-elixir-panel:hover {
+  background: var(--keep-stone-lit);
+}
+
 .keep-standing-level,
 .keep-purse-label,
 .keep-roster-detail,
 .keep-elixir-value {
   color: var(--keep-mist);
-  font-size: var(--keep-text-sm);
+  font-size: var(--keep-text);
 }
 
 /* ---- meters ----------------------------------------------------------- */
@@ -1157,15 +1170,11 @@
  * they carried is a tap away in the pause menu.
  */
 @media (width <= 640px) {
-  .keep-hud-bar {
-    flex-wrap: nowrap;
-  }
-
   /*
-   * Four panels cannot fit 390 pixels at a 16px floor, and squeezing them
-   * clipped every one of them. So three of them leave: the purse, the vial and
-   * the garrison count are all repeated in the pause menu, which is one tap
-   * away and is the right home for a number you look up rather than glance at.
+   * The corners still do not fit 390 pixels at a 16px floor, so three of them
+   * leave: the purse, the vial and the garrison count are all repeated in the
+   * pause menu, which is one tap away and is the right home for a number you
+   * look up rather than glance at.
    */
   .keep-purse,
   .keep-elixir-panel,
@@ -1173,15 +1182,9 @@
     display: none;
   }
 
-  .keep-hud-cell {
-    min-width: 0;
-    padding: calc(var(--keep-space) / 2) var(--keep-space);
-    gap: var(--keep-space);
-  }
-
   .keep-standing {
     min-width: 0;
-    flex: 1;
+    max-width: calc(100vw - var(--keep-space-4));
   }
 
   /* The explanations, which are the first thing that can go. */
@@ -1202,9 +1205,9 @@
     white-space: nowrap;
   }
 
-  .keep-sigil {
+  .keep-crest {
     width: calc(28px * var(--keep-scale));
-    height: calc(28px * var(--keep-scale));
+    height: calc(32px * var(--keep-scale));
   }
 
   .keep-vial {

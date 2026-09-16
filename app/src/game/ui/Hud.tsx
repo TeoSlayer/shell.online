@@ -140,69 +140,90 @@ export function Hud({
   const fighting = wrights.filter((wright) => wright.work === "bug").length;
   const building = wrights.filter((wright) => wright.work === "feature").length;
 
+  /*
+   * Corners rather than a bar.
+   *
+   * A strip across the top was one panel wide enough to reach from edge to edge
+   * and tall enough to hold three rows, and what it mostly did was cover the
+   * map. Everything on it is glanced at rather than read, and things that are
+   * glanced at belong at the edges of the eye, not across the middle of what
+   * you are looking at.
+   *
+   * So: who you are, top left, because it is the only thing here you might read
+   * a whole sentence of. What you have, bottom left, where money lives in every
+   * game anybody has played. Who is out, bottom right, next to the key prompt.
+   * The top right is left for the pause button, which was already there.
+   */
   return (
-    <div className="keep-hud-bar keep-panel">
-      <div className="keep-hud-cell keep-standing">
-        <div className="keep-standing-head">
-          <span className="keep-sigil" aria-hidden="true">
-            {lore.title.slice(0, 1)}
-          </span>
-          <span className="keep-standing-text">
-            <span className="keep-standing-class">{lore.title}</span>
-            <span className="keep-standing-level">Level {standing.level}</span>
+    <>
+      <div className="keep-corner is-top-left">
+        <div className="keep-panel keep-standing">
+          <div className="keep-standing-head">
+            <span className="keep-crest" aria-hidden="true">
+              <span className="keep-crest-letter">{lore.title.slice(0, 1)}</span>
+            </span>
+            <span className="keep-standing-text">
+              <span className="keep-standing-class">{lore.title}</span>
+              <span className="keep-standing-level">Level {standing.level}</span>
+            </span>
+          </div>
+          <Meter
+            label="Experience"
+            value={standing.into}
+            of={standing.needed}
+            tone="xp"
+            detail={
+              counted
+                ? unlock
+                  ? `${unlock.name} at level ${unlock.level}`
+                  : "Nothing left to unlock"
+                : "Not counted yet — the service did not answer"
+            }
+          />
+        </div>
+      </div>
+
+      <div className="keep-corner is-bottom-left">
+        <div className="keep-panel keep-purse">
+          <span className="keep-coin" aria-hidden="true">◈</span>
+          <span className="keep-purse-text">
+            <span className="keep-purse-value">{marks.toLocaleString()}</span>
+            <span className="keep-purse-label">{WORLD.coin}</span>
           </span>
         </div>
-        <Meter
-          label="Experience"
-          value={standing.into}
-          of={standing.needed}
-          tone="xp"
-          detail={
-            counted
-              ? unlock
-                ? `${unlock.name} at level ${unlock.level}`
-                : "Nothing left to unlock"
-              : "Not counted yet — the service did not answer"
-          }
-        />
+
+        {/*
+          * The vial is a way in, not an ornament. A figure that stands for
+          * money somebody's machine has spent should be one press from the
+          * account of what spent it -- and while it is off, one press from the
+          * notice explaining what turning it on would read.
+          */}
+        <button
+          type="button"
+          className="keep-panel keep-elixir-panel"
+          onClick={onOpenGathering}
+          title={gathering ? "What the gathering has cost" : "Nothing is being read. What this is"}
+        >
+          <Elixir tokens={elixir} gathering={gathering} />
+        </button>
       </div>
 
-      <div className="keep-hud-cell keep-purse">
-        <span className="keep-coin" aria-hidden="true">◈</span>
-        <span className="keep-purse-text">
-          <span className="keep-purse-value">{marks.toLocaleString()}</span>
-          <span className="keep-purse-label">{WORLD.coin}</span>
-        </span>
-      </div>
-
-      {/*
-        * The vial is a way in, not an ornament. A figure that stands for money
-        * somebody's machine has spent should be one press from the account of
-        * what spent it -- and while it is off, one press from the notice
-        * explaining what turning it on would read.
-        */}
-      <button
-        type="button"
-        className="keep-hud-cell keep-elixir-panel"
-        onClick={onOpenGathering}
-        title={gathering ? "What the gathering has cost" : "Nothing is being read. What this is"}
-      >
-        <Elixir tokens={elixir} gathering={gathering} />
-      </button>
-
-      <button type="button" className="keep-hud-cell keep-roster-button" onClick={onOpenRoster}>
-        <span className="keep-roster-count">{wrights.length}</span>
-        <span className="keep-roster-text">
-          <span className="keep-roster-label">{demo ? "Example garrison" : "On the field"}</span>
-          {/*
-            * Counts with words, not two coloured dots. The same information has
-            * to survive a screenshot and a palette somebody cannot separate.
-            */}
-          <span className="keep-roster-detail">
-            {fighting} fighting · {building} building
+      <div className="keep-corner is-bottom-right">
+        <button type="button" className="keep-panel keep-roster-button" onClick={onOpenRoster}>
+          <span className="keep-roster-count">{wrights.length}</span>
+          <span className="keep-roster-text">
+            <span className="keep-roster-label">{demo ? "Example garrison" : "On the field"}</span>
+            {/*
+              * Counts with words, not two coloured dots. The same information
+              * has to survive a screenshot and a palette somebody cannot
+              * separate.
+              */}
+            <span className="keep-roster-detail">
+              {fighting} fighting · {building} building
+            </span>
           </span>
-        </span>
-      </button>
-    </div>
+        </button>
+      </div>
+    </>
   );
 }
