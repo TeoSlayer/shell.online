@@ -266,6 +266,20 @@ export const ROADS: { from: string; to: string }[] = [
  * A flat array rather than a function called per tile per frame: the map is
  * sixteen thousand tiles and the renderer walks all of them when it is built.
  */
+/**
+ * The ground, worked out once and kept.
+ *
+ * Two things need it -- the layer that draws it and the scatter that decides
+ * where a tree may stand -- and it is sixteen thousand tiles of work. Computing
+ * it twice would be invisible and wasteful, and worse, it would make it
+ * possible for the two to disagree.
+ */
+let groundCache: Ground[] | undefined;
+
+export function groundTiles(): Ground[] {
+  return (groundCache ??= buildGround());
+}
+
 export function buildGround(): Ground[] {
   const tiles: Ground[] = new Array(MAP.width * MAP.height).fill("grass");
   const at = (x: number, y: number) => y * MAP.width + x;

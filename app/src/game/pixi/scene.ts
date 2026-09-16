@@ -2,6 +2,7 @@ import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { GARRISONS, MAP, type Garrison } from "../world/marches";
 import { depthOf, TILE_H, TILE_W, toScreen } from "./iso";
 import { buildGroundLayer } from "./ground";
+import { buildScatter } from "./scatter";
 
 /**
  * Everything standing on the ground: buildings, signs, trees, and the people.
@@ -212,6 +213,16 @@ export function buildWorld(art: Loaded): {
   const labels = new Container();
   const signs = new Container();
   things.sortableChildren = true;
+
+  /*
+   * The woods first, and their shadows straight into the ground.
+   *
+   * Props are added before the buildings only so that the two are not
+   * interleaved in the child list; what actually decides which is drawn in
+   * front is `zIndex`, which both set from the same rule.
+   */
+  const scatter = buildScatter(art, things);
+  ground.addChild(scatter.shadows);
 
   for (const garrison of GARRISONS) {
     for (const building of garrison.buildings) {

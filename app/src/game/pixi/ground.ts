@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import { buildGround, GARRISONS, MAP, type Ground } from "../world/marches";
+import { GARRISONS, groundTiles, MAP, type Ground } from "../world/marches";
 import { diamond, TILE_H, TILE_W, toScreen } from "./iso";
 
 /**
@@ -51,9 +51,11 @@ const STEPS = 5;
  * a way nobody can quite name.
  */
 function stepFor(tileX: number, tileY: number): number {
-  let value = Math.imul(tileX * 374_761_393 + tileY * 668_265_263, 0x85ebca6b);
-  value = (value ^ (value >>> 13)) >>> 0;
-  return value % STEPS;
+  /* The murmur3 finaliser. One round of mixing bands visibly across a field. */
+  let h = Math.imul(tileX, 0x27d4eb2d) ^ Math.imul(tileY, 0x165667b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) % STEPS;
 }
 
 /** The colour of one of those steps: a few points either side of the base. */
@@ -67,7 +69,7 @@ function toneOf(base: number, step: number): number {
 
 export function buildGroundLayer(): Container {
   const layer = new Container();
-  const tiles = buildGround();
+  const tiles = groundTiles();
 
   /*
    * One path per (ground, tone), filled once at the end. Building the paths
