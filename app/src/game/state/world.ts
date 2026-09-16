@@ -892,10 +892,23 @@ export function tickWorld(world: World): void {
  * the demo garrison stands in, and the interface says plainly that it is
  * standing in.
  */
-export const DEMO_GARRISON: { id: string; name: string; kind: string; work: Work }[] = [
-  { id: "demo-1", name: "fix: audit seal", kind: "claude-code", work: "bug" },
-  { id: "demo-2", name: "feat: session board", kind: "codex", work: "feature" },
-  { id: "demo-3", name: "chore: rotate keys", kind: "hermes", work: "idle" },
-  { id: "demo-4", name: "fix: relay reconnect", kind: "openclaw", work: "bug" },
-  { id: "demo-5", name: "npm run dev", kind: "terminal", work: "idle" },
-];
+export const DEMO_GARRISON = [
+  { id: "demo-1", name: "fix: audit seal", kind: "claude-code", work: "bug" as const },
+  { id: "demo-2", name: "feat: session board", kind: "codex", work: "feature" as const },
+  { id: "demo-3", name: "chore: rotate keys", kind: "hermes", work: "idle" as const },
+  { id: "demo-4", name: "fix: relay reconnect", kind: "openclaw", work: "bug" as const },
+  { id: "demo-5", name: "npm run dev", kind: "terminal", work: "idle" as const },
+].map((entry, index) => ({
+  ...entry,
+  /*
+   * The stand-in garrison carries plausible session facts, so clicking one
+   * shows the same panel a real session would rather than a panel with holes
+   * in it. The interface says elsewhere, plainly, that these are an example.
+   */
+  session: {
+    id: entry.id,
+    startedAt: Date.now() - (index + 1) * 11 * 60_000,
+    host: ["laptop", "workshop", "builder-01", "laptop", "workshop"][index],
+    command: entry.name,
+  },
+}));

@@ -1,6 +1,6 @@
 import { CLASS_LORE, WORLD } from "../lore/world";
 import { nextUnlock, type Standing } from "../state/progress";
-import type { Wright } from "../state/world";
+import type { Actor } from "../world/sim";
 
 /**
  * What the player needs to know without opening anything.
@@ -23,7 +23,7 @@ export interface HudProps {
   /** Whether any stat-gathering has been agreed to at all. */
   gathering: boolean;
   characterClass: string;
-  wrights: Wright[];
+  wrights: Actor[];
   /** True when the field is showing a stand-in garrison, not real sessions. */
   demo: boolean;
   onOpenRoster: () => void;

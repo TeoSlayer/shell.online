@@ -47,6 +47,14 @@ export interface Muster {
   name: string;
   kind: string;
   work: Work;
+  /**
+   * The facts the inspection panel shows when a wright is clicked.
+   *
+   * Carried through rather than looked up again later: by the time somebody
+   * clicks a figure on the map, the session list may have been polled a dozen
+   * times, and the answer should be about the session this wright *is*.
+   */
+  session: { id: string; startedAt: number; host: string; command: string };
 }
 
 /** Whether a session should be on the field at all. */
@@ -73,6 +81,12 @@ export function garrisonFrom(sessions: SessionRecord[]): Muster[] {
         name: label,
         kind: kindForCommand(session.command).id,
         work: workFor(`${session.name ?? ""} ${session.command}`),
+        session: {
+          id: session.id,
+          startedAt: session.startedAt,
+          host: session.host,
+          command: session.command,
+        },
       };
     });
 }

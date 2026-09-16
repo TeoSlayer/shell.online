@@ -1207,3 +1207,117 @@
   text-align: center;
   place-content: center;
 }
+
+/* ---- the wright panel -------------------------------------------------- */
+
+/*
+ * Clicking a figure on the map opens this. At the side rather than over the
+ * middle, because a modal in the middle covers the thing that was just
+ * clicked — the one part of the screen somebody was looking at.
+ */
+.keep-wright {
+  display: flex;
+  position: absolute;
+  top: var(--keep-safe);
+  right: var(--keep-safe);
+  bottom: var(--keep-safe);
+  z-index: var(--keep-z-modal);
+  width: min(340px, calc(100vw - var(--keep-space-4)));
+  padding: var(--keep-space-2);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+  overflow-y: auto;
+  pointer-events: auto;
+  animation: keep-slide var(--keep-normal) ease-out;
+}
+
+@keyframes keep-slide {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.keep-wright-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space);
+}
+
+.keep-wright-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-wright-name {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keep-wright-class {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-close {
+  min-width: var(--keep-hit);
+  min-height: var(--keep-hit);
+  border: 4px solid var(--keep-stone-dark);
+  background: var(--keep-stone);
+  color: var(--keep-parchment);
+  font: inherit;
+  cursor: pointer;
+  flex: none;
+}
+
+.keep-close:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-wright-motto {
+  margin: 0;
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-gold);
+  color: var(--keep-pale, var(--keep-mist));
+  font-style: italic;
+}
+
+.keep-wright-facts {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-wright-facts dt {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-wright-facts dd {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+}
+
+.keep-wright-note {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-wright-command code {
+  display: block;
+  padding: var(--keep-space);
+  border: 3px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 30%);
+  color: var(--keep-elixir);
+  font-family: inherit;
+  font-size: var(--keep-text-sm);
+  overflow-wrap: anywhere;
+}

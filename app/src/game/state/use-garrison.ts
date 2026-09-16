@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchSessions } from "../../lib/api";
 import { difference, garrisonFrom, type Muster } from "./sessions";
-import { dismiss, muster, type World } from "./world";
+import { muster, type Sim } from "../world/sim";
 
 /** The same interval the session list polls on, so the two agree. */
 const POLL_MS = 4000;
@@ -34,7 +34,7 @@ export interface GarrisonState {
  * first impression: a walled yard with nobody in it and no way to tell whether
  * that is the point or a fault.
  */
-export function useGarrison(world: World, demoGarrison: Muster[]): GarrisonState {
+export function useGarrison(sim: Sim, demoGarrison: Muster[]): GarrisonState {
   const [state, setState] = useState<GarrisonState>({
     loading: true,
     error: "",
@@ -53,13 +53,17 @@ export function useGarrison(world: World, demoGarrison: Muster[]): GarrisonState
        * first. Diffing across that boundary would leave demo wrights standing
        * among real ones, which is worse than either.
        */
+      const sessions = sim.actors.filter((actor) => actor.session !== undefined);
       if (demo !== showingDemo.current) {
-        for (const wright of [...world.wrights]) dismiss(world, wright.id);
+        const ids = new Set(sessions.map((actor) => actor.id));
+        sim.actors = sim.actors.filter((actor) => !ids.has(actor.id));
         showingDemo.current = demo;
       }
-      const { arrived, left } = difference(world.wrights, wanted);
-      for (const id of left) dismiss(world, id);
-      for (const entry of arrived) muster(world, entry);
+      const present = sim.actors.filter((actor) => actor.session !== undefined);
+      const { arrived, left } = difference(present, wanted);
+      const going = new Set(left);
+      sim.actors = sim.actors.filter((actor) => !going.has(actor.id));
+      for (const entry of arrived) muster(sim, entry);
     };
 
     const load = async () => {

@@ -97,13 +97,19 @@ describe("who is on the field", () => {
   });
 });
 
+/** A roster entry, with the session facts the panel needs. */
+const muster = (id: string) => ({
+  id,
+  name: id,
+  kind: "terminal",
+  work: "idle" as const,
+  session: { id, startedAt: 0, host: "laptop", command: "htop" },
+});
+
 describe("keeping the field in step with the list", () => {
   it("brings in the new and sends home the finished", () => {
     const present = [{ id: "a" }, { id: "b" }];
-    const wanted = [
-      { id: "b", name: "b", kind: "terminal", work: "idle" as const },
-      { id: "c", name: "c", kind: "terminal", work: "idle" as const },
-    ];
+    const wanted = [muster("b"), muster("c")];
     const { arrived, left } = difference(present, wanted);
     expect(arrived.map((entry) => entry.id)).toEqual(["c"]);
     expect(left).toEqual(["a"]);
@@ -116,10 +122,7 @@ describe("keeping the field in step with the list", () => {
      * the gate at exactly that interval.
      */
     const present = [{ id: "a" }, { id: "b" }];
-    const wanted = [
-      { id: "a", name: "a", kind: "terminal", work: "idle" as const },
-      { id: "b", name: "b", kind: "terminal", work: "idle" as const },
-    ];
+    const wanted = [muster("a"), muster("b")];
     const { arrived, left } = difference(present, wanted);
     expect(arrived).toHaveLength(0);
     expect(left).toHaveLength(0);

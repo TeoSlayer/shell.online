@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePageTitle } from "../lib/page-title";
 import { PixiStage } from "./pixi/PixiStage";
-import { buildKeepScene } from "./pixi/keepScene";
+import { buildKeepScene, createSim, type KeepHandle } from "./pixi/keepScene";
+import { WrightPanel } from "./ui/WrightPanel";
+import type { Actor } from "./world/sim";
 import { useInputDevice } from "./engine/use-input-device";
 import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
-import { createWorld, DEMO_GARRISON, type Wright } from "./state/world";
+import { DEMO_GARRISON } from "./state/world";
 import { useGarrison } from "./state/use-garrison";
 import { buy } from "./state/shop";
 import { experienceFrom, marksEarnedTo, standing } from "./state/progress";
@@ -117,14 +119,14 @@ export default function GameRoute() {
    * the sort of thing that makes a game feel heavy for no reason anybody can
    * see. Twice a second is faster than anyone reads.
    */
-  const [tally, setTally] = useState({ felled: 0, raised: 0, wrights: [] as Wright[] });
+  const [tally, setTally] = useState({ felled: 0, raised: 0, wrights: [] as Actor[] });
   useEffect(() => {
     const timer = window.setInterval(() => {
       setTally({
-        felled: world.current.felled,
-        raised: world.current.raised,
-        /* Copied, so React sees a new array and the roster stays in step. */
-        wrights: [...world.current.wrights],
+        felled: sim.current.felled,
+        raised: sim.current.raised,
+        /* Only the wrights that stand for real sessions are counted. */
+        wrights: sim.current.actors.filter((actor) => actor.session !== undefined),
       });
     }, 500);
     return () => window.clearInterval(timer);
@@ -159,13 +161,26 @@ export default function GameRoute() {
    * The courtyard bounds are set on the first frame, once the stage knows how
    * much ground is visible; until then there is nowhere to stand.
    */
-  const world = useRef(createWorld({ left: 0, top: 0, right: 0, bottom: 0 }));
+  /*
+   * The simulation, in a ref. It changes thirty times a second; putting it in
+   * state would re-render the route at that rate to redraw a canvas React does
+   * not manage anyway.
+   */
+  const sim = useRef(createSim());
+  /* The one clicked wright, which is the only game state React needs. */
+  const [picked, setPicked] = useState<Actor | undefined>();
+  const handle = useRef<KeepHandle>({
+    sim: sim.current,
+    select: () => {},
+    lookAt: () => {},
+  });
+  handle.current.onPick = setPicked;
 
   /*
    * Who is on the field: the account's live sessions, polled, with the
    * stand-in garrison when there are none or the service cannot be reached.
    */
-  const garrison = useGarrison(world.current, DEMO_GARRISON);
+  const garrison = useGarrison(sim.current, DEMO_GARRISON);
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -233,7 +248,9 @@ export default function GameRoute() {
           <PixiStage
             label="The Marches: garrisons spread over open country, seen from above and tilted"
             paused={paused}
-            build={buildKeepScene}
+            build={(app, viewport) =>
+              buildKeepScene(app, viewport, handle.current, DEMO_GARRISON)
+            }
           />
         </main>
 
@@ -268,6 +285,17 @@ export default function GameRoute() {
             <Prompt action="pause" verb="open the menu" />
           </footer>
         </div>
+
+        {picked && (
+          <WrightPanel
+            actor={picked}
+            now={Date.now()}
+            onClose={() => {
+              setPicked(undefined);
+              handle.current.select(undefined);
+            }}
+          />
+        )}
 
         {paused && (
           <PauseMenu

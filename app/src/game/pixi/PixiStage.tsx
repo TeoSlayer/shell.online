@@ -43,13 +43,11 @@ export interface Scene {
  */
 export function PixiStage({
   build,
-  onReady,
   paused = false,
   label,
 }: {
   /** Builds the scene once the renderer exists. */
   build: (app: Application, viewport: Viewport) => Promise<Scene> | Scene;
-  onReady?: (viewport: Viewport) => void;
   paused?: boolean;
   label: string;
 }) {
@@ -114,7 +112,6 @@ export function PixiStage({
       scene = await build(created, viewport);
       if (stopped) return;
       viewport.addChild(scene.world);
-      onReady?.(viewport);
 
       created.ticker.add((ticker) => {
         if (pausedRef.current) return;
