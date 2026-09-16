@@ -4,7 +4,7 @@ import type { Viewport } from "pixi-viewport";
 import { buildWorld, homeView, loadArt } from "./scene";
 import { toScreen, toTile } from "./iso";
 import { ActorLayer } from "./actors";
-import { Birds, Blows, loadEffects, Smoke } from "./ambience";
+import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import type { Scene } from "./PixiStage";
 import { GARRISONS } from "../world/marches";
 import { createSim, garrisonSoldiers, muster, tickSim, type Actor, type Mark, type Sim } from "../world/sim";
@@ -28,6 +28,8 @@ export interface KeepHandle {
   select(id: string | undefined): void;
   /** The skin worn by this player's own wrights. */
   wear(tint: number): void;
+  /** Stops everything that drifts or flaps, for reduced motion. */
+  still(stop: boolean): void;
   /** Rides the camera to a holding, named by id. See the road book. */
   lookAt(garrisonId: string): void;
 }
@@ -69,12 +71,24 @@ export async function buildKeepScene(
 
   const birds = new Birds(things);
   const smoke = new Smoke(things, fx["fx-smoke_01"]);
+  const dust = new Dust(things, fx["fx-smoke_01"]);
   const blows = new Blows(things, fx, numberFor);
 
   handle.select = (id) => {
     selected = id;
   };
   handle.wear = (tint) => actors.wear(tint);
+  /*
+   * The reduced-motion setting reached the interface and stopped at the edge of
+   * the canvas, so somebody who had asked for less motion got a still HUD over
+   * a map full of drifting particles and flapping birds -- the setting doing
+   * nothing in the one place it was most needed.
+   */
+  handle.still = (stop) => {
+    birds.still(stop);
+    smoke.still(stop);
+    dust.still(stop);
+  };
   handle.lookAt = (garrisonId) => {
     const garrison = GARRISONS.find((holding) => holding.id === garrisonId);
     if (!garrison) return;
@@ -189,6 +203,7 @@ export async function buildKeepScene(
       blows.sync(sim);
       birds.tick(deltaMs);
       smoke.tick(deltaMs);
+      dust.tick(sim, deltaMs);
     },
     destroy() {
       viewport.off("zoomed", rescaleSigns);
@@ -197,6 +212,7 @@ export async function buildKeepScene(
       actors.destroy();
       birds.destroy();
       smoke.destroy();
+      dust.destroy();
       blows.destroy();
     },
   };

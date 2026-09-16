@@ -112,6 +112,21 @@ export default function GameRoute() {
   const reducedMotion = motionReduced(options, systemReduced);
 
   /*
+   * Told to the scene as well as to the stylesheet. The canvas is not styled by
+   * CSS, so without this the setting stopped at the edge of it.
+   *
+   * Also kept in a ref, because the scene is built asynchronously: this effect
+   * runs against the placeholder handle long before `buildKeepScene` has
+   * replaced it, so arriving with reduced motion already on would otherwise
+   * open a map full of drifting particles and never be corrected.
+   */
+  const motionWanted = useRef(reducedMotion);
+  motionWanted.current = reducedMotion;
+  useEffect(() => {
+    handle.current.still(reducedMotion);
+  }, [reducedMotion]);
+
+  /*
    * What the garrison has done, read off the world a few times a second rather
    * than every frame.
    *
@@ -174,6 +189,7 @@ export default function GameRoute() {
     select: () => {},
     lookAt: () => {},
     wear: () => {},
+    still: () => {},
   });
   handle.current.onPick = setPicked;
 
@@ -249,9 +265,11 @@ export default function GameRoute() {
           <PixiStage
             label="The Marches: garrisons spread over open country, seen from above and tilted"
             paused={paused}
-            build={(app, viewport) =>
-              buildKeepScene(app, viewport, handle.current, DEMO_GARRISON)
-            }
+            build={async (app, viewport) => {
+              const scene = await buildKeepScene(app, viewport, handle.current, DEMO_GARRISON);
+              handle.current.still(motionWanted.current);
+              return scene;
+            }}
           />
         </main>
 

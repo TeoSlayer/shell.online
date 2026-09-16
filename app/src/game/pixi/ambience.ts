@@ -1,15 +1,22 @@
 import { Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { depthOf, toScreen } from "./iso";
-import { GARRISONS, MAP } from "../world/marches";
-import type { Effect, Mark, Sim } from "../world/sim";
+import { GARRISONS, groundTiles, MAP, type Ground } from "../world/marches";
+import type { Actor, Effect, Mark, Sim } from "../world/sim";
 
 /**
  * Everything that is there to be looked at rather than played.
  *
- * Birds, smoke, the flash where a blow lands, the numbers that come off it.
- * None of it is a mechanic and none of it can be interacted with. It is here
- * because a map where the only thing moving is the thing you are watching
- * reads as a diagram of a place rather than a place.
+ * Birds, smoke, dust off a walker's heels, the flash where a blow lands and the
+ * numbers that come off it. None of it is a mechanic and none of it can be
+ * interacted with. It is here because a map where the only thing moving is the
+ * thing you are watching reads as a diagram of a place rather than a place.
+ *
+ * All of it answers to `still()`. Drifting particles and things that flap are
+ * named in the game-ui-design rules as motion-sickness triggers, and until this
+ * existed the reduced-motion setting reached the interface and stopped at the
+ * edge of the canvas -- so somebody who had asked for less motion got a still
+ * HUD over a map full of it, which is the setting doing nothing where it
+ * matters most.
  */
 
 /** Particle textures, vendored from Kenney's CC0 pack. See the notices file. */
@@ -50,6 +57,13 @@ interface Bird {
 export class Birds {
   private readonly birds: Bird[] = [];
   private readonly layer = new Container();
+  private moving = true;
+
+  /** Off, and out of the sky: a frozen bird is stranger than no bird. */
+  still(stop: boolean): void {
+    this.moving = !stop;
+    this.layer.visible = !stop;
+  }
 
   constructor(parent: Container, count = 14) {
     parent.addChild(this.layer);
@@ -71,6 +85,7 @@ export class Birds {
   }
 
   tick(deltaMs: number): void {
+    if (!this.moving) return;
     const seconds = deltaMs / 1000;
     for (const bird of this.birds) {
       bird.x += bird.vx * seconds;
@@ -113,6 +128,18 @@ export class Birds {
 export class Smoke {
   private readonly puffs: { sprite: Sprite; life: number; x: number; y: number; from: number }[] = [];
   private readonly layer = new Container();
+  private moving = true;
+
+  /**
+   * Held rather than hidden.
+   *
+   * Smoke standing still over a chimney still says the holding is lived in,
+   * which is the whole job; it is the drift that is the problem. So the column
+   * stops where it is instead of disappearing.
+   */
+  still(stop: boolean): void {
+    this.moving = !stop;
+  }
 
   constructor(parent: Container, texture: Texture, perGarrison = 5) {
     parent.addChild(this.layer);
@@ -137,6 +164,7 @@ export class Smoke {
   }
 
   tick(deltaMs: number): void {
+    if (!this.moving) return;
     const step = deltaMs / 1000;
     for (const puff of this.puffs) {
       puff.life += step * 22;
@@ -153,6 +181,155 @@ export class Smoke {
 
   destroy(): void {
     this.layer.destroy({ children: true });
+  }
+}
+
+/* ---- dust ---------------------------------------------------------------- */
+
+/** What the ground gives up when it is walked on. Water gives up nothing. */
+const DUST_TINT: Record<Ground, number> = {
+  /*
+   * Lighter than the ground each comes off, not the same colour as it. Dust
+   * matching the road exactly is dust you cannot see; what makes it read is
+   * that it is the ground caught in the light.
+   */
+  dirt: 0xe3c79b,
+  sand: 0xf4e8c4,
+  stone: 0xd8d2c8,
+  grass: 0xcfdbb0,
+  water: 0x000000,
+};
+
+interface Puff {
+  sprite: Sprite;
+  /** Counts down. At or below zero the puff is free to be used again. */
+  life: number;
+  maxLife: number;
+  x: number;
+  y: number;
+  driftX: number;
+  driftY: number;
+}
+
+/**
+ * Dust off the heels of anything walking.
+ *
+ * This is the cheapest thing in the game that most changes how it feels. A
+ * figure crossing open ground with nothing coming off it is a sprite being
+ * moved; the same figure trailing a little dust is somebody walking, and the
+ * difference is about forty lines.
+ *
+ * The pool is fixed and allocated once. A fight with thirty walkers in it can
+ * ask for a puff several times a second, and a particle system that allocates
+ * is a particle system that stutters -- when the pool is empty the request is
+ * simply dropped, which nobody can see and which cannot cost anything.
+ *
+ * Each puff is tinted by the ground under the foot that raised it, so crossing
+ * from a road onto grass changes the colour of what comes up. That is a detail
+ * almost nobody will notice, and the reason to do it anyway is that the ones
+ * nobody notices are what the noticeable ones are made of.
+ */
+export class Dust {
+  private readonly puffs: Puff[] = [];
+  private readonly cooldown = new Map<string, number>();
+  private moving = true;
+
+  constructor(
+    private readonly parent: Container,
+    texture: Texture,
+    size = 80,
+  ) {
+    for (let index = 0; index < size; index += 1) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 0.5);
+      sprite.alpha = 0;
+      sprite.visible = false;
+      parent.addChild(sprite);
+      this.puffs.push({ sprite, life: 0, maxLife: 1, x: 0, y: 0, driftX: 0, driftY: 0 });
+    }
+  }
+
+  /** Off entirely. Dust is drift, and drift is the thing being asked about. */
+  still(stop: boolean): void {
+    this.moving = !stop;
+    if (!stop) return;
+    for (const puff of this.puffs) {
+      puff.life = 0;
+      puff.sprite.visible = false;
+    }
+  }
+
+  tick(sim: Sim, deltaMs: number): void {
+    const seconds = Math.min(0.1, deltaMs / 1000);
+
+    for (const puff of this.puffs) {
+      if (puff.life <= 0) continue;
+      puff.life -= seconds;
+      if (puff.life <= 0) {
+        puff.sprite.visible = false;
+        continue;
+      }
+      puff.x += puff.driftX * seconds;
+      puff.y += puff.driftY * seconds;
+
+      const progress = 1 - puff.life / puff.maxLife;
+      const { x, y } = toScreen(puff.x, puff.y);
+      puff.sprite.position.set(x, y + 4 - progress * 10);
+      puff.sprite.scale.set(0.08 + progress * 0.2);
+      puff.sprite.alpha = 0.5 * (1 - progress);
+      /* Under the feet that raised it, and over the ground it came off. */
+      puff.sprite.zIndex = depthOf(puff.x, puff.y, 5);
+    }
+
+    if (!this.moving) return;
+
+    for (const actor of sim.actors) {
+      const left = (this.cooldown.get(actor.id) ?? 0) - seconds;
+      if (!actor.moving) {
+        /* Standing still: hold the timer at zero so the next step raises dust. */
+        this.cooldown.set(actor.id, 0);
+        continue;
+      }
+      if (left > 0) {
+        this.cooldown.set(actor.id, left);
+        continue;
+      }
+      this.cooldown.set(actor.id, 0.16 + Math.random() * 0.1);
+      this.raise(actor);
+    }
+  }
+
+  private raise(actor: Actor): void {
+    const tiles = groundTiles();
+    const tx = Math.round(actor.x);
+    const ty = Math.round(actor.y);
+    if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return;
+    const ground = tiles[ty * MAP.width + tx];
+    if (ground === "water") return;
+
+    const puff = this.puffs.find((candidate) => candidate.life <= 0);
+    /* Nothing free: drop it. A missing puff is invisible; a stutter is not. */
+    if (!puff) return;
+
+    puff.maxLife = 0.5 + Math.random() * 0.3;
+    puff.life = puff.maxLife;
+    puff.x = actor.x;
+    puff.y = actor.y;
+    /* Backwards from the way they are facing, and drifting apart as it rises. */
+    puff.driftX = -actor.facing * (0.25 + Math.random() * 0.3);
+    puff.driftY = (Math.random() - 0.5) * 0.3;
+
+    puff.sprite.visible = true;
+    puff.sprite.tint = DUST_TINT[ground];
+    puff.sprite.alpha = 0.42;
+    puff.sprite.rotation = Math.random() * Math.PI;
+  }
+
+  destroy(): void {
+    for (const puff of this.puffs) puff.sprite.destroy();
+    this.puffs.length = 0;
+    this.cooldown.clear();
+    this.parent.sortDirty = true;
   }
 }
 
