@@ -17,12 +17,13 @@
     "preview": "vite preview",
     "render:deploy-config": "node scripts/render-deploy-config.mjs",
     "start": "node dist-server/index.js",
-    "test": "vitest run && node scripts/check-protocol.mjs",
+    "test": "vitest run && node scripts/check-protocol.mjs && node scripts/check-game-ui.mjs",
     "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:dev@localhost:5433/shell_online} vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --force",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "verify:bundle": "node scripts/check-bundle.mjs"
+    "verify:bundle": "node scripts/check-bundle.mjs",
+    "verify:game-ui": "node scripts/check-game-ui.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

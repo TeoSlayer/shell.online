@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePageTitle } from "../lib/page-title";
+import { Stage } from "./engine/Stage";
 import { useInputDevice } from "./engine/use-input-device";
 import { useGamepadActions } from "./engine/use-gamepad";
 import { KEEP_TITLE, SHELL_KEEP_MARKER } from "./keep";
 import { GameShellContext, type GameShell } from "./state/context";
 import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOptions } from "./state/options";
+import { drawField, STARTING_BASE } from "./scenes/field";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Prompt } from "./ui/Prompt";
 import "../styles/game.css";
@@ -52,6 +54,12 @@ export default function GameRoute() {
   }, []);
 
   const reducedMotion = motionReduced(options, systemReduced);
+
+  /*
+   * The holding, which for now is the one everybody starts with. The state
+   * layer replaces this with the team's own saved base.
+   */
+  const base = STARTING_BASE;
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -128,12 +136,19 @@ export default function GameRoute() {
           </header>
 
           <main className="keep-field">
-            {/*
-              * Stage 2 mounts the canvas layers here. Until then the frame is
-              * real, which is what makes the lazy-loading and the pause screen
-              * testable before there is anything to look at.
-              */}
-            <p className="keep-field-placeholder">The field is being surveyed.</p>
+            <Stage
+              label="The keep and its walls, seen from the field"
+              staticKey={`${base.ground}:${base.placements.length}`}
+              motionless={reducedMotion}
+              drawStatic={(draw) => drawField(draw, base)}
+              /*
+               * Nothing moves on the field yet: the heroes are the live
+               * sessions, and they arrive with the state layer. The front
+               * canvas is mounted and cleared each frame so that when they do,
+               * nothing about the loop has to change.
+               */
+              drawFrame={() => {}}
+            />
             <Prompt action="pause" verb="open the menu" />
           </main>
         </div>
