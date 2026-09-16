@@ -100,13 +100,18 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	// A name given here wins over one handed down by a browser-started launch.
+	//
+	// Only the one typed here is checked. The other was chosen in the browser
+	// and this process is carrying it, so it is cleaned rather than refused:
+	// a name that cannot be printed is not a reason for the session somebody
+	// asked for never to start.
 	sessionName := strings.TrimSpace(*sessionNameFlag)
-	if sessionName == "" {
-		sessionName = sessionNameFromEnvironment()
-	}
 	if err = validateSessionName(sessionName); err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 2
+	}
+	if sessionName == "" {
+		sessionName = sanitizeSessionName(sessionNameFromEnvironment())
 	}
 	password := os.Getenv("SHELL_ONLINE_E2EE_PASSWORD")
 	encrypted := !*noE2EE

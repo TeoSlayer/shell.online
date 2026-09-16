@@ -20,6 +20,7 @@ import {
   registerSession,
   renameSession,
   sessionForApi,
+  sessionName,
   sessionSource,
 } from "./lib/sessions";
 import { mintSecret } from "./lib/tokens";
@@ -106,6 +107,13 @@ export interface AppOptions {
 }
 
 const MAX_BODY_BYTES = 64 * 1024;
+
+/**
+ * How many sessions `shell ls` is given. Newest first, so an account with
+ * years of them still gets the ones it is asking about, in a reply the CLI
+ * can read.
+ */
+const CLI_SESSION_LIMIT = 500;
 
 /**
  * An error the caller caused, safe to describe back to them.
@@ -542,7 +550,13 @@ export function createApp(options: AppOptions) {
       if (route === "GET /api/cli/sessions") {
         const token = await requireCli(request);
         if (!token) return send(response, 401, { error: "not signed in" });
-        const sessions = await store.listSessions(token.uid);
+        /*
+         * Newest first, and bounded. Nothing prunes this table, so an account
+         * that has been running sessions for a year would otherwise answer
+         * with megabytes; the CLI reads a bounded body and would fail to
+         * decode a reply that outgrew it, permanently and without saying why.
+         */
+        const sessions = (await store.listSessions(token.uid)).slice(0, CLI_SESSION_LIMIT);
         const states = options.sessionLiveness
           ? await options.sessionLiveness.many(sessions)
           : new Map<string, SessionLiveness>();
@@ -1338,7 +1352,13 @@ export function createApp(options: AppOptions) {
           const command = String(body.command ?? "").trim();
           if (!command) return send(response, 400, { error: "give a command to run" });
           if (command.length > 500) return send(response, 400, { error: "that command is too long" });
-          const name = String(body.name ?? "").trim().slice(0, 120);
+          /*
+           * Cleaned here, the same way a published name is. What the browser
+           * sends becomes SHELL_ONLINE_SESSION_NAME on the machine, so a name
+           * carrying a newline or a direction override would reach the CLI as
+           * something it should never have to make sense of.
+           */
+          const name = sessionName(body.name) ?? "";
           /*
            * Relayed verbatim. This service has no key for it and must not
            * pretend to validate what it cannot read.

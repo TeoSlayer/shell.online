@@ -36,7 +36,8 @@
   top: 100%;
   right: 0;
   display: inline-flex;
-  height: 38px;
+  /* Short enough, with the pane's top padding, to clear the first row. */
+  height: 34px;
   padding: 0 5px 0 12px;
   border: 1px solid var(--line);
   border-top: 0;
@@ -53,7 +54,7 @@
   field-sizing: content;
   max-width: 190px;
   min-width: 0;
-  height: 28px;
+  height: 26px;
   padding: 0 26px 0 8px;
   border: 0;
   border-radius: var(--radius-chip);
@@ -202,7 +203,13 @@ button.tab {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  padding: 14px 0;
+  /*
+   * The top padding clears the renderer tab hanging over this corner, so the
+   * tab covers padding and never a row of output. Measured, not assumed: the
+   * tab is 34px from the tab line's own border, of which 20px is this
+   * element's margin from it.
+   */
+  padding: 18px 0 14px;
   background: transparent;
 }
 
@@ -485,7 +492,7 @@ button.tab {
   }
 
   .pane {
-    padding: 12px 0;
+    padding: 18px 0 12px;
   }
 
   .renderer-warning {

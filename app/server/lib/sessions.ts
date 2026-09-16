@@ -67,8 +67,17 @@ export const SESSION_NAME_LIMIT = 120;
  */
 export function sessionName(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  /* A newline or escape in a label would break every list it appears in. */
-  const line = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
+  /*
+   * A newline or escape in a label would break every list it appears in, and
+   * a direction override would rewrite the rest of the row around it: a name
+   * ending in U+202E makes a terminal print the columns after it backwards,
+   * so a finished session can be dressed up as something else in `shell ls`.
+   * C0, DEL, C1 and the bidi controls all go.
+   */
+  const line = value
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
   return line ? [...line].slice(0, SESSION_NAME_LIMIT).join("") : undefined;
 }
 

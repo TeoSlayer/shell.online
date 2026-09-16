@@ -133,6 +133,13 @@ describe("sessionName", () => {
     expect(sessionName("fix\nthe\tbuild\u001b[31m")).toBe("fix the build [31m");
   });
 
+  it("removes the controls that would rewrite a row around it", () => {
+    /* U+202E prints everything after it backwards; U+0085 is a C1 newline. */
+    expect(sessionName("build\u202Etxt.gnuf")).toBe("build txt.gnuf");
+    expect(sessionName("one\u0085two")).toBe("one two");
+    expect(sessionName("\u202A\u202C")).toBeUndefined();
+  });
+
   it("cuts an over-long label without splitting a character", () => {
     const name = sessionName("\u{1F680}".repeat(200));
     expect([...(name ?? "")]).toHaveLength(120);

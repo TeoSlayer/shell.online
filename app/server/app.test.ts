@@ -377,6 +377,30 @@ describe("GET /api/cli/sessions", () => {
     expect(listed.body.sessions).toEqual([]);
   });
 
+  it("hands back the newest sessions only, so a long-lived account still gets a reply", async () => {
+    const tokens = await login();
+    const { orgId } = (await call("GET", "/api/team-key", { auth: await idToken() })).body.you;
+    for (let index = 0; index < 505; index += 1) {
+      await store.upsertSession({
+        id: `s${String(index).padStart(30, "0")}`,
+        uid: "uid-1",
+        orgId,
+        ownerUid: "uid-1",
+        shareUrl: "https://shell.online/s/qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
+        command: "htop",
+        readOnly: false,
+        encrypted: true,
+        persistent: false,
+        host: "ana-mbp",
+        startedAt: 1000 + index,
+      });
+    }
+    const listed = await call("GET", "/api/cli/sessions", { auth: tokens.access_token });
+    expect(listed.body.sessions).toHaveLength(500);
+    /* Newest first, so the ones cut are the oldest. */
+    expect(listed.body.sessions[0].startedAt).toBe(1504);
+  });
+
   it("needs a machine token, not a browser sign-in", async () => {
     expect((await call("GET", "/api/cli/sessions")).status).toBe(401);
     expect((await call("GET", "/api/cli/sessions", { auth: await idToken() })).status).toBe(401);
@@ -875,6 +899,26 @@ describe("driving a machine from the browser", () => {
     await withDevice();
     expect((await call("GET", "/api/agent/commands")).status).toBe(401);
     expect((await call("POST", "/api/agent/commands/cmd_x", { body: {} })).status).toBe(401);
+  });
+});
+
+describe("a name chosen in the browser", () => {
+  it("is cleaned before it is queued for the machine", async () => {
+    const tokens = await login();
+    const device = (await devices())[0];
+    await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    const queued = await call("POST", "/api/commands", {
+      auth: await idToken(),
+      body: { device_id: device.id, kind: "start", command: "claude", name: "deploy\nnow\u202Egnuf" },
+    });
+    /* 202 when the machine has not polled since it was queued; either accepts it. */
+    expect([201, 202]).toContain(queued.status);
+    const claimed = await call("GET", "/api/agent/commands", { auth: tokens.access_token });
+    /*
+     * The CLI turns this into an environment variable and refuses to start
+     * with a name it cannot print, so a browser must not be able to send one.
+     */
+    expect(claimed.body.commands[0].name).toBe("deploy now gnuf");
   });
 });
 

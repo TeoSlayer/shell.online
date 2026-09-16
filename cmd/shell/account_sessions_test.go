@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"shell.online/internal/account"
 )
@@ -178,6 +179,37 @@ func TestValidateSessionName(t *testing.T) {
 	}
 	if err := validateSessionName("two\nlines"); err == nil {
 		t.Error("a multi-line name was accepted")
+	}
+}
+
+func TestValidateSessionNameRefusesADirectionOverride(t *testing.T) {
+	if err := validateSessionName("build\u202etxt.gnuf"); err == nil {
+		t.Error("a name that reverses the rest of its row was accepted")
+	}
+}
+
+func TestSanitizeSessionNameCleansRatherThanRefuses(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "deploy\nnow", want: "deploy now"},
+		{name: "build\u202etxt.gnuf", want: "build txt.gnuf"},
+		{name: "  spaced   out  ", want: "spaced out"},
+		{name: "\u202a\u202c", want: ""},
+		{name: "", want: ""},
+	}
+	for _, test := range tests {
+		if got := sanitizeSessionName(test.name); got != test.want {
+			t.Errorf("sanitizeSessionName(%q) = %q, want %q", test.name, got, test.want)
+		}
+	}
+	long := sanitizeSessionName(strings.Repeat("e", sessionNameLimit+40))
+	if utf8.RuneCountInString(long) != sessionNameLimit {
+		t.Errorf("an over-long name was not cut to %d runes", sessionNameLimit)
+	}
+	if err := validateSessionName(sanitizeSessionName("deploy\nnow\u202egnuf")); err != nil {
+		t.Errorf("a cleaned name should always be acceptable: %v", err)
 	}
 }
 

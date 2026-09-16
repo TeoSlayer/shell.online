@@ -61,6 +61,8 @@ export interface PendingTeammate {
   changed: boolean;
   /** Fingerprint of the vault key they now report, to compare with them. */
   fingerprint: string;
+  /** The key that fingerprint belongs to, so accepting cannot trust another. */
+  accountKey: string;
 }
 
 interface TeamKeyValue {
@@ -102,8 +104,6 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
   const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [pending, setPending] = useState<PendingTeammate[]>([]);
-  /* The vault key each pending teammate reported, kept out of render state. */
-  const pendingKeys = useRef(new Map<string, string>());
   const held = useRef<Held | null>(null);
   const waiting = useRef<((key: Held) => void)[]>([]);
   /* Read by the refresh loop without restarting it whenever the vault re-renders. */
@@ -269,13 +269,12 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
         /* Whoever is still without a copy, so the vault can say who and why. */
         const still = view.missing.filter((member) => member.uid !== uid && !sealedFor.has(member.uid));
         const nextPending: PendingTeammate[] = [];
-        pendingKeys.current = new Map();
         for (const member of still) {
-          pendingKeys.current.set(member.uid, member.accountKey);
           nextPending.push({
             uid: member.uid,
             changed: keyTrust(uid, member.uid, member.accountKey) === "changed",
             fingerprint: await fingerprint(member.accountKey),
+            accountKey: member.accountKey,
           });
         }
         if (live) setPending(nextPending);
@@ -356,12 +355,18 @@ export function TeamKeyProvider({ children }: { children: ReactNode }) {
   const acceptTeammateKey = useCallback(
     (teammate: string) => {
       const self = held.current?.uid;
-      const accountKey = pendingKeys.current.get(teammate);
-      if (!self || !accountKey) return;
-      trustKey(self, teammate, accountKey);
+      /*
+       * The key from the entry the person was looking at, not whatever the
+       * service reports now. The refresh loop replaces this list every minute,
+       * and pinning a key that arrived after they read the fingerprint would
+       * skip the one check this confirmation exists to make.
+       */
+      const entry = pending.find((candidate) => candidate.uid === teammate);
+      if (!self || !entry) return;
+      trustKey(self, teammate, entry.accountKey);
       refresh();
     },
-    [refresh],
+    [pending, refresh],
   );
 
   const value = useMemo<TeamKeyValue>(

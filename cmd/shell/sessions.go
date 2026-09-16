@@ -417,16 +417,55 @@ const sessionNameLimit = 120
 
 // validateSessionName refuses a label the web app would have to cut or mangle,
 // so what the terminal was told is what the lists show.
+//
+// Only for a name typed here. One arriving from elsewhere is cleaned instead;
+// see sanitizeSessionName.
 func validateSessionName(name string) error {
 	if utf8.RuneCountInString(name) > sessionNameLimit {
 		return fmt.Errorf("--name is limited to %d characters", sessionNameLimit)
 	}
 	for _, character := range name {
-		if unicode.IsControl(character) {
+		if unicode.IsControl(character) || isDirectionControl(character) {
 			return errors.New("--name must be a single line of text")
 		}
 	}
 	return nil
+}
+
+// isDirectionControl reports whether a rune rewrites the direction of the text
+// around it. A name ending in U+202E prints the rest of its row backwards, so
+// a session could be made to read in a list as something it is not.
+func isDirectionControl(character rune) bool {
+	switch {
+	case character == 0x200e || character == 0x200f:
+		return true
+	case character >= 0x202a && character <= 0x202e:
+		return true
+	case character >= 0x2066 && character <= 0x2069:
+		return true
+	default:
+		return false
+	}
+}
+
+// sanitizeSessionName makes a name from elsewhere safe to print and publish.
+//
+// A browser-started session carries the name chosen in the app, which this
+// process did not type and must not refuse: rejecting it would leave the
+// person who pressed the button with a session that never starts. The service
+// cleans names the same way, so this agrees with what the lists will show.
+func sanitizeSessionName(name string) string {
+	cleaned := strings.Map(func(character rune) rune {
+		if unicode.IsControl(character) || isDirectionControl(character) {
+			return ' '
+		}
+		return character
+	}, name)
+	cleaned = strings.Join(strings.Fields(cleaned), " ")
+	if utf8.RuneCountInString(cleaned) > sessionNameLimit {
+		cleaned = string([]rune(cleaned)[:sessionNameLimit])
+	}
+	return cleaned
 }
 
 // sessionNameLabel is the table cell for an optional name.
