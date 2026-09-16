@@ -57,7 +57,7 @@ export async function buildKeepScene(
   roster: { id: string; name: string; kind: string; work: "bug" | "feature" | "idle"; session?: Actor["session"] }[],
 ): Promise<Scene> {
   const [art, fx] = await Promise.all([loadArt(), loadEffects()]);
-  const { root, things, labels, signs } = buildWorld(art);
+  const { root, things, labels, signs } = buildWorld(app, art);
 
   const world = new Container();
   world.addChild(root);

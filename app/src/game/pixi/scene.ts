@@ -1,7 +1,9 @@
 import { Assets, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import type { Application } from "pixi.js";
 import { GARRISONS, MAP, type Garrison } from "../world/marches";
 import { depthOf, TILE_H, TILE_W, toScreen } from "./iso";
 import { buildGroundLayer } from "./ground";
+import { buildBorder } from "./border";
 import { buildScatter } from "./scatter";
 
 /**
@@ -192,7 +194,7 @@ export function signFor(garrison: Garrison): Container {
 }
 
 /** The ground, the holdings and their signs. Everything that does not move. */
-export function buildWorld(art: Loaded): {
+export function buildWorld(app: Application, art: Loaded): {
   root: Container;
   ground: Container;
   things: Container;
@@ -200,6 +202,11 @@ export function buildWorld(art: Loaded): {
   signs: Container;
 } {
   const root = new Container();
+  /*
+   * The wood goes down before the ground does, so the country is a clearing in
+   * it rather than a shape laid on top of it.
+   */
+  const border = buildBorder(app, art);
   const ground = buildGroundLayer();
   const things = new Container();
   /*
@@ -233,7 +240,7 @@ export function buildWorld(art: Loaded): {
     signs.addChild(signFor(garrison));
   }
 
-  root.addChild(ground, things, labels, signs);
+  root.addChild(border, ground, things, labels, signs);
   return { root, ground, things, labels, signs };
 }
 

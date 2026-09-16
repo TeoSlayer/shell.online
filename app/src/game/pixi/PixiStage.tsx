@@ -78,7 +78,8 @@ export function PixiStage({
          */
         resolution: Math.min(2, window.devicePixelRatio || 1),
         autoDensity: true,
-        background: 0x1a2416,
+        /* The canopy colour, so any sliver the wood does not reach matches it. */
+        background: 0x1f3318,
         preference: "webgl",
       });
       if (stopped) {
