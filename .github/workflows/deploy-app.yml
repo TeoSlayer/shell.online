@@ -8,8 +8,20 @@ name: Deploy app
 # Migrations only ever add, so a Worker from before a migration still runs
 # against the newer schema. That is what makes this order safe and a rollback
 # safe with it.
+#
+# Nothing here changes production until the build, the tests and the migration
+# have all succeeded, and the last word belongs to production itself: if the
+# deployed Worker does not answer, or answers with the previous build, the
+# version that was serving before is put back.
 
 on:
+  push:
+    branches: [main]
+    # Only what this Worker is built from. A change to the CLI, the relay or
+    # the site reaches people another way and must not redeploy this.
+    paths:
+      - "app/**"
+      - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
     inputs:
       migrate:
@@ -21,11 +33,16 @@ permissions:
   contents: read
   id-token: write # Workload Identity Federation, so there is no key to leak.
 
-# One deploy at a time. Two overlapping runs could migrate and deploy in an
-# order neither of them intended.
+# One deploy at a time, and never cancelled halfway: two overlapping runs could
+# migrate and deploy in an order neither of them intended.
 concurrency:
   group: deploy-app
   cancel-in-progress: false
+
+env:
+  # Pinned rather than floating: a deploy should not change because a new
+  # wrangler was published this morning.
+  WRANGLER_VERSION: "4.131.0"
 
 jobs:
   deploy:
@@ -36,6 +53,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      # A dispatch runs against whatever ref was chosen. Production is built
+      # from main, so anything else is a mistake worth catching before it is
+      # deployed rather than after.
+      - name: Refuse to deploy anything but main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -eu
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "this workflow deploys main; asked for $REF" >&2
+            exit 1
+          fi
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -50,9 +80,13 @@ jobs:
       # where the symptom no longer resembles the cause. An unset repository
       # variable is the empty string, and every one of these was empty on the
       # first run of this workflow.
+      #
+      # Values arrive through the environment rather than ${{ }} inside the
+      # script, so nothing configured elsewhere can be read as shell.
       - name: Check the deploy has what it needs
         env:
           CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET }}
           HYPERDRIVE_ID: ${{ vars.HYPERDRIVE_ID }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
@@ -64,33 +98,42 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
         run: |
+          set -eu
           missing=
-          for name in CLOUD_SQL_INSTANCE HYPERDRIVE_ID MAIL_FROM WEB_ORIGIN \
-                      CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL; do
-            eval "value=\${$name}"
+          for name in CLOUD_SQL_INSTANCE DATABASE_URL_SECRET HYPERDRIVE_ID MAIL_FROM WEB_ORIGIN \
+                      CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID \
+                      GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT; do
+            eval "value=\${$name-}"
             if [ -z "$value" ]; then missing="$missing $name"; fi
           done
-          if { [ -n "$VITE_OIDC_ISSUER" ] || [ -n "$VITE_OIDC_CLIENT_ID" ]; } && \
-             { [ -z "$VITE_OIDC_ISSUER" ] || [ -z "$VITE_OIDC_CLIENT_ID" ]; }; then
+          if { [ -n "${VITE_OIDC_ISSUER-}" ] || [ -n "${VITE_OIDC_CLIENT_ID-}" ]; } && \
+             { [ -z "${VITE_OIDC_ISSUER-}" ] || [ -z "${VITE_OIDC_CLIENT_ID-}" ]; }; then
             missing="$missing complete VITE_OIDC_ISSUER/VITE_OIDC_CLIENT_ID pair"
           fi
           firebase_missing=
           for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN \
                       VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_APP_ID; do
-            eval "value=\${$name}"
+            eval "value=\${$name-}"
             if [ -z "$value" ]; then firebase_missing="$firebase_missing $name"; fi
           done
-          if [ -z "$VITE_OIDC_ISSUER" ] && [ -n "$firebase_missing" ]; then
+          if [ -z "${VITE_OIDC_ISSUER-}" ] && [ -n "$firebase_missing" ]; then
             missing="$missing Firebase auth:$firebase_missing"
           fi
           if [ -n "$missing" ]; then
             echo "Not set:$missing" >&2
-            echo "Repository variables: infrastructure plus either complete VITE_OIDC_* or VITE_FIREBASE_* configuration" >&2
-            echo "Repository secrets:   CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL" >&2
+            echo "Repository variables: CLOUD_SQL_INSTANCE DATABASE_URL_SECRET HYPERDRIVE_ID MAIL_FROM WEB_ORIGIN, plus either complete VITE_OIDC_* or VITE_FIREBASE_*" >&2
+            echo "Repository secrets:   CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID GCP_WORKLOAD_IDENTITY_PROVIDER GCP_SERVICE_ACCOUNT" >&2
             exit 1
           fi
+
+      # The same suite CI runs, run again against the commit being deployed, so
+      # a deploy is never the first thing to find out.
+      - name: Test
+        run: npm test
+        working-directory: app
 
       # The provider's address and client id are compiled into the client, so
       # they are build inputs rather than runtime configuration. They are
@@ -122,19 +165,51 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+
+      # The database password is not a GitHub secret. It lives in Secret
+      # Manager, which is where the service reads it from as well, so there is
+      # one copy of it and this repository -- public -- never holds it.
+      # Fetched with the short-lived token from the step above.
+      #
+      # The stored URL names the Cloud SQL socket the Worker uses. Here the
+      # proxy is a TCP port on this runner, so the host is rewritten and the
+      # socket parameter dropped. Parsed rather than edited with sed: a
+      # password may contain the characters a pattern would split on.
+      - name: Read the database URL
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.migrate }}
+        env:
+          ACCESS_TOKEN: ${{ steps.gcp.outputs.access_token }}
+          DATABASE_URL_SECRET: ${{ vars.DATABASE_URL_SECRET }}
+        run: |
+          set -euo pipefail
+          encoded=$(curl -fsS \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            "https://secretmanager.googleapis.com/v1/${DATABASE_URL_SECRET}/versions/latest:access" \
+            | jq -r '.payload.data')
+          raw=$(printf '%s' "$encoded" | base64 --decode)
+          url=$(RAW="$raw" node -e 'const u = new URL(process.env.RAW); u.hostname = "127.0.0.1"; u.port = "5432"; u.search = ""; process.stdout.write(u.toString());')
+          # Masked before it is used, so no later command can print it by accident.
+          echo "::add-mask::${url}"
+          password=$(RAW="$raw" node -e 'process.stdout.write(decodeURIComponent(new URL(process.env.RAW).password));')
+          if [ -n "$password" ]; then echo "::add-mask::${password}"; fi
+          echo "DATABASE_URL=${url}" >> "$GITHUB_ENV"
 
       # The instance has no authorized networks, so it is not reachable from
       # the internet. The proxy connects through Google's own network with the
       # identity above rather than opening a port to let this runner in.
       - name: Open a Cloud SQL connection
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.migrate }}
+        env:
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
         run: |
+          set -eu
           curl -fsSL -o cloud-sql-proxy \
             "https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64"
           echo "e48115261929445f468ae7ae86be199781bafda56837c9f33644892df8d46997  cloud-sql-proxy" \
             | sha256sum --check --strict
           chmod +x cloud-sql-proxy
-          ./cloud-sql-proxy --port 5432 "${{ vars.CLOUD_SQL_INSTANCE }}" &
+          ./cloud-sql-proxy --port 5432 "$CLOUD_SQL_INSTANCE" &
           for _ in $(seq 1 30); do
             if nc -z 127.0.0.1 5432; then exit 0; fi
             sleep 1
@@ -142,12 +217,22 @@ jobs:
           echo "the Cloud SQL proxy never started listening" >&2
           exit 1
 
+      # Additive, one transaction per file, recorded with the checksum of the
+      # file that was applied. Applying twice does nothing the second time, and
+      # a file edited after the fact is refused rather than half-applied.
       - name: Apply migrations
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.migrate }}
         run: npm run db:migrate
         working-directory: app
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      # What the database actually is, checked before the Worker that depends
+      # on it goes out: nothing pending, nothing edited since it was applied,
+      # every table the store reads present. A failure here stops the deploy
+      # with production still serving the build it already had.
+      - name: Verify the schema
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.migrate }}
+        run: npm run db:verify
+        working-directory: app
 
       - name: Render deployment configuration
         run: npm run render:deploy-config
@@ -161,23 +246,67 @@ jobs:
           FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
 
-      # Deployed after the schema it expects is in place.
-      - name: Deploy the Worker
-        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: app
-          command: deploy --config wrangler.deploy.jsonc
-
-      - name: Check the deployment answers
+      # Which version is serving right now, so there is something exact to put
+      # back if the new one turns out not to work. The list is oldest first.
+      - id: serving
+        name: Note the version now serving
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: app
         run: |
+          set -euo pipefail
+          version=$(npx --yes "wrangler@${WRANGLER_VERSION}" deployments list \
+            --config wrangler.deploy.jsonc --json | jq -r '.[-1].versions[0].version_id // empty')
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "currently serving ${version:-nothing}"
+
+      # Deployed after the schema it expects is in place.
+      - id: deploy
+        name: Deploy the Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        working-directory: app
+        run: npx --yes "wrangler@${WRANGLER_VERSION}" deploy --config wrangler.deploy.jsonc
+
+      # Production has the last word. A Worker can deploy successfully and
+      # still answer with the previous index.html, which leaves a fix live at
+      # its own URL and invisible to everyone; verify-deploy compares what the
+      # origin serves against what was just built.
+      - name: Check the deployment answers
+        env:
+          WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
+        working-directory: app
+        run: |
+          set -eu
           for _ in $(seq 1 20); do
-            if curl -fsS --max-time 10 "${{ vars.WEB_ORIGIN }}/api/health" >/dev/null; then
-              curl -fsS --max-time 20 "${{ vars.WEB_ORIGIN }}/api/ready"
+            if curl -fsS --max-time 10 "${WEB_ORIGIN}/api/health" >/dev/null; then
+              curl -fsS --max-time 20 "${WEB_ORIGIN}/api/ready"
+              node scripts/verify-deploy.mjs "${WEB_ORIGIN}"
               exit 0
             fi
             sleep 3
           done
           echo "the deployment never answered a health check" >&2
           exit 1
+
+      # Only when this run is what changed production: a build or a migration
+      # that failed never reached it, and rolling back then would undo somebody
+      # else's deploy. The schema stays where it is, which is safe because a
+      # migration only ever added to it.
+      - name: Put the previous version back
+        if: ${{ failure() && steps.deploy.outcome == 'success' && steps.serving.outputs.version != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PREVIOUS: ${{ steps.serving.outputs.version }}
+          SHA: ${{ github.sha }}
+        working-directory: app
+        run: |
+          set -eu
+          npx --yes "wrangler@${WRANGLER_VERSION}" rollback "$PREVIOUS" \
+            --config wrangler.deploy.jsonc \
+            --message "deploy of ${SHA} did not answer; put ${PREVIOUS} back" \
+            --yes
+          echo "rolled back to ${PREVIOUS}" >&2
