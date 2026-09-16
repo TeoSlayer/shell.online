@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEEP, contrast, reskin, SLOT } from "./palette";
+import { STONE, contrast, reskin, SLOT } from "./palette";
 import {
   decodeSprite,
   frameAt,
@@ -13,7 +13,7 @@ import {
 const square: Sprite = {
   w: 2,
   h: 2,
-  palette: "keep",
+  palette: "stone",
   rows: [
     "0f",
     ".7",
@@ -37,26 +37,26 @@ describe("reading an authored sprite", () => {
 
 describe("decoding to pixels", () => {
   it("writes the palette colour for each slot", () => {
-    const pixels = decodeSprite(square, KEEP);
-    const red = Number.parseInt(KEEP[0].slice(1, 3), 16);
+    const pixels = decodeSprite(square, STONE);
+    const red = Number.parseInt(STONE[0].slice(1, 3), 16);
     expect(pixels[0]).toBe(red);
     expect(pixels[3]).toBe(255);
   });
 
   it("leaves transparent pixels fully clear", () => {
-    const pixels = decodeSprite(square, KEEP);
+    const pixels = decodeSprite(square, STONE);
     /* Row 1, column 0 is the '.' — its alpha byte is the fourth of that pixel. */
     const at = (1 * square.w + 0) * 4;
     expect(pixels[at + 3]).toBe(0);
   });
 
   it("produces exactly four bytes per pixel", () => {
-    expect(decodeSprite(square, KEEP)).toHaveLength(square.w * square.h * 4);
+    expect(decodeSprite(square, STONE)).toHaveLength(square.w * square.h * 4);
   });
 
   it("draws the same shape in a different palette, which is what a skin is", () => {
-    const skin = reskin(KEEP, { [SLOT.shadow]: "#ff0000" });
-    const original = decodeSprite(square, KEEP);
+    const skin = reskin(STONE, { [SLOT.shadow]: "#ff0000" });
+    const original = decodeSprite(square, STONE);
     const reskinned = decodeSprite(square, skin);
     /* The silhouette is identical... */
     expect(reskinned[3]).toBe(original[3]);
@@ -97,13 +97,13 @@ describe("catching an authoring mistake", () => {
   });
 
   it("refuses a sprite with no size at all", () => {
-    expect(spriteProblems("empty", { w: 0, h: 0, palette: "keep", rows: [] })).toHaveLength(1);
+    expect(spriteProblems("empty", { w: 0, h: 0, palette: "stone", rows: [] })).toHaveLength(1);
   });
 });
 
 describe("running an animation", () => {
   const walk: Animation = {
-    sprite: { w: 8, h: 2, palette: "keep", rows: ["01234567", "01234567"] },
+    sprite: { w: 8, h: 2, palette: "stone", rows: ["01234567", "01234567"] },
     frames: 4,
     fps: 8,
   };
@@ -140,7 +140,7 @@ describe("the colourblind palettes", () => {
      * icon and a word. This is the second line of defence, and a palette that
      * quietly stopped separating them would otherwise go unnoticed.
      */
-    expect(contrast(KEEP[SLOT.alarm], KEEP[SLOT.accentLit])).toBeGreaterThan(100);
+    expect(contrast(STONE[SLOT.alarm], STONE[SLOT.accentLit])).toBeGreaterThan(100);
   });
 
   it("measures no distance between a colour and itself", () => {

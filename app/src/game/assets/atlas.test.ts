@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { PROPS } from "./props";
 import { STRUCTURES } from "./structures";
-import { TERRAIN } from "./terrain";
-import { spriteProblems, type Sprite } from "./sprite";
+import { MEADOW, PAVING, ROAD, TERRAIN } from "./terrain";
+import { spriteProblems, TRANSPARENT, type Sprite } from "./sprite";
 
 /**
  * Every sprite in the game, checked for the mistakes hand-authoring makes.
@@ -15,6 +16,12 @@ const everySprite = (): [string, Sprite][] => {
   const entries: [string, Sprite][] = [];
   for (const [name, sprite] of Object.entries(TERRAIN)) {
     entries.push([`terrain.${name}`, sprite]);
+  }
+  MEADOW.forEach((sprite, index) => entries.push([`meadow.${index}`, sprite]));
+  PAVING.forEach((sprite, index) => entries.push([`paving.${index}`, sprite]));
+  ROAD.forEach((sprite, index) => entries.push([`road.${index}`, sprite]));
+  for (const [name, prop] of Object.entries(PROPS)) {
+    entries.push([`prop.${name}`, prop.sprite]);
   }
   for (const [name, art] of Object.entries(STRUCTURES)) {
     art.tiers.forEach((sprite, tier) => entries.push([`${name}.tier${tier + 1}`, sprite]));
@@ -52,6 +59,36 @@ describe("the atlas", () => {
   it("keeps the ground tiles square and tileable", () => {
     for (const [name, sprite] of Object.entries(TERRAIN)) {
       expect(sprite.w, `${name} is not square`).toBe(sprite.h);
+    }
+    for (const set of [MEADOW, PAVING, ROAD]) {
+      for (const sprite of set) expect(sprite.w).toBe(sprite.h);
+    }
+  });
+
+  it("leaves no hole in a ground tile", () => {
+    /*
+     * The ground is the bottom layer: a transparent pixel in it is a hole
+     * through to the page behind, which shows up as a single stray dark dot
+     * somewhere in a field of grass and is very hard to find by looking.
+     */
+    for (const [name, sprite] of Object.entries(TERRAIN)) {
+      const holes = sprite.rows.some((row) => row.includes(TRANSPARENT));
+      expect(holes, `${name} has a transparent pixel`).toBe(false);
+    }
+  });
+
+  it("gives every prop somewhere to stand", () => {
+    /*
+     * Props sit on whatever ground they land on, so they must have transparent
+     * edges. One drawn to the edge of its tile carries a square of the wrong
+     * surface around with it.
+     */
+    for (const [name, prop] of Object.entries(PROPS)) {
+      const { rows, h } = prop.sprite;
+      const solidEdge =
+        !rows[0]?.includes(TRANSPARENT) && !rows[h - 1]?.includes(TRANSPARENT);
+      expect(solidEdge, `${name} fills its whole tile`).toBe(false);
+      expect(prop.name).toBeTruthy();
     }
   });
 });

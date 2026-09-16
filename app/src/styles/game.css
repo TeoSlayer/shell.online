@@ -123,15 +123,30 @@
 /* ---- safe area -------------------------------------------------------- */
 
 /*
- * Televisions crop the edges. The field is allowed to bleed into that crop;
+ * Televisions crop the edges. The field is allowed to bleed into that crop --
+ * it is a view of a meadow and losing a strip of it costs nothing -- but
  * anything a player has to read is not, so it lives in here.
+ *
+ * Laid over the field rather than beside it, and transparent to the pointer
+ * except where there is actually a control, so a click meant for the ground
+ * does not land on an invisible box.
  */
 .keep-safe {
   display: flex;
-  height: 100%;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-hud);
   padding: var(--keep-safe);
   flex-direction: column;
+  justify-content: space-between;
   gap: var(--keep-space-2);
+  pointer-events: none;
+}
+
+.keep-safe button,
+.keep-safe a,
+.keep-safe input {
+  pointer-events: auto;
 }
 
 /* ---- pixel panels ----------------------------------------------------- */
@@ -155,30 +170,18 @@
 
 .keep-hud {
   display: flex;
-  z-index: var(--keep-z-hud);
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  justify-content: flex-end;
   gap: var(--keep-space-2);
   flex: none;
 }
 
-.keep-wordmark {
-  margin: 0;
-  color: var(--keep-elixir);
-  font-size: var(--keep-text-xl);
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  /*
-   * A hard outline, not a soft shadow. HUD text sits over whatever the field
-   * happens to be drawing, and a dark banner one second is a pale wall the
-   * next; the outline is what keeps it readable over both.
-   */
-  text-shadow:
-    2px 0 0 var(--keep-stone-dark),
-    -2px 0 0 var(--keep-stone-dark),
-    0 2px 0 var(--keep-stone-dark),
-    0 -2px 0 var(--keep-stone-dark);
+.keep-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: var(--keep-space-2);
+  flex: none;
 }
 
 /* ---- buttons ---------------------------------------------------------- */
@@ -225,22 +228,9 @@
 /* ---- field ------------------------------------------------------------ */
 
 .keep-field {
-  display: flex;
-  position: relative;
-  min-height: 0;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: var(--keep-space-2);
-  flex: 1;
-}
-
-.keep-field-placeholder {
-  margin: 0;
-  color: var(--keep-mist);
-  font-size: var(--keep-text-lg);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-field);
 }
 
 /* ---- button prompts --------------------------------------------------- */
@@ -600,21 +590,22 @@
 /* ---- canvas stage ----------------------------------------------------- */
 
 /*
- * The two canvases sit exactly on top of one another and are sized in whole
- * multiples of the design resolution, so the host centres a picture that is
- * usually smaller than it. Letterboxing on purpose: a crisp smaller image
- * beats a stretched larger one every time with art like this.
+ * The two canvases sit exactly on top of one another and cover the host
+ * completely. The backing store is a whole number of design pixels; stretching
+ * the element over the last sliver of the window is at most one scale factor
+ * and is invisible, where letterboxing would have been a black band somebody
+ * paid for a screen not to have.
  */
 .keep-stage {
   display: grid;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  place-items: center;
+  position: absolute;
+  inset: 0;
 }
 
 .keep-canvas {
   grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
   image-rendering: pixelated;
 }
 

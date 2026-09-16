@@ -17,9 +17,11 @@
  *   Colourblind palettes work everywhere at once. Widening the gap between two
  *   hues is an edit to one table, not to every sprite that used them.
  *
- * The ramps are the product's own colours from tokens.css, read as materials.
- * That is what stops the keep looking like a generic pixel game with our name
- * on it: the stone is the terminal, the parchment is the page.
+ * The world is warm: sandstone, terracotta, timber and amber, lit as if late
+ * in the afternoon. The screens set into the stone are amber CRT rather than
+ * green, which is both the warmer choice and the more period-accurate one —
+ * amber monochrome monitors were the other half of that history, and they let
+ * the keep stay a terminal without a cold green cast over everything.
  */
 
 /** Sixteen CSS colours. Index 0 is the darkest; see the slot map below. */
@@ -60,36 +62,44 @@ export const SLOT = {
   alarm: 15,
 } as const;
 
-/** Stone, moss and elixir: the keep itself and the ground it stands on. */
-export const KEEP: Palette = [
-  "#0d1009", "#1d201b", "#343a2e", "#4e5545",
-  "#6f7862", "#8d9382", "#c3c8b4", "#f3f1e9",
-  "#2b4a1f", "#4a7a2c", "#7fb03a", "#c8ff4d",
-  "#6b4418", "#a8762b", "#e8b44a", "#c2412c",
+/**
+ * Sandstone and terracotta: the keep and everything built of it.
+ *
+ * Five steps of stone rather than three, because detail at this size is
+ * shading. A wall with one highlight and one shadow reads as a rectangle; a
+ * wall with five steps reads as masonry.
+ */
+export const STONE: Palette = [
+  "#160f0c", "#2b1d16", "#463024", "#6a4a33",
+  "#8f6a45", "#b58d5f", "#d9b88a", "#f5e3c0",
+  "#5e2a16", "#94441f", "#c46b2a", "#f0a03c",
+  "#4a3a1e", "#7d6430", "#e8c65a", "#c0392b",
 ];
 
-/** The same materials lit by arcane blue, for anything the Arcanist touches. */
-export const ARCANE: Palette = [
-  "#080a12", "#161a2b", "#252c47", "#394465",
-  "#4f5d88", "#7b87ad", "#b4bdd8", "#eef1fb",
-  "#1a2a6b", "#2f47b0", "#4267f5", "#8fa6ff",
-  "#5a4a7a", "#8b6fb8", "#c9a7f0", "#e0575f",
+/** Grass, dirt and the worn path between them. */
+export const FIELD: Palette = [
+  "#141208", "#241f0e", "#343017", "#474620",
+  "#5b5c28", "#757334", "#938d48", "#bdb271",
+  "#4a3418", "#6b4a22", "#8d652f", "#b0854a",
+  "#3a2a14", "#5c4420", "#e8c65a", "#c0392b",
 ];
 
 /**
- * Corrupted scanlines: what the bugs are made of.
+ * What the bugs are made of.
  *
- * Deliberately the one palette that does not belong to the world. A bug should
- * look like something that got in rather than something that lives here.
+ * The one palette that does not belong here. Everything else in the keep is
+ * warm; a bug is cold, sickly and slightly luminous, so it reads as something
+ * that got in rather than something that lives here. That contrast is doing
+ * the same job an outline would, without costing a pixel.
  */
 export const GLITCH: Palette = [
-  "#0a0510", "#1d0f2b", "#331a47", "#4d2a66",
-  "#6b3d88", "#9159ad", "#bf86d4", "#f0d9ff",
-  "#5c0f4a", "#96197a", "#d426a6", "#ff6fd8",
-  "#3a2a0f", "#6b5520", "#b89a3a", "#ff4d4d",
+  "#04100c", "#0b2019", "#133228", "#1c4838",
+  "#266048", "#37805c", "#57a877", "#9fe0b4",
+  "#123b4a", "#1a5e6b", "#2a8f92", "#48d6c0",
+  "#2b1a3a", "#4a2d5e", "#7b4a9c", "#ff5e7a",
 ];
 
-export const PALETTES = { keep: KEEP, arcane: ARCANE, glitch: GLITCH } as const;
+export const PALETTES = { stone: STONE, field: FIELD, glitch: GLITCH } as const;
 export type PaletteName = keyof typeof PALETTES;
 
 /**
@@ -102,6 +112,28 @@ export type PaletteName = keyof typeof PALETTES;
 export function reskin(base: Palette, changes: Partial<Record<number, string>>): Palette {
   return base.map((colour, slot) => changes[slot] ?? colour) as unknown as Palette;
 }
+
+/**
+ * Every slot the same colour, which turns any sprite into its own silhouette.
+ *
+ * This is how things get shadows. Drawing the sprite again in flat dark, a few
+ * pixels down and to the right and at low opacity, costs one more blit and no
+ * new artwork — and it is the single biggest thing that stops a building
+ * looking like a sticker laid on the grass. Objects without shadows read as
+ * floating no matter how well they are drawn.
+ */
+export function silhouette(colour: string): Palette {
+  return Array.from({ length: 16 }, () => colour) as unknown as Palette;
+}
+
+/**
+ * The one shadow palette, shared.
+ *
+ * A module constant rather than a fresh array each call, because the renderer
+ * caches decoded sprites by palette identity: a new array every frame would
+ * decode every sprite on screen every frame and defeat the cache entirely.
+ */
+export const SHADOW = silhouette("#100a06");
 
 /**
  * How far apart two colours are, roughly as an eye sees it.

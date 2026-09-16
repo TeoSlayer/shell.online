@@ -1,10 +1,13 @@
 import { useEffect, useRef } from "react";
-import { pixelScale, startLoop } from "./loop";
+import { startLoop } from "./loop";
 
 export interface DrawContext {
   context: CanvasRenderingContext2D;
   /** Whole-number magnification from design pixels to screen pixels. */
   scale: number;
+  /** The visible field in design pixels — as much as this window can show. */
+  width: number;
+  height: number;
   /** Milliseconds since the stage was mounted; the clock animations read. */
   elapsedMs: number;
   /** True when the player has asked for stillness. Animations must obey it. */
@@ -12,19 +15,28 @@ export interface DrawContext {
 }
 
 /**
- * The design resolution everything is drawn against.
+ * How big a design pixel is drawn, chosen from the window.
  *
- * Sprites are authored for this, and the whole picture is then magnified by a
- * whole number to fill whatever window it finds itself in. Drawing at the
- * window's real size instead would mean a 4K display showing sprites four
- * times smaller rather than four times crisper, which is the opposite of what
- * anyone wants from pixel art.
+ * The camera looks down at the holding, so there is no fixed frame to fit
+ * inside: a wider window sees more ground rather than the same ground larger.
+ * What has to be decided is only how chunky a pixel should be, and that is a
+ * question about viewing distance — a phone held close wants a smaller factor
+ * than a monitor across a desk.
+ *
+ * Whole numbers only. At 2.37x some pixels are two screen pixels wide and some
+ * are three, and the eye reads that unevenness as blur however careful the art
+ * was.
  */
-export const DESIGN_WIDTH = 320;
-export const DESIGN_HEIGHT = 180;
+export function pixelScale(viewportWidth: number, viewportHeight: number): number {
+  const shortest = Math.min(viewportWidth, viewportHeight);
+  if (shortest <= 0) return 3;
+  /* Aim for roughly 22 tiles across the short side, then round to a whole number. */
+  const wanted = shortest / (16 * 22);
+  return Math.max(2, Math.min(6, Math.round(wanted)));
+}
 
 /**
- * Two stacked canvases and a loop that draws them.
+ * Two stacked canvases, filling the window, and a loop that draws them.
  *
  * The split is the whole optimisation. The ground and the buildings change
  * when somebody puts up a watchtower and at no other time, so they are drawn
@@ -49,7 +61,7 @@ export function Stage({
   const host = useRef<HTMLDivElement>(null);
   const staticCanvas = useRef<HTMLCanvasElement>(null);
   const frameCanvas = useRef<HTMLCanvasElement>(null);
-  const scale = useRef(1);
+  const view = useRef({ scale: 3, width: 0, height: 0 });
   /*
    * Through refs so a re-render with a new closure does not tear down the
    * loop. The loop is started once; what it calls is looked up each frame.
@@ -72,21 +84,20 @@ export function Stage({
 
     const size = () => {
       const bounds = element.getBoundingClientRect();
-      const next = pixelScale(bounds.width, bounds.height, DESIGN_WIDTH, DESIGN_HEIGHT);
-      scale.current = next;
-      const width = DESIGN_WIDTH * next;
-      const height = DESIGN_HEIGHT * next;
+      const scale = pixelScale(bounds.width, bounds.height);
+      /*
+       * The backing store is a whole number of design pixels, so nothing is
+       * ever drawn on a half. The element is then stretched by at most one
+       * scale factor of a pixel to cover the last sliver of the window, which
+       * is invisible and keeps the field edge-to-edge.
+       */
+      const width = Math.ceil(bounds.width / scale);
+      const height = Math.ceil(bounds.height / scale);
+      view.current = { scale, width, height };
+
       for (const canvas of [behind, front]) {
-        /*
-         * Sized in device pixels with no devicePixelRatio multiplier on top.
-         * The magnification above is already a whole number of real pixels;
-         * multiplying it again by a fractional ratio is what produces the
-         * uneven pixel widths that read as blur.
-         */
-        canvas.width = width;
-        canvas.height = height;
-        canvas.style.width = `${width}px`;
-        canvas.style.height = `${height}px`;
+        canvas.width = width * scale;
+        canvas.height = height * scale;
         const context = canvas.getContext("2d");
         if (context) context.imageSmoothingEnabled = false;
       }
@@ -100,7 +111,7 @@ export function Stage({
       context.clearRect(0, 0, behind.width, behind.height);
       drawStaticRef.current({
         context,
-        scale: scale.current,
+        ...view.current,
         elapsedMs: 0,
         motionless: motionlessRef.current,
       });
@@ -123,7 +134,7 @@ export function Stage({
         context.clearRect(0, 0, front.width, front.height);
         drawFrameRef.current({
           context,
-          scale: scale.current,
+          ...view.current,
           elapsedMs: performance.now() - started,
           motionless: motionlessRef.current,
         });
@@ -145,7 +156,8 @@ export function Stage({
     <div className="keep-stage" ref={host}>
       {/*
         * One accessible name for the pair. Two canvases is an implementation
-        * detail; announcing them separately would say the same scene twice.
+        * detail; announcing them separately would describe the same scene
+        * twice.
         */}
       <canvas ref={staticCanvas} className="keep-canvas" role="img" aria-label={label} />
       <canvas ref={frameCanvas} className="keep-canvas is-front" aria-hidden="true" />

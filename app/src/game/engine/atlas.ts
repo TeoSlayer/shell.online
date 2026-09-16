@@ -1,5 +1,5 @@
 import { decodeSprite, frameAt, frameOffset, paletteFor, type Animation, type Sprite } from "../assets/sprite";
-import type { Palette } from "../assets/palette";
+import { SHADOW, type Palette } from "../assets/palette";
 
 /**
  * Decoded sprites, kept for as long as the sprite itself is alive.
@@ -80,6 +80,33 @@ export function drawSprite(
     context.drawImage(canvas, left, top, width, height);
   }
   context.restore();
+}
+
+/**
+ * The same sprite as a flat dark shape, offset, under the thing itself.
+ *
+ * This is the cheapest large improvement available to a view from above. A
+ * building drawn straight onto the grass reads as a sticker; the same building
+ * with a shadow under it reads as standing on the ground, and the difference
+ * costs one extra blit of artwork that already exists.
+ *
+ * The offset is down and to the right for everything, so one light source is
+ * implied across the whole map. Shadows that disagree about where the sun is
+ * look worse than no shadows at all.
+ */
+export function drawShadow(
+  context: CanvasRenderingContext2D,
+  sprite: Sprite,
+  x: number,
+  y: number,
+  scale: number,
+  spread = 2,
+): void {
+  drawSprite(context, sprite, x + spread * scale, y + spread * scale, {
+    scale,
+    palette: SHADOW,
+    alpha: 0.32,
+  });
 }
 
 /** One frame of an animation, chosen from the time the caller is holding. */

@@ -62,3 +62,38 @@ export function still(frame: Frame, palette: Sprite["palette"]): Sprite {
     rows: [...frame],
   };
 }
+
+/**
+ * A frame turned a quarter turn clockwise.
+ *
+ * A map seen from above needs the same wall running north to south as well as
+ * east to west, and the same corner at all four orientations. Authoring each
+ * one separately is four chances to draw a slightly different wall; deriving
+ * them means the rampart is the same masonry whichever way it turns.
+ *
+ * Only correct for square frames, which is what every tile here is, so it says
+ * so rather than silently producing a sheared picture.
+ */
+export function rotate(frame: Frame): Frame {
+  const height = frame.length;
+  const width = frame[0]?.length ?? 0;
+  if (width !== height) {
+    throw new Error(`rotate needs a square frame, got ${width}x${height}`);
+  }
+  const rows: string[] = [];
+  for (let y = 0; y < height; y += 1) {
+    let row = "";
+    /* Reading up the source columns turns the picture clockwise. */
+    for (let x = 0; x < width; x += 1) row += frame[height - 1 - x]?.[y] ?? TRANSPARENT;
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** The same frame at all four orientations, clockwise from the one given. */
+export function turns(frame: Frame): [Frame, Frame, Frame, Frame] {
+  const east = rotate(frame);
+  const south = rotate(east);
+  const west = rotate(south);
+  return [frame, east, south, west];
+}

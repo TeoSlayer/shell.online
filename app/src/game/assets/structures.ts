@@ -1,242 +1,343 @@
-import { still, type Frame } from "./compose";
+import { still, turns, type Frame } from "./compose";
 import type { Sprite } from "./sprite";
 
 /**
- * The keep and the things you put up around it.
+ * The keep and the things you put up around it, seen from above.
  *
- * Terminal-punk rather than medieval: a watchtower is a cathode screen on a
- * stone plinth, the walls are cut from the same dark stone as the product's
- * terminal panel, and what glows is the prompt green. The vocabulary is
- * borrowed from every base-builder there has ever been -- towers, turrets,
- * walls -- and the material is ours.
+ * Terminal-punk rather than medieval: the lights set into the stone are amber
+ * cathode screens, and the keep's roof opens onto one. The vocabulary is
+ * borrowed from every base-builder there has ever been — ramparts, towers, a
+ * gate — and the material is ours.
+ *
+ * Detail at this size is shading, not more shapes. A wall with one highlight
+ * and one shadow reads as a rectangle; the same wall with five steps of stone,
+ * a lit outer edge, a shadowed inner one and courses picked out along the
+ * walkway reads as masonry. That is why the palette gives five stone tones
+ * rather than three, and why nearly every sprite here uses all of them.
  *
  * Palette slots, from palette.ts: 0-4 stone dark to lit, 5-7 pale, 8-11 the
- * green ramp, 12-14 timber and gold, 15 alarm.
+ * terracotta and amber ramp, 12-14 timber and gold, 15 alarm.
  */
+
+/* ---- Rampart ----------------------------------------------------------- */
+
+/*
+ * A stretch of wall running east to west, tiling seamlessly with itself.
+ *
+ * Read from the top: merlons along the outer edge, the parapet they stand on,
+ * the walkway with its flagging, the inner parapet, and merlons again. Both
+ * edges are crenellated because from above you can see both of them.
+ */
+const RAMPART_1: Frame = [
+  "444.444.444.444.",
+  "333.333.333.333.",
+  "222.222.222.222.",
+  "4444444444444444",
+  "3333333333333333",
+  "2222222222222222",
+  "2111111111111111",
+  "2122222222222221",
+  "2122222222222221",
+  "2111111111111111",
+  "2222222222222222",
+  "3333333333333333",
+  "4444444444444444",
+  "222.222.222.222.",
+  "333.333.333.333.",
+  "444.444.444.444.",
+];
+
+/* Tier II: the walkway is flagged and the merlons capped in dressed stone. */
+const RAMPART_2: Frame = [
+  "555.555.555.555.",
+  "444.444.444.444.",
+  "222.222.222.222.",
+  "5555555555555555",
+  "4444444444444444",
+  "2222222222222222",
+  "2133133133133131",
+  "2133133133133131",
+  "2111111111111111",
+  "2133133133133131",
+  "2222222222222222",
+  "4444444444444444",
+  "5555555555555555",
+  "222.222.222.222.",
+  "444.444.444.444.",
+  "555.555.555.555.",
+];
+
+/* Tier III: braziers burning along the walk, so the wall is lit at night. */
+const RAMPART_3: Frame = [
+  "666.666.666.666.",
+  "555.555.555.555.",
+  "222.222.222.222.",
+  "6666666666666666",
+  "5555555555555555",
+  "2222222222222222",
+  "2133133133133131",
+  "21b3313313b31331",
+  "21a3313313a31331",
+  "2111111111111111",
+  "2222222222222222",
+  "5555555555555555",
+  "6666666666666666",
+  "222.222.222.222.",
+  "555.555.555.555.",
+  "666.666.666.666.",
+];
+
+/*
+ * Where two stretches meet. Merlons wrap the outside of the turn and the
+ * inside is walkway, so a run of wall turns a corner without a seam.
+ */
+const CORNER_1: Frame = [
+  "444.444.444.4444",
+  "333.333.333.3334",
+  "222.222.222.2224",
+  "4444444444442224",
+  "3333333333332224",
+  "2222222222222224",
+  "2111111111111224",
+  "2122222222211224",
+  "2122222222211224",
+  "2122222222211224",
+  "2122222222211224",
+  "2122222222211224",
+  "2122222222211224",
+  "4432222222211224",
+  "4432222222211224",
+  "4442222222222224",
+];
+
+/*
+ * The way in. A timber gate under a stone arch with the road running through
+ * it, so the courtyard has somewhere a hero can actually walk out of.
+ */
+const GATE_1: Frame = [
+  "444.4444444.444.",
+  "333.4444444.333.",
+  "222.4444444.222.",
+  "4444444444444444",
+  "3334333333343333",
+  "2224dddddddd4222",
+  "2114dccccccd4111",
+  "2124dcaaaacd4222",
+  "2124dcaaaacd4222",
+  "2124dcaaaacd4222",
+  "2114dccccccd4111",
+  "2224dddddddd4222",
+  "3334333333343333",
+  "4444444444444444",
+  "222.4444444.222.",
+  "444.4444444.444.",
+];
 
 /* ---- Watchtower -------------------------------------------------------- */
 
 /*
- * A screen on a mast. Tier I is a salvaged monitor lashed to a post; the
- * higher tiers below give it a stone housing and a second aerial, so the
- * upgrade is legible from across the field at a glance rather than by reading
- * a number.
- */
-const WATCHTOWER_1: Frame = [
-  ".......44.......",
-  "......4444......",
-  "..111111111111..",
-  "..188888888881..",
-  "..1b8b8b8b8b81..",
-  "..188888888881..",
-  "..1b8b8b8b8b81..",
-  "..188888888881..",
-  "..1b8b8b8b8b81..",
-  "..188888888881..",
-  "..111111111111..",
-  "....11111111....",
-  "....13333331....",
-  "....13222331....",
-  "....13222331....",
-  "....13222331....",
-  "....13222331....",
-  "....13222331....",
-  "....13222331....",
-  "....11111111....",
-  "..144444444441..",
-  ".13333333333331.",
-  "1222222222222221",
-  "1111111111111111",
-];
-
-const WATCHTOWER_2: Frame = [
-  "...4..44..4.....",
-  "...44444444.....",
-  ".1111111111111..",
-  ".1bbbbbbbbbbb1..",
-  ".1b8b8b8b8b8b1..",
-  ".1bbbbbbbbbbb1..",
-  ".1b8b8b8b8b8b1..",
-  ".1bbbbbbbbbbb1..",
-  ".1b8b8b8b8b8b1..",
-  ".1bbbbbbbbbbb1..",
-  ".1111111111111..",
-  "...1111111111...",
-  "...1333333331...",
-  "...1322222331...",
-  "...1322dd2331...",
-  "...1322dd2331...",
-  "...1322222331...",
-  "...1322222331...",
-  "...1333333331...",
-  "...1111111111...",
-  ".14444444444441.",
-  "1333333333333331",
-  "1222222222222221",
-  "1111111111111111",
-];
-
-const WATCHTOWER_3: Frame = [
-  "..4..4444..4....",
-  "..44444444444...",
-  "111111111111111.",
-  "1bbbbbbbbbbbbb1.",
-  "1b8b8b8b8b8b8b1.",
-  "1bbbbbbbbbbbbb1.",
-  "1b8b8b8b8b8b8b1.",
-  "1bbbbbbbbbbbbb1.",
-  "1b8b8b8b8b8b8b1.",
-  "1bbbbbbbbbbbbb1.",
-  "111111111111111.",
-  "..1111111111111.",
-  "..1444444444441.",
-  "..1322eeee22331.",
-  "..1322eeee22331.",
-  "..1322eeee22331.",
-  "..1322222222221.",
-  "..1322222222331.",
-  "..1444444444441.",
-  "..1111111111111.",
-  "144444444444444.",
-  "1333333333333331",
-  "1222222222222221",
-  "1111111111111111",
-];
-
-/* ---- Wall -------------------------------------------------------------- */
-
-/*
- * A battlement, not a box. The first version of this was three grey rectangles
- * in a row and read as scenery rather than as defence; crenellations along the
- * top and a shadowed course through the middle are what make it obviously a
- * wall at sixteen pixels wide.
+ * A round tower from above: a ring of merlons, a walk inside it, and an amber
+ * screen at the middle that is the thing actually keeping watch.
  *
- * Long runs are built with repeat() rather than typed out. A row of fourteen
- * identical characters is a row nobody can proofread, and the one time it is
- * miscounted every pixel after it shifts.
+ * The tiers grow outward rather than upward, because upward is the one
+ * direction this camera cannot show. Tier II widens the base and adds a
+ * dressed rim; tier III mounts a turret on it.
  */
-const row = (edge: string, fill: string, width = 16) =>
-  edge + fill.repeat(width - 2) + edge;
-
-const WALL_1: Frame = [
-  "11..11..11..11..",
-  "1111111111111111",
-  row("1", "4"),
-  row("1", "3"),
-  "13222222222222 1".replace(" ", "3"),
-  "1322222222222231",
-  "1111111111111111",
-  "1322222222222231",
-  "1322222222222231",
-  row("1", "3"),
-  "1111111111111111",
+const TOWER_1: Frame = [
+  ".....444444.....",
+  "...4433333344...",
+  "..443222222344..",
+  ".44322111122344.",
+  ".43211122211234.",
+  "4432112222112344",
+  "4321122ab2211234",
+  "4321122bb2211234",
+  "4321122bb2211234",
+  "4321122ab2211234",
+  "4432112222112344",
+  ".43211122211234.",
+  ".44322111122344.",
+  "..443222222344..",
+  "...4433333344...",
+  ".....444444.....",
 ];
 
-const WALL_2: Frame = [
-  "11..11..11..11..",
-  "1141141141141141",
-  row("1", "4"),
-  row("1", "3"),
-  "1322222222222231",
-  "1322dd22dd222231",
-  "1111111111111111",
-  "1322222222222231",
-  "1322222222222231",
-  row("1", "3"),
-  "1111111111111111",
+/* Tier II: a dressed rim, a wider walk, and a brighter lamp. */
+const TOWER_2: Frame = [
+  "....55555555....",
+  "..554433334455..",
+  ".55443222234455.",
+  "5544322111223445",
+  "5443211222112344",
+  "5432112222112234",
+  "4321129ab9211234",
+  "432112abba211234",
+  "432112abba211234",
+  "4321129ab9211234",
+  "5432112222112234",
+  "5443211222112344",
+  "5544322111223445",
+  ".55443222234455.",
+  "..554433334455..",
+  "....55555555....",
 ];
 
-const WALL_3: Frame = [
-  "11..11..11..11..",
-  "11b11b11b11b11b1",
-  row("1", "4"),
-  row("1", "3"),
-  "1322eeee22eeee31",
-  "1322dd22dd222231",
-  "1111111111111111",
-  "1322222222222231",
-  "1322222222222231",
-  row("1", "4"),
-  "1111111111111111",
+/* Tier III: a turret mounted on the rim, and gold on the merlons. */
+const TOWER_3: Frame = [
+  "...66555555 66..".replace(" ", "5"),
+  ".66554444445566.",
+  "6655e33333e35566",
+  "6544322111223456",
+  "5443211222112345",
+  "5432112eee211234",
+  "432112eabae211 4".replace(" ", "3"),
+  "43211eabbbae1234",
+  "43211eabbbae1234",
+  "432112eabae211 4".replace(" ", "3"),
+  "5432112eee211234",
+  "5443211222112345",
+  "6544322111223456",
+  "6655e33333e35566",
+  ".66554444445566.",
+  "...665555556 66.".replace(" ", "5"),
 ];
 
 /* ---- The keep itself --------------------------------------------------- */
 
 /*
- * A fortified terminal, and the biggest thing on the field.
+ * The hall at the middle of the holding, and the biggest thing on the map.
  *
- * The first attempt was twenty-eight pixels of monitor and read as another
- * tower rather than as the place the whole game is about. This one is
- * thirty-two square, crenellated, and has a lit gate at the foot of it, so the
- * eye lands here first and the towers read as things arranged around it.
+ * A terracotta roof with a ridge running east to west, one lantern of amber
+ * glass opening out of the middle of it, and a timber porch on the south side.
+ * It reads as a building rather than as another tower because its roof has a
+ * direction, where the towers are radially symmetrical.
  *
- * The face is a prompt. That is the joke and the brand at the same time.
+ * Built by rule rather than typed out. Thirty-two rows of thirty-two
+ * characters is past what anyone can proofread, and the atlas test can only
+ * tell you that a row is wrong, not which pixel you meant.
  */
-const KEEP_WIDE = 32;
-/* Transparent margin, outer wall, then the interior the screen sits in. */
-const keepRow = (interior: string) => "...." + "13" + interior + "31" + "....";
-const screenRow = (glass: string) => keepRow("22" + glass + "22");
+/*
+ * Three tiles square. The first version was two, and on the field it read as
+ * one more tower rather than as the hall the whole holding is arranged around;
+ * the thing the eye should land on first has to be the biggest thing there.
+ */
+const KEEP_W = 48;
 
-const KEEP_1: Frame = [
-  "...." + "111..111..111..111..111." + "....",
-  "...." + "1".repeat(24) + "....",
-  "...." + "1" + "4".repeat(22) + "1" + "....",
-  "...." + "1" + "3".repeat(22) + "1" + "....",
-  keepRow("2".repeat(20)),
-  screenRow("1".repeat(16)),
-  screenRow("1" + "8".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "8".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "8".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "8".repeat(14) + "1"),
-  screenRow("1".repeat(16)),
-  keepRow("2".repeat(20)),
-  keepRow("2".repeat(20)),
-  "...." + "1" + "3".repeat(22) + "1" + "....",
-  ".." + "1" + "4".repeat(26) + "1" + "..",
-  ".." + "1" + "3".repeat(26) + "1" + "..",
-  ".." + "1" + "2".repeat(10) + "0".repeat(6) + "2".repeat(10) + "1" + "..",
-  ".." + "1" + "2".repeat(10) + "0bbbb0" + "2".repeat(10) + "1" + "..",
-  ".." + "1" + "2".repeat(10) + "0bbbb0" + "2".repeat(10) + "1" + "..",
-  ".." + "1" + "2".repeat(26) + "1" + "..",
-  "1" + "4".repeat(30) + "1",
-  "1" + "3".repeat(30) + "1",
-  "1" + "2".repeat(30) + "1",
-  "1".repeat(KEEP_WIDE),
-];
+/**
+ * The hall, built by rule.
+ *
+ * Forty-eight rows of forty-eight characters is far past what anyone can
+ * proofread, and the atlas test can only tell you that a row is the wrong
+ * width, not that you meant the ridge to be somewhere else.
+ *
+ * What makes it read as a building rather than a patterned rectangle is the
+ * roof having a *direction*. There is a ridge across the middle; the slope
+ * above it faces the light and is a step brighter, the slope below faces away
+ * and is a step darker, and both are laid in courses with the joints staggered
+ * between them. The eaves overhang into shadow on all four sides, and the
+ * south wall shows below the roofline with the door in it, so there is a front
+ * to the building and it faces the gate.
+ */
+function roofCourse(
+  y: number,
+  slope: "north" | "south",
+  width: number,
+): string {
+  /* Three-pixel courses: two of tile, one of the shadow under its lip. */
+  const step = y % 3;
+  const lit = slope === "north" ? "a" : "9";
+  const mid = slope === "north" ? "9" : "9";
+  const lip = slope === "north" ? "9" : "8";
+  const shift = (Math.floor(y / 3) % 2) * 2;
 
-/* Tier II: banners, a gold course, and lit windows along the base. */
-const KEEP_2: Frame = [
-  "..4." + "111..111..111..111..111." + ".4..",
-  "..4." + "1".repeat(24) + ".4..",
-  "..4." + "1" + "e".repeat(22) + "1" + ".4..",
-  "...." + "1" + "4".repeat(22) + "1" + "....",
-  keepRow("2".repeat(20)),
-  screenRow("1".repeat(16)),
-  screenRow("1" + "b".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "b".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "b".repeat(14) + "1"),
-  screenRow("1" + "b8".repeat(7) + "1"),
-  screenRow("1" + "b".repeat(14) + "1"),
-  screenRow("1".repeat(16)),
-  keepRow("2".repeat(20)),
-  keepRow("2" + "e".repeat(18) + "2"),
-  "...." + "1" + "3".repeat(22) + "1" + "....",
-  ".." + "1" + "e".repeat(26) + "1" + "..",
-  ".." + "1" + "3".repeat(26) + "1" + "..",
-  ".." + "1" + "2e2e2e2e22" + "0".repeat(6) + "22e2e2e2e2" + "1" + "..",
-  ".." + "1" + "2".repeat(10) + "0bbbb0" + "2".repeat(10) + "1" + "..",
-  ".." + "1" + "2".repeat(10) + "0bbbb0" + "2".repeat(10) + "1" + "..",
-  ".." + "1" + "2".repeat(26) + "1" + "..",
-  "1" + "e".repeat(30) + "1",
-  "1" + "3".repeat(30) + "1",
-  "1" + "2".repeat(30) + "1",
-  "1".repeat(KEEP_WIDE),
-];
+  let row = "";
+  for (let x = 0; x < width; x += 1) {
+    if (step === 2) row += lip;
+    else if ((x + shift) % 4 === 0) row += mid;
+    else row += step === 0 ? lit : lit;
+  }
+  return row;
+}
+
+function buildKeep(gold: boolean, lit: boolean): Frame {
+  const rows: string[] = [];
+  const W = KEEP_W;
+  /* The roof overhangs the walls by two pixels on each side. */
+  const roofW = W - 4;
+  const roof = (body: string) => "12" + body + "21";
+
+  /* Eaves: the dark lip of the roof, and the shadow it throws. */
+  rows.push("." + "1".repeat(W - 2) + ".");
+  rows.push(roof("8".repeat(roofW)));
+  rows.push(roof("8".repeat(roofW)));
+
+  /* The north slope, facing the light. */
+  const northRows = 17;
+  for (let y = 0; y < northRows; y += 1) {
+    let body = roofCourse(y, "north", roofW);
+    /*
+     * A chimney standing off the north slope, and a dormer with a light in it.
+     * Both are here rather than in a separate sprite because they have to sit
+     * inside the courses rather than on top of them.
+     */
+    if (y >= 3 && y <= 9) {
+      const chimney = y === 3 ? "3443" : y === 9 ? "1221" : "3223";
+      body = body.slice(0, 6) + chimney + body.slice(10);
+    }
+    if (y >= 8 && y <= 14) {
+      const glass = lit ? "e" : "b";
+      const dormer =
+        y === 8 ? "1111111111"
+        : y === 14 ? "1222222221"
+        : `12${glass.repeat(6)}21`;
+      const at = Math.floor((roofW - 10) / 2);
+      body = body.slice(0, at) + dormer + body.slice(at + 10);
+    }
+    rows.push(roof(body));
+  }
+
+  /* The ridge: capped tiles along the top of the roof. */
+  const cap = gold ? "e" : "4";
+  rows.push(roof("8".repeat(roofW)));
+  rows.push(roof(cap.repeat(roofW)));
+  rows.push(roof((gold ? "d" : "3").repeat(roofW)));
+  rows.push(roof("8".repeat(roofW)));
+
+  /* The south slope, facing away. */
+  const southRows = 14;
+  for (let y = 0; y < southRows; y += 1) {
+    rows.push(roof(roofCourse(y, "south", roofW)));
+  }
+
+  /* The eaves again, then the wall below them. */
+  rows.push(roof("8".repeat(roofW)));
+  rows.push("1" + "1".repeat(W - 2) + "1");
+
+  /*
+   * The south face: dressed stone, two lit windows, and the door, so the hall
+   * has a front and the front faces the gate.
+   */
+  const glass = lit ? "e" : "b";
+  const wall = (body: string) => "1" + body + "1";
+  const face = (middle: string) => {
+    const side = "4433".repeat(3);
+    return wall(side + middle + side.split("").reverse().join(""));
+  };
+  rows.push(wall("4".repeat(W - 2)));
+  const window = glass + glass;
+  const door = "cddc";
+  rows.push(face("3333" + window + "333" + door + "333" + window + "3333"));
+  rows.push(face("3333" + window + "333" + door + "333" + window + "3333"));
+  rows.push(face("3".repeat(9) + door + "3".repeat(9)));
+  rows.push(wall("3".repeat(W - 2)));
+  rows.push("1" + "2".repeat(W - 2) + "1");
+  rows.push("." + "1".repeat(W - 2) + ".");
+  return rows;
+}
+
+const KEEP_1: Frame = buildKeep(false, false);
+/* Tier II: a gilded ridge and every light in the place burning. */
+const KEEP_2: Frame = buildKeep(true, true);
 
 export interface StructureArt {
   /** One sprite per tier, lowest first. */
@@ -247,27 +348,58 @@ export interface StructureArt {
   blurb: string;
 }
 
+const stone = (frames: Frame[]): Sprite[] => frames.map((frame) => still(frame, "stone"));
+
+export const RAMPART: StructureArt = {
+  name: "Rampart",
+  blurb: "Slows what comes over the wall.",
+  tiers: stone([RAMPART_1, RAMPART_2, RAMPART_3]),
+};
+
+export const CORNER: StructureArt = {
+  name: "Corner",
+  blurb: "Where two stretches of wall meet.",
+  tiers: stone([CORNER_1]),
+};
+
+export const GATE: StructureArt = {
+  name: "Gate",
+  blurb: "The only way in, and the first thing they try.",
+  tiers: stone([GATE_1]),
+};
+
 export const WATCHTOWER: StructureArt = {
   name: "Watchtower",
   blurb: "Sees a wave coming before it arrives.",
-  tiers: [WATCHTOWER_1, WATCHTOWER_2, WATCHTOWER_3].map((frame) => still(frame, "keep")),
-};
-
-export const WALL: StructureArt = {
-  name: "Wall",
-  blurb: "Slows what gets through the gate.",
-  tiers: [WALL_1, WALL_2, WALL_3].map((frame) => still(frame, "keep")),
+  tiers: stone([TOWER_1, TOWER_2, TOWER_3]),
 };
 
 export const KEEP_CORE: StructureArt = {
   name: "The Keep",
   blurb: "Where the garrison musters.",
-  tiers: [KEEP_1, KEEP_2].map((frame) => still(frame, "keep")),
+  tiers: stone([KEEP_1, KEEP_2]),
 };
 
+/**
+ * The corner at all four orientations, clockwise from the one authored above.
+ *
+ * Derived rather than drawn four times, so every corner of a holding is the
+ * same masonry.
+ */
+export const CORNER_TURNS: Sprite[] = turns(CORNER_1).map((frame) => still(frame, "stone"));
+
+/** The rampart running north to south, from the east-to-west one. */
+export const RAMPART_VERTICAL: Sprite[] = [RAMPART_1, RAMPART_2, RAMPART_3].map((frame) =>
+  still(turns(frame)[1], "stone"),
+);
+
+export const GATE_VERTICAL: Sprite = still(turns(GATE_1)[1], "stone");
+
 export const STRUCTURES = {
+  rampart: RAMPART,
+  corner: CORNER,
+  gate: GATE,
   watchtower: WATCHTOWER,
-  wall: WALL,
   keep: KEEP_CORE,
 } as const;
 

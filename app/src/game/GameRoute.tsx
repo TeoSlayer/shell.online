@@ -119,12 +119,33 @@ export default function GameRoute() {
         style={style}
       >
         {/*
-          * Everything that must survive a television sits inside this. The
-          * field may bleed to the edges; the things you need to read may not.
+          * The field fills the window, edge to edge and under everything else.
+          * There is no title over it: the game is the picture, and a wordmark
+          * across the top of it is a browser tab's job.
+          */}
+        <main className="keep-field">
+          <Stage
+            label="The holding, seen from above: a walled courtyard with towers at its corners and the keep at its middle"
+            staticKey={`${base.ground}:${base.wallTier}:${base.keepTier}:${base.towerTier}`}
+            motionless={reducedMotion}
+            drawStatic={(draw) => drawField(draw, base)}
+            /*
+             * Nothing moves on the field yet: the heroes are the live
+             * sessions, and they arrive with the state layer. The front canvas
+             * is mounted and cleared each frame so that when they do, nothing
+             * about the loop has to change.
+             */
+            drawFrame={() => {}}
+          />
+        </main>
+
+        {/*
+          * Everything that must survive a television sits inside this, laid
+          * over the field rather than beside it. The picture may bleed into
+          * the crop; the things you need to read may not.
           */}
         <div className="keep-safe">
           <header className="keep-hud">
-            <h1 className="keep-wordmark">{KEEP_TITLE}</h1>
             <button
               type="button"
               className="keep-button keep-pause-button"
@@ -135,22 +156,9 @@ export default function GameRoute() {
             </button>
           </header>
 
-          <main className="keep-field">
-            <Stage
-              label="The keep and its walls, seen from the field"
-              staticKey={`${base.ground}:${base.placements.length}`}
-              motionless={reducedMotion}
-              drawStatic={(draw) => drawField(draw, base)}
-              /*
-               * Nothing moves on the field yet: the heroes are the live
-               * sessions, and they arrive with the state layer. The front
-               * canvas is mounted and cleared each frame so that when they do,
-               * nothing about the loop has to change.
-               */
-              drawFrame={() => {}}
-            />
+          <footer className="keep-foot">
             <Prompt action="pause" verb="open the menu" />
-          </main>
+          </footer>
         </div>
 
         {paused && <PauseMenu onResume={() => setPaused(false)} />}
