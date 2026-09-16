@@ -1,7 +1,7 @@
 import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
-import { buildWorld, homePosition, loadArt } from "./scene";
+import { buildWorld, homeView, loadArt } from "./scene";
 import { toTile } from "./iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, loadEffects, Smoke } from "./ambience";
@@ -118,8 +118,8 @@ export async function buildKeepScene(
   };
   app.stage.on("pointertap", onTap);
 
-  const home = homePosition();
-  viewport.setZoom(0.9, true);
+  const home = homeView(app.screen.width, app.screen.height);
+  viewport.setZoom(home.zoom, true);
   viewport.moveCenter(home.x, home.y);
 
   /*

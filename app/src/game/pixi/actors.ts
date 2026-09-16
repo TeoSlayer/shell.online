@@ -90,8 +90,14 @@ export class ActorLayer {
    * rather than at anybody in it.
    */
   zoomed(scale: number): void {
-    this.plateScale = Math.min(1.4, Math.max(0.6, 1 / scale));
-    this.platesShown = scale > 0.6;
+    this.plateScale = Math.min(1.7, Math.max(0.6, 1 / scale));
+    /*
+     * Shown at every zoom the wheel allows. An earlier version hid them below
+     * two thirds, which was a guess, and it turned out to be exactly the zoom
+     * the opening view needs to get all six holdings on screen -- so the first
+     * thing the game showed was a map with nobody named on it.
+     */
+    this.platesShown = scale > 0.44;
     for (const piece of this.pieces.values()) {
       if (!piece.plate) continue;
       piece.plate.scale.set(this.plateScale);

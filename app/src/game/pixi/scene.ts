@@ -227,9 +227,90 @@ export function buildWorld(art: Loaded): {
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */
-export function homePosition(): { x: number; y: number } {
-  const keep = GARRISONS[0];
-  return toScreen(keep.x, keep.y);
+export function homeView(screenWidth: number, screenHeight: number): {
+  x: number;
+  y: number;
+  zoom: number;
+} {
+  /*
+   * Every holding in frame, not just the one in the middle.
+   *
+   * Opening on the Keep at a comfortable zoom put Watchmen's Rise -- the
+   * holding that faces the Unmade, and so the only place anything is actually
+   * fighting -- about twenty pixels off the right edge. The first thing the
+   * game showed was therefore a quiet village, and the battle it is supposed
+   * to be about was happening where nobody could see it.
+   */
+  let left = Infinity;
+  let right = -Infinity;
+  let top = Infinity;
+  let bottom = -Infinity;
+
+  for (const garrison of GARRISONS) {
+    /* The corners of the holding, projected, so the apron is included too. */
+    for (const [x, y] of [
+      [garrison.x - garrison.radius, garrison.y - garrison.radius],
+      [garrison.x + garrison.radius, garrison.y - garrison.radius],
+      [garrison.x - garrison.radius, garrison.y + garrison.radius],
+      [garrison.x + garrison.radius, garrison.y + garrison.radius],
+    ]) {
+      const point = toScreen(x, y);
+      left = Math.min(left, point.x);
+      right = Math.max(right, point.x);
+      top = Math.min(top, point.y);
+      bottom = Math.max(bottom, point.y);
+    }
+  }
+
+  /*
+   * A holding's board stands above it, so the thing to fit on screen is taller
+   * than the thing just measured. Counted here, in world units, rather than as
+   * a bigger margin: a margin is screen space the view is kept out of, and
+   * this is part of the picture.
+   */
+  top -= 200;
+
+  /*
+   * The margins are not the same on all four sides, because what is in the way
+   * is not the same on all four sides.
+   *
+   * Above, the HUD strip lies over the view. To the sides, a wright's name
+   * board sticks out well past the holding it belongs to. Below there is only
+   * the one key prompt. Reserving the same margin everywhere and centring on
+   * the middle of the holdings put the northernmost garrison neatly behind the
+   * experience bar.
+   */
+  const TOP = 285;
+  const BOTTOM = 90;
+  const SIDE = 180;
+
+  const fit = Math.min(
+    (screenWidth - SIDE * 2) / (right - left),
+    (screenHeight - TOP - BOTTOM) / (bottom - top),
+  );
+
+  /* The same range the wheel is allowed; opening outside it would snap. */
+  /*
+   * The floor is not a matter of taste. Below it the world is shorter than the
+   * window, and pixi-viewport's clamp centres an underflowing world -- which
+   * quietly throws away the offset computed below, and puts the northernmost
+   * holding back behind the HUD. 2048 world units of map at 0.45 is 922
+   * pixels, which is taller than the tallest window this is laid out for.
+   */
+  const zoom = Math.min(1.1, Math.max(0.45, fit));
+
+  return {
+    x: (left + right) / 2,
+    /*
+     * Reserving space at the top only helps if the view is also moved out of
+     * it, and the camera moves the opposite way to the picture: to push the
+     * country *down* the screen, away from the HUD, the camera looks *higher*
+     * up the country. Half the difference between the margins, converted from
+     * screen pixels into world units by the zoom it is about to be shown at.
+     */
+    y: (top + bottom) / 2 - (TOP - BOTTOM) / 2 / zoom,
+    zoom,
+  };
 }
 
 export { TILE_W, TILE_H };
