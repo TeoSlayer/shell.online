@@ -9,7 +9,10 @@ import { motionReduced, optionsToStyle, readOptions, writeOptions, type GameOpti
 import { drawField, HOLDING, layout, STARTING_BASE } from "./scenes/field";
 import { drawLife } from "./scenes/life";
 import { drawWrights } from "./scenes/wrights";
-import { createWorld, DEMO_GARRISON, muster, tickWorld } from "./state/world";
+import { drawFoes, drawSites } from "./scenes/foes";
+import { createWorld, DEMO_GARRISON, muster, tickWorld, type Wright } from "./state/world";
+import { experienceFrom, fortification, marksEarnedTo, standing } from "./state/progress";
+import { Hud } from "./ui/Hud";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Prompt } from "./ui/Prompt";
 import "../styles/game.css";
@@ -59,10 +62,41 @@ export default function GameRoute() {
   const reducedMotion = motionReduced(options, systemReduced);
 
   /*
-   * The holding, which for now is the one everybody starts with. The state
-   * layer replaces this with the team's own saved base.
+   * What the garrison has done, read off the world a few times a second rather
+   * than every frame.
+   *
+   * The world changes thirty times a second and the HUD has four numbers on
+   * it; re-rendering React at frame rate to move a progress bar by a pixel is
+   * the sort of thing that makes a game feel heavy for no reason anybody can
+   * see. Twice a second is faster than anyone reads.
    */
-  const base = STARTING_BASE;
+  const [tally, setTally] = useState({ felled: 0, raised: 0, wrights: [] as Wright[] });
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTally({
+        felled: world.current.felled,
+        raised: world.current.raised,
+        /* Copied, so React sees a new array and the roster stays in step. */
+        wrights: [...world.current.wrights],
+      });
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  /*
+   * Experience from work that actually happened. Sessions and days come from
+   * the service once the state layer lands; until then the field's own tally
+   * is the honest part of it.
+   */
+  const rank = standing(experienceFrom({
+    felled: tally.felled,
+    raised: tally.raised,
+    sessions: 0,
+    days: 0,
+  }));
+
+  /* The holding is however fortified this level has earned. */
+  const base = { ...STARTING_BASE, ...fortification(rank.level) };
 
   /*
    * The world, in a ref rather than in state.
@@ -169,7 +203,9 @@ export default function GameRoute() {
               }
 
               drawLife(draw);
+              drawSites(draw, world.current);
               drawWrights(draw, world.current);
+              drawFoes(draw, world.current);
             }}
           />
         </main>
@@ -181,6 +217,16 @@ export default function GameRoute() {
           */}
         <div className="keep-safe">
           <header className="keep-hud">
+            <Hud
+              standing={rank}
+              marks={marksEarnedTo(rank.level)}
+              elixir={0}
+              gathering={false}
+              characterClass="claude-code"
+              wrights={tally.wrights}
+              demo
+              onOpenRoster={() => setPaused(true)}
+            />
             <button
               type="button"
               className="keep-button keep-pause-button"

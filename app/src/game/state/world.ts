@@ -37,12 +37,59 @@ export interface Wright {
   rest: number;
 }
 
+/** One of the Unmade, on its way in. */
+export interface Foe {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  facing: 1 | -1;
+  /** Ticks of flinch left, so a hit is visible as well as counted. */
+  hurt: number;
+}
+
+/** A number floating up off something that was just hit. */
+export interface Mark {
+  id: number;
+  text: string;
+  x: number;
+  y: number;
+  /** Counts down; the renderer uses it for the rise and the fade. */
+  life: number;
+  maxLife: number;
+  kind: "damage" | "gain";
+}
+
+/** Something being raised in the yard, by whoever is building a feature. */
+export interface Site {
+  id: string;
+  x: number;
+  y: number;
+  /** 0 to `total`; the stage drawn is derived from it. */
+  progress: number;
+  total: number;
+}
+
 export interface World {
   wrights: Wright[];
+  foes: Foe[];
+  sites: Site[];
+  marks: Mark[];
   /** The courtyard they may walk in, in tiles. */
   bounds: { left: number; top: number; right: number; bottom: number };
   /** Advances once per tick; animations read it so a pause freezes them. */
   clock: number;
+  /** Ticks until the next of the Unmade wanders in. */
+  nextSpawn: number;
+  /** Counts up, for ids that do not repeat. */
+  spawned: number;
+  /** Faults put down since the keep was opened. Feeds the stats. */
+  felled: number;
+  /** Structures finished since the keep was opened. */
+  raised: number;
 }
 
 /** Tiles per second. Slow: this is a garrison at work, not a race. */
@@ -54,7 +101,18 @@ const REST_MIN = 30;
 const REST_MAX = 150;
 
 export function createWorld(bounds: World["bounds"]): World {
-  return { wrights: [], bounds, clock: 0 };
+  return {
+    wrights: [],
+    foes: [],
+    sites: [],
+    marks: [],
+    bounds,
+    clock: 0,
+    nextSpawn: SPAWN_EVERY,
+    spawned: 0,
+    felled: 0,
+    raised: 0,
+  };
 }
 
 /**
@@ -166,6 +224,145 @@ export function dismiss(world: World, id: string): void {
   if (at >= 0) world.wrights.splice(at, 1);
 }
 
+/* ---- the Unmade --------------------------------------------------------- */
+
+/** Ticks between arrivals, while anybody is working on a fault. */
+const SPAWN_EVERY = 150;
+/** More than this on the field at once is a crowd nobody can read. */
+const MAX_FOES = 6;
+/** How close a wright has to be to swing, in tiles. */
+const REACH = 0.9;
+/** Ticks between blows. */
+const SWING_EVERY = 18;
+/** How long a hit shows, and how long a number floats. */
+const HURT_TICKS = 6;
+const MARK_TICKS = 40;
+
+const FOE_KINDS = [
+  { kind: "mite", hp: 3, speed: 1.1 },
+  { kind: "crawler", hp: 6, speed: 0.8 },
+  { kind: "heisenbug", hp: 9, speed: 0.6 },
+];
+
+/**
+ * Whether anything should be coming in at all.
+ *
+ * The Unmade arrive because somebody is fixing a fault, not on a timer of
+ * their own. A keep with nothing broken in it is a quiet keep, and that is the
+ * correct picture of an account whose sessions are all building.
+ */
+function underAttack(world: World): boolean {
+  return world.wrights.some((wright) => wright.work === "bug");
+}
+
+function spawnFoe(world: World): void {
+  const { left, top, right, bottom } = world.bounds;
+  world.spawned += 1;
+  const roll = noise(world.spawned * 977 + world.clock);
+  const choice = FOE_KINDS[Math.min(FOE_KINDS.length - 1, Math.floor(roll * FOE_KINDS.length))];
+
+  /*
+   * In over a wall rather than through the gate. The gate is the way the
+   * garrison comes and goes; things that are not supposed to be here should
+   * not be using the door.
+   */
+  const side = Math.floor(noise(world.spawned * 31) * 4);
+  const along = noise(world.spawned * 53);
+  const x = side === 0 ? left : side === 1 ? right : left + along * (right - left);
+  const y = side === 2 ? top : side === 3 ? bottom : top + along * (bottom - top);
+
+  world.foes.push({
+    id: `foe-${world.spawned}`,
+    kind: choice.kind,
+    x,
+    y,
+    hp: choice.hp,
+    maxHp: choice.hp,
+    speed: choice.speed,
+    facing: 1,
+    hurt: 0,
+  });
+}
+
+function addMark(world: World, text: string, x: number, y: number, kind: Mark["kind"]): void {
+  world.marks.push({
+    id: world.clock * 1000 + world.marks.length,
+    text,
+    x,
+    y,
+    life: MARK_TICKS,
+    maxLife: MARK_TICKS,
+    kind,
+  });
+}
+
+/** Ticks between hammer blows. Slower than a sword; a wall takes a while. */
+const HAMMER_EVERY = 24;
+/** How many blows a structure takes, over the three stages. */
+const BUILD_EFFORT = 18;
+
+/**
+ * The plot a wright is working on, claimed on first need.
+ *
+ * One site per builder rather than one shared site, because two sessions
+ * building different features are doing two different things and the field
+ * should say so. The plot is picked from the wright's own id, so the same
+ * session always returns to the same corner of the yard.
+ */
+function siteFor(world: World, wright: Wright): Site {
+  const existing = world.sites.find((site) => site.id === wright.id);
+  if (existing) return existing;
+
+  const { left, top, right, bottom } = world.bounds;
+  const seed = hashId(wright.id);
+  let x = left + noise(seed) * (right - left);
+  let y = top + noise(seed * 3) * (bottom - top);
+  /* Not on the hall, and not so close to it that the two overlap. */
+  for (let attempt = 0; attempt < 8 && insideKeep(world, x, y); attempt += 1) {
+    x = left + noise(seed + attempt * 41) * (right - left);
+    y = top + noise(seed * 3 + attempt * 59) * (bottom - top);
+  }
+
+  const site: Site = { id: wright.id, x, y, progress: 0, total: BUILD_EFFORT };
+  world.sites.push(site);
+  return site;
+}
+
+/** The nearest fault to a wright, or nothing when the field is clear. */
+function nearestFoe(world: World, wright: Wright): Foe | undefined {
+  let best: Foe | undefined;
+  let bestDistance = Infinity;
+  for (const foe of world.foes) {
+    const distance = Math.hypot(foe.x - wright.x, foe.y - wright.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = foe;
+    }
+  }
+  return best;
+}
+
+/**
+ * How hard a class hits.
+ *
+ * The differences are small and are there to make the classes legible on the
+ * field, not to make one of them correct to pick. Nobody chooses which session
+ * kind they are running to win a fight in a browser game, and a balance patch
+ * for something nobody chooses would be a strange thing to write.
+ */
+function blow(kind: string): number {
+  switch (kind) {
+    case "codex":
+      return 3;
+    case "openclaw":
+      return 2;
+    case "hermes":
+      return 1;
+    default:
+      return 2;
+  }
+}
+
 /**
  * One fixed step of the world.
  *
@@ -176,7 +373,118 @@ export function dismiss(world: World, id: string): void {
 export function tickWorld(world: World): void {
   world.clock += 1;
 
+  /* Arrivals, while there is a fault being worked on. */
+  if (underAttack(world) && world.foes.length < MAX_FOES) {
+    world.nextSpawn -= 1;
+    if (world.nextSpawn <= 0) {
+      world.nextSpawn = SPAWN_EVERY;
+      spawnFoe(world);
+    }
+  }
+
+  /* The Unmade make for the hall. */
+  const midX = (world.bounds.left + world.bounds.right) / 2;
+  const midY = (world.bounds.top + world.bounds.bottom) / 2;
+  for (const foe of world.foes) {
+    if (foe.hurt > 0) foe.hurt -= 1;
+    const dx = midX - foe.x;
+    const dy = midY - foe.y;
+    const distance = Math.hypot(dx, dy);
+    /*
+     * They stop at the hall rather than entering it, and nothing happens when
+     * they arrive. There is no losing here on purpose: the game is a picture of
+     * work that has already happened, and a keep that falls over because
+     * somebody closed their laptop would be a punishment for nothing.
+     */
+    if (distance > KEEP_HALF + 0.4) {
+      const step = foe.speed / (1000 / TICK_MS);
+      foe.x += (dx / distance) * step;
+      foe.y += (dy / distance) * step;
+      if (Math.abs(dx) > 0.05) foe.facing = dx > 0 ? 1 : -1;
+    }
+  }
+
+  /* Numbers rise and fade. */
+  for (const mark of world.marks) mark.life -= 1;
+  world.marks = world.marks.filter((mark) => mark.life > 0);
+
   for (const wright of world.wrights) {
+    /*
+     * A wright working a fault goes to the nearest one and swings at it.
+     * Everybody else wanders, which is what the yard looks like when the
+     * sessions running are building things rather than fixing them.
+     */
+    /*
+     * A wright building a feature claims a plot in the yard and works on it
+     * until it is standing. The stages are what make it worth watching; a
+     * structure that appeared finished in one step would be a number going up
+     * with a picture next to it.
+     */
+    if (wright.work === "feature") {
+      const site = siteFor(world, wright);
+      const dx = site.x - wright.x;
+      const dy = site.y - wright.y;
+      const distance = Math.hypot(dx, dy);
+
+      if (distance > REACH) {
+        const step = SPEED / (1000 / TICK_MS);
+        wright.x += (dx / distance) * step;
+        wright.y += (dy / distance) * step;
+        pushOutOfKeep(world, wright);
+        wright.moving = true;
+        if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+      } else {
+        wright.moving = false;
+        if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+        if ((world.clock + hashId(wright.id)) % HAMMER_EVERY === 0) {
+          site.progress += 1;
+          if (site.progress >= site.total) {
+            world.raised += 1;
+            addMark(world, "RAISED", site.x, site.y, "gain");
+            world.sites = world.sites.filter((other) => other.id !== site.id);
+          }
+        }
+      }
+      continue;
+    }
+
+    if (wright.work === "bug") {
+      const foe = nearestFoe(world, wright);
+      if (foe) {
+        const dx = foe.x - wright.x;
+        const dy = foe.y - wright.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance > REACH) {
+          const step = SPEED / (1000 / TICK_MS);
+          wright.x += (dx / distance) * step;
+          wright.y += (dy / distance) * step;
+          pushOutOfKeep(world, wright);
+          wright.moving = true;
+          if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+        } else {
+          wright.moving = false;
+          if (Math.abs(dx) > 0.05) wright.facing = dx > 0 ? 1 : -1;
+          /*
+           * Staggered by who is swinging, so two wrights on one fault do not
+           * land every blow on the same tick and read as one attacker.
+           */
+          if ((world.clock + hashId(wright.id)) % SWING_EVERY === 0) {
+            const damage = blow(wright.kind);
+            foe.hp -= damage;
+            foe.hurt = HURT_TICKS;
+            addMark(world, String(damage), foe.x, foe.y, "damage");
+            if (foe.hp <= 0) {
+              world.felled += 1;
+              world.foes = world.foes.filter((other) => other.id !== foe.id);
+            }
+          }
+        }
+        continue;
+      }
+      /* Nothing to fight; fall through and wander like everyone else. */
+    }
+
     if (!wright.moving) {
       wright.rest -= 1;
       if (wright.rest > 0) continue;

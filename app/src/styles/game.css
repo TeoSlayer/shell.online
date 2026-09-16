@@ -612,3 +612,214 @@
 .keep-canvas.is-front {
   pointer-events: none;
 }
+
+/* ---- HUD bar ---------------------------------------------------------- */
+
+/*
+ * The strip along the top: standing, purse, elixir, garrison.
+ *
+ * Wraps rather than shrinks. On a phone these become two rows of readable
+ * panels instead of four unreadable ones, which is the right trade when the
+ * alternative is text below the floor this file holds itself to.
+ */
+.keep-hud-bar {
+  display: flex;
+  flex-flow: row wrap;
+  align-items: stretch;
+  gap: var(--keep-space);
+  flex: 1;
+  min-width: 0;
+}
+
+.keep-hud-bar > .keep-panel {
+  display: flex;
+  padding: var(--keep-space) var(--keep-space-2);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-standing {
+  min-width: calc(260px * var(--keep-scale));
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: var(--keep-space) !important;
+}
+
+.keep-standing-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-sigil {
+  display: inline-flex;
+  width: calc(34px * var(--keep-scale));
+  height: calc(34px * var(--keep-scale));
+  border: 3px solid var(--keep-gold);
+  background: var(--keep-stone-dark);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.keep-standing-text,
+.keep-purse-text,
+.keep-roster-text,
+.keep-elixir-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.keep-standing-class {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-standing-level,
+.keep-purse-label,
+.keep-roster-detail,
+.keep-elixir-value {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- meters ----------------------------------------------------------- */
+
+.keep-meter {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--keep-space) / 2);
+}
+
+.keep-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--keep-space);
+}
+
+.keep-meter-label {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-meter-value {
+  font-size: var(--keep-text-sm);
+  font-weight: 700;
+}
+
+.keep-meter-of {
+  color: var(--keep-mist);
+  font-weight: 400;
+}
+
+.keep-meter-track {
+  height: calc(14px * var(--keep-scale));
+  border: 3px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 35%);
+  overflow: hidden;
+}
+
+.keep-meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--keep-gold);
+  transition: width var(--keep-normal) linear;
+}
+
+.keep-meter.is-elixir .keep-meter-fill {
+  background: var(--keep-elixir);
+}
+
+.keep-meter-detail {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- purse, elixir, roster -------------------------------------------- */
+
+.keep-coin {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-xl);
+}
+
+.keep-purse-value,
+.keep-roster-count,
+.keep-elixir-label {
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-elixir {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+/*
+ * The vial. A pixel vessel rather than a bar, because this is the one gauge
+ * that is not a game resource: it is real money, and it should not look like
+ * the experience bar next to it.
+ */
+.keep-vial {
+  display: block;
+  position: relative;
+  width: calc(18px * var(--keep-scale));
+  height: calc(34px * var(--keep-scale));
+  border: 3px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 40%);
+  box-shadow: inset 0 3px 0 0 var(--keep-stone-lit);
+  overflow: hidden;
+  flex: none;
+}
+
+.keep-vial-fill {
+  display: block;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--keep-elixir);
+  transition: height var(--keep-normal) linear;
+}
+
+.keep-elixir-label {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-roster-button {
+  border: 4px solid var(--keep-stone-dark);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.keep-roster-button:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-roster-count {
+  color: var(--keep-gold);
+}
+
+.keep-roster-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (width <= 900px) {
+  .keep-standing {
+    min-width: 100%;
+  }
+}

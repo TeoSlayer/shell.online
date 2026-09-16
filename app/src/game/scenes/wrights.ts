@@ -53,7 +53,12 @@ function drawPlate(draw: DrawContext, label: string, x: number, y: number): void
   const plateX = x - width / 2 - padding;
   const plateY = y + padding;
 
-  context.globalAlpha = 0.72;
+  /*
+   * Lighter than it was. Five plates at full strength dominated a field they
+   * are only meant to annotate; the roster in the HUD is where the whole list
+   * is read, and this is a label on a moving thing.
+   */
+  context.globalAlpha = 0.5;
   context.fillStyle = "#160f0c";
   context.fillRect(plateX, plateY, width + padding * 2, size + padding);
   context.globalAlpha = 1;
@@ -61,6 +66,7 @@ function drawPlate(draw: DrawContext, label: string, x: number, y: number): void
   context.lineWidth = Math.max(2, scale / 2);
   context.strokeStyle = "#160f0c";
   context.strokeText(label, x, plateY + padding / 2);
+  context.globalAlpha = 0.85;
   context.fillStyle = "#f5e3c0";
   context.fillText(label, x, plateY + padding / 2);
   context.restore();

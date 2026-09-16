@@ -404,3 +404,73 @@ export const STRUCTURES = {
 } as const;
 
 export type StructureName = keyof typeof STRUCTURES;
+
+/* ---- Under construction ------------------------------------------------- */
+
+/*
+ * What a feature looks like while a wright is raising it.
+ *
+ * Three stages: pegged out, framed, and roofed. The stages matter more than
+ * the artwork does — a structure that appears finished in one step gives the
+ * player nothing to watch, and watching something you already did turn into
+ * something standing is the whole of what this game offers.
+ */
+const SITE_1: Frame = [
+  "................",
+  "................",
+  "................",
+  "..c..........c..",
+  "..cc........cc..",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "..cc........cc..",
+  "..c..........c..",
+  "................",
+  "..2222222222222.",
+  ".22222222222222.",
+  "................",
+];
+
+const SITE_2: Frame = [
+  "................",
+  "..cccccccccccc..",
+  "..c1dddddddd1c..",
+  "..c1........1c..",
+  "..cc........cc..",
+  "..c1........1c..",
+  "..c1........1c..",
+  "..cc........cc..",
+  "..c1........1c..",
+  "..c1........1c..",
+  "..cc........cc..",
+  "..c1dddddddd1c..",
+  "..cccccccccccc..",
+  "..2222222222222.",
+  ".22222222222222.",
+  "................",
+];
+
+const SITE_3: Frame = [
+  "................",
+  "..999999999999..",
+  "..9aaaaaaaaaa9..",
+  "..9a88888888a9..",
+  "..9aaaaaaaaaa9..",
+  "..9a88888888a9..",
+  "..999999999999..",
+  "..cccccccccccc..",
+  "..c4444444444c..",
+  "..c433bb3334cc..",
+  "..c433bb333 cc..".replace(" ", "4"),
+  "..c4444444444c..",
+  "..cccccccccccc..",
+  "..2222222222222.",
+  ".22222222222222.",
+  "................",
+];
+
+/** The three stages of a build, in order. */
+export const BUILD_SITE: Sprite[] = [SITE_1, SITE_2, SITE_3].map((frame) => still(frame, "stone"));
