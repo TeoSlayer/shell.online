@@ -303,6 +303,8 @@ export function documentTarget(pathname: string, status: number, currentVersion:
 
 export function isDocumentNavigation(request: Request): boolean {
   if (request.method !== "GET") return false;
+  /* A browser fetching a page it guesses will be wanted has not shown it to anyone. */
+  if (request.headers.get("Sec-Purpose")?.includes("prefetch") || request.headers.get("Purpose") === "prefetch") return false;
   if (request.headers.get("Sec-Fetch-Dest") === "document") return true;
   return request.headers.get("Accept")?.toLowerCase().includes("text/html") ?? false;
 }
@@ -312,11 +314,26 @@ export function binaryDownloadTarget(pathname: string): string | null {
   return match ? `${match[1]}-${match[2]}` : null;
 }
 
+/**
+ * Crawlers, and monitors that say so, the site's own download checks among
+ * them: requests to count, never people. A monitor that says nothing looks
+ * like whatever library it used, which the tool pattern catches next.
+ */
+const CRAWLER_AGENT = /bot|crawler|spider|slurp|headless|preview|monitor|uptime|pingdom|statuscake|checkly|site24x7|synthetic|shell\.online-(?:downloads|install)-check/;
+
+/**
+ * Tools a person or a script runs: the CLI, curl and wget, PowerShell's web
+ * cmdlets, and the HTTP libraries scripts are written with. Not browsers,
+ * whatever else the agent string says; the default used to be "desktop",
+ * which made every Node script a person.
+ */
+const TOOL_AGENT = /^shell\/|curl|wget|powershell|\bnode\b|node-fetch|undici|go-http-client|python|\bjava\b|\bjava\/|okhttp|axios|libwww|httpie/;
+
 export function classifyDevice(userAgent: string, mobileHint: string | null = null): DeviceClass {
   const normalized = userAgent.toLowerCase();
   if (!normalized) return "unknown";
-  if (/bot|crawler|spider|slurp|headless|preview/.test(normalized)) return "bot";
-  if (/^shell\//.test(normalized) || /curl|wget/.test(normalized)) return "cli";
+  if (CRAWLER_AGENT.test(normalized)) return "bot";
+  if (TOOL_AGENT.test(normalized)) return "cli";
   if (mobileHint === "?1" || /iphone|ipod|android.+mobile|mobile.+android/.test(normalized)) {
     return "mobile";
   }
@@ -327,9 +344,11 @@ export function classifyDevice(userAgent: string, mobileHint: string | null = nu
 export function classifyClient(userAgent: string): string {
   const shellVersion = userAgent.match(/\bshell\/(\d{1,3}\.\d{1,3}\.\d{1,3})\b/i)?.[1];
   if (shellVersion) return `shell/${shellVersion}`;
-  if (/curl/i.test(userAgent)) return "curl";
-  if (/wget/i.test(userAgent)) return "wget";
-  if (/bot|crawler|spider|slurp|headless|preview/i.test(userAgent)) return "bot";
+  const normalized = userAgent.toLowerCase();
+  if (/curl/.test(normalized)) return "curl";
+  if (/wget/.test(normalized)) return "wget";
+  if (CRAWLER_AGENT.test(normalized)) return "bot";
+  if (TOOL_AGENT.test(normalized)) return "tool";
   return userAgent ? "web" : "unknown";
 }
 

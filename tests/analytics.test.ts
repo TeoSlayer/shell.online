@@ -61,6 +61,39 @@ describe("analytics", () => {
     });
   });
 
+  it("counts monitors as crawlers and HTTP libraries as tools, never as people", () => {
+    for (const agent of ["shell.online-downloads-check", "shell.online-install-check", "Better Uptime Bot", "Pingdom.com_bot", "Checkly/1.0", "Site24x7", "Datadog Synthetics"]) {
+      expect(classifyDevice(agent)).toBe("bot");
+      expect(classifyClient(agent)).toBe("bot");
+    }
+    for (const agent of [
+      "node",
+      "node-fetch/1.0",
+      "undici",
+      "Go-http-client/1.1",
+      "python-requests/2.31.0",
+      "Java/17.0.2",
+      "okhttp/4.12.0",
+      "axios/1.6.0",
+      "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.19045; en-US) PowerShell/7.4.1",
+      "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.19041.1",
+    ]) {
+      expect(classifyDevice(agent)).toBe("cli");
+      expect(classifyClient(agent)).toBe("tool");
+    }
+    expect(classifyDevice("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/129.0 Safari/537.36")).toBe("desktop");
+    expect(classifyDevice("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 Version/17.6 Safari/605.1.15")).toBe("desktop");
+    expect(classifyDevice("")).toBe("unknown");
+  });
+
+  it("does not count a page a browser fetched ahead of time", () => {
+    const headers = { Accept: "text/html", "Sec-Fetch-Dest": "document" };
+    expect(isDocumentNavigation(new Request("https://shell.online/", { headers }))).toBe(true);
+    expect(isDocumentNavigation(new Request("https://shell.online/", { headers: { ...headers, "Sec-Purpose": "prefetch" } }))).toBe(false);
+    expect(isDocumentNavigation(new Request("https://shell.online/", { headers: { ...headers, "Sec-Purpose": "prefetch;prerender" } }))).toBe(false);
+    expect(isDocumentNavigation(new Request("https://shell.online/", { headers: { ...headers, Purpose: "prefetch" } }))).toBe(false);
+  });
+
   it("reduces user agents and referrers to coarse categories", () => {
     expect(classifyDevice("shell/0.3.4")).toBe("cli");
     expect(classifyClient("shell/0.3.4")).toBe("shell/0.3.4");

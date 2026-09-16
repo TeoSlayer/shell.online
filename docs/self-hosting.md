@@ -89,3 +89,18 @@ Accounts are optional and do not participate in terminal transport. The app in
 PostgreSQL. OIDC requires an issuer and public client id together; leaving both
 unset keeps the Firebase flow. Its local Docker deployment is documented in
 [`app/README.md`](../app/README.md).
+
+Your own accounts would otherwise dominate the account figures: they are the
+most active accounts there are, and they were always going to use the product.
+`STATS_EXCLUDE` on the accounts app names them, and what they do in the app is
+counted apart from what customers do rather than shown. It is configuration
+rather than a list in the source because it names individual people:
+
+```sh
+npx wrangler secret put STATS_EXCLUDE   # example.com, @tools.example, someone@mail.example
+```
+
+An entry with a local part excludes that one address, and one without excludes
+the domain and its subdomains; a `+tag` is ignored on both sides. The dashboard
+says how many accounts were left out, so the figure can be checked rather than
+taken on trust. Unset, nobody is excluded.

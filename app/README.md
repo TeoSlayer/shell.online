@@ -60,6 +60,7 @@ The server uses:
 | `FEEDBACK_TO` | Optional address that feedback sent from the app is forwarded to |
 | `TRUST_PROXY` | Set to `1` only behind a trusted proxy |
 | `STATS_TOKEN` | Optional, 32+ characters: lets the relay's statistics dashboard read account counts and sign-up cohorts |
+| `STATS_EXCLUDE` | Optional: addresses and domains whose accounts are left out of every statistics figure, for your own team's accounts. Comma or space separated; an entry with a local part matches that address, one without matches the domain and its subdomains. The dashboard reports how many accounts it left out |
 
 See [`.env.example`](.env.example) for the complete development configuration.
 

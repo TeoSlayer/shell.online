@@ -952,7 +952,23 @@ for (const implementation of implementations) {
         expect((await store.membershipOf("uid-1"))?.lastSeenAt).toBe(noon + 2 * 60 * 60_000);
         await store.touchMembership("uid-1", noon + day);
         await store.touchMembership("nobody", noon);
-        expect(await store.accountActivity()).toEqual([{ joinedAt: 1000, days: [10 * day, 11 * day] }]);
+        expect(await store.accountActivity()).toEqual([
+          { joinedAt: 1000, days: [10 * day, 11 * day], internal: false },
+        ]);
+      });
+
+      it("tags our own accounts from the address, and hands back no address", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.touchMembership("uid-1", noon);
+        const asked: string[] = [];
+        const rows = await store.accountActivity((email) => {
+          asked.push(email);
+          return email.endsWith("@example.com");
+        });
+        expect(asked).toEqual(["ana@example.com"]);
+        expect(rows).toEqual([{ joinedAt: 1000, days: [10 * day], internal: true }]);
+        expect(JSON.stringify(rows)).not.toContain("example.com");
       });
 
       it("keeps the days through a membership rewrite and drops them with the account", async () => {
@@ -988,6 +1004,14 @@ for (const implementation of implementations) {
         ]);
         expect(await store.appEvents(11 * day)).toEqual([{ event: "command_sent", count: 1 }]);
         expect(await store.appEvents(12 * day)).toEqual([]);
+      });
+
+      it("counts what we did ourselves apart, and never reports it", async () => {
+        await store.recordAppEvent("machine_linked", noon, false);
+        await store.recordAppEvent("machine_linked", noon, true);
+        await store.recordAppEvent("machine_linked", noon, true);
+        await store.recordAppEvent("vault_created", noon, true);
+        expect(await store.appEvents(0)).toEqual([{ event: "machine_linked", count: 1 }]);
       });
 
       it("forgets counts older than the memory window when purging", async () => {

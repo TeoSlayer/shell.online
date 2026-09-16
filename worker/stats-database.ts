@@ -21,6 +21,7 @@ import {
   type PreviousPeriodRows,
   type RetentionRow,
   type StatsSnapshotRows,
+  type SurfaceSinceRow,
   type UniqueDayRow,
   type UniqueSummaryRow,
 } from "../shared/stats-snapshot";
@@ -136,6 +137,35 @@ export function initializeStatsSchema(sql: StatsSql): void {
     )
   `);
   sql.exec("CREATE INDEX IF NOT EXISTS visitors_last_day ON visitors(last_day)");
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS dashboard_marks (
+      name TEXT PRIMARY KEY,
+      value INTEGER NOT NULL
+    )
+  `);
+  migrateStatsData(sql);
+}
+
+/**
+ * The last day machines were keyed by address and user agent; since the day
+ * after, by address alone. A machine row from before cannot match the same
+ * machine seen after, so it would sit in the cohorts as a ghost that never
+ * came back.
+ */
+export const MACHINE_KEY_DAY = Date.UTC(2026, 8, 15);
+
+/**
+ * One-time repairs to what is stored, each done once and marked as done.
+ * The first drops the machine rows keyed the old way; a machine seen on the
+ * cut-over day itself is lost with them, a few hours of history against 120
+ * days of ghosts.
+ */
+export function migrateStatsData(sql: StatsSql): void {
+  const done = sql.exec<{ value: number }>("SELECT value FROM dashboard_marks WHERE name = 'machine_key'").toArray();
+  if (done.length > 0) return;
+  sql.exec("DELETE FROM visitor_days WHERE surface IN ('cli', 'install') AND day <= ?", MACHINE_KEY_DAY);
+  sql.exec("DELETE FROM visitors WHERE surface IN ('cli', 'install') AND last_day <= ?", MACHINE_KEY_DAY);
+  sql.exec("INSERT INTO dashboard_marks (name, value) VALUES ('machine_key', 1)", );
 }
 
 /** One event into its hour bucket, and its person into the day's visitors when it has one. */
@@ -228,6 +258,9 @@ export function collectStatsRows(
   const collectingSince = sql.exec<MinimumRow>("SELECT MIN(bucket) AS minimum FROM metric_hourly").one().minimum;
   /* Taken after the purge, so it is the earliest day people can still be counted from. */
   const uniquesSince = sql.exec<MinimumRow>("SELECT MIN(day) AS minimum FROM visitor_days").one().minimum;
+  const uniquesSinceBySurface = sql.exec<SurfaceSinceRow>(
+    "SELECT surface, MIN(day) AS minimum FROM visitor_days GROUP BY surface ORDER BY surface",
+  ).toArray();
   const rangeStart = statsRangeStart(range, now, collectingSince);
   /* Buckets are hours and events at most ten minutes ahead of this clock, so nothing sits past tomorrow. */
   const rangeEnd = now + DAY_MS;
@@ -255,13 +288,15 @@ export function collectStatsRows(
       ).toArray(),
     };
   }
+  /* The charts are about people, so crawlers stay out of them; the ledger keeps every request. */
   const trend = sql.exec<MetricTrendRow>(
     `SELECT bucket, event, SUM(count) AS count
     FROM metric_hourly
     WHERE bucket >= ?
-      AND event IN ('session_created', 'share_opened', 'collaboration_started', 'page_view')
+      AND event IN ('session_created', 'session_started', 'share_opened', 'collaboration_started', 'page_view', 'binary_download')
+      AND device != 'bot'
     GROUP BY bucket, event
-    ORDER BY bucket`,
+    ORDER BY bucket, event`,
     rangeStart,
   ).toArray();
   const live = sql.exec<LivePresenceRow>(
@@ -346,6 +381,7 @@ export function collectStatsRows(
       installConversion,
       uniquesConfigured,
       uniquesSince,
+      uniquesSinceBySurface,
     },
   };
 }

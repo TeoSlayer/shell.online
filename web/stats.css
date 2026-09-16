@@ -1949,40 +1949,6 @@ html.stats-document #app {
   line-height: 1.5;
 }
 
-.accounts-panel .kpi-row {
-  display: grid;
-  margin-bottom: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.accounts-panel .kpi-row span {
-  display: grid;
-  padding: 12px;
-  border: 1px solid rgb(150 170 207 / 9%);
-  border-radius: 12px;
-  background: rgb(12 17 26 / 45%);
-  gap: 4px;
-}
-
-.accounts-panel .kpi-row small {
-  color: var(--stats-muted);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.accounts-panel .kpi-row b {
-  color: var(--stats-ink);
-  font-size: 22px;
-  font-weight: 620;
-  font-variant-numeric: tabular-nums;
-}
-
-.accounts-panel .kpi-spark {
-  height: 34px;
-}
-
 .traffic-split.is-wide {
   flex-wrap: wrap;
 }
@@ -1995,19 +1961,6 @@ html.stats-document #app {
   .uniques-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
-
-.accounts-panel .kpi-spark svg {
-  display: block;
-  width: 100%;
-  height: 34px;
-}
-
-.accounts-panel .kpi-spark polyline {
-  fill: none;
-  stroke: #8eafff;
-  stroke-width: 1.5;
-  vector-effect: non-scaling-stroke;
 }
 
 .stats-content > .funnel-panel,
@@ -2115,3 +2068,57 @@ html.stats-document #app {
   font-size: 9px;
   font-weight: 500;
 }
+
+/* ---- Accounts ---- */
+
+/*
+ * The accounts block sits between the funnel and the traffic it came from,
+ * and is the one part of the page counting people exactly rather than by a
+ * keyed hash. It gets a heading of its own so the boundary is visible:
+ * everything under it is accounts until the next panel's header.
+ */
+.stats-section-head {
+  display: flex;
+  margin: 10px 2px -4px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stats-section-head h2 {
+  margin: 2px 0 0;
+  color: var(--stats-ink);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Four headline figures, where the page's other row has six. */
+.stats-kpis.accounts-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) {
+  .stats-kpis.accounts-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 340px) {
+  .stats-kpis.accounts-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+.accounts-events-panel {
+  padding: 20px 22px 18px;
+}
+
+/* Now the whole of its own panel, so it no longer hangs off what was above it. */
+.accounts-events-panel .accounts-events {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.kind-band .breakdown-list > div > i b { background: linear-gradient(90deg, #4a6a86, #8ec2dc); }

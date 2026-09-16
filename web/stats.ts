@@ -1,14 +1,18 @@
 import {
   INSTALL_CONVERSION_DAYS,
   STATS_RANGES,
+  type StatsAccounts,
+  type StatsAccountStats,
   type StatsBreakdownItem,
   type StatsRange,
   type StatsRetentionCohort,
   type StatsSeriesPoint,
   type StatsSnapshot,
+  type UniqueSurface,
 } from "../shared/stats";
-import { peopleCountedSince } from "../shared/stats-snapshot";
+import { DAY_MS, peopleCountedSince } from "../shared/stats-snapshot";
 import {
+  accountsInsight,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -23,12 +27,38 @@ import {
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import "./stats.css";
 
-type SeriesKey = "sessions" | "shares" | "collaborations" | "pageViews";
+type SeriesKey = "sessions" | "started" | "shares" | "collaborations" | "pageViews" | "installs";
 
 interface ChartSeries {
-  key: SeriesKey;
+  key: string;
   label: string;
   color: string;
+}
+
+/**
+ * One moment on a chart, and the value of each series at it.
+ *
+ * The trend the Worker sends is one shape; the accounts app's days are
+ * another, and both are drawn by the same code, so both are turned into this
+ * first rather than the chart learning about either of them.
+ */
+interface ChartPoint {
+  at: number;
+  values: Record<string, number>;
+}
+
+function trendPoints(trend: StatsSeriesPoint[]): ChartPoint[] {
+  return trend.map((point) => ({
+    at: point.at,
+    values: {
+      sessions: point.sessions,
+      started: point.started,
+      shares: point.shares,
+      collaborations: point.collaborations,
+      pageViews: point.pageViews,
+      installs: point.installs,
+    },
+  }));
 }
 
 const ACTIVITY_SERIES: ChartSeries[] = [
@@ -37,7 +67,7 @@ const ACTIVITY_SERIES: ChartSeries[] = [
   { key: "collaborations", label: "Collaborated", color: "#d7a6ff" },
 ];
 const TRAFFIC_SERIES: ChartSeries[] = [
-  { key: "pageViews", label: "Page views", color: "#9ab7e8" },
+  { key: "pageViews", label: "Page views by people", color: "#9ab7e8" },
 ];
 let activeDashboardCleanup: (() => void) | null = null;
 let statsRenderId = 0;
@@ -345,6 +375,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
   const previous = snapshot.previous;
   const rangeLabel = snapshot.range === "all" ? "all time" : `last ${snapshot.range}`;
   const priorLabel = snapshot.range === "all" ? "" : `the ${snapshot.range} before`;
+  const trend = trendPoints(snapshot.trend);
   const outcomes = snapshot.breakdowns.outcomes;
   const endedSessions = outcomes.reduce((sum, item) => sum + item.value, 0);
   const people = snapshot.uniques;
@@ -357,7 +388,8 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
    */
   const peopleSince = peopleCountedSince(people, snapshot.rangeStart);
   /* Plain text: renderKpi escapes its detail. */
-  const sinceNote = peopleSince === null ? "" : ` · counted since ${formatDay(peopleSince)}`;
+  const visitorsNote = peopleNote(snapshot, "site");
+  const machinesNote = peopleNote(snapshot, "cli");
   const totalViews = metrics.landingViews + metrics.docsViews;
   const otherViews = audiences.views.tools + audiences.views.unknown;
   const ctaByLink = snapshot.targets
@@ -390,9 +422,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       ${renderKpi(
         "Visitors",
         people.configured ? site.unique : "—",
-        people.configured
-          ? `${integerFormatter.format(site.new)} new · ${integerFormatter.format(site.returning)} returning${sinceNote}`
-          : "people are not counted yet",
+        people.configured ? visitorsNote : "people are not counted yet",
         snapshot.trend,
         "pageViews",
         "silver",
@@ -416,7 +446,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
           ? "no installer runs in this range"
           : `${formatPercent(ratio(figures.installs, figures.installerRuns))} of ${integerFormatter.format(figures.installerRuns)} installer run${figures.installerRuns === 1 ? "" : "s"}`,
         snapshot.trend,
-        "sessions",
+        "installs",
         "amber",
         delta(figures.installs, previous?.figures.installs),
       )}
@@ -424,10 +454,10 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         "Sessions started",
         figures.sessionsStarted,
         people.configured
-          ? `on ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"}, ${integerFormatter.format(cli.new)} new${sinceNote}`
+          ? `on ${integerFormatter.format(cli.unique)} machine${cli.unique === 1 ? "" : "s"} · ${machinesNote}`
           : `${integerFormatter.format(metrics.sessionsCreated)} created`,
         snapshot.trend,
-        "sessions",
+        "started",
         "violet",
         delta(figures.sessionsStarted, previous?.figures.sessionsStarted),
       )}
@@ -461,11 +491,13 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         <span class="panel-range">${escapeHtml(rangeLabel)}</span>
       </header>
       <p class="panel-insight">${escapeHtml(funnelInsight(snapshot))}</p>
-      ${renderFunnel(snapshot, peopleSince)}
+      ${renderFunnel(snapshot)}
       ${peopleSince === null ? "" : `<p class="cohort-empty">People have been counted since ${escapeHtml(formatDay(peopleSince))}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.</p>`}
       ${renderInstallConversion(snapshot)}
       ${renderUniquesStrip(snapshot)}
     </article>
+
+    ${renderAccounts(snapshot)}
 
     <section class="stats-wide-grid">
       <article class="stats-panel traffic-panel">
@@ -474,7 +506,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
           <strong>${integerFormatter.format(totalViews)} <small>views</small></strong>
         </header>
         <p class="panel-insight">${escapeHtml(trafficInsight(snapshot))}</p>
-        ${renderTimeChart("traffic", snapshot.trend, TRAFFIC_SERIES, snapshot.range, true)}
+        ${renderTimeChart("traffic", trend, TRAFFIC_SERIES, snapshot.trendStepMs, true)}
         <div class="traffic-split is-wide">
           <span class="split-people"><i></i>People <b>${integerFormatter.format(audiences.views.browsers)}</b></span>
           <span class="split-crawlers"><i></i>Crawlers <b>${integerFormatter.format(audiences.views.crawlers)}</b></span>
@@ -516,7 +548,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
           </div>
         </header>
         <p class="panel-insight">${escapeHtml(sessionsInsight(snapshot))}</p>
-        ${renderTimeChart("activity", snapshot.trend, ACTIVITY_SERIES, snapshot.range)}
+        ${renderTimeChart("activity", trend, ACTIVITY_SERIES, snapshot.trendStepMs)}
       </article>
 
       <article class="stats-panel outcomes-panel">
@@ -607,8 +639,6 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       )}
     </section>
 
-    ${renderAccounts(snapshot)}
-
     <details class="stats-panel raw-metrics">
       <summary><span><small>Complete event ledger</small>Every tracked aggregate, every audience</span><i></i></summary>
       <div class="metrics-table-wrap">
@@ -634,12 +664,14 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       <span>${snapshot.collectingSince ? `Collecting exact dashboard metrics since ${formatDate(snapshot.collectingSince)}.` : "Waiting for the first event."}</span>
       ${people.configured && people.since !== null ? `<span>Counting people since ${escapeHtml(formatDay(people.since, "long"))}.</span>` : ""}
       <span>Crawlers are requests whose user agent says so; they stay in the ledger and out of every figure about people.</span>
+      ${accountsExcludedNote(snapshot.accounts)}
       <span>People are keyed hashes of address and browser family, forgotten ${people.memoryDays} days after they were last seen; a person seen again after that counts as new.</span>
     </div>
   `;
 
-  bindChartInteraction(container.querySelector("#activity-chart"), snapshot.trend, ACTIVITY_SERIES);
-  bindChartInteraction(container.querySelector("#traffic-chart"), snapshot.trend, TRAFFIC_SERIES);
+  bindChartInteraction(container.querySelector("#activity-chart"), trend, ACTIVITY_SERIES, snapshot.trendStepMs);
+  bindChartInteraction(container.querySelector("#traffic-chart"), trend, TRAFFIC_SERIES, snapshot.trendStepMs);
+  bindChartInteraction(container.querySelector("#accounts-chart"), accountPoints(snapshot.accounts), ACCOUNT_SERIES, DAY_MS);
 }
 
 /** What is happening this minute, under the page title, so it is not mistaken for a range figure. */
@@ -690,11 +722,17 @@ function renderSparkline(values: number[]): string {
   return `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${points}"></polyline></svg>`;
 }
 
+/*
+ * `stepMs` is how much time one point covers, not which range is selected:
+ * the trend's step changes with the range, and the accounts chart is always a
+ * day whatever the range is. It decides whether an axis label and a tooltip
+ * name an hour or a day.
+ */
 function renderTimeChart(
   id: string,
-  points: StatsSeriesPoint[],
+  points: ChartPoint[],
   series: ChartSeries[],
-  range: StatsRange,
+  stepMs: number,
   compact = false,
 ): string {
   const width = 760;
@@ -702,12 +740,12 @@ function renderTimeChart(
   const top = 16;
   const bottom = compact ? 24 : 32;
   const usableHeight = height - top - bottom;
-  const maximum = Math.max(1, ...points.flatMap((point) => series.map((item) => point[item.key])));
+  const maximum = Math.max(1, ...points.flatMap((point) => series.map((item) => point.values[item.key] ?? 0)));
   const roundedMaximum = niceMaximum(maximum);
   const paths = series.map((item, index) => {
     const coordinates = points.map((point, pointIndex) => ({
       x: points.length <= 1 ? width / 2 : pointIndex * width / (points.length - 1),
-      y: top + usableHeight - point[item.key] / roundedMaximum * usableHeight,
+      y: top + usableHeight - (point.values[item.key] ?? 0) / roundedMaximum * usableHeight,
     }));
     const line = smoothPath(coordinates);
     const area = coordinates.length === 0
@@ -726,7 +764,7 @@ function renderTimeChart(
   const xLabels = axisLabelIndexes(points.length).map((index) => {
     const point = points[index];
     const x = points.length <= 1 ? width / 2 : index * width / (points.length - 1);
-    return `<text x="${x}" y="${height - 3}" text-anchor="${index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}">${point ? escapeHtml(formatChartTime(point.at, range)) : ""}</text>`;
+    return `<text x="${x}" y="${height - 3}" text-anchor="${index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}">${point ? escapeHtml(formatChartTime(point.at, stepMs)) : ""}</text>`;
   }).join("");
 
   return `
@@ -748,9 +786,16 @@ function renderTimeChart(
   `;
 }
 
-function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): string {
+/** Which surface a funnel step's people are counted on, for the day their count starts. */
+const STEP_SURFACES: Record<string, UniqueSurface> = { visited: "site", installer: "install", session: "cli", opened: "viewer" };
+
+function renderFunnel(snapshot: StatsSnapshot): string {
   const steps = snapshot.funnel;
-  const since = peopleSince === null ? "" : ` since ${escapeHtml(formatDay(peopleSince))}`;
+  const sinceFor = (key: string): string => {
+    const surface = STEP_SURFACES[key];
+    const since = surface === undefined ? null : peopleCountedSince(snapshot.uniques, snapshot.rangeStart, surface);
+    return since === null ? "" : ` since ${escapeHtml(formatDay(since))}`;
+  };
   const colors = ["#9ab7e8", "#8eafff", "#819de5", "#f4bd78", "#8eafff", "#75dac2", "#d7a6ff"];
   const maximum = Math.max(1, ...steps.map((step) => step.count));
   return `
@@ -771,7 +816,7 @@ function renderFunnel(snapshot: StatsSnapshot, peopleSince: number | null): stri
         return `
           <div class="funnel-step">
             <span>${escapeHtml(step.label)}</span>
-            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${since}</small>`}</b>
+            <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${sinceFor(step.key)}</small>`}</b>
             <div><i style="width:${width}%;--funnel:${colors[index % colors.length]}"></i></div>
             <em>${escapeHtml(share)}</em>
             ${excluded}
@@ -799,15 +844,30 @@ function renderInstallConversion(snapshot: StatsSnapshot): string {
   return `<p class="cohort-empty">${escapeHtml(verdict)} Machines are followed by address from the binary download to the first session.</p>`;
 }
 
+/*
+ * What to say beside a people figure. New means first seen since the range
+ * began, so until a whole range has passed since this surface's people were
+ * first counted, everyone is new and the split says nothing: name the day it
+ * starts to. The 24h range counts people by UTC day, which is two of them.
+ */
+function peopleNote(snapshot: StatsSnapshot, surface: UniqueSurface): string {
+  const count = snapshot.uniques.surfaces[surface];
+  const days = snapshot.range === "24h" ? " · by UTC day, so two days" : "";
+  const since = peopleCountedSince(snapshot.uniques, snapshot.rangeStart, surface);
+  if (since === null) return `${integerFormatter.format(count.new)} new · ${integerFormatter.format(count.returning)} returning${days}`;
+  const knownFrom = formatDay(since + (snapshot.generatedAt - snapshot.rangeStart));
+  return `counted since ${formatDay(since)}; new or returning cannot be told until ${knownFrom}${days}`;
+}
+
 function renderUniquesStrip(snapshot: StatsSnapshot): string {
   const people = snapshot.uniques;
-  const cell = (label: string, surface: keyof typeof people.surfaces): string => {
+  const cell = (label: string, surface: UniqueSurface): string => {
     const count = people.surfaces[surface];
     return `
       <span>
         <small>${escapeHtml(label)}</small>
         <b>${people.configured ? integerFormatter.format(count.unique) : "—"}</b>
-        <em>${people.configured ? `${integerFormatter.format(count.new)} new · ${integerFormatter.format(count.returning)} back` : "not counted"}</em>
+        <em>${people.configured ? escapeHtml(peopleNote(snapshot, surface)) : "not counted"}</em>
       </span>
     `;
   };
@@ -865,6 +925,16 @@ function renderCohorts(
   `;
 }
 
+/**
+ * Accounts: the one exact count of people on this page.
+ *
+ * Everything else here is inferred from requests -- a keyed hash is the best
+ * guess at a person that a page with no sign-in can make. An account is a
+ * person who gave us an address and came back to it, so this panel is read
+ * first and laid out to be read in one pass: how many there are and how that
+ * moved, then how many of them are actually using it, then a day-by-day line
+ * of both, then what they did and whether they stayed.
+ */
 function renderAccounts(snapshot: StatsSnapshot): string {
   const accounts = snapshot.accounts;
   if (accounts === null) return "";
@@ -877,22 +947,90 @@ function renderAccounts(snapshot: StatsSnapshot): string {
     `;
   }
   const rangeLabel = snapshot.range === "all" ? "all time" : `last ${snapshot.range}`;
+  const priorLabel = snapshot.range === "all" ? "" : `the ${snapshot.range} before`;
+  const previous = accounts.previous;
+  const points = accountPoints(accounts);
+  const signups = points.map((point) => point.values.signups);
+  const active = points.map((point) => point.values.active);
+  const stale = accounts.total - accounts.activeInRange;
   return `
-    <section class="stats-people-grid">
+    <header class="stats-section-head">
+      <div>
+        <span class="panel-kicker">The only exact count of people on this page</span>
+        <h2>Accounts</h2>
+      </div>
+      <span class="panel-range">${escapeHtml(rangeLabel)}</span>
+    </header>
+
+    <section class="stats-kpis accounts-kpis" aria-label="Account statistics">
+      ${renderAccountKpi(
+        "Accounts",
+        accounts.total,
+        accounts.newInRange === 0
+          ? `no new account in ${rangeLabel}`
+          : `${integerFormatter.format(accounts.newInRange)} signed up in ${rangeLabel}`,
+        signups,
+        "blue",
+        renderDelta(accounts.total, previous?.total ?? null, priorLabel),
+      )}
+      ${renderAccountKpi(
+        "Signed up",
+        accounts.newInRange,
+        snapshot.range === "all" ? "every account there is" : `in ${rangeLabel}`,
+        signups,
+        "green",
+        renderDelta(accounts.newInRange, previous?.newAccounts ?? null, priorLabel),
+      )}
+      ${renderAccountKpi(
+        "Used the app",
+        accounts.activeInRange,
+        accounts.total === 0
+          ? "no accounts yet"
+          : `${formatPercent(ratio(accounts.activeInRange, accounts.total))} of all accounts · ${integerFormatter.format(stale)} did not`,
+        active,
+        "violet",
+        renderDelta(accounts.activeInRange, previous?.active ?? null, priorLabel),
+      )}
+      ${renderAccountKpi(
+        "Came back",
+        accounts.returningInRange,
+        snapshot.range === "all"
+          ? "nothing comes before all time, so nothing here has come back to it"
+          : accounts.activeInRange === 0
+            ? "nobody used the app in this range"
+            : `${formatPercent(ratio(accounts.returningInRange, accounts.activeInRange))} of the accounts that used it had signed up earlier`,
+        active,
+        "pink",
+        renderDelta(accounts.returningInRange, previous?.returning ?? null, priorLabel),
+      )}
+    </section>
+
+    <section class="stats-wide-grid">
       <article class="stats-panel accounts-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">Exact, from the accounts app</span><h2>Accounts</h2></div>
+          <div><span class="panel-kicker">Sign-ups, and the accounts that opened it</span><h2>Day by day</h2></div>
+          <div class="chart-legend">
+            ${ACCOUNT_SERIES.map((series) => `<span><i style="--legend:${series.color}"></i>${series.label}</span>`).join("")}
+          </div>
+        </header>
+        <p class="panel-insight">${escapeHtml(accountsInsight(accounts, rangeLabel))}</p>
+        ${points.length === 0
+          ? '<p class="cohort-empty">No account has signed up yet.</p>'
+          : renderTimeChart("accounts", points, ACCOUNT_SERIES, DAY_MS)}
+        <p class="cohort-empty">Every day since the first account, whatever range is chosen above: accounts arrive a few a day, and a day is the smallest step that says anything. A day counts an account as active if it signed up or made a request that day.${accountsSinceNote(accounts)}</p>
+      </article>
+
+      <article class="stats-panel accounts-events-panel">
+        <header class="panel-heading">
+          <div><span class="panel-kicker">What they did</span><h2>In the app</h2></div>
           <span class="panel-range">${escapeHtml(rangeLabel)}</span>
         </header>
-        <div class="kpi-row">
-          <span><small>Accounts</small><b>${integerFormatter.format(accounts.total)}</b></span>
-          <span><small>New</small><b>${integerFormatter.format(accounts.newInRange)}</b></span>
-          <span><small>Active</small><b>${integerFormatter.format(accounts.activeInRange)}</b></span>
-        </div>
-        <div class="kpi-spark">${renderSparkline(accounts.newByDay.map((point) => point.count))}</div>
-        <p class="cohort-empty">New accounts per day. Active means the account used the app in the range.</p>
         ${renderAccountEvents(accounts.events)}
       </article>
+    </section>
+
+    <section class="stats-people-grid">
+      ${renderEngagement(accounts)}
       ${renderCohorts(
         "Accounts that came back",
         "Accounts by the week they signed up",
@@ -902,6 +1040,91 @@ function renderAccounts(snapshot: StatsSnapshot): string {
         "No account has signed up in these weeks yet.",
       )}
     </section>
+  `;
+}
+
+/** The footer line that makes the exclusion visible wherever the reader stops. */
+function accountsExcludedNote(accounts: StatsAccounts): string {
+  if (accounts === null || "error" in accounts || accounts.excluded === 0) return "";
+  return `<span>${integerFormatter.format(accounts.excluded)} of our own account${accounts.excluded === 1 ? " is" : "s are"} left out of every account figure, along with everything ${accounts.excluded === 1 ? "it" : "they"} did in the app. Set by <code>STATS_EXCLUDE</code> on the accounts app.</span>`;
+}
+
+/*
+ * Used first, signed up second. An account is active on the day it signs up,
+ * so the first line is never below the second: drawn this way the filled area
+ * belongs to the larger of the two and neither line hides the other.
+ */
+const ACCOUNT_SERIES: ChartSeries[] = [
+  { key: "active", label: "Used the app", color: "#8eafff" },
+  { key: "signups", label: "Signed up", color: "#75dac2" },
+];
+
+/**
+ * The account days as chart points, trimmed to start at the first day
+ * anything happened. The app sends a fixed window of days whatever the range,
+ * and a product ten days old would otherwise be drawn as eighty days of zero.
+ */
+function accountPoints(accounts: StatsAccounts): ChartPoint[] {
+  if (accounts === null || "error" in accounts) return [];
+  const active = new Map(accounts.activeByDay.map((point) => [point.day, point.count]));
+  const points = accounts.newByDay.map((point) => ({
+    at: point.day,
+    values: { signups: point.count, active: active.get(point.day) ?? 0 },
+  }));
+  const first = points.findIndex((point) => point.values.signups > 0 || point.values.active > 0);
+  return first === -1 ? [] : points.slice(first);
+}
+
+/** Says when the app started recording days, where that is younger than the accounts. */
+function accountsSinceNote(accounts: StatsAccountStats): string {
+  if (accounts.activeSince === null) return "";
+  return ` Days have been recorded since ${formatDay(accounts.activeSince, "long")}; before that an account is only counted active on the day it signed up.`;
+}
+
+/**
+ * How deeply accounts use the app: not how many came, but how many days each
+ * of them has been in it. The bands are always all four, zeros included --
+ * the shape of the distribution is the point, and hiding the empty end of it
+ * would make one busy band look like the whole picture.
+ */
+function renderEngagement(accounts: StatsAccountStats): string {
+  const maximum = Math.max(1, ...accounts.engagement.map((bucket) => bucket.value));
+  return `
+    <article class="stats-panel breakdown-panel kind-band">
+      <header class="panel-heading">
+        <div><span class="panel-kicker">Accounts by the days they have been in the app</span><h2>How much they use it</h2></div>
+        <strong>${integerFormatter.format(accounts.engagementBase)}</strong>
+      </header>
+      <div class="breakdown-list">
+        ${accounts.engagementBase === 0
+          ? "<em>No account has signed up since days started being recorded.</em>"
+          : accounts.engagement.map((bucket) => `
+            <div>
+              <span>${escapeHtml(humanize(bucket.label))}</span>
+              <i><b style="width:${Math.max(2, bucket.value / maximum * 100)}%"></b></i>
+              <strong>${integerFormatter.format(bucket.value)}</strong>
+            </div>
+          `).join("")}
+      </div>
+      <p class="cohort-empty">Over the accounts that signed up since days started being recorded. An older account is missing the days before that and would read here as one that never came back, so it is left out rather than counted against the product.</p>
+    </article>
+  `;
+}
+
+function renderAccountKpi(
+  label: string,
+  value: number,
+  detail: string,
+  values: number[],
+  tone: string,
+  delta: string,
+): string {
+  return `
+    <article class="kpi-card tone-${tone}">
+      <div><span>${escapeHtml(label)}</span><strong>${integerFormatter.format(value)}${delta}</strong></div>
+      <div class="kpi-spark">${renderSparkline(values)}</div>
+      <small>${escapeHtml(detail)}</small>
+    </article>
   `;
 }
 
@@ -944,13 +1167,14 @@ function renderDonut(items: StatsBreakdownItem[]): string {
 /**
  * What accounts did, in the order the product hopes for: link a machine,
  * register a session, send it a command. Counts of things done, not of
- * accounts, since the app sends no identifiers with them.
+ * accounts, since the app sends no identifiers with them -- and only what
+ * customers did: the app counts our own separately and never sends it.
  */
 function renderAccountEvents(events: Record<string, number>): string {
   const order = ["machine_linked", "session_registered", "command_sent", "vault_created", "invite_created", "invite_accepted", "feedback_sent"];
   const items = order.filter((key) => (events[key] ?? 0) > 0).map((key) => ({ label: key, value: events[key] }));
   if (items.length === 0) {
-    return '<p class="cohort-empty">Nothing done in the app in this range yet: no machine linked, session registered, command sent, vault created, invite, or feedback.</p>';
+    return '<p class="cohort-empty">Nothing done in the app in this range: no machine linked, session registered, command sent, vault created, invite, or feedback. What we did ourselves is counted apart and never shown here.</p>';
   }
   const maximum = Math.max(1, ...items.map((item) => item.value));
   return `
@@ -963,7 +1187,7 @@ function renderAccountEvents(events: Record<string, number>): string {
         </div>
       `).join("")}
     </div>
-    <p class="cohort-empty">Things done, not distinct accounts: one account linking three machines counts three times.</p>
+    <p class="cohort-empty">Things done, not distinct accounts: one account linking three machines counts three times. What we did ourselves is counted apart and never shown here.</p>
   `;
 }
 
@@ -1024,8 +1248,9 @@ function renderBreakdown(
 
 function bindChartInteraction(
   element: Element | null,
-  points: StatsSeriesPoint[],
+  points: ChartPoint[],
   series: ChartSeries[],
+  stepMs: number,
 ): void {
   if (!(element instanceof HTMLElement) || points.length === 0) return;
   const tooltip = element.querySelector<HTMLElement>(".chart-tooltip");
@@ -1040,8 +1265,8 @@ function bindChartInteraction(
     guide.style.left = `${left}%`;
     tooltip.style.left = `${left}%`;
     tooltip.innerHTML = `
-      <time>${escapeHtml(formatTooltipTime(point.at))}</time>
-      ${series.map((item) => `<span><i style="--legend:${item.color}"></i>${item.label}<b>${integerFormatter.format(point[item.key])}</b></span>`).join("")}
+      <time>${escapeHtml(formatTooltipTime(point.at, stepMs))}</time>
+      ${series.map((item) => `<span><i style="--legend:${item.color}"></i>${item.label}<b>${integerFormatter.format(point.values[item.key] ?? 0)}</b></span>`).join("")}
     `;
     element.classList.add("hovering");
   };
@@ -1089,13 +1314,19 @@ function renderSkeleton(): string {
   `;
 }
 
-function formatChartTime(at: number, range: StatsRange): string {
+function formatChartTime(at: number, stepMs: number): string {
   const date = new Date(at);
-  if (range === "24h") return date.toLocaleTimeString([], { hour: "numeric" });
+  if (stepMs < DAY_MS) return date.toLocaleTimeString([], { hour: "numeric" });
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-function formatTooltipTime(at: number): string {
+/*
+ * The hour is only meaningful where a point covers less than a day. A point
+ * that covers a whole UTC day is named as that day: a local time on it would
+ * put it in the wrong one for most of the world.
+ */
+function formatTooltipTime(at: number, stepMs: number): string {
+  if (stepMs >= DAY_MS) return `${formatDay(at, "long")} UTC`;
   return new Date(at).toLocaleString([], {
     month: "short",
     day: "numeric",

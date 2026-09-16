@@ -1,3 +1,4 @@
+import { parseExcludedAccounts } from "./internal-accounts";
 import type { IssuerSettings } from "./oidc-token";
 
 /**
@@ -65,6 +66,12 @@ export interface Config {
    * figures. Absent means that route does not exist.
    */
   statsToken?: string;
+  /**
+   * Accounts the statistics dashboard leaves out of every figure: ours, not
+   * customers'. Addresses and domains, read from STATS_EXCLUDE; see
+   * internal-accounts.ts for why it is configuration rather than source.
+   */
+  excludedAccounts: string[];
 }
 
 export class ConfigError extends Error {}
@@ -260,5 +267,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     statsToken,
+    excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
   };
 }

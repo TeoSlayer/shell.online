@@ -33,10 +33,16 @@ export interface StatsInstallConversion {
 
 export interface StatsSeriesPoint {
   at: number;
+  /** Sessions created. */
   sessions: number;
+  /** Sessions whose host connected. */
+  started: number;
   shares: number;
   collaborations: number;
+  /** Landing and documentation views, crawlers left out. */
   pageViews: number;
+  /** Release binaries served, crawlers left out. */
+  installs: number;
 }
 
 export interface StatsBreakdownItem {
@@ -61,6 +67,13 @@ export interface StatsUniqueCount {
   new: number;
   /** Of those, seen before the range began. */
   returning: number;
+  /**
+   * Midnight UTC of the earliest day this surface's people were counted, or
+   * null. Surfaces start on different days: machines were re-keyed after
+   * visitors were first counted, so a "new" machine and a "new" visitor are
+   * measured from different starts.
+   */
+  since: number | null;
 }
 
 export interface StatsUniqueDay {
@@ -192,12 +205,44 @@ export interface StatsRetention {
   cli: StatsRetentionCohort[];
 }
 
-/** Aggregates the accounts app answers with, when the dashboard is linked to it. */
+/** The account counts over one period, so a range can be read against the one before it. */
+export interface StatsAccountPeriod {
+  total: number;
+  newAccounts: number;
+  active: number;
+  returning: number;
+}
+
+/** How many accounts have used the app on how many separate days. */
+export interface StatsAccountEngagement {
+  label: string;
+  value: number;
+}
+
+/**
+ * Aggregates the accounts app answers with, when the dashboard is linked to
+ * it. Our own accounts are left out of every figure here before it is sent;
+ * `excluded` says how many, so the number can be checked rather than trusted.
+ */
 export interface StatsAccountStats {
   total: number;
   newInRange: number;
   activeInRange: number;
+  /** Of the active, that had signed up before the range began: the ones that came back. */
+  returningInRange: number;
+  /** The same four over the period of equal length before the range, or null over all time. */
+  previous: StatsAccountPeriod | null;
   newByDay: { day: number; count: number }[];
+  /** Accounts that used the app on each day, over the same days as newByDay. */
+  activeByDay: { day: number; count: number }[];
+  /** Accounts by how many separate days they have used the app. */
+  engagement: StatsAccountEngagement[];
+  /** How many accounts the engagement figures are over: those that signed up since activeSince. */
+  engagementBase: number;
+  /** Midnight UTC of the first day an account was recorded as active, or null. */
+  activeSince: number | null;
+  /** Accounts left out of every figure here because they are ours. */
+  excluded: number;
   cohorts: StatsRetentionCohort[];
   /** Things done in the app in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
   events: Record<string, number>;

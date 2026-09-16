@@ -204,6 +204,12 @@ export interface Feedback {
 export interface AccountActivity {
   joinedAt: number;
   days: number[];
+  /**
+   * One of ours rather than a customer's. Decided from the address while the
+   * store still has it, so the figures can leave us out without anything
+   * outside the store being handed an identifier.
+   */
+  internal: boolean;
 }
 
 /**

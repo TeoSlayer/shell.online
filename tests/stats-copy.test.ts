@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildStatsSnapshot, DAY_MS, dayStart, type StatsSnapshotRows } from "../shared/stats-snapshot";
+import type { StatsAccountStats } from "../shared/stats";
 import {
+  accountsInsight,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -55,6 +57,7 @@ function rows(overrides: Partial<StatsSnapshotRows> = {}): StatsSnapshotRows {
     installConversion: null,
     uniquesConfigured: true,
     uniquesSince: dayStart(now - 20 * DAY_MS),
+    uniquesSinceBySurface: [],
     ...overrides,
   };
 }
@@ -127,5 +130,55 @@ describe("the dashboard's copy", () => {
     expect(humanize("checksum_mismatch")).toBe("Checksum mismatch");
     expect(humanize("machine_linked")).toBe("Linked a machine");
     expect(humanize("some_new_thing")).toBe("Some New Thing");
+  });
+});
+
+describe("accountsInsight", () => {
+  const accounts = (overrides: Partial<StatsAccountStats> = {}): StatsAccountStats => ({
+    total: 20,
+    newInRange: 4,
+    activeInRange: 5,
+    returningInRange: 2,
+    previous: { total: 16, newAccounts: 6, active: 3, returning: 1 },
+    newByDay: [],
+    activeByDay: [],
+    engagement: [],
+    engagementBase: 0,
+    activeSince: null,
+    excluded: 0,
+    cohorts: [],
+    events: {},
+    ...overrides,
+  });
+
+  it("says how many there are, how many are new, and how many came back", () => {
+    expect(accountsInsight(accounts(), "last 7d")).toBe(
+      "20 accounts, 4 of them from last 7d. 5 used the app (25% of all of them), 2 of which had signed up earlier.",
+    );
+  });
+
+  it("reads a quiet range as quiet rather than as a broken figure", () => {
+    expect(accountsInsight(accounts({ newInRange: 0, activeInRange: 0, returningInRange: 0 }), "last 7d")).toBe(
+      "20 accounts, none of them new in last 7d. None of them opened the app in last 7d. The period before brought 6; this one brought none.",
+    );
+    expect(accountsInsight(accounts({ total: 0, newInRange: 0, activeInRange: 0, returningInRange: 0 }), "last 7d"))
+      .toBe("Nobody has signed up yet.");
+  });
+
+  it("says how many of our own accounts were left out, whatever else it says", () => {
+    expect(accountsInsight(accounts({ excluded: 21 }), "last 7d")).toContain(
+      "21 of our own accounts are left out of every figure here.",
+    );
+    expect(accountsInsight(accounts({ total: 0, newInRange: 0, activeInRange: 0, returningInRange: 0, excluded: 1 }), "all time"))
+      .toBe("Nobody has signed up yet. 1 of our own account is left out of every figure here.");
+  });
+
+  it("does not claim a first-time account came back", () => {
+    expect(accountsInsight(accounts({ returningInRange: 0 }), "last 7d")).toContain("all of them for the first time");
+  });
+
+  it("does not say new or returning over all time, where every account is both or neither", () => {
+    const all = accounts({ total: 20, newInRange: 20, activeInRange: 12, returningInRange: 0, previous: null });
+    expect(accountsInsight(all, "all time")).toBe("20 accounts in all. 12 used the app (60% of all of them).");
   });
 });

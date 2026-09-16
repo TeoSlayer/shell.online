@@ -49,6 +49,7 @@ import { recordAudit, assignSession, auditCsv, SEALED_KINDS } from "./routes/aud
 import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./routes/social";
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
+import { excludedAccountFilter } from "./lib/internal-accounts";
 import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats";
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
@@ -88,6 +89,11 @@ export interface AppOptions {
    * exist. At least 32 characters; see readConfig.
    */
   statsToken?: string;
+  /**
+   * Accounts the statistics dashboard leaves out of every figure: ours, not
+   * customers'. Addresses and domains; see internal-accounts.ts.
+   */
+  excludedAccounts?: string[];
   /**
    * Serves the built client for anything that is not an API route. Present
    * only in a deployment that serves the app and the API together; in
@@ -336,6 +342,8 @@ export function createApp(options: AppOptions) {
   const mailer = options.mailer ?? logMailer();
   /* The first allowed origin is the web app's; see readConfig. */
   const webOrigin = options.webOrigin ?? allowedOrigins[0] ?? "";
+  /* Whether an address is one of ours, for the statistics only. */
+  const isInternalAccount = excludedAccountFilter(options.excludedAccounts ?? []);
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
   const feedbackLimit = rateLimiter(FEEDBACK_BUCKET);
@@ -393,9 +401,12 @@ export function createApp(options: AppOptions) {
    * One count per thing done, never who did it, for the statistics
    * dashboard. Counting must never change an answer, so a store that cannot
    * count is nobody's problem here.
+   *
+   * The address is passed so the store can record whether this was one of
+   * ours; it is read for that and nothing else, and never stored.
    */
-  const track = (event: AppEvent): void => {
-    void store.recordAppEvent(event).catch(() => undefined);
+  const track = (event: AppEvent, email: string): void => {
+    void store.recordAppEvent(event, undefined, isInternalAccount(email)).catch(() => undefined);
   };
 
   /* The CLI authenticates with an opaque access token issued by this service. */
@@ -503,7 +514,7 @@ export function createApp(options: AppOptions) {
           label: String(body.label ?? "shell cli").slice(0, 80),
           machineId,
         });
-        track("machine_linked");
+        track("machine_linked", result.email);
         return send(response, 200, {
           access_token: tokens.accessToken,
           refresh_token: tokens.refreshToken,
@@ -580,7 +591,7 @@ export function createApp(options: AppOptions) {
           return send(response, 400, { error: "invalid browser public key" });
         }
         if (publicKey) await store.setMemberKey(identity.uid, publicKey);
-        if (resolved.joined && invite) track("invite_accepted");
+        if (resolved.joined && invite) track("invite_accepted", identity.email);
         const described = await describeOrganization(store, resolved.membership);
         return send(response, described.status, {
           ...(described.body as Record<string, unknown>),
@@ -621,7 +632,7 @@ export function createApp(options: AppOptions) {
           const invite = (result.body as { invite?: Invite }).invite;
           if (invite) await notifyInvited(store, mailer, webOrigin, membership, invite, log);
         }
-        if (result.status < 300) track("invite_created");
+        if (result.status < 300) track("invite_created", membership.email);
         return send(response, result.status, result.body);
       }
 
@@ -993,7 +1004,7 @@ export function createApp(options: AppOptions) {
           });
           if (!created) return send(response, 409, { error: "this account already has a vault" });
           const stored = await store.accountKey(identity.uid);
-          track("vault_created");
+          track("vault_created", identity.email);
           return send(response, 201, { vault: stored ? vaultForApi(stored) : null });
         }
 
@@ -1146,7 +1157,7 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
-        track("session_registered");
+        track("session_registered", token.email);
         return send(response, 201, { session: sessionForApi(result.session) });
       }
 
@@ -1377,7 +1388,7 @@ export function createApp(options: AppOptions) {
             createdAt: Date.now(),
           };
           await store.putCommand(queued);
-          track("command_sent");
+          track("command_sent", identity.email);
           return send(response, 202, { command: queued });
         }
 
@@ -1564,7 +1575,7 @@ export function createApp(options: AppOptions) {
           log,
         );
         if (!result.ok) return send(response, result.status, { error: result.error });
-        track("feedback_sent");
+        track("feedback_sent", membership.email);
         return send(response, 201, { feedback: { id: result.value.id, at: result.value.at } });
       }
 
@@ -1581,7 +1592,7 @@ export function createApp(options: AppOptions) {
         const range = isStatsRange(requested) ? requested : "7d";
         const now = Date.now();
         return send(response, 200, accountStats(
-          await store.accountActivity(),
+          await store.accountActivity(isInternalAccount),
           range,
           now,
           await store.appEvents(dayStart(rangeStart(range, now))),

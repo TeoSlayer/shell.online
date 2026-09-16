@@ -2728,6 +2728,26 @@ describe("feedback", () => {
     expect(kept.orgId).toBeTruthy();
   });
 
+  /*
+   * The dashboard reports what customers did. A thing done by one of our own
+   * accounts is counted apart, so a week of our own testing cannot read as a
+   * week of use.
+   */
+  it("counts a thing one of our own accounts did apart from the rest", async () => {
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      excludedAccounts: ["ours.example"],
+    });
+    expect((await call("POST", "/api/feedback", { auth: await idToken(), body: message })).status).toBe(201);
+    expect((await call("POST", "/api/feedback", {
+      auth: await idToken({ sub: "uid-ours", email: "dev@ours.example", name: "Dev" }),
+      body: message,
+    })).status).toBe(201);
+    expect(await store.appEvents(0)).toEqual([{ event: "feedback_sent", count: 1 }]);
+  });
+
   it("refuses without a signed-in user", async () => {
     const posted = await call("POST", "/api/feedback", { body: message });
     expect(posted.status).toBe(401);
@@ -2787,5 +2807,30 @@ describe("account figures for the statistics dashboard", () => {
     expect(answer.body.cohorts[0].size).toBe(1);
     expect(JSON.stringify(answer.body)).not.toContain("uid-1");
     expect(JSON.stringify(answer.body)).not.toContain("ana@example.com");
+  });
+
+  /*
+   * Our own accounts are the most active there are and were always going to
+   * use the product. Left in, a quiet week reads as a good one, so they are
+   * out of the counts and only their number is reported.
+   */
+  it("leaves our own accounts out of the figures, and says how many it left out", async () => {
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      statsToken: TOKEN,
+      excludedAccounts: ["ours.example"],
+    });
+    expect((await call("GET", "/api/org", { auth: await idToken() })).status).toBe(200);
+    expect((await call("GET", "/api/org", {
+      auth: await idToken({ sub: "uid-ours", email: "dev@ours.example", name: "Dev" }),
+    })).status).toBe(200);
+
+    const answer = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
+    expect(answer.status).toBe(200);
+    expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1, excluded: 1 });
+    expect(answer.body.cohorts[0].size).toBe(1);
+    expect(JSON.stringify(answer.body)).not.toContain("ours.example");
   });
 });
