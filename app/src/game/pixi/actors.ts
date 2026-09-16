@@ -35,12 +35,24 @@ const UNIT_FOR: Record<string, string> = {
 /** The Unmade are tinted cold; everything else on this map is warm. */
 const UNMADE_TINT = 0x6fd6c0;
 
+/** How much bigger than drawn a figure is. See `make`. */
+const FIGURE = 1.25;
+
+/** A few pixels of deterministic vertical stagger, so boards do not stack. */
+function lift(id: string): number {
+  let value = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    value = (Math.imul(value, 31) + id.charCodeAt(index)) | 0;
+  }
+  return (Math.abs(value) % 3) * 13;
+}
+
 interface Piece {
   root: Container;
   sprite: Sprite;
   shadow: Graphics;
   bar: Graphics;
-  plate?: Text;
+  plate?: Container;
   lastHp: number;
 }
 
@@ -53,24 +65,57 @@ export class ActorLayer {
   constructor(
     private readonly art: Loaded,
     private readonly parent: Container,
+    /* Name boards go here, above the world, so nothing can stand in front. */
+    private readonly labels: Container,
   ) {}
+
+  /** The last zoom the plates were sized for; see `zoomed`. */
+  private plateScale = 1;
+  private platesShown = true;
 
   /** Called when a skin is bought or changed in the shop. */
   wear(tint: number): void {
     this.skinTint = tint;
   }
 
+  /**
+   * Keeps the name boards a readable size, and takes them away when they stop
+   * being names and start being clutter.
+   *
+   * A board that scales with the map is illegible zoomed out and enormous
+   * zoomed in; one that never scales covers the map at the far end. So it
+   * scales against the zoom, within bounds, and below the point where a name
+   * would be smaller than the floor this game holds itself to, there is no
+   * name -- which is also the zoom at which you are looking at the country
+   * rather than at anybody in it.
+   */
+  zoomed(scale: number): void {
+    this.plateScale = Math.min(1.4, Math.max(0.6, 1 / scale));
+    this.platesShown = scale > 0.6;
+    for (const piece of this.pieces.values()) {
+      if (!piece.plate) continue;
+      piece.plate.scale.set(this.plateScale);
+      piece.plate.visible = this.platesShown;
+    }
+  }
+
   private make(actor: Actor): Piece {
     const root = new Container();
 
     const shadow = new Graphics();
-    shadow.ellipse(0, 0, 13, 6).fill({ color: 0x1a1008, alpha: 0.3 });
+    shadow.ellipse(0, 0, 16, 7).fill({ color: 0x1a1008, alpha: 0.32 });
     root.addChild(shadow);
 
     const texture = this.art.frame(UNIT_FOR[actor.kind] ?? UNIT_FOR.terminal);
     const sprite = new Sprite(texture);
     sprite.anchor.set(0.5, 1);
-    sprite.scale.set(0.85);
+    /*
+     * Drawn larger than the pack intends. Kenney's units are scaled to sit
+     * beside Kenney's buildings, and at that ratio a wright on this map was a
+     * speck next to a church -- correct, and useless, because the wrights are
+     * the thing the game is about and the buildings are where they stand.
+     */
+    sprite.scale.set(FIGURE);
     sprite.position.set(0, TILE_H * 0.25);
     if (actor.side === "unmade") sprite.tint = UNMADE_TINT;
     root.addChild(sprite);
@@ -86,22 +131,43 @@ export class ActorLayer {
      * The garrison's own soldiers are scenery; giving them plates would fill
      * the map with labels that stand for nothing.
      */
-    let plate: Text | undefined;
+    let plate: Container | undefined;
     if (actor.session) {
-      plate = new Text({
-        text: actor.name.length > 22 ? `${actor.name.slice(0, 21)}…` : actor.name,
+      /*
+       * A little board, for the same reason the garrison signs are boards: a
+       * name in outlined text over grass, roofs and road was unreadable at the
+       * worst of it, and the outline thick enough to fix that turned sixteen
+       * point type to mud. It also stops two wrights standing near each other
+       * from interleaving their names into one unreadable line.
+       */
+      const text = new Text({
+        text: actor.name.length > 24 ? `${actor.name.slice(0, 23)}…` : actor.name,
         style: {
           fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
           fontSize: 16,
-          fill: 0xf5e3c0,
-          stroke: { color: 0x1a1008, width: 4 },
+          fill: 0xf0d9a8,
         },
       });
-      plate.anchor.set(0.5, 0);
-      plate.position.set(0, TILE_H * 0.35);
-      plate.scale.set(0.8);
-      root.addChild(plate);
+      text.anchor.set(0.5, 0);
+      text.position.set(0, 3);
 
+      const board = new Graphics();
+      board
+        .rect(-text.width / 2 - 6, 0, text.width + 12, text.height + 6)
+        .fill({ color: 0x241d15, alpha: 0.85 })
+        .stroke({ color: 0xc9a06a, width: 1, alignment: 1 });
+
+      plate = new Container();
+      plate.addChild(board, text);
+      plate.scale.set(this.plateScale);
+      plate.visible = this.platesShown;
+      /*
+       * Staggered by the id, so two wrights standing together do not lay their
+       * boards on top of one another. Deterministic, so a name does not hop to
+       * a different height when the list is re-ordered.
+       */
+      plate.y = lift(actor.id);
+      this.labels.addChild(plate);
     }
 
     this.parent.addChild(root);
@@ -123,9 +189,10 @@ export class ActorLayer {
       const { x, y } = toScreen(actor.x, actor.y);
       piece.root.position.set(x, y);
       piece.root.zIndex = depthOf(actor.x, actor.y, 10);
+      if (piece.plate) piece.plate.position.set(x, y + TILE_H * 0.4 + lift(actor.id));
 
       /* Facing, as a mirror rather than a second sprite. */
-      piece.sprite.scale.x = actor.facing === 1 ? 0.85 : -0.85;
+      piece.sprite.scale.x = actor.facing === 1 ? FIGURE : -FIGURE;
 
       /*
        * A blow is a lunge rather than a different drawing. Kenney's units have
@@ -165,7 +232,7 @@ export class ActorLayer {
 
       if (piece.plate) {
         const chosen = actor.id === selectedId;
-        piece.plate.style.fill = chosen ? 0xf0a03c : 0xf5e3c0;
+        piece.plate.tint = chosen ? 0xffd27a : 0xffffff;
         piece.shadow.tint = chosen ? 0xf0a03c : 0xffffff;
         piece.shadow.alpha = chosen ? 0.9 : 1;
       }
@@ -175,12 +242,16 @@ export class ActorLayer {
     for (const [id, piece] of this.pieces) {
       if (seen.has(id)) continue;
       piece.root.destroy({ children: true });
+      piece.plate?.destroy({ children: true });
       this.pieces.delete(id);
     }
   }
 
   destroy(): void {
-    for (const piece of this.pieces.values()) piece.root.destroy({ children: true });
+    for (const piece of this.pieces.values()) {
+      piece.root.destroy({ children: true });
+      piece.plate?.destroy({ children: true });
+    }
     this.pieces.clear();
   }
 }

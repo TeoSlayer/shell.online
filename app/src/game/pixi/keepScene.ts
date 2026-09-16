@@ -51,7 +51,7 @@ export async function buildKeepScene(
   roster: { id: string; name: string; kind: string; work: "bug" | "feature" | "idle"; session?: Actor["session"] }[],
 ): Promise<Scene> {
   const [art, fx] = await Promise.all([loadArt(), loadEffects()]);
-  const { root, things, signs } = buildWorld(art);
+  const { root, things, labels, signs } = buildWorld(art);
 
   const world = new Container();
   world.addChild(root);
@@ -61,7 +61,7 @@ export async function buildKeepScene(
   for (const entry of roster) muster(sim, entry);
 
   let selected: string | undefined;
-  const actors = new ActorLayer(art, things);
+  const actors = new ActorLayer(art, things, labels);
 
   const birds = new Birds(things);
   const smoke = new Smoke(things, fx["fx-smoke_01"]);
@@ -127,12 +127,24 @@ export async function buildKeepScene(
    * under the name only appears close up. A map zoomed out is otherwise a map
    * covered in enormous words, and zoomed in they disappear.
    */
+  let detailed: boolean | undefined;
   const rescaleSigns = () => {
     const scale = 1 / viewport.scale.x;
+    const wanted = viewport.scale.x > 0.75;
     for (const sign of signs.children) {
       sign.scale.set(Math.min(1.6, Math.max(0.55, scale)));
-      const purpose = (sign as Container).getChildByLabel?.("purpose");
-      if (purpose) purpose.visible = viewport.scale.x > 0.75;
+    }
+    actors.zoomed(viewport.scale.x);
+    /*
+     * Only when it changes. Showing the sentence redraws every board, and
+     * `moved` fires on every frame of a drag -- redrawing six boards a frame to
+     * arrive at the picture already on screen is the kind of cost that only
+     * shows up as a number in somebody else's profile.
+     */
+    if (wanted === detailed) return;
+    detailed = wanted;
+    for (const sign of signs.children) {
+      (sign as Container & { setDetailed?: (on: boolean) => void }).setDetailed?.(wanted);
     }
   };
   rescaleSigns();

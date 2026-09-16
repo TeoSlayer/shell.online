@@ -95,16 +95,25 @@ export function standing(
  * The sign outside a garrison.
  *
  * This is where the lore lives. It used to be in a menu nobody had to open;
- * now it is a board in the ground at the place it describes, and reading it
- * means walking the map. The name is always shown and the purpose appears when
- * the view is close enough to make a sentence worth reading — a line of eight
- * point text on a zoomed-out map is clutter, not atmosphere.
+ * now it is a board standing at the place it describes, and reading the world
+ * means walking it.
+ *
+ * It is a plaque and not floating text, for a reason worth recording: over a
+ * map of grass, fired clay and red roofs there is no text colour that reads
+ * everywhere, and the outline thick enough to survive the worst case turned
+ * every letter to mud. A board carries its own background with it. It also
+ * sits wholly above the holding rather than hanging off the top of it, so a
+ * sentence can never run down across the buildings it is describing.
  */
 export function signFor(garrison: Garrison): Container {
   const group = new Container();
-  const { x, y } = toScreen(garrison.x, garrison.y - garrison.radius + 0.5);
+  const { x, y } = toScreen(garrison.x, garrison.y - garrison.radius - 0.5);
   group.position.set(x, y);
-  group.zIndex = depthOf(garrison.x, garrison.y - garrison.radius + 0.5, 500);
+  /* Signs are drawn over everything; they are labels, not scenery. */
+  group.zIndex = depthOf(garrison.x, garrison.y - garrison.radius, 500);
+
+  const PAD = 10;
+  const WIDTH = 300;
 
   const name = new Text({
     text: garrison.name,
@@ -113,30 +122,70 @@ export function signFor(garrison: Garrison): Container {
       fontSize: 20,
       fontWeight: "700",
       letterSpacing: 1.5,
-      fill: 0xf5e3c0,
-      stroke: { color: 0x1a1008, width: 5 },
+      fill: 0xf0d9a8,
       align: "center",
+      wordWrap: true,
+      wordWrapWidth: WIDTH - PAD * 2,
     },
   });
-  name.anchor.set(0.5, 1);
-  group.addChild(name);
+  name.anchor.set(0.5, 0);
 
   const purpose = new Text({
     text: garrison.purpose,
     style: {
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: 16,
-      fill: 0xd9b88a,
-      stroke: { color: 0x1a1008, width: 4 },
+      fill: 0xc9a06a,
       align: "center",
       wordWrap: true,
-      wordWrapWidth: 320,
+      wordWrapWidth: WIDTH - PAD * 2,
     },
   });
   purpose.anchor.set(0.5, 0);
-  purpose.position.set(0, 4);
   purpose.label = "purpose";
-  group.addChild(purpose);
+
+  /*
+   * The board is sized to the text rather than the text fitted to the board,
+   * because the names and the sentences are lore and will be rewritten, and a
+   * fixed box is a promise to re-measure every time somebody edits a word.
+   */
+  const width = Math.max(name.width, purpose.width) + PAD * 2;
+  const tall = name.height + 4 + purpose.height + PAD * 2;
+  const short = name.height + PAD * 2;
+
+  name.position.set(0, -tall + PAD);
+  purpose.position.set(0, -tall + PAD + name.height + 4);
+
+  const board = new Graphics();
+  const post = new Graphics();
+
+  /*
+   * Two boards, swapped rather than resized: close up the sentence is shown
+   * and the board is tall enough for it, far out only the name is, and the
+   * board shrinks to match. Redrawing on every zoom step would be the same
+   * picture at a cost per frame.
+   */
+  const draw = (height: number) => {
+    board.clear();
+    board
+      .rect(-width / 2, -height, width, height)
+      .fill({ color: 0x241d15, alpha: 0.88 })
+      .stroke({ color: 0xe8b44a, width: 2, alignment: 1 });
+    post.clear();
+    post.rect(-3, -height, 6, height + 14).fill({ color: 0x3a2a1a, alpha: 0.9 });
+  };
+  draw(tall);
+
+  group.addChild(post, board, name, purpose);
+
+  /* Read by the scene when the zoom changes; see keepScene's rescaleSigns. */
+  Object.assign(group, {
+    setDetailed(detailed: boolean) {
+      purpose.visible = detailed;
+      name.position.y = detailed ? -tall + PAD : -short + PAD;
+      draw(detailed ? tall : short);
+    },
+  });
 
   return group;
 }
@@ -146,11 +195,21 @@ export function buildWorld(art: Loaded): {
   root: Container;
   ground: Container;
   things: Container;
+  labels: Container;
   signs: Container;
 } {
   const root = new Container();
   const ground = buildGroundLayer();
   const things = new Container();
+  /*
+   * Names live above the world rather than in it.
+   *
+   * A name board parented to its own figure sorts at that figure's depth, so
+   * anything standing in front of it covers the name -- and a label you cannot
+   * read when somebody walks past is not a label. These are drawn over
+   * everything, like the garrison signs, because that is what a label is.
+   */
+  const labels = new Container();
   const signs = new Container();
   things.sortableChildren = true;
 
@@ -163,8 +222,8 @@ export function buildWorld(art: Loaded): {
     signs.addChild(signFor(garrison));
   }
 
-  root.addChild(ground, things, signs);
-  return { root, ground, things, signs };
+  root.addChild(ground, things, labels, signs);
+  return { root, ground, things, labels, signs };
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */

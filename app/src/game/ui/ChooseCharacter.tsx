@@ -28,7 +28,7 @@ export function ChooseCharacter({ onChoose }: { onChoose: (kind: string) => void
 
   return (
     <div className="keep-curtain" role="presentation">
-      <div className="keep-panel keep-opening" role="dialog" aria-modal="true" aria-label="Choose your character">
+      <div className="keep-panel keep-panel-heavy keep-opening" role="dialog" aria-modal="true" aria-label="Choose your character">
         <header className="keep-opening-head">
           <h2>{WORLD.era}</h2>
           {OPENING.map((line) => (

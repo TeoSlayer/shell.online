@@ -112,8 +112,8 @@ export function Hud({
   const building = wrights.filter((wright) => wright.work === "feature").length;
 
   return (
-    <div className="keep-hud-bar">
-      <div className="keep-panel keep-standing">
+    <div className="keep-hud-bar keep-panel">
+      <div className="keep-hud-cell keep-standing">
         <div className="keep-standing-head">
           <span className="keep-sigil" aria-hidden="true">
             {lore.title.slice(0, 1)}
@@ -132,7 +132,7 @@ export function Hud({
         />
       </div>
 
-      <div className="keep-panel keep-purse">
+      <div className="keep-hud-cell keep-purse">
         <span className="keep-coin" aria-hidden="true">◈</span>
         <span className="keep-purse-text">
           <span className="keep-purse-value">{marks.toLocaleString()}</span>
@@ -140,11 +140,11 @@ export function Hud({
         </span>
       </div>
 
-      <div className="keep-panel keep-elixir-panel">
+      <div className="keep-hud-cell keep-elixir-panel">
         <Elixir tokens={elixir} gathering={gathering} />
       </div>
 
-      <button type="button" className="keep-panel keep-roster-button" onClick={onOpenRoster}>
+      <button type="button" className="keep-hud-cell keep-roster-button" onClick={onOpenRoster}>
         <span className="keep-roster-count">{wrights.length}</span>
         <span className="keep-roster-text">
           <span className="keep-roster-label">{demo ? "Example garrison" : "On the field"}</span>

@@ -41,12 +41,19 @@ credit is appreciated but not required. It is given here anyway.
 |---|---|---|
 | Structures, units, terrain and environment | RTS Pack: Medieval | https://kenney.nl/assets/medieval-rts |
 | Particle textures for the game's effects | Particle Pack | https://kenney.nl/assets/particle-pack |
+| The 9-slice frames around the game's panels | Fantasy UI Borders | https://kenney.nl/assets/fantasy-ui-borders |
 
 The vendored files are `app/public/game/medieval-rts.png` (Kenney's own
 spritesheet, unmodified) and `app/public/game/fx-*.png` (selected particle
 textures, unmodified). `app/public/game/medieval-rts.json` is generated from
 Kenney's spritesheet XML by `app/scripts/import-kenney.mjs`, which records how
 to regenerate it against a newer release of the pack.
+
+`app/public/game/ui/frame-*.png` are two borders from the Fantasy UI Borders
+pack, recoloured from white to brass. Every pixel is Kenney's: the files are
+paletted, and `app/scripts/import-fantasy-ui.mjs` rewrites the one palette
+entry that is not transparent. That script also records which borders were
+taken, so the choice can be revisited against a newer release.
 
 ## PixiJS — MIT
 

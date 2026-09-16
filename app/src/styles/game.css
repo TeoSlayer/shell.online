@@ -9,6 +9,10 @@
  * arcane light and --acid is elixir. That is what stops this looking like a
  * generic pixel game wearing our name — it is the same product in armour.
  *
+ * The stones are the product's --terminal warmed, because the map they sit
+ * over is grass and fired clay and a cold green-black interface laid on top of
+ * it read as two pictures rather than one. Same colour, seen by firelight.
+ *
  * Rules this file holds itself to, from the game-ui-design skill:
  *   · nothing readable outside the safe area, which the player can widen
  *   · 16px floor for body text, 24px for anything that matters in a hurry
@@ -20,9 +24,12 @@
 
 .keep {
   /* ---- materials ---- */
-  --keep-stone: #1d201b;
-  --keep-stone-lit: #343a2e;
-  --keep-stone-dark: #0d1009;
+  --keep-stone: #241d15;
+  --keep-stone-lit: #3e3324;
+  --keep-stone-dark: #120d08;
+  /* Brass: the frames, the rules, and anything the eye is meant to land on. */
+  --keep-brass: #e8b44a;
+  --keep-brass-dim: #c9a06a;
   --keep-parchment: #f3f1e9;
   --keep-parchment-shade: #ded9c8;
   --keep-ink: #191b18;
@@ -152,18 +159,48 @@
 /* ---- pixel panels ----------------------------------------------------- */
 
 /*
- * A carved stone panel. The bevel is drawn with inset shadows rather than a
- * gradient so it stays hard-edged at any zoom — a soft edge is the one thing
- * that makes pixel art look like a mistake rather than a choice.
+ * A brass-framed panel on warm stone.
+ *
+ * The frame is a 9-slice from Kenney's Fantasy UI Borders, recoloured to brass
+ * on the way into the repository by scripts/import-fantasy-ui.mjs. Two frames
+ * in the whole interface, and each one means something: this is "laid over the
+ * map", and .keep-panel-heavy is "the game has stopped to ask you something".
+ * An interface where nothing is framed the same way twice reads as a sampler
+ * rather than a place.
+ *
+ * `border-image` rather than a background image, so the frame stays at its
+ * drawn resolution while the panel takes whatever size its contents need --
+ * which is the whole point of a 9-slice and the reason this is not four nested
+ * elements. No `fill` keyword, so the middle slice is left unpainted and the
+ * panel's own background shows through it.
+ *
+ * The border is 16px against 16px of source, which is to say the art is drawn
+ * at its own size. `image-rendering: pixelated` keeps it there: the source is
+ * 1-bit line work, and a browser smoothing it produces exactly the soft grey
+ * fringe that makes pixel art look like a mistake rather than a choice.
  */
 .keep-panel {
-  border: 4px solid var(--keep-stone-dark);
-  background: var(--keep-stone);
-  box-shadow:
-    inset 0 4px 0 0 var(--keep-stone-lit),
-    inset 4px 0 0 0 var(--keep-stone-lit),
-    inset -4px 0 0 0 var(--keep-stone-dark),
-    inset 0 -4px 0 0 var(--keep-stone-dark);
+  border: 16px solid transparent;
+  border-image: url("/game/ui/frame-panel.png") 16 / 16px stretch;
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 45%) padding-box;
+  image-rendering: pixelated;
+  /* Lifts it off the field, which is busy and in places the same value. */
+  box-shadow: 0 calc(4px * var(--keep-scale)) 0 0 rgb(0 0 0 / 45%);
+}
+
+/*
+ * The heavy frame, for anything that has stopped the game.
+ *
+ * Drawn at 96px against the other's 48, so the rule is genuinely finer relief
+ * rather than the same art enlarged -- which is the difference between a modal
+ * that feels important and one that feels zoomed.
+ */
+.keep-panel-heavy {
+  border: 32px solid transparent;
+  border-image: url("/game/ui/frame-heavy.png") 32 / 32px stretch;
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 30%) padding-box;
+  image-rendering: pixelated;
+  box-shadow: 0 calc(6px * var(--keep-scale)) 0 0 rgb(0 0 0 / 50%);
 }
 
 /* ---- HUD -------------------------------------------------------------- */
@@ -186,15 +223,22 @@
 
 /* ---- buttons ---------------------------------------------------------- */
 
+/*
+ * A brass-edged stone button.
+ *
+ * The bevel is inset shadows rather than a gradient so it stays hard-edged at
+ * any interface scale, and the brass hairline is what separates a button from
+ * the panel it sits in — on a warm stone panel, stone-on-stone disappears.
+ */
 .keep-button {
   display: inline-flex;
   min-height: var(--keep-hit);
   padding: 0 var(--keep-space-3);
-  border: 4px solid var(--keep-stone-dark);
+  border: 2px solid var(--keep-brass-dim);
   background: var(--keep-stone);
   box-shadow:
-    inset 0 4px 0 0 var(--keep-stone-lit),
-    inset 0 -4px 0 0 var(--keep-stone-dark);
+    inset 0 3px 0 0 var(--keep-stone-lit),
+    inset 0 -3px 0 0 var(--keep-stone-dark);
   color: var(--keep-parchment);
   font-family: inherit;
   font-size: var(--keep-text);
@@ -210,6 +254,7 @@
 
 .keep-button:hover {
   background: var(--keep-stone-lit);
+  border-color: var(--keep-brass);
 }
 
 /*
@@ -218,7 +263,7 @@
  */
 .keep-button:active {
   transform: translateY(2px);
-  box-shadow: inset 0 4px 0 0 var(--keep-stone-dark);
+  box-shadow: inset 0 3px 0 0 var(--keep-stone-dark);
 }
 
 .keep-pause-button {
@@ -646,24 +691,58 @@
 /*
  * The strip along the top: standing, purse, elixir, garrison.
  *
- * Wraps rather than shrinks. On a phone these become two rows of readable
- * panels instead of four unreadable ones, which is the right trade when the
- * alternative is text below the floor this file holds itself to.
+ * One framed strip divided by brass rules, not four floating panels. Four
+ * panels over a map read as four things that happen to be near each other, and
+ * at the sizes their contents want they collided; a single bar reads as the
+ * instrument panel it is, and a divider costs two pixels where a frame costs
+ * sixteen on each side.
+ *
+ * It wraps rather than shrinks. On a narrow window these become two rows of
+ * readable cells instead of four unreadable ones, which is the right trade
+ * when the alternative is text below the floor this file holds itself to.
  */
 .keep-hud-bar {
   display: flex;
   flex-flow: row wrap;
   align-items: stretch;
-  gap: var(--keep-space);
-  flex: 1;
+  /* Hugs its contents. A bar stretched to the window is a bar with a hole in it. */
+  flex: 0 1 auto;
   min-width: 0;
+  margin-right: auto;
+  padding: 0;
 }
 
-.keep-hud-bar > .keep-panel {
+.keep-hud-cell {
   display: flex;
   padding: var(--keep-space) var(--keep-space-2);
   align-items: center;
   gap: var(--keep-space-2);
+  /* Reset, because one of these is a button and buttons bring their own. */
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/*
+ * A hairline between cells rather than around each one.
+ *
+ * `:not(:first-child)` and not a `+` rule, so a cell that has been hidden on a
+ * narrow window does not leave the one after it without its divider.
+ */
+.keep-hud-cell:not(:first-child) {
+  border-left: 2px solid rgb(232 180 74 / 35%);
+}
+
+/* The one cell you can press says so when pressed, like every other control. */
+.keep-roster-button {
+  cursor: pointer;
+  transition: background var(--keep-fast) linear;
+}
+
+.keep-roster-button:hover {
+  background: rgb(232 180 74 / 12%);
 }
 
 .keep-standing {
@@ -824,18 +903,6 @@
   text-transform: uppercase;
 }
 
-.keep-roster-button {
-  border: 4px solid var(--keep-stone-dark);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.keep-roster-button:hover {
-  background: var(--keep-stone-lit);
-}
-
 .keep-roster-count {
   color: var(--keep-gold);
 }
@@ -864,7 +931,6 @@
 @media (width <= 640px) {
   .keep-hud-bar {
     flex-wrap: nowrap;
-    gap: calc(var(--keep-space) / 2);
   }
 
   /*
@@ -879,7 +945,7 @@
     display: none;
   }
 
-  .keep-hud-bar > .keep-panel {
+  .keep-hud-cell {
     min-width: 0;
     padding: calc(var(--keep-space) / 2) var(--keep-space);
     gap: var(--keep-space);

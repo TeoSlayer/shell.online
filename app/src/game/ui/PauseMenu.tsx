@@ -138,7 +138,7 @@ export function PauseMenu({
   return (
     <div className="keep-pause" role="presentation">
       <div
-        className={`keep-pause-panel keep-panel${pane === "root" ? "" : " is-wide"}`}
+        className={`keep-pause-panel keep-panel keep-panel-heavy${pane === "root" ? "" : " is-wide"}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
