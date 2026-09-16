@@ -40,6 +40,8 @@ export const COUNTRY = {
  */
 export const OVERHANG = 2600;
 
+export type Standing = "tree" | "rock" | "ruin";
+
 export interface Tree {
   /** Screen position, in world units. */
   x: number;
@@ -48,9 +50,32 @@ export interface Tree {
   scale: number;
   /** 0 against the country, 1 deep in the wood. Drives how dark it is drawn. */
   depth: number;
+  /** What it is, which decides how big and how dark it is drawn. */
+  kind: Standing;
 }
 
+/**
+ * What stands in the border wood.
+ *
+ * Old growth: the trees out here are drawn at roughly twice the size of the
+ * ones inside the country. That is the whole difference between a hedge and a
+ * forest -- a barrier you could walk through is not a barrier, and at the zoom
+ * where the edge of the map matters, small trees read as scrub.
+ */
 const TREES = ["Environment_01", "Environment_02", "Environment_03", "Environment_21"];
+
+/** Boulders, the big ones. The small stones belong in the country, not here. */
+const ROCKS = ["Environment_07", "Environment_08", "Environment_09", "Environment_10", "Environment_11"];
+
+/**
+ * Ruins: whatever stood here before the Marches did.
+ *
+ * Kenney's pack has no broken wall, so these are its stone buildings drawn dark
+ * and half-swallowed by the trees around them. A whole building at the edge of
+ * the world would read as a place you can go; one glimpsed between trunks, in
+ * shadow, reads as something older than the map.
+ */
+const RUINS = ["Structure_12", "Structure_05", "Structure_06"];
 
 /** The murmur3 finaliser; see the note in world/scatter.ts about the cheap one. */
 function noise(x: number, y: number, channel: number): number {
@@ -107,9 +132,22 @@ export function canopyBounds(): { x: number; y: number; width: number; height: n
  * a few tree-widths of it. Beyond that the wood is drawn, not built -- see
  * `canopyBlobs`.
  */
-const BAND = 340;
+const BAND = 520;
 
-const NEAR = 58;
+/**
+ * How big each thing in the wood is drawn, against the country's own scatter.
+ *
+ * Everything here is larger than its counterpart inside the map. The wood is
+ * meant to be impassable, and the reading of "impassable" is entirely a matter
+ * of how big the trunks are next to a figure who is thirty pixels tall.
+ */
+const SIZE: Record<Standing, { from: number; to: number }> = {
+  tree: { from: 1.5, to: 2.4 },
+  rock: { from: 1.1, to: 1.9 },
+  ruin: { from: 1.0, to: 1.5 },
+};
+
+const NEAR = 46;
 
 /**
  * Where the border trees stand: in a thicket hugging the country, and nowhere
@@ -142,13 +180,33 @@ export function borderTrees(): Tree[] {
       const distance = out * (COUNTRY.width / 2);
       if (distance > BAND) continue;
 
+      const key = Math.round(x);
+      const other = Math.round(y);
+      const what = noise(key, other, 6);
+
+      /*
+       * Mostly trees, with boulders through it and the occasional ruin. The
+       * ruins are rare on purpose: something you notice once and then look for
+       * afterwards is worth more than something on every screen.
+       */
+      let kind: Standing = "tree";
+      let list = TREES;
+      if (what > 0.965) {
+        kind = "ruin";
+        list = RUINS;
+      } else if (what > 0.84) {
+        kind = "rock";
+        list = ROCKS;
+      }
+
       trees.push({
-        x: x + (noise(Math.round(x), Math.round(y), 2) - 0.5) * NEAR,
-        y: y + (noise(Math.round(x), Math.round(y), 3) - 0.5) * NEAR,
-        sprite: TREES[Math.floor(noise(Math.round(x), Math.round(y), 4) * TREES.length) % TREES.length],
-        scale: 0.8 + noise(Math.round(x), Math.round(y), 5) * 0.45,
+        x: x + (noise(key, other, 2) - 0.5) * NEAR,
+        y: y + (noise(key, other, 3) - 0.5) * NEAR,
+        sprite: list[Math.floor(noise(key, other, 4) * list.length) % list.length],
+        scale: SIZE[kind].from + noise(key, other, 5) * (SIZE[kind].to - SIZE[kind].from),
         /* How far out it stands, so the renderer can put it further into shade. */
         depth: Math.min(1, Math.max(0, distance / BAND)),
+        kind,
       });
     }
   }

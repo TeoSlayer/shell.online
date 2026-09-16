@@ -99,8 +99,13 @@ export function buildBorder(app: Application, art: Loaded): Container {
      * the light. It also breaks up the grid the trees were placed on.
      */
     const shade = 1 - tree.depth * 0.55;
-    const channel = (value: number) => Math.round(value * shade);
-    sprite.tint = (channel(0x9f) << 16) | (channel(0xbf) << 8) | channel(0x8a);
+    /*
+     * Stone takes the light differently from leaves, and a ruin is darker again
+     * -- it is meant to be half-seen between trunks rather than presented.
+     */
+    const base = tree.kind === "tree" ? 0x9fbf8a : tree.kind === "rock" ? 0xa8a79c : 0x6f6f68;
+    const channel = (shift: number) => Math.round(((base >> shift) & 0xff) * shade);
+    sprite.tint = (channel(16) << 16) | (channel(8) << 8) | channel(0);
     layer.addChild(sprite);
   }
 
