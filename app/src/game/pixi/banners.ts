@@ -113,10 +113,16 @@ export class Banners {
       ring.shape.clear();
 
       if (foe) {
+        /*
+         * Small, but not faint. The first version was nearly transparent on the
+         * theory that a crowd of them would be noise; what it actually did was
+         * make the one thing on the map that can hurt you the hardest thing on
+         * it to see.
+         */
         ring.shape
           .ellipse(x, y, (FOE_RADIUS * TILE_W) / 2, (FOE_RADIUS * TILE_H) / 2)
-          .fill({ color: 0xd4553f, alpha: 0.16 })
-          .stroke({ color: 0xd4553f, width: 1.5, alpha: 0.6 });
+          .fill({ color: 0xd4553f, alpha: 0.42 })
+          .stroke({ color: 0xff6a4d, width: 2.5, alpha: 1 });
         continue;
       }
 

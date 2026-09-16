@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import type { Application } from "pixi.js";
 import { borderTrees, canopyBlobs, canopyBounds, CANOPY_TONES } from "../world/border";
-import type { Loaded } from "./scene";
+import type { Kingdom, Loaded } from "./scene";
 
 /**
  * The wood that closes the Marches in, as one layer under everything.
@@ -51,7 +51,7 @@ export interface Border {
   thicket: Container;
 }
 
-export function buildBorder(app: Application, art: Loaded): Border {
+export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Border {
   const layer = new Container();
   const thicket = new Container();
   const bounds = canopyBounds();
@@ -125,10 +125,31 @@ export function buildBorder(app: Application, art: Loaded): Border {
    * The thicket, as real sprites, because this is the part doing work a flat
    * shape cannot: breaking up the straight edge the projection makes.
    */
-  for (const tree of borderTrees()) {
-    const sprite = new Sprite(art.frame(tree.sprite));
+  /*
+   * The conifers from the medieval pack, mixed in with Kenney's.
+   *
+   * Two sets rather than one, because a wood of a single silhouette repeated a
+   * thousand times reads as wallpaper however well it is drawn. These are flat
+   * dark shapes, which is exactly what a tree looks like at the distance any of
+   * this is seen from, and they break the pattern the eye would otherwise find.
+   */
+  const conifers = ["pine-dark", "pine-tall", "pine-broad"]
+    .map((name) => kingdom.get(name))
+    .filter((texture): texture is NonNullable<typeof texture> => texture !== undefined);
+
+  borderTrees().forEach((tree, index) => {
+    const outsider = conifers.length > 0 && tree.kind === "tree" && index % 3 === 0;
+    const sprite = new Sprite(
+      outsider ? conifers[index % conifers.length] : art.frame(tree.sprite),
+    );
     sprite.anchor.set(0.5, 1);
-    sprite.scale.set(tree.scale);
+    /*
+     * The two sets are drawn at very different sizes -- Kenney's are sprites
+     * cut to a tile, these are vector art at whatever the artboard was -- so
+     * the imported ones are scaled against their own height rather than sharing
+     * a number that happens to suit the others.
+     */
+    sprite.scale.set(outsider ? (tree.scale * 110) / sprite.texture.height : tree.scale);
     sprite.position.set(tree.x, tree.y);
     /*
      * Darkened with distance. A wood lit exactly like the field it surrounds
@@ -144,7 +165,7 @@ export function buildBorder(app: Application, art: Loaded): Border {
     const channel = (shift: number) => Math.round(((base >> shift) & 0xff) * shade);
     sprite.tint = (channel(16) << 16) | (channel(8) << 8) | channel(0);
     thicket.addChild(sprite);
-  }
+  });
 
   return { canopy: layer, thicket };
 }

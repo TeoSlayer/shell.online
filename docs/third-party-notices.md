@@ -55,6 +55,26 @@ paletted, and `app/scripts/import-fantasy-ui.mjs` rewrites the one palette
 entry that is not transparent. That script also records which borders were
 taken, so the choice can be revisited against a newer release.
 
+## Medieval art pack — supplied by the repository owner
+
+`app/public/game/kingdom/` holds fifteen files taken from a medieval art pack
+supplied by the repository owner: four banners that stand at a hero's camp,
+three conifers for the border wood, and eight icons the interface uses beside
+its labels.
+
+**The pack arrived with no licence file**, so this entry records where the files
+came from rather than the terms they are under. Anybody preparing this for
+distribution should confirm those terms; the alternative is shipping art whose
+licence nobody has read.
+
+`app/scripts/import-kingdom.mjs` records exactly which files were taken and what
+was done to them. The pack is roughly two hundred files and most of a gigabyte,
+and the game uses about a dozen, so it is not vendored whole — art nobody loads
+does not belong in a chunk somebody downloads. The banners are downscaled from
+three thousand pixels to three hundred and sixty with `sips`, which is
+macOS-only; that is why the results are committed rather than generated during
+the build.
+
 ## Pirata One — SIL Open Font License 1.1
 
 Copyright (c) 2012 Rodrigo Fuenzalida and Nicolas Massi, with Reserved Font Name

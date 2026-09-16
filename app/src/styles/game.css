@@ -229,7 +229,16 @@
 .keep-panel {
   border: 16px solid transparent;
   border-image: url("/game/ui/frame-panel.png") 16 / 16px stretch;
-  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 45%) padding-box;
+  /*
+   * `border-box`, not `padding-box`.
+   *
+   * The frame is a sixteen-pixel border, and a background clipped to the
+   * padding box stops where the border begins -- so every panel was a dark
+   * rectangle floating inside a brass rectangle with the map showing through
+   * the gap between them. Filling to the border box puts the stone behind the
+   * frame, which is what a panel with a frame around it looks like.
+   */
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 45%) border-box;
   image-rendering: pixelated;
   /* Lifts it off the field, which is busy and in places the same value. */
   box-shadow: 0 calc(4px * var(--keep-scale)) 0 0 rgb(0 0 0 / 45%);
@@ -245,7 +254,7 @@
 .keep-panel-heavy {
   border: 32px solid transparent;
   border-image: url("/game/ui/frame-heavy.png") 32 / 32px stretch;
-  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 30%) padding-box;
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 30%) border-box;
   image-rendering: pixelated;
   box-shadow: 0 calc(6px * var(--keep-scale)) 0 0 rgb(0 0 0 / 50%);
 }
@@ -1737,11 +1746,26 @@
   object-fit: contain;
 }
 
-/* The mark beside each fact. Never on its own: the word is beside it. */
-.keep-fact-mark {
+/*
+ * The mark beside a label.
+ *
+ * Sized in ems so it grows with the interface-size slider, and nudged down a
+ * little because an icon's optical centre sits above a line of text's.
+ */
+.keep-mark {
   display: inline-block;
-  width: 1.2em;
-  color: var(--keep-gold);
+  width: 1.7em;
+  height: 1.7em;
+  margin-right: 0.4em;
+  object-fit: contain;
+  vertical-align: -0.45em;
+}
+
+.keep-barrow-mark .keep-mark {
+  width: calc(28px * var(--keep-scale));
+  height: calc(28px * var(--keep-scale));
+  margin-right: 0;
+  vertical-align: middle;
 }
 
 @keyframes keep-slide {

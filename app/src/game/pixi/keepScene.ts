@@ -1,7 +1,7 @@
 import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
-import { buildWorld, homeView, loadArt } from "./scene";
+import { buildWorld, homeView, loadArt, loadKingdom } from "./scene";
 import { toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
@@ -68,10 +68,11 @@ export async function buildKeepScene(
   viewport: Viewport,
   handle: KeepHandle,
 ): Promise<Scene> {
-  const [art, fx, sigils] = await Promise.all([
+  const [art, fx, sigils, kingdom] = await Promise.all([
     loadArt(),
     loadEffects(),
     loadSigils(),
+    loadKingdom(),
     /*
      * The signs' face, waited for before anything is drawn.
      *
@@ -85,7 +86,7 @@ export async function buildKeepScene(
      */
     document.fonts?.load('26px "Pirata One"').catch(() => undefined),
   ]);
-  const { root, camps, banners, things, labels, signs } = buildWorld(app, art);
+  const { root, camps, banners, things, labels, signs } = buildWorld(app, art, kingdom);
 
   const world = new Container();
   world.addChild(root);

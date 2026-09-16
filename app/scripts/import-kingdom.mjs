@@ -1,0 +1,114 @@
+// Brings the medieval art pack into public/game/kingdom/.
+//
+//   node scripts/import-kingdom.mjs <assets-dir>
+//
+// The pack is not vendored whole. It is roughly two hundred files, most of a
+// gigabyte of it in three-thousand-pixel renders, and the game uses about a
+// dozen; copying the rest would put art nobody loads into a chunk somebody
+// downloads. This script records exactly which files were taken and what was
+// done to them, so the choice can be revisited without anybody having to guess.
+//
+// Provenance is recorded in docs/third-party-notices.md. The pack arrived with
+// no licence file, so it is recorded there as supplied by the repository owner
+// -- which is a statement about where it came from, not a licence.
+//
+// The flags are downscaled with `sips`, which is macOS-only. That is a real
+// limitation and the reason the downscaled results are committed rather than
+// generated at build time: a build that only works on one operating system is
+// worse than a script that only re-runs on one.
+import { mkdir, copyFile, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+const run = promisify(execFile);
+
+const source = process.argv[2];
+if (!source) {
+  console.error("usage: node scripts/import-kingdom.mjs <assets-dir>");
+  process.exit(1);
+}
+
+const out = "public/game/kingdom";
+
+/**
+ * The banners that stand at a hero's camp.
+ *
+ * Downscaled hard. They ship at three thousand pixels for print; on the map a
+ * camp banner is about sixty pixels tall, so anything past a few hundred is
+ * bytes nobody sees.
+ */
+const FLAGS = [
+  ["flag-medieval-realistic_01/flag-medieval-realistic_04/flag-medieval-realistic_04.png", "banner-a.png"],
+  ["flag-medieval-realistic_01/flag-medieval-realistic_05/flag-medieval-realistic_05.png", "banner-b.png"],
+  ["flag-medieval-realistic_01/flag-medieval-realistic_06/flag-medieval-realistic_06.png", "banner-c.png"],
+  ["flag-medieval-realistic_01/flag-medieval-realistic_07/flag-medieval-realistic_07.png", "banner-d.png"],
+];
+
+/** How wide a banner is kept. See the note above. */
+const BANNER_WIDTH = 360;
+
+/**
+ * Conifers for the border wood.
+ *
+ * Only the conifers. The set is called "palm tree and pine forest" and most of
+ * it is palms, which would be a strange thing to find at the edge of a map of
+ * keeps and barrows. The flat silhouette is the one that reads at a distance,
+ * which is the only distance any of these are seen from.
+ */
+const TREES = [
+  ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-16.svg", "pine-dark.svg"],
+  ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-05.svg", "pine-tall.svg"],
+  ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-08.svg", "pine-broad.svg"],
+];
+
+/**
+ * The marks the interface uses, in place of the typographic glyphs it had.
+ *
+ * One per thing that needed naming, and no more. A hundred and twenty icons is
+ * an invitation to decorate, and an interface where every line has a picture
+ * beside it is one where none of the pictures mean anything.
+ */
+const ICONS = [
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Castle.svg", "castle.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Shield.svg", "shield.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Tower.svg", "tower.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Torch.svg", "torch.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Cart Wagon.svg", "wagon.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Goblet.svg", "goblet.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Old Maps.svg", "map.svg"],
+  ["medieval-icons/Filled/SVG/Filled 2_Medieval Lance.svg", "lance.svg"],
+];
+
+await mkdir(out, { recursive: true });
+
+let taken = 0;
+
+for (const [from, to] of [...TREES, ...ICONS]) {
+  try {
+    await copyFile(join(source, from), join(out, to));
+    taken += 1;
+    console.log(`${to}  <-  ${from}`);
+  } catch {
+    console.warn(`missing, skipped: ${from}`);
+  }
+}
+
+for (const [from, to] of FLAGS) {
+  const input = join(source, from);
+  try {
+    await stat(input);
+  } catch {
+    console.warn(`missing, skipped: ${from}`);
+    continue;
+  }
+  try {
+    await run("sips", ["--resampleWidth", String(BANNER_WIDTH), input, "--out", join(out, to)]);
+    taken += 1;
+    console.log(`${to}  <-  ${from}  (resampled to ${BANNER_WIDTH}px)`);
+  } catch (error) {
+    console.warn(`sips failed for ${from}: ${error instanceof Error ? error.message : error}`);
+  }
+}
+
+console.log(`\n${taken} files written to ${out}`);

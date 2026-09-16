@@ -36,19 +36,22 @@ const UNIT_FOR: Record<string, string> = {
 };
 
 /** How much bigger than drawn a soldier is. See `make`. */
-const FIGURE = 1.25;
+const FIGURE = 1.85;
 
 /**
  * How much bigger again a hero is.
  *
- * Twice the soldier, which sounds like a lot and is barely enough. A hero is a
- * person and everything around them is their work; drawn at the same size they
- * were indistinguishable from their own retinue, which is the one thing about
- * this map that has to be legible at a glance. The map is also large enough
- * now that a figure you cannot pick out at a distance is a figure you will
- * never find.
+ * Two thirds again on top of a soldier, and both have grown. A hero is a person
+ * and everything around them is their work; drawn at the same size they were
+ * indistinguishable from their own retinue, which is the one thing about this
+ * map that has to be legible at a glance.
+ *
+ * Everybody is larger than the pack intends. Kenney's units are scaled to stand
+ * beside Kenney's buildings, which is correct and useless here: the country is
+ * a hundred and twenty-eight tiles across, and a figure sized for a courtyard
+ * is a speck on it.
  */
-const HERO = 2.1;
+const HERO = 3.1;
 
 /** A small deterministic offset, so two bugs do not step in lockstep. */
 function hashOf(id: string): number {

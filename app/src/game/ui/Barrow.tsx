@@ -1,4 +1,5 @@
 import { AWARD, type Earned } from "../state/progress";
+import { Mark, type MarkName } from "./Mark";
 
 /**
  * The Barrow: what the finished sessions came to.
@@ -24,35 +25,35 @@ export function Barrow({
 }) {
   const rows = [
     {
-      mark: "⚔",
+      mark: "finished" as MarkName,
       label: "Sessions run to the end",
       count: earned.sessions,
       each: AWARD.session,
       note: "Started, finished, and closed without an error.",
     },
     {
-      mark: "☾",
+      mark: "elapsed" as MarkName,
       label: "Days anything was started",
       count: earned.days,
       each: AWARD.day,
       note: "Worth the most of any of these, and the only one nobody can farm.",
     },
     {
-      mark: "⌂",
+      mark: "machine" as MarkName,
       label: "Machines that answered",
       count: earned.machines,
       each: AWARD.machine,
       note: "Each outpost that has ever sent a wright.",
     },
     {
-      mark: "✚",
+      mark: "company" as MarkName,
       label: "Faults mended",
       count: earned.mended,
       each: AWARD.mended,
       note: "Finished sessions whose name reads as fixing something.",
     },
     {
-      mark: "⚒",
+      mark: "made" as MarkName,
       label: "Things made",
       count: earned.made,
       each: AWARD.made,
@@ -79,7 +80,7 @@ export function Barrow({
       <ul className="keep-barrow-rows">
         {rows.map((row) => (
           <li key={row.label} className="keep-barrow-row">
-            <span className="keep-barrow-mark" aria-hidden="true">{row.mark}</span>
+            <span className="keep-barrow-mark"><Mark name={row.mark} /></span>
             <span className="keep-barrow-text">
               <span className="keep-barrow-label">{row.label}</span>
               <span className="keep-barrow-detail">{row.note}</span>

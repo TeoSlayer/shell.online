@@ -1,6 +1,7 @@
 import type React from "react";
 import { kindById } from "../../lib/session-kinds";
 import { CLASS_LORE } from "../lore/world";
+import { Mark } from "./Mark";
 import { garrisonById } from "../world/marches";
 import type { Actor } from "../world/sim";
 
@@ -109,7 +110,7 @@ export function WrightPanel({
           * been taught is decoration.
           */}
         <div>
-          <dt><span className="keep-fact-mark" aria-hidden="true">⚒</span>Doing</dt>
+          <dt><Mark name="work" />Doing</dt>
           <dd>
             {work.title}
             <span className="keep-wright-note">{work.note}</span>
@@ -123,7 +124,7 @@ export function WrightPanel({
           */}
         {actor.role === "hero" ? (
           <div>
-            <dt><span className="keep-fact-mark" aria-hidden="true">⚑</span>Company</dt>
+            <dt><Mark name="company" />Company</dt>
             <dd>
               {company.length === 1 ? "1 soldier" : `${company.length} soldiers`}
               <span className="keep-wright-note">
@@ -136,7 +137,7 @@ export function WrightPanel({
           </div>
         ) : (
           <div>
-            <dt><span className="keep-fact-mark" aria-hidden="true">⚑</span>Serves</dt>
+            <dt><Mark name="company" />Serves</dt>
             <dd>
               {captain?.name ?? "nobody"}
               {posting && <span className="keep-wright-note">{posting.truth}</span>}
@@ -146,23 +147,23 @@ export function WrightPanel({
         {actor.session && (
           <>
             <div>
-              <dt><span className="keep-fact-mark" aria-hidden="true">⌂</span>Machine</dt>
+              <dt><Mark name="machine" />Machine</dt>
               <dd>{actor.session.host}</dd>
             </div>
             <div>
-              <dt><span className="keep-fact-mark" aria-hidden="true">❯</span>Running</dt>
+              <dt><Mark name="running" />Running</dt>
               <dd className="keep-wright-command">
                 <code>{actor.session.command}</code>
               </dd>
             </div>
             <div>
-              <dt><span className="keep-fact-mark" aria-hidden="true">⧗</span>On the field</dt>
+              <dt><Mark name="elapsed" />On the field</dt>
               <dd>{since(actor.session.startedAt, now)}</dd>
             </div>
           </>
         )}
         <div>
-          <dt><span className="keep-fact-mark" aria-hidden="true">♥</span>Condition</dt>
+          <dt><Mark name="condition" />Condition</dt>
           <dd>
             {/* A figure and a word, never a bar on its own. */}
             {actor.hp} of {actor.maxHp}

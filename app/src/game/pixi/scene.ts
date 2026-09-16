@@ -20,6 +20,41 @@ import { buildScatter } from "./scatter";
 /** Where the art lives. See scripts/import-kenney.mjs and the notices file. */
 const ATLAS = "/game/medieval-rts.json";
 
+/**
+ * The banners that stand at a camp, and the conifers in the border wood.
+ *
+ * From the medieval pack; see scripts/import-kingdom.mjs for what was taken and
+ * what was done to it. Loaded separately from the atlas because they are a
+ * handful of loose files rather than a spritesheet, and because one of them
+ * failing to load should cost that one thing rather than the whole map.
+ */
+const KINGDOM = [
+  "banner-a",
+  "banner-b",
+  "banner-c",
+  "banner-d",
+  "pine-dark",
+  "pine-tall",
+  "pine-broad",
+];
+
+export type Kingdom = Map<string, Texture>;
+
+export async function loadKingdom(): Promise<Kingdom> {
+  const loaded: Kingdom = new Map();
+  await Promise.all(
+    KINGDOM.map(async (name) => {
+      const file = name.startsWith("banner") ? `${name}.png` : `${name}.svg`;
+      try {
+        loaded.set(name, await Assets.load(`/game/kingdom/${file}`));
+      } catch {
+        /* One missing banner is one missing banner, not a blank map. */
+      }
+    }),
+  );
+  return loaded;
+}
+
 export interface Loaded {
   frame(name: string): Texture;
 }
@@ -202,7 +237,7 @@ export function signFor(garrison: Garrison): Container {
 }
 
 /** The ground, the holdings and their signs. Everything that does not move. */
-export function buildWorld(app: Application, art: Loaded): {
+export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   root: Container;
   ground: Container;
   /** The camps, by "x,y", so the scene can show the ones somebody holds. */
@@ -219,7 +254,7 @@ export function buildWorld(app: Application, art: Loaded): {
    * it. The thicket goes down after, so the trees that straddle the edge are
    * not sliced along it.
    */
-  const border = buildBorder(app, art);
+  const border = buildBorder(app, art, kingdom);
   const ground = buildGroundLayer();
   const things = new Container();
   /*
@@ -256,11 +291,26 @@ export function buildWorld(app: Application, art: Loaded): {
    * country full of abandoned camps, which is a different and wrong story.
    */
   const camps = new Map<string, Container>();
-  for (const site of campSites()) {
+  const flags = ["banner-a", "banner-b", "banner-c", "banner-d"];
+  campSites().forEach((site, index) => {
     const camp = new Container();
     camp.addChild(standing(art.frame("Structure_16"), site.x, site.y - 1.5, 1.1));
     camp.addChild(standing(art.frame("Structure_01"), site.x - 3.5, site.y + 1.5, 0.9));
     camp.addChild(standing(art.frame("Structure_08"), site.x + 3.5, site.y + 1.5, 0.85));
+
+    /*
+     * Banners at the gate. A camp is a barracks, a tent and a gate, which from
+     * above is three roofs -- indistinguishable from any other cluster of
+     * buildings on the map. Flags are what say somebody holds this ground.
+     *
+     * A different set per site, so two camps side by side are not the same
+     * picture twice, and chosen by position rather than at random so the same
+     * camp always flies the same colours.
+     */
+    const flag = kingdom.get(flags[index % flags.length]);
+    if (flag) {
+      camp.addChild(standing(flag, site.x - 1.5, site.y + 3.2, 0.26));
+    }
     camp.visible = false;
     /*
      * Sorted as its own group rather than by each building's depth. A camp is
@@ -270,7 +320,7 @@ export function buildWorld(app: Application, art: Loaded): {
     camp.zIndex = depthOf(site.x, site.y);
     things.addChild(camp);
     camps.set(`${site.x},${site.y}`, camp);
-  }
+  });
 
   for (const garrison of GARRISONS) {
     for (const building of garrison.buildings) {
