@@ -30,14 +30,15 @@ export function ChooseCharacter({ onChoose }: { onChoose: (kind: string) => void
     <div className="keep-curtain" role="presentation">
       <div className="keep-panel keep-panel-heavy keep-opening" role="dialog" aria-modal="true" aria-label="Choose your character">
         <header className="keep-opening-head">
-          <h2>{WORLD.era}</h2>
+          <span className="keep-opening-kicker">{WORLD.era}</span>
+          <h2>Your sessions are already here</h2>
           {OPENING.map((line) => (
             <p key={line}>{line}</p>
           ))}
         </header>
 
         <div className="keep-opening-choose">
-          <h3>Which are you?</h3>
+          <h3>Choose how you appear</h3>
           <Menu
             items={items}
             label="Choose your character"

@@ -300,6 +300,19 @@ export async function buildKeepScene(
     const wanted = viewport.scale.x > 0.75;
     for (const sign of signs.children) {
       sign.scale.set(Math.min(1.6, Math.max(0.55, scale)));
+      /*
+       * A board is centred over its post and grows upward. Hide it for the
+       * last few pixels of a pan instead of showing a severed sentence along
+       * the browser edge (or underneath the persistent Pause control).
+       */
+      const point = viewport.toScreen(sign.x, sign.y);
+      const bounds = sign.getLocalBounds();
+      const screenScale = sign.scale.x * viewport.scale.x;
+      const left = point.x + bounds.x * screenScale;
+      const top = point.y + bounds.y * screenScale;
+      const right = left + bounds.width * screenScale;
+      const bottom = top + bounds.height * screenScale;
+      sign.visible = left >= 8 && top >= 8 && right <= app.screen.width - 8 && bottom <= app.screen.height - 8;
     }
     actors.zoomed(viewport.scale.x);
     /*

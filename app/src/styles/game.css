@@ -322,6 +322,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--keep-space);
+  padding: calc(var(--keep-space) / 2) var(--keep-space);
+  background: rgb(9 7 5 / 72%);
+  box-shadow: 0 0 0 2px rgb(242 221 164 / 12%);
   color: var(--keep-mist);
   font-size: var(--keep-text);
   letter-spacing: 0.06em;
@@ -481,21 +484,21 @@
 }
 
 .keep-marches-list {
-  display: flex;
+  display: grid;
   margin: 0;
   padding: 0;
-  flex-direction: column;
   gap: var(--keep-space);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   list-style: none;
 }
 
 .keep-marches-item {
-  display: flex;
+  display: grid;
   padding: var(--keep-space-2);
   border: 2px solid rgb(232 180 74 / 25%);
   background: rgb(0 0 0 / 22%);
-  align-items: center;
   gap: var(--keep-space-2);
+  grid-template-rows: 1fr auto;
 }
 
 .keep-marches-text {
@@ -504,6 +507,10 @@
   flex: 1;
   flex-direction: column;
   gap: 2px;
+}
+
+.keep-marches-item > .keep-button {
+  width: 100%;
 }
 
 .keep-marches-name {
@@ -707,6 +714,24 @@
   padding: var(--keep-space-3);
   flex-direction: column;
   gap: var(--keep-space-2);
+}
+
+/* The root has eight destinations; two columns keep every one visible. */
+.keep-pause-panel.is-root {
+  width: min(760px, 100%);
+}
+
+@media (width > 480px) {
+  .keep-pause-panel.is-root > .keep-menu {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+
+  .keep-pause-panel.is-root .keep-menu-item.is-danger {
+    margin-top: 0;
+    border-top-color: transparent;
+  }
 }
 
 /*
@@ -1147,6 +1172,59 @@
   gap: var(--keep-space);
 }
 
+.keep-operational-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--keep-space);
+}
+
+.keep-operational-value {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-huge);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.keep-operational-label {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-operational-breakdown {
+  margin: 0;
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-data-state {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: calc(6px * var(--keep-scale));
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-data-state::before {
+  width: calc(8px * var(--keep-scale));
+  height: calc(8px * var(--keep-scale));
+  border-radius: 50%;
+  background: var(--keep-heal);
+  box-shadow: 0 0 calc(6px * var(--keep-scale)) var(--keep-heal);
+  content: "";
+}
+
+.keep-data-state.is-preview::before {
+  background: var(--keep-gold);
+  box-shadow: none;
+}
+
+.keep-standing-divider {
+  height: 2px;
+  background: var(--keep-stone-dark);
+}
+
 .keep-standing-head {
   display: flex;
   align-items: center;
@@ -1373,6 +1451,25 @@
     max-width: calc(100vw - var(--keep-space-4));
   }
 
+  .keep-operational-head {
+    gap: calc(6px * var(--keep-scale));
+  }
+
+  .keep-operational-value {
+    font-size: var(--keep-text-xl);
+  }
+
+  .keep-operational-label {
+    font-size: var(--keep-text);
+  }
+
+  /* Progression remains in the pause screen; the phone HUD is for live work. */
+  .keep-standing-divider,
+  .keep-standing-head,
+  .keep-standing > .keep-meter {
+    display: none;
+  }
+
   /* The explanations, which are the first thing that can go. */
   .keep-standing-level,
   .keep-meter-label,
@@ -1462,6 +1559,15 @@
   color: var(--keep-gold);
   font-size: var(--keep-text-xl);
   letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.keep-opening-kicker {
+  display: block;
+  margin-bottom: var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -1694,6 +1800,58 @@
   }
 }
 
+@media (width <= 640px) {
+  .keep-marches-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .keep-pause-panel {
+    gap: var(--keep-space);
+    padding: var(--keep-space-2);
+  }
+
+  .keep-pause-head h2 {
+    font-size: var(--keep-text-xl);
+  }
+
+  .keep-menu {
+    gap: calc(var(--keep-space) / 2);
+  }
+
+  .keep-menu-item {
+    padding-block: calc(var(--keep-space) / 2);
+  }
+}
+
+@media (width <= 480px) {
+  /* One-line root choices keep the exit visible without shrinking text. */
+  .keep-pause-panel.is-root .keep-menu-detail {
+    display: none;
+  }
+}
+
+@media (height <= 800px) {
+  .keep-pause {
+    align-items: stretch;
+  }
+
+  .keep-pause-panel {
+    margin: auto;
+    gap: var(--keep-space);
+    padding-block: var(--keep-space-2);
+  }
+
+  .keep-pause-panel > .keep-menu,
+  .keep-pause-panel > .keep-marches {
+    scrollbar-gutter: stable;
+  }
+
+  .keep-menu-item {
+    min-height: var(--keep-hit);
+    padding-block: calc(var(--keep-space) / 2);
+  }
+}
+
 /* The figures the HUD drops on a narrow screen, repeated in the pause menu. */
 .keep-pause-stats {
   display: flex;
@@ -1731,28 +1889,37 @@
  * clicked — the one part of the screen somebody was looking at.
  */
 /*
- * The inspect card stands beside the figure it is about, and walks with it.
- *
- * It used to be pinned to the right edge, which meant reading about somebody
- * while looking at a box a screen's width away from them. Positioned from the
- * top-left corner and moved with a transform, because a transform is the one
- * property a browser will move without laying anything out again -- and this
- * moves every frame.
+ * The inspect card is an edge-anchored operational panel. It no longer chases
+ * a moving figure around the field: the selected figure stays highlighted on
+ * the map while the facts remain in one predictable place for the eye.
  */
 .keep-wright {
   display: flex;
   position: fixed;
-  top: 0;
-  left: 0;
+  top: calc(var(--keep-safe) + var(--keep-hit) + var(--keep-space-2));
+  right: var(--keep-safe);
   z-index: var(--keep-z-modal);
-  width: min(320px, calc(100vw - var(--keep-space-4)));
-  max-height: calc(100vh - var(--keep-space-4));
+  width: min(360px, calc(100vw - var(--keep-space-4)));
+  max-height: calc(100vh - var(--keep-safe) - var(--keep-safe) - var(--keep-hit) - var(--keep-space-3));
   padding: var(--keep-space-2);
   flex-direction: column;
   gap: var(--keep-space);
   overflow-y: auto;
   pointer-events: auto;
-  will-change: transform;
+  animation: keep-slide var(--keep-normal) ease-out;
+}
+
+@media (width <= 640px) {
+  .keep-wright {
+    top: auto;
+    right: var(--keep-safe);
+    bottom: var(--keep-safe);
+    left: var(--keep-safe);
+    width: auto;
+    max-height: min(62vh, 560px);
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
 }
 
 /* The harness's own mark, at the size of the crest it replaces. */

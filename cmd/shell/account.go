@@ -150,6 +150,12 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	samePrincipal := previousErr == nil && sameAccount(previous, credentials)
+	if samePrincipal && previous.AccountKey != "" {
+		if credentials.AccountKey != "" && credentials.AccountKey != previous.AccountKey {
+			fmt.Fprintln(stderr, "shell: the account vault key changed; keeping this machine's pinned key and refusing to seal new passwords")
+		}
+		credentials.AccountKey = previous.AccountKey
+	}
 	alreadyGranted := samePrincipal && previous.RemoteStart
 	if !samePrincipal {
 		// A daemon keeps the credentials it started with in memory. Stop it

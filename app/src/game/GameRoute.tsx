@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { usePageTitle } from "../lib/page-title";
 import { PixiStage } from "./pixi/PixiStage";
 import { buildKeepScene, createSim, type KeepHandle } from "./pixi/keepScene";
@@ -38,6 +39,7 @@ import "../styles/game.css";
  */
 export default function GameRoute() {
   usePageTitle(KEEP_TITLE);
+  const navigate = useNavigate();
 
   const [options, setOptionsState] = useState<GameOptions>(readOptions);
   /* Who you are, what you are wearing, and what you have bought. */
@@ -188,7 +190,7 @@ export default function GameRoute() {
    * vial on the field leads straight to the account of what the gathering has
    * cost; everything else opens the menu where it was left.
    */
-  const [pauseAt, setPauseAt] = useState<"gathering" | undefined>();
+  const [pauseAt, setPauseAt] = useState<"gathering" | "marches" | undefined>();
 
   const handle = useRef<KeepHandle>({
     sim: sim.current,
@@ -199,13 +201,10 @@ export default function GameRoute() {
   });
   handle.current.onPick = setPicked;
   /*
-   * The inspect card follows the figure it is about.
-   *
-   * Its position is written straight onto the node by the scene, every frame,
-   * rather than kept in state: a card that re-rendered the route sixty times a
-   * second to move one box would be paying a component tree for arithmetic.
-   * It is also clamped to the window here, because a card about somebody
-   * standing at the edge of the view is a card half off the screen.
+   * The scene still tells us whether the selected figure is visible, but the
+   * card itself stays against the edge of the window. A moving information
+   * panel was harder to read, covered a different piece of the map every
+   * frame, and became a bottom-sheet-sized obstruction on a phone.
    */
   const cardRef = useRef<HTMLElement>(null);
   handle.current.onTrack = (at) => {
@@ -215,18 +214,7 @@ export default function GameRoute() {
       card.style.visibility = "hidden";
       return;
     }
-    const box = card.getBoundingClientRect();
-    const GAP = 28;
-    const left = Math.min(
-      Math.max(12, at.x + GAP),
-      Math.max(12, window.innerWidth - box.width - 12),
-    );
-    const top = Math.min(
-      Math.max(12, at.y - box.height / 2),
-      Math.max(12, window.innerHeight - box.height - 12),
-    );
     card.style.visibility = "visible";
-    card.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
   };
 
   /*
@@ -324,11 +312,24 @@ export default function GameRoute() {
             wrights={tally.wrights}
             demo={garrison.demo}
             counted={known}
+            sessionTotal={garrison.soldiers}
+            dataState={
+              garrison.loading
+                ? "Updating sessions"
+                : garrison.demo
+                  ? garrison.error
+                    ? "Preview — sessions unavailable"
+                    : "Preview — no active sessions"
+                  : "Live team sessions"
+            }
             onOpenGathering={() => {
               setPauseAt("gathering");
               setPaused(true);
             }}
-            onOpenRoster={() => setPaused(true)}
+            onOpenRoster={() => {
+              setPauseAt("marches");
+              setPaused(true);
+            }}
           />
 
           {/*
@@ -363,6 +364,7 @@ export default function GameRoute() {
               setPicked(undefined);
               handle.current.select(undefined);
             }}
+            onOpenSession={(sessionId) => navigate(`/sessions/${sessionId}`)}
           />
         )}
 

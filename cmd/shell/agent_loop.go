@@ -149,7 +149,11 @@ func performAgentCommand(
 		// The browser supplies a command line rather than an argv. Give that
 		// complete line to the platform shell so quoting and escapes keep their
 		// normal meaning, then wrap that shell through the usual CLI path.
-		launch := exec.CommandContext(ctx, self, browserCommandArguments(command.Command)...)
+		// `--` keeps a server-supplied command from becoming shell.online's own
+		// flags. The opted-in service may choose what program runs, but it may
+		// not silently weaken E2EE or widen file sharing on the wrapper itself.
+		arguments := append([]string{"--"}, browserCommandArguments(command.Command)...)
+		launch := exec.CommandContext(ctx, self, arguments...)
 		launch.Env = os.Environ()
 		if command.Name != "" {
 			// The launched shell reads this when it publishes the session, so

@@ -116,7 +116,7 @@ func Collect(ctx context.Context, options Options) Run {
 
 	commits, insertions, deletions, err := gitWork(ctx, options)
 	if err != nil {
-		trouble = append(trouble, "git: "+short(err))
+		trouble = append(trouble, "git: unavailable")
 	}
 	run.Commits = commits
 	run.Insertions = insertions
@@ -124,13 +124,13 @@ func Collect(ctx context.Context, options Options) Run {
 
 	prs, err := openPullRequests(ctx, options)
 	if err != nil {
-		trouble = append(trouble, "gh: "+short(err))
+		trouble = append(trouble, "gh: unavailable")
 	}
 	run.PullRequests = prs
 
 	tokens, err := agentTokens(options)
 	if err != nil {
-		trouble = append(trouble, "agents: "+short(err))
+		trouble = append(trouble, "agents: unavailable")
 	}
 	run.Tokens = tokens
 
@@ -139,21 +139,6 @@ func Collect(ctx context.Context, options Options) Run {
 		run.Error = run.Error[:200]
 	}
 	return run
-}
-
-// short keeps a failure to a sentence, and keeps paths out of it.
-//
-// An error from a command often quotes the directory it ran in, and a
-// directory is a path, and paths are what rule 1 is about.
-func short(err error) string {
-	text := err.Error()
-	if index := strings.IndexByte(text, '\n'); index >= 0 {
-		text = text[:index]
-	}
-	if len(text) > 60 {
-		text = text[:60]
-	}
-	return text
 }
 
 /* ---- git ---------------------------------------------------------------- */

@@ -358,8 +358,8 @@
           "Anyone holding both values for an interactive share can view and type with the wrapped process\u2019s operating-system permissions. Share them only with intended collaborators and run with least privilege."
         ],
         [
-          "Read-only is server-enforced",
-          "With --read-only, ordinary browser input and confirmed EOF are rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
+          "Read-only is enforced twice",
+          "With --read-only, ordinary browser input and confirmed EOF are rejected independently by the relay and the CLI before they reach the PTY. DevTools, a modified browser, or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
         ],
         [
           "Files are off unless the CLI opts in",
@@ -370,12 +370,20 @@
           "The current CLI normally encrypts terminal payloads before the relay. Cloudflare can still observe frame type, encrypted size, timing, connection IP, access mode, command label, and lifecycle metadata. --no-e2ee instead exposes terminal payloads to Cloudflare while retaining HTTPS/WSS transport encryption."
         ],
         [
+          "Captured input cannot be replayed",
+          "Current envelope-v2 frames authenticate their direction, sender stream, and sequence. The CLI accepts limited legitimate reordering but rejects duplicate and stale keystrokes. A relay can still delay or drop ciphertext. Legacy sessions remain viewable for upgrade continuity and gain replay protection when their CLI is updated."
+        ],
+        [
           "No terminal transcript retained",
           "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; ordinary task exit deletes the session state and closes every socket."
         ],
         [
           "Browser-started passwords stay sealed",
           "When a session is started from the web app, the browser picks its password and seals it to that one machine using an ephemeral ECDH P-256 key the machine published. The accounts service relays an envelope it cannot open, and a session password is sealed once per organization member so colleagues can open the session without the service reading it."
+        ],
+        [
+          "Hosted application code is trusted",
+          "E2EE keeps ciphertext opaque to a passive relay, but the JavaScript served while you log in or unlock a vault is trusted. Browser-started commands also trust the accounts service after the machine owner explicitly opts in. The security policy names these operator boundaries directly; use shell daemon stop or link without remote start when that capability is not needed."
         ]
       ],
       "diagrams": [
@@ -416,7 +424,7 @@
         ],
         [
           "Limits, recovery, and opt-out",
-          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
+          "E2EE cannot hide traffic shape or prevent the relay from dropping or delaying ciphertext. Envelope v2 authenticates direction, sender stream, and sequence so current receivers reject replayed keystrokes and stale frames. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
         ]
       ]
     },

@@ -218,6 +218,20 @@ func TestCollectKeepsTheFailureShort(t *testing.T) {
 	}
 }
 
+func TestCollectNeverReportsLocalPathsFromErrors(t *testing.T) {
+	secretPath := "/Users/example/private-project"
+	run := Collect(context.Background(), Options{
+		Home: t.TempDir(),
+		Look: func(string) (string, error) { return "/usr/bin/git", nil },
+		Run: func(context.Context, string, ...string) ([]byte, error) {
+			return nil, errors.New("failed in " + secretPath)
+		},
+	})
+	if strings.Contains(run.Error, secretPath) || strings.Contains(run.Error, "private-project") {
+		t.Fatalf("local path leaked in %q", run.Error)
+	}
+}
+
 func TestCollectSumsAgentHistories(t *testing.T) {
 	home := t.TempDir()
 	dir := filepath.Join(home, ".claude", "projects", "some-project")

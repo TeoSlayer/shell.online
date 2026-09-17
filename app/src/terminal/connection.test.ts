@@ -299,6 +299,20 @@ describe("encrypted session", () => {
     expect(recorded.writes).toEqual([{ text: "secret", reset: false }]);
   });
 
+  it("drops a replayed frame without treating the password as wrong", async () => {
+    const { connection, recorded } = connect(`${SALT}&password=hunter2`);
+    await connection.start();
+    const host = await BrowserFrameCipher.fromPassword("hunter2", new Uint8Array(16).fill(7));
+    FakeSocket.last!.opened();
+    const frame = await host.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("once")));
+    FakeSocket.last!.binary(frame);
+    FakeSocket.last!.binary(frame);
+    await waitFor(() => recorded.writes.length > 0, "the first frame");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(recorded.writes).toEqual([{ text: "once", reset: false }]);
+    expect(recorded.statuses.at(-1)?.status).not.toBe("needs-password");
+  });
+
   it("asks again when the password cannot decrypt", async () => {
     const { connection, recorded } = connect(SALT);
     await connection.start();

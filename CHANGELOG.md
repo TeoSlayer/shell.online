@@ -4,11 +4,25 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- Shell Keep now leads with the state of the real work: active sessions and
+  how many are fixing, building, or waiting appear before cosmetic progression.
+  Selected sessions open in a stable edge panel with a direct route to the
+  terminal, rather than a card that chases a moving figure. Pause and holdings
+  menus use plain operational labels, fit without hiding the exit, and stack
+  cleanly on narrow screens. First launch explains the session-to-world mapping
+  before asking how the player should appear. Every session class and work
+  state now has a tested visual marker.
+- E2EE envelope v2 authenticates direction, sender stream, and sequence with a
+  bounded replay window; read-only input is rejected again inside the CLI; and
+  encrypted URL fragments can no longer be downgraded by relay metadata.
+
 ### Added
 
 - A game skin over the web app, reached from a controller at the right of the
-  top bar and left again through a pause screen whose last item is "Quit to
-  boring UI". The Marches are nine holdings spread over open country, each one
+  top bar and left again through a pause screen whose last item returns to the
+  session list. The Marches are ten holdings spread over open country, each one
   a rename of a part of the product: the Forge is where features are built, the
   Watch is where faults are met, the Chronicle is the audit log, the Vault
   holds session passwords the service cannot open. Live sessions are wrights

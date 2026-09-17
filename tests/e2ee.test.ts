@@ -32,11 +32,29 @@ describe("browser E2EE envelope", () => {
     await expect(cipher.open(sealed)).rejects.toThrow();
   });
 
+  it("rejects replayed frames while allowing a small reordering window", async () => {
+    const cipher = await BrowserFrameCipher.fromKey(new Uint8Array(32).fill(5));
+    const frames = await Promise.all(["a", "b", "c"].map((value) =>
+      cipher.seal(new Uint8Array([2, value.charCodeAt(0)]))));
+    await expect(cipher.open(frames[2])).resolves.toEqual(new Uint8Array([2, 99]));
+    await expect(cipher.open(frames[0])).resolves.toEqual(new Uint8Array([2, 97]));
+    await expect(cipher.open(frames[1])).resolves.toEqual(new Uint8Array([2, 98]));
+    await expect(cipher.open(frames[1])).rejects.toThrow(/replayed/i);
+  });
+
   it("opens the Go AES-GCM compatibility vector", async () => {
     const cipher = await BrowserFrameCipher.fromKey(Uint8Array.from({ length: 32 }, (_, index) => index));
     const hex = "0101000102030405060708090a0b2f67ba77aabc5ea34e96d1ce6b9479978b53be0144";
     const sealed = Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
     expect(new TextDecoder().decode((await cipher.open(sealed)).subarray(1))).toBe("hello");
+  });
+
+  it("opens the sequenced Go envelope-v2 compatibility vector", async () => {
+    const cipher = await BrowserFrameCipher.fromKey(Uint8Array.from({ length: 32 }, (_, index) => index));
+    const hex = "01020100010203040506070000000000000001000102030405060708090a0b2f67ba77aaca8b8b050124ea94b7b8803644a14b0b";
+    const sealed = Uint8Array.from(hex.match(/../g)!, (pair) => Number.parseInt(pair, 16));
+    expect(new TextDecoder().decode((await cipher.open(sealed)).subarray(1))).toBe("hello");
+    await expect(cipher.open(sealed)).rejects.toThrow(/replayed/i);
   });
 
   it("derives the same password key as Go", async () => {

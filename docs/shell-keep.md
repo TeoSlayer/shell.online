@@ -20,6 +20,11 @@ garrison nobody can point at a feature for would drift into fantasy filler the
 first time anybody edited it, and a bar that fills while you watch it is a bar
 that is lying about your week.
 
+The operational meaning comes first. The field HUD leads with active sessions
+and how many are fixing, building, or waiting; character and progression sit
+below that on larger screens and move out of the way on a phone. Any stand-in
+roster is labelled as a preview, never presented as live account data.
+
 ---
 
 ## 2. The cast
@@ -136,12 +141,16 @@ watch and not the Unmade. **The whole drawn body answers**, not the tile it
 stands on: a figure rises well over a hundred pixels out of its own tile, so
 testing in tile space meant only the feet were clickable and a click on the
 chest asked about whatever field was behind them. Where two figures overlap,
-the one drawn on top is the one that answers. **The card stands beside whoever was clicked and walks
-with them**; every fact on it carries a mark as well as a word, and what it shows
+the one drawn on top is the one that answers. **The card stays against the edge
+of the screen while the selected figure remains highlighted**; every fact on it
+carries a mark as well as a word, and what it shows
 depends on what was clicked: a hero shows the company they command, a soldier
-shows whose company it is in. This is the one piece of the game that is not a
-read-out, and deliberately the only one: walking your hero around changes nothing
-about your account. It is there because a map you can only look at is a diagram.
+shows whose company it is in. A real session's panel names its plain state,
+owner, machine, command, and uptime, and opens the same terminal route as the
+session list. The simulated health row is explicitly labelled visual-only. This
+is the one piece of the game that is not a read-out, and deliberately the only
+one: walking your hero around changes nothing about your account. It is there
+because a map you can only look at is a diagram.
 
 The view opens on **your own hero** once the roster arrives, not on the Keep.
 
@@ -351,6 +360,11 @@ When the service cannot be reached the game shows an **example** team with an
 example history, labelled as such in the HUD and in the Barrow. Without it the
 map is visible and nothing the map is for is reachable: no finished sessions, no
 experience, no marks, and a shop that will not open.
+
+Every supported session class has a distinct atlas sprite and matching sigil.
+Session plates also carry a compact state mark: a red cross for fixing, a gold
+hammer for building, and pause bars for waiting. A coverage test fails whenever
+a new launcher kind is added without its own sprite and lore entry.
 
 ## 9. Accessibility and input
 

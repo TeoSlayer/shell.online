@@ -200,7 +200,8 @@ export function soldierPlate(actor: Actor, sigils: Sigils): Plate {
 
   const PAD = 6;
   const SIGIL = 22;
-  const width = SIGIL + PAD * 3 + name.width;
+  const WORK_MARK = 16;
+  const width = SIGIL + WORK_MARK + PAD * 4 + name.width;
   const height = SIGIL + PAD;
 
   const board = new Graphics();
@@ -213,6 +214,25 @@ export function soldierPlate(actor: Actor, sigils: Sigils): Plate {
   badge.position.set(-width / 2 + PAD + SIGIL / 2, height / 2);
   name.position.set(-width / 2 + PAD * 2 + SIGIL, height / 2);
 
-  root.addChild(board, badge, name);
+  /*
+   * The class sigil says what is running; this small pixel mark says what the
+   * session is doing. Fixing is a red cross, building a gold hammer, and a
+   * waiting prompt two quiet bars. That keeps all three operational states
+   * visible even when labels are too small to read.
+   */
+  const work = new Graphics();
+  if (actor.work === "bug") {
+    work.moveTo(-5, -5).lineTo(5, 5).moveTo(5, -5).lineTo(-5, 5)
+      .stroke({ color: 0xe35d4f, width: 3 });
+  } else if (actor.work === "feature") {
+    work.rect(-5, -5, 10, 7).fill({ color: 0xe8b44a });
+    work.rect(-1.5, 2, 3, 7).fill({ color: 0xe8b44a });
+  } else {
+    work.rect(-5, -5, 3, 10).fill({ color: 0x91a0ad });
+    work.rect(2, -5, 3, 10).fill({ color: 0x91a0ad });
+  }
+  work.position.set(width / 2 - PAD - WORK_MARK / 2, height / 2);
+
+  root.addChild(board, badge, name, work);
   return { root, height };
 }

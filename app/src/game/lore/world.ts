@@ -42,10 +42,9 @@ export const WORLD = {
  * of curiosity is a wall they close.
  */
 export const OPENING = [
-  `It is ${WORLD.era}, and nothing has been rebooted in living memory.`,
-  `Your keep stands on ${WORLD.region}, built around ${WORLD.flame} — an amber light in the hall that must not go out.`,
-  /* One sentence, so the foe's name is never asked to start one in lower case. */
-  `Each outpost you have linked sends a wright when there is work; ${WORLD.foe} come when there is rot.`,
+  "Every active terminal session becomes a wright on this map.",
+  "Fixes gather at Watchmen’s Rise, builds at the Forge, and waiting sessions stay with their owner.",
+  "Select a wright to see its owner, machine, command, uptime, and open the real terminal.",
 ] as const;
 
 /** Flavour for each class of wright, keyed by the session kind it comes from. */

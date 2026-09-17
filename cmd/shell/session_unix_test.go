@@ -93,6 +93,17 @@ func TestSessionCipherRotationRejectsOldGeneration(t *testing.T) {
 	}
 }
 
+func TestReadOnlySessionRejectsInputInsideTheCLI(t *testing.T) {
+	for _, opcode := range []byte{protocol.Input, protocol.ConfirmedEOF} {
+		if acceptsViewerInput(true, opcode) {
+			t.Fatalf("read-only CLI accepted opcode 0x%02x", opcode)
+		}
+		if !acceptsViewerInput(false, opcode) {
+			t.Fatalf("interactive CLI rejected opcode 0x%02x", opcode)
+		}
+	}
+}
+
 func TestSharedProcessCancelsHangingRelayDialBeforeAnnouncing(t *testing.T) {
 	requestStarted := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {

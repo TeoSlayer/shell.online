@@ -68,7 +68,7 @@ export function PauseMenu({
   earned: Earned;
   counted: boolean;
   /** Which pane to open on, so the vial can lead straight to the bill. */
-  openAt?: "gathering";
+  openAt?: "gathering" | "marches";
 }) {
   const navigate = useNavigate();
   const [pane, setPane] = useState<Pane>(openAt ?? "root");
@@ -120,31 +120,31 @@ export function PauseMenu({
       onSelect: onResume,
     },
     {
-      id: "shop",
-      label: "The pedlar",
-      detail: shopOpen
-        ? `${purse.marks.toLocaleString()} marks to spend`
-        : "Starts calling at level 2",
-      disabled: !shopOpen,
-      onSelect: () => setPane("shop"),
-    },
-    {
       id: "marches",
-      label: "The Marches",
-      detail: "Ten holdings, and the road to each",
+      label: "Map & holdings",
+      detail: "The Marches — find active work",
       onSelect: () => setPane("marches"),
     },
     {
       id: "barrow",
-      label: "The Barrow",
+      label: "Completed work",
       detail: counted
-        ? `${earned.sessions.toLocaleString()} sessions run to the end`
-        : "Not counted yet",
+        ? `The Barrow — ${earned.sessions.toLocaleString()} completed sessions`
+        : "The Barrow — not counted yet",
       onSelect: () => setPane("barrow"),
     },
     {
+      id: "shop",
+      label: "Cosmetics",
+      detail: shopOpen
+        ? `The Pedlar — ${purse.marks.toLocaleString()} marks to spend`
+        : "The Pedlar — unlocks at level 2",
+      disabled: !shopOpen,
+      onSelect: () => setPane("shop"),
+    },
+    {
       id: "gathering",
-      label: "The gathering",
+      label: "Data gathering",
       detail: gathering
         ? `${elixir.toLocaleString()} tokens spent`
         : "Off. Nothing is being read",
@@ -152,8 +152,8 @@ export function PauseMenu({
     },
     {
       id: "codex",
-      label: "The Chronicle",
-      detail: "What everything here is a name for",
+      label: "Guide",
+      detail: "How this world maps to shell.online",
       onSelect: () => setPane("codex"),
     },
     {
@@ -164,8 +164,8 @@ export function PauseMenu({
     },
     {
       id: "quit",
-      label: "Quit to boring UI",
-      detail: "Back to the session list",
+      label: "Back to sessions",
+      detail: "Leave the keep and open the session list",
       danger: true,
       onSelect: () => navigate(BORING_UI),
     },
@@ -185,7 +185,7 @@ export function PauseMenu({
   return (
     <div className="keep-pause" role="presentation">
       <div
-        className={`keep-pause-panel keep-panel keep-panel-heavy${pane === "root" ? "" : " is-wide"}`}
+        className={`keep-pause-panel keep-panel keep-panel-heavy${pane === "root" ? " is-root" : " is-wide"}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -205,7 +205,7 @@ export function PauseMenu({
         {pane === "root" && (
           <p className="keep-pause-stats">
             <span>◈ {purse.marks.toLocaleString()} marks</span>
-            <span>{garrison} on the field</span>
+            <span>{garrison} active {garrison === 1 ? "session" : "sessions"}</span>
             <span>{elixir > 0 ? `${elixir.toLocaleString()} tokens` : "not gathering"}</span>
           </p>
         )}

@@ -34,7 +34,7 @@ import { mountRelayFileBrowser } from "./relay-files-ui";
 import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
-import { BrowserFrameCipher, parseEncryptionFragment } from "./e2ee";
+import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment } from "./e2ee";
 import {
   renderDocumentation,
   resolveCurrentDocumentationRoute,
@@ -957,7 +957,9 @@ function renderTerminal(sessionId: string): void {
   const destructiveInput = new DestructiveInputGuard();
   let destructiveInputTimer: number | undefined;
   let frameCipher: BrowserFrameCipher | null = null;
-  let encryptedSession = false;
+  // The URL fragment is the viewer's cryptographic intent. Never let an
+  // untrusted relay downgrade a link that already carries E2EE material.
+  let encryptedSession = encryptionDescriptor !== null;
   let persistentSession = false;
   let waitingForEncryptionKey = false;
   let waitingForCapacity = false;
@@ -1539,7 +1541,8 @@ function renderTerminal(sessionId: string): void {
           if (!frameCipher) return;
           try {
             frame = await frameCipher.open(received);
-          } catch {
+          } catch (error) {
+            if (error instanceof E2EEReplayError) return;
             frameCipher = null;
             socket?.close(4003, "decryption failed");
             showEncryptionGate("That password could not decrypt this session. Check it and try again.", encryptionDescriptor?.kind === "password");
@@ -1633,7 +1636,14 @@ function renderTerminal(sessionId: string): void {
 
     const messageReadOnly = readOnlyFromControlMessage(message);
     if (messageReadOnly !== null) applyReadOnly(messageReadOnly);
-    if (typeof message.encrypted === "boolean") applyEncryptionMode(message.encrypted);
+    if (typeof message.encrypted === "boolean") {
+      if (encryptionDescriptor && !message.encrypted) {
+        showEncryptionGate("The relay reported this encrypted link as plaintext. The connection was blocked.", false);
+        socket?.close(4003, "encryption downgrade blocked");
+        return;
+      }
+      applyEncryptionMode(message.encrypted);
+    }
     if (typeof message.persistent === "boolean") {
       persistentSession = message.persistent;
       if (encryptedSession) applyEncryptionMode(true);

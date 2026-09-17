@@ -28,9 +28,9 @@ function since(startedAt: number, now: number): string {
 }
 
 const WORK_WORDS: Record<Actor["work"], { title: string; note: string }> = {
-  bug: { title: "Mending", note: "Out against the Unmade." },
-  feature: { title: "Making", note: "Raising something that was not there." },
-  idle: { title: "Standing to", note: "No fault named, nothing being built." },
+  bug: { title: "Fixing", note: "Posted against the Unmade." },
+  feature: { title: "Building", note: "Raising something that was not there." },
+  idle: { title: "Waiting", note: "At a prompt or without a named task." },
 };
 
 export function WrightPanel({
@@ -110,7 +110,7 @@ export function WrightPanel({
           * been taught is decoration.
           */}
         <div>
-          <dt><Mark name="work" />Doing</dt>
+          <dt><Mark name="work" />Session state</dt>
           <dd>
             {work.title}
             <span className="keep-wright-note">{work.note}</span>
@@ -163,12 +163,12 @@ export function WrightPanel({
           </>
         )}
         <div>
-          <dt><Mark name="condition" />Condition</dt>
+          <dt><Mark name="condition" />Game condition</dt>
           <dd>
             {/* A figure and a word, never a bar on its own. */}
             {actor.hp} of {actor.maxHp}
             <span className="keep-wright-note">
-              {actor.hp >= actor.maxHp ? "Unharmed." : "Has been in it."}
+              Visual only; it does not affect the process.
             </span>
           </dd>
         </div>

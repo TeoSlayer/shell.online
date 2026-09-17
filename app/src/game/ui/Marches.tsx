@@ -25,7 +25,7 @@ export function Marches({
   return (
     <div className="keep-marches">
       <p className="keep-marches-note">
-        Ten holdings. The roads all meet at the Keep.
+        Jump to the part of the map that represents what you need.
       </p>
 
       <ul className="keep-marches-list">

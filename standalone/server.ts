@@ -17,7 +17,13 @@ const MAX_BODY = 4_096;
 const MAX_LIVE_FRAME = 64 * 1024;
 const MAX_INPUT_FRAME = 16 * 1024 + 1;
 const MAX_SNAPSHOT = 512 * 1024;
-const ENCRYPTION_OVERHEAD = 29;
+const LEGACY_ENCRYPTION_OVERHEAD = 29;
+const ENCRYPTION_OVERHEAD = 46;
+
+function validEncryptedFrameLength(length: number, plaintextLength: number): boolean {
+  return length === plaintextLength + LEGACY_ENCRYPTION_OVERHEAD ||
+    length === plaintextLength + ENCRYPTION_OVERHEAD;
+}
 const TRAFFIC_WINDOW_MS = 10_000;
 const HOST_WINDOW_BYTES = 40 * 1024 * 1024;
 const VIEWER_WINDOW_BYTES = 1024 * 1024;
@@ -293,7 +299,7 @@ class SessionRelay {
         if (frame.length > MAX_SNAPSHOT + 1 + (this.meta.encrypted ? ENCRYPTION_OVERHEAD : 0)) return close(socket, 4009, "snapshot frame too large");
         return this.broadcastBinary(frame, "viewer");
       case Opcode.Pong:
-        if (frame.length !== (this.meta.encrypted ? 34 : 5)) return close(socket, 4002, "invalid latency response");
+        if (this.meta.encrypted ? !validEncryptedFrameLength(frame.length, 5) : frame.length !== 5) return close(socket, 4002, "invalid latency response");
         return this.broadcastBinary(frame, "viewer");
       case Opcode.FileResponse: {
         if (frame.length < 6 || frame.length > MAX_LIVE_FRAME + 5 + (this.meta.encrypted ? ENCRYPTION_OVERHEAD : 0)) return close(socket, 4009, "file response frame too large");
@@ -317,7 +323,7 @@ class SessionRelay {
       return this.broadcastBinary(frame, "host");
     }
     if (action === "confirmed-eof") {
-      if (frame.length !== (this.meta.encrypted ? 30 : 1)) return close(socket, 4002, "invalid confirmed EOF frame");
+      if (this.meta.encrypted ? !validEncryptedFrameLength(frame.length, 1) : frame.length !== 1) return close(socket, 4002, "invalid confirmed EOF frame");
       if (!this.claimInputLease(attachment)) return;
       this.broadcastGrid();
       return this.broadcastBinary(frame, "host");
@@ -340,7 +346,7 @@ class SessionRelay {
       return;
     }
     if (action === "ping") {
-      if (frame.length !== (this.meta.encrypted ? 34 : 5)) return close(socket, 4002, "invalid latency probe");
+      if (this.meta.encrypted ? !validEncryptedFrameLength(frame.length, 5) : frame.length !== 5) return close(socket, 4002, "invalid latency probe");
       return this.broadcastBinary(frame, "host");
     }
     close(socket, 4002, "viewer opcode not allowed");

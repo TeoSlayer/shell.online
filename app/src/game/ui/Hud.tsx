@@ -1,6 +1,7 @@
 import { CLASS_LORE, WORLD } from "../lore/world";
 import { nextUnlock, type Standing } from "../state/progress";
 import type { Actor } from "../world/sim";
+import { sessionBreakdown } from "./session-breakdown";
 
 /**
  * What the player needs to know without opening anything.
@@ -33,11 +34,16 @@ export interface HudProps {
    * request failed is a bar telling somebody their week did not count.
    */
   counted: boolean;
+  /** The uncapped number of active sessions; the canvas may draw fewer. */
+  sessionTotal: number;
+  /** Says whether the map is live, loading, or an explicitly labelled preview. */
+  dataState: string;
   onOpenRoster: () => void;
   /** Opens the gathering: the notice when it is off, the bill when it is on. */
   onOpenGathering: () => void;
 }
 
+/** The real work represented by the figures currently drawn on the field. */
 /** A bar with its numbers beside it, never colour alone. */
 function Meter({
   label,
@@ -132,13 +138,14 @@ export function Hud({
   wrights,
   demo,
   counted,
+  sessionTotal,
+  dataState,
   onOpenRoster,
   onOpenGathering,
 }: HudProps) {
   const lore = CLASS_LORE[characterClass] ?? CLASS_LORE.terminal;
   const unlock = nextUnlock(standing.level);
-  const fighting = wrights.filter((wright) => wright.work === "bug").length;
-  const building = wrights.filter((wright) => wright.work === "feature").length;
+  const { fixing, building, waiting } = sessionBreakdown(wrights);
 
   /*
    * Corners rather than a bar.
@@ -158,6 +165,19 @@ export function Hud({
     <>
       <div className="keep-corner is-top-left">
         <div className="keep-panel keep-standing">
+          <div className="keep-operational-head">
+            <span className="keep-operational-value">{sessionTotal.toLocaleString()}</span>
+            <span className="keep-operational-label">
+              {demo ? "example sessions" : sessionTotal === 1 ? "active session" : "active sessions"}
+            </span>
+          </div>
+          <p className="keep-operational-breakdown">
+            {fixing} fixing · {building} building · {waiting} waiting
+          </p>
+          <span className={`keep-data-state${demo ? " is-preview" : " is-live"}`}>
+            {dataState}
+          </span>
+          <div className="keep-standing-divider" />
           <div className="keep-standing-head">
             <span className="keep-crest" aria-hidden="true">
               <span className="keep-crest-letter">{lore.title.slice(0, 1)}</span>
@@ -212,14 +232,14 @@ export function Hud({
         <button type="button" className="keep-panel keep-roster-button" onClick={onOpenRoster}>
           <span className="keep-roster-count">{wrights.length}</span>
           <span className="keep-roster-text">
-            <span className="keep-roster-label">{demo ? "Example garrison" : "On the field"}</span>
+            <span className="keep-roster-label">{demo ? "Example map" : "Session map"}</span>
             {/*
               * Counts with words, not two coloured dots. The same information
               * has to survive a screenshot and a palette somebody cannot
               * separate.
               */}
             <span className="keep-roster-detail">
-              {fighting} fighting · {building} building
+              {fixing} fixing · {building} building · {waiting} waiting
             </span>
           </span>
         </button>
