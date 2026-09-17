@@ -15,25 +15,7 @@ import type { Actor, Sim } from "../world/sim";
  * it again is uploading geometry.
  */
 
-/**
- * Which unit sprite stands for which class.
- *
- * Kenney's pack has four colours of unit; they are used here to tell the
- * classes apart at a glance, which is what a colour is for on a map where
- * everything is the same size.
- */
-const UNIT_FOR: Record<string, string> = {
-  "claude-code": "Unit_05",
-  codex: "Unit_01",
-  hermes: "Unit_11",
-  openclaw: "Unit_07",
-  terminal: "Unit_17",
-  soldier: "Unit_19",
-  /* The Unmade get the darkest units, tinted below so they read as wrong. */
-  mite: "Unit_21",
-  crawler: "Unit_23",
-  heisenbug: "Unit_09",
-};
+import { UNIT_FOR } from "./units";
 
 /** How much bigger than drawn a soldier is. See `make`. */
 const FIGURE = 1.85;

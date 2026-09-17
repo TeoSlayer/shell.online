@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { CLASS_LORE, WORLD } from "../lore/world";
 import { buy, fitsClass, REFUSALS, SKINS, swatchFor, type Purse } from "../state/shop";
+import { SkinPortrait } from "./SkinPortrait";
+import { unitFor } from "../pixi/units";
 
 /**
  * The pedlar at the gate.
@@ -72,14 +74,31 @@ export function Shop({
           return (
             <li key={skin.id} className="keep-shop-item">
               {/*
-                * The swatch is the colour itself, which is the whole product:
-                * a skin washes the figure in this and changes nothing else.
+                * The figure wearing it, rather than a square of the colour.
+                *
+                * A skin is one number multiplied over a sprite, so a swatch was
+                * an honest description of the mechanism and a useless
+                * description of the goods -- what is being bought is how your
+                * own wright reads on the map, and nobody can see that in a
+                * rectangle of #c96a92. A hero skin is shown on your own class's
+                * unit; a retinue livery on a soldier, because that is the
+                * figure it will actually wash over.
+                *
+                * The swatch stays underneath as a strip. It is still the one
+                * part of this that is legible at a glance down the list.
                 */}
-              <span
-                className="keep-swatch"
-                aria-hidden="true"
-                style={{ background: swatchFor(skin.id) }}
-              />
+              <span className="keep-shop-goods" aria-hidden={false}>
+                <SkinPortrait
+                  unit={skin.wears === "hero" ? unitFor(characterClass) : unitFor("soldier")}
+                  tint={skin.tint}
+                  label={`${skin.name}, shown on ${skin.wears === "hero" ? "your own figure" : "one of your soldiers"}`}
+                />
+                <span
+                  className="keep-swatch"
+                  aria-hidden="true"
+                  style={{ background: swatchFor(skin.id) }}
+                />
+              </span>
 
               <span className="keep-shop-text">
                 <span className="keep-shop-name">{skin.name}</span>

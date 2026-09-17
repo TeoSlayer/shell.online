@@ -1583,6 +1583,38 @@
   gap: var(--keep-space-2);
 }
 
+/*
+ * The goods: the figure the skin dresses, with its colour as a strip under it.
+ *
+ * The portrait is what is being bought and the swatch is what is legible
+ * running an eye down the list, so both are here and the portrait is the one
+ * that gets the room.
+ */
+.keep-shop-goods {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6px * var(--keep-scale));
+}
+
+.keep-shop-portrait {
+  display: block;
+  width: calc(56px * var(--keep-scale));
+  height: auto;
+  /*
+   * Kenney's units are 33 pixels tall and this shows them at four times that,
+   * so the browser must not smooth them on the way up either -- the canvas is
+   * drawn nearest-neighbour and then scaled again by this rule.
+   */
+  image-rendering: pixelated;
+}
+
+.keep-shop-goods .keep-swatch {
+  width: calc(56px * var(--keep-scale));
+  height: calc(10px * var(--keep-scale));
+}
+
 /* The four colours the skin changes, which are the entire product. */
 .keep-swatch {
   display: grid;
