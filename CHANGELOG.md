@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.16.2] — 2026-09-17
+
 ### Fixed
 
 - Documentation now matches the ten-character generated password, the current
