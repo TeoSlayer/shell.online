@@ -39,16 +39,16 @@ const ATLAS = "/game/medieval-rts.json";
  * rather than ornaments: they are the only warm thing left on the map.
  */
 const DUSK = {
-  wood: 0x707f9e,
-  ground: 0x8e97ba,
-  things: 0xa9afc9,
+  wood: 0x8c99b5,
+  ground: 0xb2b9d4,
+  things: 0xc9cde0,
 } as const;
 
 /**
  * The banners that stand at a camp, and the conifers in the border wood.
  *
- * From the medieval pack; see scripts/import-kingdom.mjs for what was taken and
- * what was done to it. Loaded separately from the atlas because they are a
+ * From the medieval pack, and the conifers from the nature pack;
+ * see scripts/import-kingdom.mjs for what was taken and what was done to it. Loaded separately from the atlas because they are a
  * handful of loose files rather than a spritesheet, and because one of them
  * failing to load should cost that one thing rather than the whole map.
  */
@@ -60,6 +60,8 @@ const KINGDOM = [
   "pine-dark",
   "pine-tall",
   "pine-broad",
+  "pine-light-a",
+  "pine-light-b",
   "castle-keep",
   "siege",
   "hero-banner",
@@ -144,7 +146,16 @@ export function standing(
   group.zIndex = depthOf(tileX, tileY);
 
   const mark = shadow(texture.width * scale);
-  mark.position.set(0, 0);
+  /*
+   * On the feet, not on the tile centre.
+   *
+   * The sprite below is dropped by the same TILE_H * 0.2, and the shadow used
+   * to stay at the group's origin -- so every building on the map cast its
+   * shadow a fifth of a tile up-screen of where it actually stood, which is
+   * the whole of why they read as floating. The roadside props next door had
+   * this right; these did not, and two files doing the same job disagreed.
+   */
+  mark.position.set(0, TILE_H * 0.2);
   group.addChild(mark);
 
   const sprite = new Sprite(texture);
@@ -301,6 +312,16 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   const banners = new Container();
   const lights = new Container();
   const labels = new Container();
+  /*
+   * Sorted, like the figures under them.
+   *
+   * The plates were added in roster order and never given a depth, so where
+   * two figures stood close the one at the back could paint its name straight
+   * over the name of the one in front -- the same fault the figures themselves
+   * were sorted to avoid, one layer up. The stagger in `actors.ts` keeps most
+   * plates off each other; this decides who wins when it cannot.
+   */
+  labels.sortableChildren = true;
   const signs = new Container();
   things.sortableChildren = true;
 

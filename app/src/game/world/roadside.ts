@@ -125,14 +125,23 @@ export function roadsideProps(): Roadside[] {
       }
 
       if (index > fenceUntil && noise(road, index, 1) < 0.1) {
-        fenceUntil = index + 5 + Math.floor(noise(road, index, 2) * 7);
+        /* In steps, and a section now costs four of them, so a run of three
+         * to seven sections is twelve to twenty-eight steps rather than five
+         * to eleven -- which at the new spacing was one section and a gap. */
+        fenceUntil = index + 12 + Math.floor(noise(road, index, 2) * 16);
         fenceSide = noise(road, index, 3) < 0.5 ? 1 : -1;
       }
       /*
-       * Every other step while a run is going. A section is drawn about two
-       * tiles long, so one per step would stack them through each other.
+       * Every fourth step while a run is going.
+       *
+       * A road step is half a tile -- `steps` is `span * 2` -- and a section is
+       * drawn 2.1 tiles long, so every other step put each section a single
+       * tile from the last and stacked it more than halfway through its
+       * neighbour. Four steps is 2.0 tiles: the rails meet end to end with a
+       * tenth of a tile of overlap, which is a fence rather than a pile of
+       * them.
        */
-      if (index <= fenceUntil && index % 2 === 0) {
+      if (index <= fenceUntil && index % 4 === 0) {
         put("fence", step.x + nx * verge * fenceSide, step.y + ny * verge * fenceSide, dx, dy);
       }
 

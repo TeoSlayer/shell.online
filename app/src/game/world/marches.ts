@@ -77,7 +77,12 @@ export const GARRISONS: Garrison[] = [
     ground: "stone",
     draws: "none",
     buildings: [
-      { sprite: "Structure_02", x: 64, y: 60, scale: 1.6 },
+      /*
+       * No hall here: the castle from the medieval pack stands on this spot
+       * (see the landmarks in pixi/scene.ts), and a Structure_02 at 1.6 was
+       * underneath it -- two buildings claiming one tile, which is what the
+       * overlap at the middle of the map was.
+       */
       { sprite: "Structure_06", x: 64, y: 67.5, scale: 1.1 },
       { sprite: "Structure_12", x: 58.5, y: 63 },
       { sprite: "Structure_12", x: 69.5, y: 63 },

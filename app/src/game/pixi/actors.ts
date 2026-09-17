@@ -358,6 +358,12 @@ export class ActorLayer {
          */
         const stagger = actor.role === "hero" ? 0 : lift(actor.id);
         piece.plate.root.position.set(x, y - piece.headroom - stagger);
+        /*
+         * The same depth as the figure it belongs to, so a name in front
+         * covers a name behind. A hero's plate is lifted above their own
+         * retinue's: it is the one board on a camp that has to be findable.
+         */
+        piece.plate.root.zIndex = depthOf(actor.x, actor.y, actor.role === "hero" ? 60 : 10);
       }
 
       /* Facing, as a mirror rather than a second drawing. */
