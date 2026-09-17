@@ -84,6 +84,27 @@ describe("a session on a relay the app cannot reach", () => {
     }
   });
 
+  it("offers the relay setting for the next session, not as a way back into this one", () => {
+    /*
+     * SHELL_ONLINE_SERVER belongs to the CLI that starts a session, not to
+     * this app, which reads VITE_RELAY_URL. Told to "start it" in a sentence
+     * whose subject was the app, people set the variable here and nothing
+     * changed -- and a session that has already finished cannot be reopened
+     * by starting anything. The advice is about the next session.
+     */
+    const result = resolveSessionSocket(
+      `https://shell.online/s/${ID}`,
+      "http://localhost:5173",
+      RELAY,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).not.toContain("Start it with");
+      expect(result.reason).not.toContain("to open it here");
+      expect(result.reason).toContain("A session started with");
+    }
+  });
+
   it("explains when no relay is configured at all", () => {
     const result = resolveSessionSocket(
       `https://shell.online/s/${ID}`,

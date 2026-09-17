@@ -161,6 +161,21 @@ jobs:
         working-directory: app
         env:
           TEST_DATABASE_URL: postgres://postgres:ci@localhost:5432/shell_online
+      # Against the empty `postgres` database on the same service, so it is a
+      # migration from nothing rather than whatever the suite left behind.
+      # Twice, because applying twice has to be the same as applying once: that
+      # is what lets a deploy re-run safely after a failure further along.
+      - name: Migrate a database from nothing, twice, and verify it
+        run: |
+          set -eu
+          npm run db:migrate
+          npm run db:verify
+          npm run db:migrate
+          npm run db:verify
+        working-directory: app
+        env:
+          DATABASE_URL: postgres://postgres:ci@localhost:5432/postgres
+
       - name: Check vendored modules have not drifted
         run: node scripts/check-protocol.mjs
         working-directory: app

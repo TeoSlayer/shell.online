@@ -76,8 +76,9 @@ export function resolveSessionSocket(
     return {
       ok: false,
       reason:
-        `This session is on ${share.origin}, but this app proxies to ${relay.origin}. ` +
-        `Start it with SHELL_ONLINE_SERVER=${relay.origin} to open it here.`,
+        `This session is on ${share.origin}, but this app reaches ${relay.origin}, ` +
+        `so its screen is only available where it was started. ` +
+        `A session started with SHELL_ONLINE_SERVER=${relay.origin} opens here.`,
     };
   }
 
