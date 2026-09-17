@@ -133,7 +133,21 @@ export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Bo
    * dark shapes, which is exactly what a tree looks like at the distance any of
    * this is seen from, and they break the pattern the eye would otherwise find.
    */
-  const conifers = ["pine-dark", "pine-tall", "pine-broad"]
+  const conifers = [
+    "pine-dark",
+    "pine-tall",
+    "pine-broad",
+    /*
+     * And two more from the same nature pack, in sage rather than near-black.
+     *
+     * The wood was three dark silhouettes repeated, which at dusk turned the
+     * whole edge of the map into one black band -- a wall rather than a wood.
+     * These are drawn in sage rather than near-black, so the treeline has some
+     * depth in it and the eye can still tell one trunk from the next.
+     */
+    "pine-light-a",
+    "pine-light-b",
+  ]
     .map((name) => kingdom.get(name))
     .filter((texture): texture is NonNullable<typeof texture> => texture !== undefined);
 
@@ -162,7 +176,7 @@ export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Bo
      * reads as more field; the eye needs the edge of the map to be the edge of
      * the light. It also breaks up the grid the trees were placed on.
      */
-    const shade = 1 - tree.depth * 0.55;
+    const shade = 1 - tree.depth * 0.34;
     /*
      * Stone takes the light differently from leaves, and a ruin is darker again
      * -- it is meant to be half-seen between trunks rather than presented.

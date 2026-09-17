@@ -60,6 +60,16 @@ const TREES = [
   ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-16.svg", "pine-dark.svg"],
   ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-05.svg", "pine-tall.svg"],
   ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-08.svg", "pine-broad.svg"],
+  /*
+   * Two more, and not silhouettes.
+   *
+   * The three above are a flat near-black shape, which reads at a distance but
+   * gives a wood made only of them no depth at all -- at dusk the whole edge of
+   * the map went to one black band. These two are drawn in sage, so the
+   * treeline has something in it besides its own outline.
+   */
+  ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-06.svg", "pine-light-a.svg"],
+  ["green-nature-palm-tree-and-pine-forest-2026-02-24-00-33-38-utc/SVG/palmtreeart-07.svg", "pine-light-b.svg"],
 ];
 
 /**

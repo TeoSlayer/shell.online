@@ -131,7 +131,7 @@ export function PauseMenu({
     {
       id: "marches",
       label: "The Marches",
-      detail: "Nine holdings, and the road to each",
+      detail: "Ten holdings, and the road to each",
       onSelect: () => setPane("marches"),
     },
     {

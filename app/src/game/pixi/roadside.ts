@@ -149,12 +149,22 @@ function drawLantern(): Graphics {
  */
 function bakeGlow(app: Application): Texture {
   const pool = new Graphics();
-  const R = 120;
+  /*
+   * Bigger and much brighter than it was.
+   *
+   * The whole argument for lighting this map at dusk is that the lamps are
+   * what lift it back, and at a 120px pool of four percent a step they lifted
+   * nothing: the ground under a lamp was the same colour as the ground twenty
+   * tiles away, so every lamp on the map was an ornament rather than a light.
+   * A wider pool with a hotter centre is what makes the verge it stands on
+   * readable, which is the one job it has.
+   */
+  const R = 168;
   const STEPS = 26;
   for (let step = STEPS; step > 0; step -= 1) {
     const t = step / STEPS;
     /* Flattened to the 2:1 ground plane, like every other shadow on this map. */
-    pool.ellipse(R, R / 2, R * t, (R * t) / 2).fill({ color: GLOW, alpha: 0.04 * (1 - t) ** 1.2 });
+    pool.ellipse(R, R / 2, R * t, (R * t) / 2).fill({ color: GLOW, alpha: 0.1 * (1 - t) ** 1.2 });
   }
   const texture = app.renderer.generateTexture(pool);
   pool.destroy();
