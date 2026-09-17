@@ -63,7 +63,6 @@ const KINGDOM = [
   "pine-broad",
   "pine-light-a",
   "pine-light-b",
-  "castle-8bit",
   "grass-band-a",
   "grass-band-b",
   "grass-band-c",
@@ -89,7 +88,13 @@ export async function loadKingdom(): Promise<Kingdom> {
          * into a smear, and nearest keeps every pixel a square block. It is the
          * one thing on this map drawn that way, on purpose.
          */
-        if (name === "castle-8bit") texture.source.scaleMode = "nearest";
+        /*
+         * The grass is pixel art: forty pixels across, ten colours, drawn at
+         * about a tile and a half. Sampled smoothly it comes back to being the
+         * soft painted illustration it started as, which is the one thing it
+         * was flattened to stop being.
+         */
+        if (name.startsWith("grass-")) texture.source.scaleMode = "nearest";
         loaded.set(name, texture);
       } catch {
         /* One missing banner is one missing banner, not a blank map. */
@@ -380,88 +385,116 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * met, so it gets the engine.
    */
   const keep = GARRISONS.find((holding) => holding.id === "keep");
-  const castle = kingdom.get("castle-8bit");
-  if (keep && castle) {
+  if (keep) {
     /*
-     * Twice its own 160 pixels: about ten tiles tall, and half again the size
-     * the castle was first drawn at.
+     * The castle, built out of Kenney's own castle pieces rather than dropped
+     * in as one imported render.
      *
-     * Big, because the Keep is the account itself and the middle of the country
-     * every road runs to -- a landmark you have to go looking for is not a
-     * landmark. But no bigger, because the number that matters here is not the
-     * height, it is the *block*: at a scale of 2 one castle pixel is two world
-     * pixels, near enough the grain of Kenney's sprites that the two read as
-     * one picture. Scaled up until it filled the screen, it read as a castle
-     * pasted in from a different game.
+     * The render was the wrong shape for this map and no amount of transforming
+     * fixed it. A castle on a diamond grid has to have *both* of its ground
+     * axes on the grid's axes. A shear lays the horizontals over onto one of
+     * them; the second shear needed for the other leans every tower, because a
+     * shear cannot rotate a three-dimensional picture -- only a camera can, and
+     * there was one picture.
+     *
+     * These were drawn isometric to begin with, so both axes are right by
+     * construction, they are lit from the same corner as everything else here,
+     * and they are the same artwork as the hall and the chapel standing round
+     * them.
+     *
+     * Laid out in *screen* pixels rather than tiles. A castle is a thing whose
+     * parts sit beside each other in the picture -- a gate in the middle, a
+     * tower at each end -- and a tile offset walks diagonally, so placing them
+     * by tile put the left tower nearer the camera than the right one and the
+     * whole thing came out as a staircase of roofs.
      */
-    things.addChild(standing(castle, keep.x, keep.y - 1, 2));
+    const atScreen = (offsetX: number, offsetY: number) => {
+      /* The inverse of `toScreen` without its origin. See the grass below. */
+      const acrossX = offsetX / (TILE_W / 2);
+      const acrossY = offsetY / (TILE_H / 2);
+      return {
+        x: keep.x + (acrossX + acrossY) / 2,
+        y: keep.y - 1 + (acrossY - acrossX) / 2,
+      };
+    };
 
     /*
-     * And something growing round its foot.
-     *
-     * A building this size standing on bare flagstones has nothing to say where
-     * the ground begins, and the eye reads the gap as air -- which is most of
-     * why it looked like it was hovering over the Keep rather than standing in
-     * it. Planting the base gives the wall a line to meet the floor at.
-     *
-     * Thinner across the front than round the back, so the gate is not hidden
-     * by a hedge, and deterministic like everything else here.
+     * Back to front, so the code reads in the order the picture does. Depth
+     * would sort them anyway.
      */
-    /*
-     * A band of grass round the walls, and a few things growing out of it.
-     *
-     * Ten scattered shrubs left most of the wall meeting bare flagstone, and a
-     * building this size standing on a hard edge has nothing to say where the
-     * ground begins -- the eye reads the gap as air, which is most of why it
-     * looked like it was hovering over the Keep.
-     *
-     * The band is laid as an ellipse rather than a circle because the ground
-     * plane is a 2:1 diamond: a ring of equal radius in tile space is a circle
-     * on the floor and a circle is not what a ring round a building looks like
-     * from here. Wider across the back, thinner across the front, so the gate
-     * is not hidden by a hedge.
-     */
-    const RING = 34;
-    for (let step = 0; step < RING; step += 1) {
-      const angle = (step / RING) * Math.PI * 2;
-      /* South is towards the camera; the gate is there, so keep it clear. */
-      const front = Math.max(0, Math.sin(angle));
-      const out = 4.5 - front * 1.4;
-      /* Deterministic, like every other thing placed on this map. */
-      const jitter = ((step * 2654435761) % 1000) / 1000;
-      const bands = ["grass-band-a", "grass-band-b", "grass-band-c", "grass-band-d"];
-      const name = jitter > 0.82 && front < 0.4
-        ? (jitter > 0.92 ? "grass-tuft-b" : "grass-tuft-a")
-        : bands[step % bands.length];
-      const blade = kingdom.get(name);
-      if (!blade) continue;
-      things.addChild(
-        standing(
-          blade,
-          keep.x + Math.cos(angle) * out,
-          keep.y - 1 + Math.sin(angle) * out * 0.5,
-          (0.3 + jitter * 0.14) * (name.startsWith("grass-tuft") ? 0.8 : 1),
-        ),
-      );
+    const CASTLE: { sprite: string; x: number; y: number; scale: number }[] = [
+      /* The inner keep, standing behind and above the wall. */
+      { sprite: "Structure_06", x: 0, y: -66, scale: 1.3 },
+      /* A corner tower at each end of the front, clear of the gatehouse. */
+      { sprite: "Structure_01", x: -136, y: -8, scale: 1.2 },
+      { sprite: "Structure_01", x: 136, y: -8, scale: 1.2 },
+      /* And the gatehouse, which is the face of the whole thing. */
+      { sprite: "Structure_02", x: 0, y: 0, scale: 1.6 },
+    ];
+
+    for (const piece of CASTLE) {
+      const at = atScreen(piece.x, piece.y);
+      things.addChild(standing(art.frame(piece.sprite), at.x, at.y, piece.scale));
     }
 
-    /* And the shrubs and the trees, standing out of the grass rather than on
-     * bare stone. Fewer than before, because the band is doing the work now. */
+    /*
+     * And grass along the foot of the walls.
+     *
+     * Each piece is anchored bottom-centre, so the line it meets the ground
+     * along is its own width laid across the screen at its own feet.
+     */
+    const FRONT = CASTLE.filter((piece) => piece.sprite !== "Structure_06");
+
+    /*
+     * How far down-screen of a wall's foot a tuft is set. On the line exactly it
+     * sorts behind the sprite and the wall covers it; a few pixels forward puts
+     * the grass in front of the stone it is growing against, which is where
+     * grass at the foot of a wall actually is.
+     */
+    const FORWARD = 9;
+
+    let planting = 0;
+    for (const piece of FRONT) {
+      const texture = art.frame(piece.sprite);
+      const halfWidth = (texture.width * piece.scale) / 2;
+      /* A tuft about every eighteen screen pixels along the foot. */
+      const tufts = Math.max(3, Math.round((halfWidth * 2) / 18));
+
+      for (let step = 0; step <= tufts; step += 1) {
+        const jitter = ((planting * 2654435761) % 1000) / 1000;
+        planting += 1;
+        /* Skip a few, so the band is a verge and not a hedge. */
+        if (jitter > 0.84) continue;
+
+        const bands = ["grass-band-a", "grass-band-b", "grass-band-c", "grass-band-d"];
+        const name = jitter > 0.72 ? "grass-tuft-a" : bands[step % bands.length];
+        const blade = kingdom.get(name);
+        if (!blade) continue;
+
+        const at = atScreen(
+          piece.x - halfWidth + ((halfWidth * 2) * step) / tufts,
+          piece.y + FORWARD,
+        );
+        /*
+         * Against the tuft's own forty pixels, not the two hundred and twenty
+         * it was first imported at. Flattening the grass to pixel art shrank
+         * the file by five and a half times, and a scale tuned to the old file
+         * put ten-pixel weeds at the foot of the wall.
+         */
+        things.addChild(standing(blade, at.x, at.y, 1.25 + jitter * 0.5));
+      }
+    }
+
+    /* And the shrubs and the trees, standing out beyond the grass. */
     const SKIRT = [
-      { at: -5.4, out: 2.9, sprite: "Environment_01", scale: 0.95 },
-      { at: -2.6, out: 3.7, sprite: "Environment_02", scale: 0.85 },
-      { at: 1.4, out: 3.7, sprite: "Environment_03", scale: 0.9 },
-      { at: 4.6, out: 2.8, sprite: "Environment_21", scale: 1 },
+      { x: -212, y: 24, sprite: "Environment_01", scale: 0.95 },
+      { x: -104, y: 48, sprite: "Environment_02", scale: 0.85 },
+      { x: 104, y: 48, sprite: "Environment_03", scale: 0.9 },
+      { x: 212, y: 24, sprite: "Environment_21", scale: 1 },
     ];
     for (const plant of SKIRT) {
-      things.addChild(
-        standing(
-          art.frame(plant.sprite),
-          keep.x + plant.at,
-          keep.y - 1 + plant.out * 0.5,
-          plant.scale,
-        ),
-      );
+      const at = atScreen(plant.x, plant.y);
+      things.addChild(standing(art.frame(plant.sprite), at.x, at.y, plant.scale));
     }
   }
 

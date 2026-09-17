@@ -39,9 +39,21 @@ TAKE = [
     ("Green Grass Illustration 6.png", "grass-tuft-b.png"),
 ]
 
-# How wide a tuft is kept, in pixels. Drawn at about a tile, so anything past a
-# couple of hundred is bytes nobody sees.
-WIDE = 220
+# How wide a tuft is kept, in pixels.
+#
+# Small, because these are pixel art by the time they are committed and the
+# width *is* the pixel size. At forty across, drawn at about a tile and a half,
+# a blade of grass is two or three screen pixels wide -- the same grain as
+# Kenney's sprites beside it.
+WIDE = 40
+# How many colours survive. The set is painted with soft gradients down every
+# blade; left alone next to flat sprites it reads as a photograph someone has
+# dropped onto a cartoon, and the palette is most of that. Ten is enough for a
+# light side, a dark side and a stem.
+COLOURS = 10
+# Anything less opaque than this is cut away rather than feathered: a soft edge
+# on a sprite scaled up is a halo.
+ALPHA_CUT = 120
 
 out.mkdir(parents=True, exist_ok=True)
 for name, to in TAKE:
@@ -53,6 +65,18 @@ for name, to in TAKE:
     tuft = tuft.crop(tuft.getbbox())
     width, height = tuft.size
     scale = WIDE / width
-    tuft = tuft.resize((WIDE, max(1, round(height * scale))), Image.LANCZOS)
+    # BOX rather than LANCZOS: averaging the block is what makes a pixel, and a
+    # sharpening filter puts ringing on every blade before it is quantised.
+    tuft = tuft.resize((WIDE, max(1, round(height * scale))), Image.BOX)
+
+    # Then flattened, the same two steps the castle went through. Resizing alone
+    # keeps the gradients and just makes them big soft blocks.
+    alpha = tuft.getchannel("A").point(lambda value: 255 if value > ALPHA_CUT else 0)
+    flat = tuft.convert("RGB").quantize(
+        colors=COLOURS, method=Image.MEDIANCUT, dither=Image.Dither.NONE
+    )
+    tuft = flat.convert("RGBA")
+    tuft.putalpha(alpha)
+
     tuft.save(out / to)
-    print(f"{to}  <-  {name}  ({tuft.width}x{tuft.height})")
+    print(f"{to}  <-  {name}  ({tuft.width}x{tuft.height}, {COLOURS} colours)")

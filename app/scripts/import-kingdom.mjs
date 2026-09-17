@@ -12,11 +12,16 @@
 // no licence file, so it is recorded there as supplied by the repository owner
 // -- which is a statement about where it came from, not a licence.
 //
-// The castle over the Keep is not here. It is pixel art, drawn about eleven
-// times the size of its own file, and making it needs a colour quantiser as
-// well as a resize -- so it has its own script, `scripts/pixelate-castle.py`,
-// and the full-size render is not committed at all. Nothing loaded it once the
-// 8-bit one existed, and a 233KB file nobody fetches is 233KB in the deploy.
+// The castle over the Keep is not here either, and is no longer imported at
+// all. It was this pack's Castle.png, which is rendered square to the camera --
+// wrong for a diamond grid, and unfixable: a shear lays a picture's horizontals
+// onto one of the map's axes, and the second shear needed for the other axis
+// leans every tower, because a shear cannot rotate a three-dimensional render.
+// The Keep is built out of Kenney's own castle pieces instead, which were drawn
+// isometric to begin with. See `pixi/scene.ts`.
+//
+// The grass round its foot does come from outside, and is flattened to pixel
+// art the same way: see `scripts/import-grass.py`.
 //
 // The flags are downscaled with `sips`, which is macOS-only. That is a real
 // limitation and the reason the downscaled results are committed rather than
