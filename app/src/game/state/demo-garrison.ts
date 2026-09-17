@@ -81,4 +81,7 @@ export const DEMO_ROSTER: Roster = {
   })),
   /* The first of them is "you", so the point-and-click has a hero to order. */
   youUid: "demo-ada",
+  /* The stand-in is small enough that no cap ever touches it. */
+  heroTotal: PEOPLE.length,
+  soldierTotal: WORK.length,
 };

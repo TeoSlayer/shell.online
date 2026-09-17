@@ -78,14 +78,6 @@ function Meter({
 }
 
 /**
- * The elixir vial: what the stat-gathering has spent, in tokens.
- *
- * It is here rather than buried in a settings page because it is the one
- * number in this game that costs real money. Somebody playing with a resource
- * gauge should be able to see at a glance that the gauge is their own spend,
- * and clicking it says where every drop went.
- */
-/**
  * How full the vial looks, which is not how many tokens there are.
  *
  * Logarithmic, because the range this has to cover is absurd. A light week is
@@ -104,6 +96,14 @@ function vialFill(tokens: number): number {
   return Math.min(100, Math.max(4, decades * 100));
 }
 
+/**
+ * The elixir vial: what the stat-gathering has spent, in tokens.
+ *
+ * On the HUD rather than in a settings page because it is the one number in
+ * this game that costs real money. Somebody playing with a resource gauge
+ * should see at a glance that the gauge is their own spend, and clicking it
+ * says where every drop went.
+ */
 function Elixir({ tokens, gathering }: { tokens: number; gathering: boolean }) {
   return (
     <div className="keep-elixir">

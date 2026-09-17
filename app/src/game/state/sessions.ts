@@ -24,7 +24,37 @@ export interface Roster {
   heroes: HeroInput[];
   soldiers: SoldierInput[];
   youUid?: string;
+  /**
+   * How many there really are, before the drawing caps below.
+   *
+   * The field is capped and the count is not. What the HUD reports is the team
+   * and its sessions, which is the read-out this whole game exists to be; the
+   * caps decide how many figures are drawn, which is a budget and nothing else.
+   * Reporting the capped number would make a large team's own statistics wrong
+   * to protect its browser, which is the wrong thing to protect.
+   */
+  heroTotal: number;
+  soldierTotal: number;
 }
+
+/*
+ * What the field will draw at once.
+ *
+ * Every figure on this map costs a container, a sprite and a name board, and a
+ * name board is a Pixi `Text` -- which rasterises a texture of its own. That is
+ * fine for a team of six with a few sessions each and it is not fine without a
+ * ceiling: an organisation of sixty people running twenty sessions apiece is
+ * twelve hundred figures and twelve hundred text textures, which is how a tab
+ * runs out of GPU memory.
+ *
+ * Per hero as well as overall, because the two protect against different
+ * shapes of large. The overall cap stops a big organisation; the per-hero cap
+ * stops one person with a hundred sessions open from filling the field on
+ * their own while everybody else's camp shows nothing.
+ */
+const MAX_HEROES = 60;
+const MAX_SOLDIERS = 240;
+const MAX_PER_HERO = 14;
 
 /**
  * Whether a session is still running, and so still has a soldier.
@@ -156,5 +186,36 @@ export function rosterFrom(
     },
   }));
 
-  return { heroes, soldiers, youUid: you?.uid };
+  /*
+   * Yours first, so a cap never takes your own company off the field.
+   *
+   * The one thing the player has to be able to find is themselves: the view
+   * opens on their hero, the HUD names them, and theirs is the only one that
+   * answers a click. A ceiling that could drop them is a ceiling that breaks
+   * the game rather than protecting it.
+   */
+  const yoursFirst = <T extends { uid?: string; heroUid?: string }>(list: T[]) =>
+    [...list].sort((left, right) => {
+      const leftYours = (left.uid ?? left.heroUid) === viewerUid ? 0 : 1;
+      const rightYours = (right.uid ?? right.heroUid) === viewerUid ? 0 : 1;
+      return leftYours - rightYours;
+    });
+
+  const perHero = new Map<string, number>();
+  const drawnSoldiers: SoldierInput[] = [];
+  for (const soldier of yoursFirst(soldiers)) {
+    if (drawnSoldiers.length >= MAX_SOLDIERS) break;
+    const already = perHero.get(soldier.heroUid) ?? 0;
+    if (already >= MAX_PER_HERO) continue;
+    perHero.set(soldier.heroUid, already + 1);
+    drawnSoldiers.push(soldier);
+  }
+
+  return {
+    heroes: yoursFirst(heroes).slice(0, MAX_HEROES),
+    soldiers: drawnSoldiers,
+    youUid: you?.uid,
+    heroTotal: heroes.length,
+    soldierTotal: soldiers.length,
+  };
 }

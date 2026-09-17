@@ -134,7 +134,6 @@ export class ActorLayer {
 
   /** The last zoom the plates were sized for; see `zoomed`. */
   private plateScale = 1;
-  private platesShown = true;
 
   /** Called when a skin or a livery is bought or changed in the shop. */
   wear(skin: number, livery: number): void {
@@ -165,28 +164,14 @@ export class ActorLayer {
      */
     this.plateScale = Math.min(2.6, Math.max(0.75, 1 / scale));
     /*
-     * A hero is named at almost any zoom; a soldier only close up.
-     *
-     * They are named at different distances because they are different kinds of
-     * thing. A hero is a person and there are a handful of them on the map, so
-     * knowing which is which from across the country is the point. A soldier is
-     * one session out of a camp's worth, and a dozen boards over one camp
-     * interleave into an unreadable stack -- which is what happened the moment
-     * everybody's sessions were gathered in one place instead of spread over
-     * the holdings by what they were doing.
+     * Every board is shown at every zoom the wheel allows, heroes and soldiers
+     * alike. A dozen of them over one camp do interleave; the answer to that is
+     * the stagger in `lift` and the scaling above, not taking the names away at
+     * exactly the distance you need them.
      */
-    /*
-     * Shown at every zoom the wheel allows, heroes and soldiers alike. They
-     * were hidden below a threshold at one point, on the theory that a dozen
-     * boards over one camp interleave into an unreadable stack; the answer to
-     * that is the stagger below and the scaling above, not taking away the
-     * names at exactly the distance you need them.
-     */
-    this.platesShown = true;
     for (const piece of this.pieces.values()) {
       if (!piece.plate) continue;
       piece.plate.root.scale.set(this.plateScale);
-      piece.plate.root.visible = this.platesShown;
     }
   }
 

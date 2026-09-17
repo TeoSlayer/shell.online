@@ -238,3 +238,67 @@ describe("the roster", () => {
     expect(again.heroes.map((hero) => hero.uid)).toEqual(first.heroes.map((hero) => hero.uid));
   });
 });
+
+describe("what the field will draw", () => {
+  /**
+   * The caps exist so a large organisation cannot exhaust a browser: every
+   * figure costs a container, a sprite and a name board, and a name board is a
+   * texture. What they must never do is take the player off their own map, or
+   * make a team's own statistics wrong to protect its GPU.
+   */
+  const bigTeam = (people: number, each: number) => {
+    const members = Array.from({ length: people }, (_, index) => ({
+      uid: `member-${index}`,
+      email: `person${index}@example.com`,
+    }));
+    const sessions = members.flatMap((member, index) =>
+      Array.from({ length: each }, (_, session) => ({
+        id: `s-${index}-${session}`,
+        name: `feat: thing ${session}`,
+        command: "claude",
+        host: "laptop",
+        startedAt: Date.now(),
+        ownerUid: member.uid,
+        status: "running",
+      })),
+    );
+    return { members, sessions };
+  };
+
+  it("draws no more than the ceiling, however large the team", () => {
+    const { members, sessions } = bigTeam(60, 20);
+    const roster = rosterFrom(sessions as never, members as never, { uid: "member-7" });
+    expect(roster.soldiers.length).toBeLessThanOrEqual(240);
+    expect(roster.heroes.length).toBeLessThanOrEqual(60);
+  });
+
+  it("still reports the whole team, which is the read-out", () => {
+    const { members, sessions } = bigTeam(60, 20);
+    const roster = rosterFrom(sessions as never, members as never, { uid: "member-7" });
+    expect(roster.soldierTotal).toBe(1200);
+    expect(roster.heroTotal).toBe(60);
+  });
+
+  it("never drops your own company to make room", () => {
+    const { members, sessions } = bigTeam(60, 20);
+    const roster = rosterFrom(sessions as never, members as never, { uid: "member-59" });
+    expect(roster.heroes.some((hero) => hero.uid === "member-59")).toBe(true);
+    expect(roster.soldiers.some((soldier) => soldier.heroUid === "member-59")).toBe(true);
+  });
+
+  it("does not let one person fill the field", () => {
+    const members = [{ uid: "hog", email: "hog@example.com" }, { uid: "quiet", email: "q@example.com" }];
+    const sessions = Array.from({ length: 300 }, (_, index) => ({
+      id: `s-${index}`,
+      name: "feat: thing",
+      command: "claude",
+      host: "laptop",
+      startedAt: Date.now(),
+      ownerUid: "hog",
+      status: "running",
+    }));
+    const roster = rosterFrom(sessions as never, members as never, { uid: "quiet" });
+    const hogs = roster.soldiers.filter((soldier) => soldier.heroUid === "hog").length;
+    expect(hogs).toBeLessThanOrEqual(14);
+  });
+});

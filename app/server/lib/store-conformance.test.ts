@@ -147,6 +147,22 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
 }
 
 const TABLES = [
+  /*
+   * The game's two tables truncate with the rest.
+   *
+   * They were missed when the game was added, and the way that showed was a
+   * failure nowhere near the cause: `recordCollectionRun` makes a profile row
+   * when there is not one, so a run recorded in one test left a `game_profiles`
+   * row behind, and the next test's `putGameProfile` upserted onto it. The
+   * upsert deliberately keeps the original `created_at` -- which is correct, and
+   * meant the leaked row's timestamp came back instead of the one the test had
+   * just written.
+   *
+   * Only against Postgres, because MemoryStore is built fresh per test. So it
+   * passed locally for anybody without a database and failed in CI.
+   */
+  "game_collection_runs",
+  "game_profiles",
   "feedback",
   "account_activity",
   "app_events",

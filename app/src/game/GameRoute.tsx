@@ -173,20 +173,12 @@ export default function GameRoute() {
   };
 
   /*
-   * The world, in a ref rather than in state.
+   * The simulation, in a ref rather than in state.
    *
    * It changes thirty times a second; putting it in state would re-render the
    * whole route at that rate to redraw a canvas React does not manage anyway.
-   * The loop mutates it and the renderer reads it, and React is told about it
-   * only when something it actually draws in the DOM changes.
-   *
-   * The courtyard bounds are set on the first frame, once the stage knows how
-   * much ground is visible; until then there is nowhere to stand.
-   */
-  /*
-   * The simulation, in a ref. It changes thirty times a second; putting it in
-   * state would re-render the route at that rate to redraw a canvas React does
-   * not manage anyway.
+   * The loop mutates it and the renderer reads it, and React is told only when
+   * something it actually draws in the DOM changes.
    */
   const sim = useRef(createSim());
   /* The one clicked wright, which is the only game state React needs. */

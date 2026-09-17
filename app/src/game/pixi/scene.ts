@@ -134,14 +134,6 @@ export async function loadArt(): Promise<Loaded> {
 }
 
 /**
- * A soft shadow under something standing up.
- *
- * Drawn as a flattened ellipse on the ground plane rather than as a copy of the
- * sprite: in an isometric view a shadow lies on the floor, so it should be the
- * shape the floor is, not the shape the object is. This is most of what makes
- * the map read as having a third dimension at all.
- */
-/**
  * Something that stands on the ground at a tile.
  *
  * Anchored bottom-centre, so the sprite grows upwards from the tile it
@@ -366,16 +358,6 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
   buildBridges(things);
   ground.addChild(roadside.shadows);
 
-  /*
-   * A barracks, a muster tent and a gate on every camp site -- built once for
-   * every site, and shown only where a hero is actually holding.
-   *
-   * Built for all of them because the sites are fixed and the roster is not:
-   * adding and removing buildings on a four-second poll, for structures that
-   * never move, is churn for nothing. Hidden where nobody holds because
-   * fourteen sets of barracks on a map with three people on it reads as a
-   * country full of abandoned camps, which is a different and wrong story.
-   */
   /*
    * The landmarks: a castle over the Keep and a siege engine at the Watch.
    *

@@ -125,16 +125,11 @@ export function buildBorder(
   drawn.destroy();
 
   /*
-   * The thicket, as real sprites, because this is the part doing work a flat
-   * shape cannot: breaking up the straight edge the projection makes.
-   */
-  /*
-   * The conifers from the medieval pack, mixed in with Kenney's.
+   * The thicket, as real sprites: this is the part doing work a flat shape
+   * cannot, which is breaking up the straight edge the projection makes.
    *
-   * Two sets rather than one, because a wood of a single silhouette repeated a
-   * thousand times reads as wallpaper however well it is drawn. These are flat
-   * dark shapes, which is exactly what a tree looks like at the distance any of
-   * this is seen from, and they break the pattern the eye would otherwise find.
+   * Two sets of conifers rather than one, because a wood of a single silhouette
+   * repeated a thousand times reads as wallpaper however well it is drawn.
    */
   const conifers = [
     "pine-dark",

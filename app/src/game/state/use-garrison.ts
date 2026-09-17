@@ -66,8 +66,13 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
           loading: false,
           error: "",
           demo,
-          heroes: shown.heroes.length,
-          soldiers: shown.soldiers.length,
+          /*
+           * The totals, not the number of figures drawn. The field is capped so
+           * a large organisation cannot exhaust a browser; the read-out is not,
+           * because the read-out is the whole point of the game.
+           */
+          heroes: shown.heroTotal,
+          soldiers: shown.soldierTotal,
         });
       } catch (caught) {
         if (!live) return;
@@ -80,8 +85,8 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
           loading: false,
           error: caught instanceof Error ? caught.message : "The service did not answer.",
           demo: true,
-          heroes: fallback.current.heroes.length,
-          soldiers: fallback.current.soldiers.length,
+          heroes: fallback.current.heroTotal,
+          soldiers: fallback.current.soldierTotal,
         });
       }
     };
