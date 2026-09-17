@@ -29,3 +29,5 @@ worker-configuration.d.ts
 
 # Marketing renders are maintained outside the source tree.
 /promo/
+
+app/dist-game/

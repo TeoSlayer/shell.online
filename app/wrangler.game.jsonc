@@ -1,0 +1,39 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+
+  // The game, deployed on its own.
+  //
+  // A Worker with no `main`: it serves the files in dist-game and nothing
+  // else. It has no database binding, no mail, no secrets and no cron, because
+  // it needs none of them -- the game calls /api/* on the same origin, which
+  // belongs to the console's Worker and is where every one of those already
+  // lives. There is nothing here to leak and nothing to migrate.
+  //
+  // The point of it is blast radius. `shell-online-app` serves the session
+  // list, the terminal and the vault; a game that ships beside them shares
+  // their deploy, so a bad game build is a bad console build. Split, the game
+  // can be deployed, rolled back or switched off without the console noticing.
+  "name": "shell-online-game",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "preview_urls": false,
+
+  // No route yet, and that is deliberate -- see docs/deploy-game.md.
+  //
+  // `shell-online-app` claims app.shell.online as a *custom domain*, which
+  // takes the whole hostname; a second Worker on a path of it needs the
+  // console moved to a zone route first. That is a one-line change to the
+  // other Worker's config and a change to production routing, so it is a
+  // decision to take deliberately rather than a side effect of merging this.
+  //
+  // Until then this deploys and is unreachable, which is the safe half of the
+  // arrangement: the pipeline can be proven before anything is routed to it.
+  //
+  // "routes": [{ "pattern": "app.shell.online/game*", "zone_name": "shell.online" }],
+
+  "assets": {
+    "directory": "./dist-game",
+    // Every path under /game is the same page; the router inside it decides.
+    "not_found_handling": "single-page-application"
+  }
+}
