@@ -74,6 +74,19 @@ export function depthOf(tileX: number, tileY: number, height = 0): number {
   return (tileX + tileY) * 1000 + height;
 }
 
+/**
+ * The same depth, for something whose screen position is known and whose tile
+ * is not.
+ *
+ * `toScreen` puts a tile at `y = (x + y) * TILE_H / 2`, so screen y *is* depth
+ * up to that constant -- which is the whole of the perspective on this map:
+ * the camera looks at the bottom corner of the diamond, so the further down the
+ * screen a thing stands, the nearer it is and the later it must be drawn.
+ */
+export function depthAtScreenY(screenY: number, height = 0): number {
+  return (screenY / (TILE_H / 2)) * 1000 + height;
+}
+
 /** The four corners of a tile's diamond, for drawing the ground. */
 export function diamond(tileX: number, tileY: number): number[] {
   const { x, y } = toScreen(tileX, tileY);

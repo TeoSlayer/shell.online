@@ -51,24 +51,51 @@ function drawFence(dx: number, dy: number): Graphics {
   const left = end(-1);
   const right = end(1);
 
-  const POST_H = 26;
-  const POSTS = 3;
+  /*
+   * A post-and-rail fence, drawn as timber rather than as line art.
+   *
+   * The first version was three two-pixel posts and a pair of hairline strokes,
+   * which at this distance is a handful of sticks lying in the grass. What made
+   * it read as a fence is thickness and shading: a rail is a board with a lit
+   * top edge and a dark underside, a post is a squared-off piece of wood with
+   * one lit face and a cap, and there are enough posts that the rails look
+   * carried rather than floating.
+   */
+  const POST_H = 30;
+  const POSTS = 5;
+  const RAILS = [POST_H * 0.80, POST_H * 0.44];
+
+  const WOOD = 0x6f4a29;
+  const WOOD_LIT = 0x9c7245;
+  const WOOD_DARK = 0x4a2f19;
 
   /* Rails first, so the posts read as standing in front of them. */
-  for (const lift of [POST_H * 0.74, POST_H * 0.36]) {
+  for (const lift of RAILS) {
+    /* The underside, a touch below and darker: what gives a rail a thickness. */
+    section
+      .moveTo(left.x, left.y - lift + 2.5)
+      .lineTo(right.x, right.y - lift + 2.5)
+      .stroke({ color: WOOD_DARK, width: 5, cap: "round" });
     section
       .moveTo(left.x, left.y - lift)
       .lineTo(right.x, right.y - lift)
-      .stroke({ color: 0x6b4a2c, width: 3.5, cap: "round" });
+      .stroke({ color: WOOD, width: 5, cap: "round" });
+    /* And the lit top edge, the same north-west light the ground is drawn with. */
+    section
+      .moveTo(left.x, left.y - lift - 1.4)
+      .lineTo(right.x, right.y - lift - 1.4)
+      .stroke({ color: WOOD_LIT, width: 1.6, cap: "round" });
   }
 
   for (let post = 0; post < POSTS; post += 1) {
     const t = post / (POSTS - 1);
     const px = left.x + (right.x - left.x) * t;
     const py = left.y + (right.y - left.y) * t;
-    section.rect(px - 2.5, py - POST_H, 5, POST_H).fill({ color: 0x77522f });
-    /* One lit face, the same north-west light the ground is drawn with. */
-    section.rect(px - 2.5, py - POST_H, 2, POST_H).fill({ color: 0x9a6f45 });
+    /* Squared timber: the shaded body, one lit face, and a cap on top. */
+    section.rect(px - 3.5, py - POST_H, 7, POST_H).fill({ color: WOOD_DARK });
+    section.rect(px - 3.5, py - POST_H, 3.5, POST_H).fill({ color: WOOD });
+    section.rect(px - 3.5, py - POST_H, 1.6, POST_H).fill({ color: WOOD_LIT });
+    section.ellipse(px, py - POST_H, 3.6, 1.7).fill({ color: WOOD_LIT });
   }
 
   return section;
@@ -159,7 +186,7 @@ function bakeGlow(app: Application): Texture {
    * A wider pool with a hotter centre is what makes the verge it stands on
    * readable, which is the one job it has.
    */
-  const R = 168;
+  const R = 300;
   const STEPS = 26;
   for (let step = STEPS; step > 0; step -= 1) {
     const t = step / STEPS;
@@ -277,15 +304,14 @@ export function buildRoadside(
     lanterns.add(light, Math.abs(Math.round(tileX * 131 + tileY)));
   };
 
-  /** Something standing at a tile, and the flat shadow it leaves on the ground. */
-  const stand = (texture: Texture, tileX: number, tileY: number, spread: number) => {
+  /** Something standing at a tile, sorted against everything else on it. */
+  const stand = (texture: Texture, tileX: number, tileY: number) => {
     const at = toScreen(tileX, tileY);
     const sprite = new Sprite(texture);
     sprite.anchor.set(0.5, 1);
     sprite.position.set(at.x, at.y + TILE_H * 0.2);
     sprite.zIndex = depthOf(tileX, tileY);
     into.addChild(sprite);
-    shadows.ellipse(at.x, at.y + TILE_H * 0.16, spread, spread * 0.3);
     return sprite;
   };
 
@@ -299,11 +325,11 @@ export function buildRoadside(
        */
       const angle = Math.atan2(prop.dy, prop.dx);
       const bucket = ((Math.round((angle / (Math.PI * 2)) * FACINGS) % FACINGS) + FACINGS) % FACINGS;
-      stand(facings[bucket], prop.x, prop.y, 30);
+      stand(facings[bucket], prop.x, prop.y);
     } else if (prop.kind === "bale") {
-      stand(baleTexture, prop.x, prop.y, 16);
+      stand(baleTexture, prop.x, prop.y);
     } else {
-      stand(lampTexture, prop.x, prop.y, 8);
+      stand(lampTexture, prop.x, prop.y);
       lightAt(prop.x, prop.y, 1, lights);
     }
   }
@@ -319,7 +345,7 @@ export function buildRoadside(
    * per site so the scene can show them with the camp.
    */
   for (const lamp of campLanterns()) {
-    const sprite = stand(lampTexture, lamp.x, lamp.y, 8);
+    const sprite = stand(lampTexture, lamp.x, lamp.y);
     sprite.visible = false;
 
     let group = campLights.get(lamp.site);

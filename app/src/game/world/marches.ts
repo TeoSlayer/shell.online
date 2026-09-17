@@ -409,12 +409,113 @@ export function roadPath(from: Garrison, to: Garrison): RoadStep[] {
  */
 let roadCache: RoadStep[][] | undefined;
 
+/**
+ * The west road: out of Ravens' Roost, over the river, and into the wood.
+ *
+ * The only road on the map that does not run between two holdings, and the only
+ * one that crosses water. Both of those are the point of it.
+ *
+ * Every other lane here joins one part of the product to another, so the
+ * network is a closed country -- which is right, except that it left the river
+ * as scenery nobody ever reached and nothing to say that anything arrives from
+ * outside. The Roost is the inbox. What lands there came from somewhere that is
+ * not on this map, so the road out of it runs west, crosses the water and stops
+ * at the treeline.
+ *
+ * Laid the same way as the others, as steps half a tile apart with a breathing
+ * width, so the scatter's clearance and the roadside props treat it as a road
+ * without being told about it separately.
+ */
+function westRoad(): RoadStep[] {
+  const roost = garrisonById("roost");
+  if (!roost) return [];
+
+  const fromX = roost.x - roost.radius + 0.5;
+  const toX = 3.5;
+  const span = fromX - toX;
+  const steps = Math.ceil(span * 2);
+
+  const path: RoadStep[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps;
+    const x = fromX - span * t;
+    /* A slack curve rather than a ruled line, like every other lane here. */
+    const y = roost.y + Math.sin(t * Math.PI) * 2.6 + (wobble(Math.round(x), 0, 11) - 0.5) * 0.8;
+    const width = 0.85 + (Math.sin(t * 6) * 0.5 + 0.5) * 0.6;
+    path.push({ x, y, width });
+  }
+  return path;
+}
+
 export function roadPaths(): RoadStep[][] {
-  return (roadCache ??= ROADS.map((road) => {
-    const from = garrisonById(road.from);
-    const to = garrisonById(road.to);
-    return from && to ? roadPath(from, to) : [];
-  }));
+  return (roadCache ??= [
+    ...ROADS.map((road) => {
+      const from = garrisonById(road.from);
+      const to = garrisonById(road.to);
+      return from && to ? roadPath(from, to) : [];
+    }),
+    westRoad(),
+  ]);
+}
+
+export interface Crossing {
+  /** The middle of the water the road has to get over, in tiles. */
+  x: number;
+  y: number;
+  /** The way the road is heading there, as a unit vector in tile space. */
+  dx: number;
+  dy: number;
+  /** How wide the water is at that point, in tiles. */
+  span: number;
+}
+
+/**
+ * Where a road runs into water, which is where a bridge goes.
+ *
+ * Found from the road and the ground rather than written down, so a river that
+ * moves takes its bridge with it. `buildGround` refuses to lay road over water,
+ * so every crossing is already a gap in a lane; this is the list of them, and
+ * the bridge is what fills each one in.
+ */
+export function crossings(): Crossing[] {
+  const tiles = groundTiles();
+  const wet = (x: number, y: number) => {
+    const tx = Math.round(x);
+    const ty = Math.round(y);
+    if (tx < 0 || ty < 0 || tx >= MAP.width || ty >= MAP.height) return false;
+    return tiles[ty * MAP.width + tx] === "water";
+  };
+
+  const out: Crossing[] = [];
+  for (const path of roadPaths()) {
+    let run: RoadStep[] = [];
+    const close = (endedAt: number) => {
+      if (run.length === 0) return;
+      const first = run[0];
+      const last = run[run.length - 1];
+      const before = path[Math.max(0, endedAt - run.length - 1)];
+      const after = path[Math.min(path.length - 1, endedAt)];
+      const dx = after.x - before.x;
+      const dy = after.y - before.y;
+      const length = Math.hypot(dx, dy) || 1;
+      out.push({
+        x: (first.x + last.x) / 2,
+        y: (first.y + last.y) / 2,
+        dx: dx / length,
+        dy: dy / length,
+        /* The wet run plus a step of dry bank at each end to land on. */
+        span: Math.hypot(last.x - first.x, last.y - first.y) + 2,
+      });
+      run = [];
+    };
+
+    path.forEach((step, index) => {
+      if (wet(step.x, step.y)) run.push(step);
+      else close(index);
+    });
+    close(path.length);
+  }
+  return out;
 }
 
 /**

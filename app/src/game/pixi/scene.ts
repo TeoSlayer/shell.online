@@ -5,6 +5,7 @@ import { campSites } from "../world/camps";
 import { depthOf, TILE_H, TILE_W, toScreen } from "../world/iso";
 import { buildGroundLayer } from "./ground";
 import { buildBorder } from "./border";
+import { buildBridges } from "./bridge";
 import { buildScatter } from "./scatter";
 import { buildRoadside, type Lanterns } from "./roadside";
 
@@ -62,7 +63,7 @@ const KINGDOM = [
   "pine-broad",
   "pine-light-a",
   "pine-light-b",
-  "castle-keep",
+  "castle-8bit",
   "siege",
   "hero-banner",
 ];
@@ -75,7 +76,15 @@ export async function loadKingdom(): Promise<Kingdom> {
     KINGDOM.map(async (name) => {
       const file = name.startsWith("pine") ? `${name}.svg` : `${name}.png`;
       try {
-        loaded.set(name, await Assets.load(`/game/kingdom/${file}`));
+        const texture = await Assets.load(`/game/kingdom/${file}`);
+        /*
+         * The castle is pixel art and is drawn at twice its own size, so how it
+         * is sampled is the whole look of it: bilinear turns a pixel castle
+         * into a smear, and nearest keeps every pixel a square block. It is the
+         * one thing on this map drawn that way, on purpose.
+         */
+        if (name === "castle-8bit") texture.source.scaleMode = "nearest";
+        loaded.set(name, texture);
       } catch {
         /* One missing banner is one missing banner, not a blank map. */
       }
@@ -121,12 +130,6 @@ export async function loadArt(): Promise<Loaded> {
  * shape the floor is, not the shape the object is. This is most of what makes
  * the map read as having a third dimension at all.
  */
-function shadow(width: number): Graphics {
-  const mark = new Graphics();
-  mark.ellipse(0, 0, width * 0.42, width * 0.2).fill({ color: 0x1a1008, alpha: 0.28 });
-  return mark;
-}
-
 /**
  * Something that stands on the ground at a tile.
  *
@@ -145,19 +148,15 @@ export function standing(
   group.position.set(x, y);
   group.zIndex = depthOf(tileX, tileY);
 
-  const mark = shadow(texture.width * scale);
   /*
-   * On the feet, not on the tile centre.
+   * No shadow under it.
    *
-   * The sprite below is dropped by the same TILE_H * 0.2, and the shadow used
-   * to stay at the group's origin -- so every building on the map cast its
-   * shadow a fifth of a tile up-screen of where it actually stood, which is
-   * the whole of why they read as floating. The roadside props next door had
-   * this right; these did not, and two files doing the same job disagreed.
+   * Every standing thing used to carry a soft ellipse, and a flat disc under a
+   * sprite in this projection does not read as contact -- it reads as a thing
+   * hovering over a disc, which is exactly the float it was added to prevent.
+   * What puts a building on the ground here is standing on its own tile and
+   * sorting correctly against its neighbours, and that is now what does it.
    */
-  mark.position.set(0, TILE_H * 0.2);
-  group.addChild(mark);
-
   const sprite = new Sprite(texture);
   sprite.anchor.set(0.5, 1);
   sprite.scale.set(scale);
@@ -298,9 +297,14 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * it. The thicket goes down after, so the trees that straddle the edge are
    * not sliced along it.
    */
-  const border = buildBorder(app, art, kingdom);
   const ground = buildGroundLayer();
   const things = new Container();
+  things.sortableChildren = true;
+  /*
+   * The edge trees go into `things` with everything else that stands on the
+   * ground. Built after it exists, for that reason.
+   */
+  const border = buildBorder(app, art, kingdom, things);
   /*
    * Names live above the world rather than in it.
    *
@@ -323,7 +327,6 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    */
   labels.sortableChildren = true;
   const signs = new Container();
-  things.sortableChildren = true;
 
   /*
    * The woods first, and their shadows straight into the ground.
@@ -343,6 +346,13 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * earth cannot move and never needs sorting against anything.
    */
   const roadside = buildRoadside(app, things, lights);
+
+  /*
+   * And the bridges, where a road runs into the river. After the roadside props
+   * for the same reason those came after the scatter: what decides the order on
+   * screen is depth, not the order things were added.
+   */
+  buildBridges(things);
   ground.addChild(roadside.shadows);
 
   /*
@@ -364,9 +374,56 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * met, so it gets the engine.
    */
   const keep = GARRISONS.find((holding) => holding.id === "keep");
-  const castle = kingdom.get("castle-keep");
+  const castle = kingdom.get("castle-8bit");
   if (keep && castle) {
-    things.addChild(standing(castle, keep.x, keep.y - 1, 0.34));
+    /*
+     * Twice its own 160 pixels: about ten tiles tall, and half again the size
+     * the castle was first drawn at.
+     *
+     * Big, because the Keep is the account itself and the middle of the country
+     * every road runs to -- a landmark you have to go looking for is not a
+     * landmark. But no bigger, because the number that matters here is not the
+     * height, it is the *block*: at a scale of 2 one castle pixel is two world
+     * pixels, near enough the grain of Kenney's sprites that the two read as
+     * one picture. Scaled up until it filled the screen, it read as a castle
+     * pasted in from a different game.
+     */
+    things.addChild(standing(castle, keep.x, keep.y - 1, 2));
+
+    /*
+     * And something growing round its foot.
+     *
+     * A building this size standing on bare flagstones has nothing to say where
+     * the ground begins, and the eye reads the gap as air -- which is most of
+     * why it looked like it was hovering over the Keep rather than standing in
+     * it. Planting the base gives the wall a line to meet the floor at.
+     *
+     * Thinner across the front than round the back, so the gate is not hidden
+     * by a hedge, and deterministic like everything else here.
+     */
+    const SKIRT = [
+      { at: -5.6, out: 2.6, sprite: "Environment_01", scale: 0.95 },
+      { at: -4.1, out: 3.3, sprite: "Environment_12", scale: 0.6 },
+      { at: -2.4, out: 3.6, sprite: "Environment_02", scale: 0.85 },
+      { at: -0.7, out: 3.7, sprite: "Environment_19", scale: 0.5 },
+      { at: 1.1, out: 3.6, sprite: "Environment_03", scale: 0.9 },
+      { at: 2.8, out: 3.3, sprite: "Environment_12", scale: 0.55 },
+      { at: 4.4, out: 2.7, sprite: "Environment_21", scale: 1 },
+      { at: 5.7, out: 1.9, sprite: "Environment_19", scale: 0.6 },
+      /* The two that stand in front, low enough to see the gate over. */
+      { at: -2.2, out: -2.4, sprite: "Environment_19", scale: 0.5 },
+      { at: 2.3, out: -2.5, sprite: "Environment_12", scale: 0.55 },
+    ];
+    for (const plant of SKIRT) {
+      things.addChild(
+        standing(
+          art.frame(plant.sprite),
+          keep.x + plant.at,
+          keep.y - 1 + plant.out * 0.5,
+          plant.scale,
+        ),
+      );
+    }
   }
 
   const watch = GARRISONS.find((holding) => holding.id === "watch");
@@ -448,7 +505,6 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
    * put something under, and a tint on the parent is not.
    */
   border.canopy.tint = DUSK.wood;
-  border.thicket.tint = DUSK.wood;
   ground.tint = DUSK.ground;
   things.tint = DUSK.things;
 
@@ -465,7 +521,6 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
     ground,
     lights,
     banners,
-    border.thicket,
     things,
     labels,
     signs,

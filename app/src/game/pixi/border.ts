@@ -1,4 +1,5 @@
 import { Container, Graphics, Sprite } from "pixi.js";
+import { depthAtScreenY } from "../world/iso";
 import type { Application } from "pixi.js";
 import { borderTrees, canopyBlobs, canopyBounds, CANOPY_TONES } from "../world/border";
 import type { Kingdom, Loaded } from "./scene";
@@ -38,22 +39,24 @@ const BAKE = 1 / 12;
 export interface Border {
   /** The far wood, which goes under the map. */
   canopy: Container;
-  /**
-   * The trees at the edge, which go *over* it.
-   *
-   * They have to. The thicket deliberately straddles the edge of the country so
-   * that the straight line the projection makes disappears under branches, and
-   * a straddling tree drawn beneath the ground is a tree with its trunk sliced
-   * off along that exact line -- which draws the eye to it rather than hiding
-   * it. Nothing walks out here, so there is nothing for them to be wrongly in
-   * front of.
-   */
-  thicket: Container;
 }
 
-export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Border {
+export function buildBorder(
+  app: Application,
+  art: Loaded,
+  kingdom: Kingdom,
+  /*
+   * The sorted layer the edge trees join, rather than a container of their own.
+   *
+   * They used to be one sibling drawn before every building, which meant a tree
+   * at the near corner of the diamond -- the corner the camera looks at, so the
+   * nearest thing on the map -- was painted behind a building at the far one.
+   * Depth on this map is `x + y`, and it can only decide anything between
+   * siblings, so everything standing on the ground has to be one.
+   */
+  into: Container,
+): Border {
   const layer = new Container();
-  const thicket = new Container();
   const bounds = canopyBounds();
 
   /*
@@ -184,8 +187,15 @@ export function buildBorder(app: Application, art: Loaded, kingdom: Kingdom): Bo
     const base = tree.kind === "tree" ? 0x9fbf8a : tree.kind === "rock" ? 0xa8a79c : 0x6f6f68;
     const channel = (shift: number) => Math.round(((base >> shift) & 0xff) * shade);
     sprite.tint = (channel(16) << 16) | (channel(8) << 8) | channel(0);
-    thicket.addChild(sprite);
+    /*
+     * Placed in screen space, so the depth comes from where it landed. The
+     * trees straddle the edge of the country on purpose; one at the bottom of
+     * that edge is nearer the camera than anything inland and now draws like
+     * it.
+     */
+    sprite.zIndex = depthAtScreenY(tree.y);
+    into.addChild(sprite);
   });
 
-  return { canopy: layer, thicket };
+  return { canopy: layer };
 }

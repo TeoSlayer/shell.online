@@ -12,6 +12,12 @@
 // no licence file, so it is recorded there as supplied by the repository owner
 // -- which is a statement about where it came from, not a licence.
 //
+// The castle over the Keep is not here. It is pixel art, drawn about eleven
+// times the size of its own file, and making it needs a colour quantiser as
+// well as a resize -- so it has its own script, `scripts/pixelate-castle.py`,
+// and the full-size render is not committed at all. Nothing loaded it once the
+// 8-bit one existed, and a 233KB file nobody fetches is 233KB in the deploy.
+//
 // The flags are downscaled with `sips`, which is macOS-only. That is a real
 // limitation and the reason the downscaled results are committed rather than
 // generated at build time: a build that only works on one operating system is
@@ -102,7 +108,6 @@ const ICONS = [
  * gets the most; the rest are smaller things and get less.
  */
 const RENDERS = [
-  ["medieval-kingdom-3d-icons/Castle.png", "castle-keep.png", 620],
   ["medieval-kingdom-3d-icons/Siege Weapon.png", "siege.png", 340],
   ["medieval-kingdom-3d-icons/Banner.png", "hero-banner.png", 300],
 ];

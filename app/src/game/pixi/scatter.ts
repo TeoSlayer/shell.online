@@ -54,16 +54,7 @@ export function buildScatter(art: Loaded, into: Container): Scatter {
     sprite.zIndex = depthOf(prop.x, prop.y);
     into.addChild(sprite);
 
-    /*
-     * Sized from the sprite rather than fixed, so a boulder casts a boulder's
-     * shadow and a shrub casts a shrub's. Flattened, because the shadow lies on
-     * the ground plane and the ground plane is a 2:1 diamond.
-     */
-    const width = texture.width * prop.scale;
-    shadows.ellipse(x, y + TILE_H * 0.16, width * 0.34, width * 0.16);
   }
-
-  shadows.fill({ color: 0x1a1008, alpha: 0.22 });
 
   return { shadows, count: placed.length };
 }

@@ -2,6 +2,7 @@ import { GARRISONS, type Garrison } from "./marches";
 import { assignCamps, CAMP_RADIUS, type Camp } from "./camps";
 import { assignBanners } from "./banners";
 import type { Work } from "./work";
+import { pushOut } from "./solids";
 
 /**
  * Who is on the Marches, and what they are doing.
@@ -564,22 +565,45 @@ function chooseEnemy(sim: Sim, actor: Actor): Actor | undefined {
   return best;
 }
 
-/** A step towards a point. No avoidance: the map is open country. */
+/**
+ * A step towards a point, and out of anything it lands inside.
+ *
+ * Still no steering. Nothing here looks ahead or picks a way round, which is
+ * the thing that made an earlier version shake; the step is taken exactly as it
+ * always was and the result is then corrected by `pushOut`, which is a function
+ * of position alone. Walking into a wall at an angle slides along it, because
+ * the correction is perpendicular to the wall and the rest of the step lives.
+ *
+ * A figure walking straight at a wall slides nowhere, so a walk that ends up
+ * covering almost none of its step counts as arrived rather than pressing
+ * against the stone forever -- which is what a person does when the way is
+ * shut.
+ */
 function stepTo(actor: Actor, toX: number, toY: number, speed: number): boolean {
   const step = speed * PER_TICK;
   const dx = toX - actor.x;
   const dy = toY - actor.y;
   const distance = Math.hypot(dx, dy);
   if (distance <= step) {
-    actor.x = toX;
-    actor.y = toY;
+    const landed = pushOut(toX, toY);
+    actor.x = landed.x;
+    actor.y = landed.y;
     return false;
   }
-  actor.x += (dx / distance) * step;
-  actor.y += (dy / distance) * step;
+
+  const fromX = actor.x;
+  const fromY = actor.y;
+  const wantX = actor.x + (dx / distance) * step;
+  const wantY = actor.y + (dy / distance) * step;
+  const landed = pushOut(wantX, wantY);
+  actor.x = landed.x;
+  actor.y = landed.y;
+
   /* Face the way travelled, with a deadband so a stopped actor does not spin. */
   if (Math.abs(dx) > 0.02) actor.facing = dx > 0 ? 1 : -1;
-  return true;
+
+  const moved = Math.hypot(actor.x - fromX, actor.y - fromY);
+  return moved > step * 0.2;
 }
 
 /**
