@@ -43,11 +43,48 @@ LONG = 160
 COLOURS = 28
 # Anything less opaque than this is cut away rather than feathered.
 ALPHA_CUT = 110
+# How far the render is laid over onto the map's angle.
+#
+# Not the tile's own 0.5. The pack's castle is a render with its own perspective
+# already in it, so applying the projection's full slope on top of that stacks
+# the two and the castle reads as sliding down a hill. This is the largest
+# amount that still reads as a building standing on isometric ground, and it was
+# picked by looking at it against the Kenney structures beside it rather than by
+# arithmetic.
+SHEAR = 0.22
 
 castle = Image.open(source).convert("RGBA")
 
 # Trimmed first: the render ships centred in a square with a lot of empty air,
 # and pixels spent on transparency are pixels the blocks do not get.
+castle = castle.crop(castle.getbbox())
+
+# Then laid on the map's own angle.
+#
+# The pack's castle is rendered square to the camera. Every other building here
+# is isometric, so the castle sat at a visibly different angle from the ground
+# it stood on and from its neighbours -- the one landmark on the map that did
+# not belong to the grid.
+#
+# This is the projection's own transform and nothing more: y' = y + k(x - mid),
+# which leaves every vertical line vertical -- the towers stay upright -- and
+# slopes every horizontal one down to the right at the tile's 2:1. So the
+# battlements, the gatehouse line and the base all run along the diamond
+# instead of across it.
+#
+# Done before the resize, at the render's full resolution, so the slope is
+# resampled once by something with pixels to spare rather than being stepped
+# into the 160px version afterwards.
+width, height = castle.size
+grown = Image.new("RGBA", (width, height + round(width * SHEAR)), (0, 0, 0, 0))
+grown.paste(castle, (0, 0))
+# PIL maps output back to input, so the shear is written with its sign flipped.
+castle = grown.transform(
+    grown.size,
+    Image.AFFINE,
+    (1, 0, 0, -SHEAR, 1, SHEAR * (width / 2)),
+    resample=Image.BICUBIC,
+)
 castle = castle.crop(castle.getbbox())
 
 width, height = castle.size

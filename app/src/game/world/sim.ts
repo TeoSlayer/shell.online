@@ -309,8 +309,18 @@ export function setRoster(
       toY: camp.y,
       facing: 1,
       moving: false,
-      hp: 60,
-      maxHp: 60,
+      /*
+       * A hero is a tank, and deliberately so.
+       *
+       * At sixty they had less in them than a single heisenbug has, so a camp
+       * with a fault on it put its own person down inside a few seconds -- and
+       * a hero is not a unit, it is somebody on the team. There is no death
+       * here and nothing to lose, so the health bar is not a stake; it is a
+       * read-out of how hard a camp is being hit. It has to survive a wave to
+       * say anything at all, and at this it does.
+       */
+      hp: 420,
+      maxHp: 420,
       hurt: 0,
       action: "stand",
       actionUntil: 0,

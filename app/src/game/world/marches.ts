@@ -497,14 +497,39 @@ export function crossings(): Crossing[] {
       const after = path[Math.min(path.length - 1, endedAt)];
       const dx = after.x - before.x;
       const dy = after.y - before.y;
-      const length = Math.hypot(dx, dy) || 1;
+
+      /*
+       * Snapped to a tile axis, rather than laid along the road's own tangent.
+       *
+       * The road bows, so where it meets the water it is heading a few degrees
+       * off west -- and a deck built on that heading sits at an angle that
+       * matches neither the river nor the grid under it, which is exactly what
+       * a crooked bridge looks like. Everything else standing on this map lines
+       * up with the diamond; a bridge is a built thing and lines up hardest of
+       * all. So the crossing takes the nearer of the two tile axes and the deck
+       * runs straight along it.
+       */
+      const along =
+        Math.abs(dx) >= Math.abs(dy)
+          ? { dx: Math.sign(dx) || 1, dy: 0 }
+          : { dx: 0, dy: Math.sign(dy) || 1 };
+
+      /*
+       * And measured along that axis rather than along the road, so the deck is
+       * as long as the water is wide in the direction it actually crosses.
+       * Three tiles of dry bank at each end, so it lands on the road rather
+       * than stopping at the waterline.
+       */
+      const wet = along.dx !== 0
+        ? Math.abs(last.x - first.x)
+        : Math.abs(last.y - first.y);
+
       out.push({
         x: (first.x + last.x) / 2,
         y: (first.y + last.y) / 2,
-        dx: dx / length,
-        dy: dy / length,
-        /* The wet run plus a step of dry bank at each end to land on. */
-        span: Math.hypot(last.x - first.x, last.y - first.y) + 2,
+        dx: along.dx,
+        dy: along.dy,
+        span: wet + 6,
       });
       run = [];
     };

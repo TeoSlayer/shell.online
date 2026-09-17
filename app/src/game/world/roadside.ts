@@ -124,7 +124,16 @@ export function roadsideProps(): Roadside[] {
         put("lantern", step.x + nx * verge * side, step.y + ny * verge * side);
       }
 
-      if (index > fenceUntil && noise(road, index, 1) < 0.1) {
+      /*
+       * Half as many runs, and not half as many sections in each.
+       *
+       * There was too much fence on this map, but thinning every run would have
+       * been the wrong half to take: a run with gaps in it is not a field
+       * boundary, it is litter, and the whole reason a fence reads as a fence is
+       * that it is continuous. So the *number of runs* drops and their length
+       * does not -- fewer veins, each one still joined end to end.
+       */
+      if (index > fenceUntil && noise(road, index, 1) < 0.05) {
         /* In steps, and a section now costs four of them, so a run of three
          * to seven sections is twelve to twenty-eight steps rather than five
          * to eleven -- which at the new spacing was one section and a gap. */

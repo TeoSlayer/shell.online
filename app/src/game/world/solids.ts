@@ -68,6 +68,52 @@ export function solids(): Solid[] {
 }
 
 /**
+ * The solids, bucketed by where they are.
+ *
+ * `pushOut` runs for every actor on every tick, and walking the whole list each
+ * time is fifty distance checks per figure per tick -- which on a busy map was
+ * enough to take the simulation from comfortably real-time to timing out a test
+ * that runs a few thousand ticks. Nothing here moves, so the buckets are built
+ * once and read forever.
+ *
+ * A building is filed under every cell its circle touches, so a lookup is one
+ * cell and never a neighbourhood search.
+ */
+const CELL = 8;
+
+let grid: Map<string, Solid[]> | undefined;
+
+function key(cellX: number, cellY: number): string {
+  return `${cellX},${cellY}`;
+}
+
+function buckets(): Map<string, Solid[]> {
+  if (grid) return grid;
+
+  grid = new Map();
+  for (const solid of solids()) {
+    /*
+     * The reach in tile space. The comparison below squashes y by two, so a
+     * solid reaches half as far north as it does east and the cells it is filed
+     * under have to agree with that or a lookup misses it at the edge.
+     */
+    const fromX = Math.floor((solid.x - solid.r) / CELL);
+    const toX = Math.floor((solid.x + solid.r) / CELL);
+    const fromY = Math.floor((solid.y - solid.r / 2) / CELL);
+    const toY = Math.floor((solid.y + solid.r / 2) / CELL);
+    for (let cellY = fromY; cellY <= toY; cellY += 1) {
+      for (let cellX = fromX; cellX <= toX; cellX += 1) {
+        const at = key(cellX, cellY);
+        const already = grid.get(at);
+        if (already) already.push(solid);
+        else grid.set(at, [solid]);
+      }
+    }
+  }
+  return grid;
+}
+
+/**
  * Pushes a point out of anything it has ended up inside.
  *
  * Returns the corrected point. Runs after a step rather than before it, and
@@ -78,10 +124,14 @@ export function solids(): Solid[] {
  * footprint in tile space is the ellipse the eye expects on the ground.
  */
 export function pushOut(x: number, y: number): { x: number; y: number } {
+  const near = buckets().get(key(Math.floor(x / CELL), Math.floor(y / CELL)));
+  /* Open country, which is nearly all of it, costs one map lookup. */
+  if (!near) return { x, y };
+
   let px = x;
   let py = y;
 
-  for (const solid of solids()) {
+  for (const solid of near) {
     const dx = px - solid.x;
     /* Tile space is 2:1 on screen; compare in the shape the player sees. */
     const dy = (py - solid.y) * 2;

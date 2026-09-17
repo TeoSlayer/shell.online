@@ -64,6 +64,12 @@ const KINGDOM = [
   "pine-light-a",
   "pine-light-b",
   "castle-8bit",
+  "grass-band-a",
+  "grass-band-b",
+  "grass-band-c",
+  "grass-band-d",
+  "grass-tuft-a",
+  "grass-tuft-b",
   "siege",
   "hero-banner",
 ];
@@ -401,18 +407,51 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
      * Thinner across the front than round the back, so the gate is not hidden
      * by a hedge, and deterministic like everything else here.
      */
+    /*
+     * A band of grass round the walls, and a few things growing out of it.
+     *
+     * Ten scattered shrubs left most of the wall meeting bare flagstone, and a
+     * building this size standing on a hard edge has nothing to say where the
+     * ground begins -- the eye reads the gap as air, which is most of why it
+     * looked like it was hovering over the Keep.
+     *
+     * The band is laid as an ellipse rather than a circle because the ground
+     * plane is a 2:1 diamond: a ring of equal radius in tile space is a circle
+     * on the floor and a circle is not what a ring round a building looks like
+     * from here. Wider across the back, thinner across the front, so the gate
+     * is not hidden by a hedge.
+     */
+    const RING = 34;
+    for (let step = 0; step < RING; step += 1) {
+      const angle = (step / RING) * Math.PI * 2;
+      /* South is towards the camera; the gate is there, so keep it clear. */
+      const front = Math.max(0, Math.sin(angle));
+      const out = 4.5 - front * 1.4;
+      /* Deterministic, like every other thing placed on this map. */
+      const jitter = ((step * 2654435761) % 1000) / 1000;
+      const bands = ["grass-band-a", "grass-band-b", "grass-band-c", "grass-band-d"];
+      const name = jitter > 0.82 && front < 0.4
+        ? (jitter > 0.92 ? "grass-tuft-b" : "grass-tuft-a")
+        : bands[step % bands.length];
+      const blade = kingdom.get(name);
+      if (!blade) continue;
+      things.addChild(
+        standing(
+          blade,
+          keep.x + Math.cos(angle) * out,
+          keep.y - 1 + Math.sin(angle) * out * 0.5,
+          (0.3 + jitter * 0.14) * (name.startsWith("grass-tuft") ? 0.8 : 1),
+        ),
+      );
+    }
+
+    /* And the shrubs and the trees, standing out of the grass rather than on
+     * bare stone. Fewer than before, because the band is doing the work now. */
     const SKIRT = [
-      { at: -5.6, out: 2.6, sprite: "Environment_01", scale: 0.95 },
-      { at: -4.1, out: 3.3, sprite: "Environment_12", scale: 0.6 },
-      { at: -2.4, out: 3.6, sprite: "Environment_02", scale: 0.85 },
-      { at: -0.7, out: 3.7, sprite: "Environment_19", scale: 0.5 },
-      { at: 1.1, out: 3.6, sprite: "Environment_03", scale: 0.9 },
-      { at: 2.8, out: 3.3, sprite: "Environment_12", scale: 0.55 },
-      { at: 4.4, out: 2.7, sprite: "Environment_21", scale: 1 },
-      { at: 5.7, out: 1.9, sprite: "Environment_19", scale: 0.6 },
-      /* The two that stand in front, low enough to see the gate over. */
-      { at: -2.2, out: -2.4, sprite: "Environment_19", scale: 0.5 },
-      { at: 2.3, out: -2.5, sprite: "Environment_12", scale: 0.55 },
+      { at: -5.4, out: 2.9, sprite: "Environment_01", scale: 0.95 },
+      { at: -2.6, out: 3.7, sprite: "Environment_02", scale: 0.85 },
+      { at: 1.4, out: 3.7, sprite: "Environment_03", scale: 0.9 },
+      { at: 4.6, out: 2.8, sprite: "Environment_21", scale: 1 },
     ];
     for (const plant of SKIRT) {
       things.addChild(

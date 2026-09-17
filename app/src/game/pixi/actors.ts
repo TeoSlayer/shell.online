@@ -69,13 +69,37 @@ function hashOf(id: string): number {
  * and three steps of thirteen pixels is not enough separation for a dozen
  * boards. Deterministic so a name does not hop when the list is re-ordered.
  */
+/**
+ * How far a soldier's name is lifted above its head, so two of them standing
+ * together do not write over each other.
+ *
+ * Six bands rather than five, and thirty-six apart rather than twenty-two. A
+ * plate is about thirty pixels tall, so at twenty-two the bands overlapped each
+ * other by a third before any two figures had even met -- the stagger was
+ * shuffling the collision around rather than preventing it. Thirty-six clears a
+ * plate outright, and six bands means a camp has to hold seven sessions before
+ * two can land on the same line.
+ *
+ * Deterministic from the id, so a session's name does not hop to a different
+ * height every time the roster is polled.
+ */
 function lift(id: string): number {
   let value = 0;
   for (let index = 0; index < id.length; index += 1) {
     value = (Math.imul(value, 31) + id.charCodeAt(index)) | 0;
   }
-  return (Math.abs(value) % 5) * 22;
+  return (Math.abs(value) % 6) * 36;
 }
+
+/**
+ * And a hero's name sits above every band a soldier can reach.
+ *
+ * A hero used to be pinned at zero, which is also the lowest band a soldier can
+ * draw at -- so the one board on a camp that has to be findable was the one
+ * most likely to have a session's name written across it. Their own retinue is
+ * what they collide with, so the fix is to put them over the top of it.
+ */
+const HERO_LIFT = 6 * 36 + 24;
 
 interface Piece {
   root: Container;
@@ -356,7 +380,7 @@ export class ActorLayer {
          * for them to collide with, and lifting them adds up to another eighty
          * pixels of empty sky between a person and their own name.
          */
-        const stagger = actor.role === "hero" ? 0 : lift(actor.id);
+        const stagger = actor.role === "hero" ? HERO_LIFT : lift(actor.id);
         piece.plate.root.position.set(x, y - piece.headroom - stagger);
         /*
          * The same depth as the figure it belongs to, so a name in front
