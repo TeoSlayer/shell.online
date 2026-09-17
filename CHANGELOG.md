@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.16.1] — 2026-09-17
+
 ### Changed
 
 - Shell Keep now leads with the state of the real work: active sessions and
