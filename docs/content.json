@@ -45,7 +45,7 @@
         ],
         [
           "Start sessions from the browser",
-          "shell login asks once whether your signed-in browser may start sessions on this machine. Agree and a small daemon runs in the background for as long as you stay signed in, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. A machine that sits idle and still has to be reachable can run shell service install instead."
+          "Every interactive shell login asks whether your signed-in browser may start sessions on this machine, using the previous answer as the default. Agree and a small daemon runs in the background for as long as you stay signed in, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. A machine that sits idle and still has to be reachable can run shell service install instead."
         ],
         [
           "Organizations and collaboration",
@@ -158,7 +158,7 @@
     "mobile": {
       "eyebrow": "Terminal fidelity",
       "title": "A real terminal, fitted to the device in your hand.",
-      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches everyone to a compatible 80\u00d724 grid and fits it to each browser.",
+      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches current hosts to an 80\u00d740 portrait grid and fits it to each browser. Older hosts fall back to 80\u00d724.",
       "seo": {
         "description": "How shell.online fits shared terminals to phones with deterministic PTY sizing, touch scrolling, keyboard handling, and bounded paste input.",
         "socialTitle": "A real terminal on mobile | shell.online",
@@ -167,7 +167,7 @@
       "cards": [
         [
           "Deterministic sizing",
-          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide 80\u00d724 compatibility grid before input is forwarded; the last phone leaving restores 120\u00d736. Read-only phones count too."
+          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide portrait grid before input is forwarded: 80\u00d740 on the current CLI, or 80\u00d724 for an older host. The last phone leaving restores 120\u00d736. Read-only phones count too."
         ],
         [
           "Touch that scrolls",
@@ -191,8 +191,8 @@
           "after": 1,
           "title": "A deterministic shared grid",
           "caption": "The relay selects one PTY grid for every viewer. Each browser fits that grid locally without fighting over dimensions.",
-          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 24 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
-          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 24]\n  B --> D[Fit in each browser]\n  C --> D"
+          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 40 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
+          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 40]\n  B --> D[Fit in each browser]\n  C --> D"
         }
       ]
     },
@@ -576,7 +576,7 @@
             ],
             [
               "SHELL_ONLINE_E2EE_PASSWORD=<new> shell password rotate <ID>",
-              "Choose the replacement instead of generating eight random base64url characters."
+              "Choose the replacement instead of generating ten random base64url characters."
             ]
           ]
         ],
@@ -676,7 +676,7 @@
             ],
             [
               "shell help <topic>",
-              "Topics: start, attach, list, kill, e2ee, docker, reference."
+              "Topics: start, files, attach, list, ls, password, kill, login, stats, agent, daemon, service, e2ee, docker, platforms, reference."
             ],
             [
               "shell help e2ee",

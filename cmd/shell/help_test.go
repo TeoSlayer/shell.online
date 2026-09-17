@@ -38,6 +38,21 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestEveryAdvertisedHelpTopicResolves(t *testing.T) {
+	for _, topic := range helpTopics {
+		t.Run(topic, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			if exitCode := runHelp([]string{topic}, &stdout, &stderr); exitCode != 0 {
+				t.Fatalf("runHelp(%q) = %d, stderr = %q", topic, exitCode, stderr.String())
+			}
+			if stdout.Len() == 0 {
+				t.Fatalf("runHelp(%q) produced no guidance", topic)
+			}
+		})
+	}
+}
+
 func TestE2EEHelpExplainsAutomaticPasswordFlow(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

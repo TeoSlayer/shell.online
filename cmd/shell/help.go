@@ -3,10 +3,24 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
+var helpTopics = [...]string{
+	"start", "files", "attach", "list", "ls", "password", "kill", "login",
+	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "reference",
+}
+
+func helpTopicUsage() string {
+	return strings.Join(helpTopics[:], "|")
+}
+
+func helpTopicList() string {
+	return strings.Join(helpTopics[:], ", ")
+}
+
 func printShellHelp(writer io.Writer) {
-	fmt.Fprint(writer, `shell.online — a browser link for a local terminal process
+	fmt.Fprintf(writer, `shell.online — a browser link for a local terminal process
 
 Start
   shell <command>                  Share it in the background
@@ -50,9 +64,9 @@ Common options
   --files-root <directory>         Opt in a different directory
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|files|attach|list|ls|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
-guided topic, or shell help reference for every command, flag, and environment variable.
-`)
+Use shell help <%s> for a guided topic, or shell help reference for every command,
+flag, and environment variable.
+`, helpTopicUsage())
 }
 
 func runHelp(arguments []string, stdout, stderr io.Writer) int {
@@ -61,7 +75,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|files|attach|list|ls|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
+		fmt.Fprintf(stderr, "Usage: shell help [%s]\n", helpTopicUsage())
 		return 2
 	}
 
@@ -379,14 +393,14 @@ process. The Docker image combines it with a restart policy for automatic recove
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, ls, password, kill, login, agent, daemon, service, e2ee, docker, platforms, reference")
+		fmt.Fprintf(stderr, "Available topics: %s\n", helpTopicList())
 		return 2
 	}
 	return 0
 }
 
 func printCLIReference(writer io.Writer) {
-	fmt.Fprint(writer, `Complete CLI reference
+	fmt.Fprintf(writer, `Complete CLI reference
 
 SYNOPSIS
   shell [options] [--] [command] [arguments...]
@@ -397,7 +411,7 @@ SYNOPSIS
   shell kill --all
   shell password <session-id-or-prefix>
   shell password rotate <session-id-or-prefix>
-  shell help [start|attach|list|ls|password|kill|e2ee|docker|platforms|reference]
+  shell help [%s]
 
 START AND SHARE
   shell [command] [arguments...]
@@ -508,5 +522,5 @@ OUTPUT AND EXIT STATUS
 SESSION EVENT JSON
   New-session events include encrypted=true and e2ee_password. Agents should give
   operators both share_url and e2ee_password and must preserve the URL fragment.
-`)
+`, helpTopicUsage())
 }

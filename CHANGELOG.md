@@ -4,6 +4,13 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Documentation now matches the ten-character generated password, the current
+  80×40 mobile grid and 80×24 legacy fallback, the complete Linux architecture
+  list, and the remote-start prompt shown on every interactive login. CLI help
+  topic lists now come from one tested source.
+
 ## [0.16.1] — 2026-09-17
 
 ### Changed
