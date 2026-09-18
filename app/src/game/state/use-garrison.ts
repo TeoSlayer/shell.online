@@ -16,6 +16,21 @@ export interface GarrisonState {
   /** How many heroes and how many soldiers are on the field. */
   heroes: number;
   soldiers: number;
+  /**
+   * The team's own totals, when the service answered.
+   *
+   * Kept apart from the two above, which are whatever is being *shown* -- and
+   * what is shown, for an account with nothing running, is the example team.
+   *
+   * The difference matters for exactly one thing and it is the important one:
+   * whether to tell somebody their kingdom is short of sessions. Reading that
+   * off the example would tell a person with nothing running that everything
+   * is fine, which is the opposite of true and the opposite of useful. It is
+   * `undefined` when the service could not be reached, because "we do not
+   * know" and "you have nothing" are not the same answer and only one of them
+   * is worth washing somebody's screen red over.
+   */
+  team?: { heroes: number; soldiers: number };
 }
 
 /**
@@ -66,6 +81,7 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
           loading: false,
           error: "",
           demo,
+          team: { heroes: roster.heroTotal, soldiers: roster.soldierTotal },
           /*
            * The totals, not the number of figures drawn. The field is capped so
            * a large organisation cannot exhaust a browser; the read-out is not,
@@ -85,6 +101,8 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
           loading: false,
           error: caught instanceof Error ? caught.message : "The service did not answer.",
           demo: true,
+          /* Unreachable is not "you have nothing standing". */
+          team: undefined,
           heroes: fallback.current.heroTotal,
           soldiers: fallback.current.soldierTotal,
         });

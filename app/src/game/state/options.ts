@@ -19,6 +19,8 @@
  * the TV and the phone and each keeps its own.
  */
 
+import type { Layout } from "./layout";
+
 export type MotionSetting = "system" | "full" | "reduced";
 export type ColourSetting = "default" | "deuteranopia" | "protanopia" | "tritanopia";
 
@@ -118,9 +120,27 @@ export function motionReduced(options: GameOptions, systemPrefersReduced: boolea
 export function optionsToStyle(
   options: GameOptions,
   systemPrefersReduced: boolean,
+  /**
+   * The shape of screen this is being drawn on.
+   *
+   * Here rather than in the stylesheet because these properties are set
+   * *inline*, and an inline property beats every rule in a stylesheet: the
+   * `@media (width <= 640px)` block that redefined `--keep-safe` for a phone
+   * had never once applied. That is the sort of bug that looks like a design
+   * decision for a year.
+   */
+  layout: Layout = "room",
 ): Record<string, string> {
   return {
-    "--keep-safe": `${options.safeZone}%`,
+    /*
+     * A safe zone is overscan, and overscan is a television. A handset has no
+     * crop and does have a notch, so there the inset comes from the device
+     * rather than from a slider that cannot mean anything on it.
+     */
+    "--keep-safe":
+      layout === "phone"
+        ? "max(10px, env(safe-area-inset-left))"
+        : `${options.safeZone}%`,
     "--keep-scale": String(options.uiScale / 100),
     "--keep-motion": motionReduced(options, systemPrefersReduced) ? "0" : "1",
   };

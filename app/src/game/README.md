@@ -69,13 +69,28 @@ imports from here except through the seams above.
 ## Layout
 
 ```
-world/     the map, the projection, the simulation, the scatter, the border
+world/     the map, the projection, the simulation, the scatter, the border,
+           and what the kingdom is asked to hold
 pixi/      what gets drawn, and the camera: scene, actors, plates, ground, ambience
-engine/    input, the focus grid, the fixed-step loop
-state/     options, progress, the shop, the roster, what is saved
+engine/    input, the focus grid, the fixed-step loop, the camera's limits
+state/     options, progress, the shop, the roster, the shape of the screen,
+           what is saved
 ui/        the DOM interface over the canvas: HUD, menus, shop, the gathering
 lore/      names, flavour, and the codex
 ```
+
+Three of those files are arithmetic that more than one layer has to agree
+about, which is why each of them is pure and tested on its own:
+
+- `world/kingdom.ts` — how large a wave is, whether the garrison meets it, and
+  how heavily the veil is drawn. The simulation, the HUD and the veil all read
+  it; two copies would drift, and the way that would show is a screen washed in
+  blood over a map with nothing on it.
+- `engine/zoom.ts` — the camera's floor, ceiling, opening zoom and step. It was
+  inline in the renderer, computed against a screen size that was wrong.
+- `state/layout.ts` — which shape of screen this is. Not a media query: a
+  handset held sideways is 844 pixels across and sails past every
+  `width <= 640px` rule in the stylesheet.
 
 **`world/` imports nothing from `pixi/`, and nothing from `pixi.js`.** That is
 the rule the layout is for, and it is what lets a thousand ticks of the

@@ -8,6 +8,7 @@ import { buildBorder } from "./border";
 import { buildBridges } from "./bridge";
 import { buildScatter } from "./scatter";
 import { buildRoadside, type Lanterns } from "./roadside";
+import { headroom, openingZoom, zoomBounds } from "../engine/zoom";
 
 /**
  * Everything standing on the ground: buildings, signs, trees, and the people.
@@ -594,7 +595,10 @@ export function buildWorld(app: Application, art: Loaded, kingdom: Kingdom): {
 }
 
 /** Where the view should start: on the Keep, which is the middle of the map. */
-export function homeView(): { x: number; y: number; zoom: number } {
+export function homeView(
+  screenWidth: number,
+  screenHeight: number,
+): { x: number; y: number; zoom: number } {
   /*
    * On the Keep, at a zoom you can read.
    *
@@ -605,9 +609,15 @@ export function homeView(): { x: number; y: number; zoom: number } {
    * in. A big map is one you arrive somewhere on and travel across, so the
    * game opens where the roads meet, and the road book in the pause menu is
    * how you get anywhere else without walking.
+   *
+   * The zoom comes from the canvas rather than from a constant. The constant
+   * was 0.75, which is a reasonable view of a laptop and about eight tiles of
+   * country on a phone -- a game that opens in a broom cupboard.
    */
   const keep = GARRISONS[0];
   const middle = toScreen(keep.x, keep.y);
+  const bounds = zoomBounds(screenWidth, screenHeight, MAP.width * TILE_W, MAP.height * TILE_H);
+  const zoom = openingZoom(screenWidth, screenHeight, bounds);
 
   /*
    * The HUD lies across the top of the view, so the camera looks a little
@@ -615,26 +625,11 @@ export function homeView(): { x: number; y: number; zoom: number } {
    * moves the opposite way to the picture: to push the Keep down the screen,
    * the camera looks higher up the country.
    */
-  const zoom = 0.75;
-  const HUD = 250;
-
   return {
     x: middle.x,
-    y: middle.y - HUD / 2 / zoom,
+    y: middle.y - headroom(screenHeight) / zoom,
     zoom,
   };
-}
-
-/**
- * How far out the view may go: far enough to see the whole country.
- *
- * Worked out from the map rather than chosen, so that making the Marches
- * bigger again cannot quietly leave a corner of them unreachable.
- */
-export function widestZoom(screenWidth: number, screenHeight: number): number {
-  const across = MAP.width * TILE_W;
-  const down = MAP.height * TILE_H;
-  return Math.min(screenWidth / across, screenHeight / down);
 }
 
 export { TILE_W, TILE_H };

@@ -16,6 +16,30 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   and sessions that are equally stale are chosen between at random, so one that
   misses a request is very unlikely to miss the next. The per-minute budget
   that actually protects the relay is unchanged.
+- Shell Keep on a phone. The map can be pulled back: three zoom controls sit up
+  the right-hand edge, and the camera's limits are now worked out from the
+  canvas and re-read whenever it changes size, rather than once from a default
+  800×600 that no phone has. The HUD is sized for the screen it is on, which
+  includes a handset held sideways — every responsive rule in the game asked
+  about the window's width, and a phone in landscape is 844 pixels across.
+  The game opens at a zoom chosen for the screen instead of a constant that
+  showed about eight tiles of country on a handset.
+- A soldier is a session that is live and writable. Sessions whose process had
+  exited, whose machine the relay had lost, or that were shared read-only were
+  standing on the field as live soldiers, so the garrison only ever grew and
+  the session count on the HUD read high.
+- The Unmade appear. They used to march only on a hero whose session name read
+  as bug work, which on a real team meant they never marched at all, and they
+  were drawn at a third the height of the figures fighting them.
+
+### Added
+
+- The kingdom can be short-handed, and says so. Waves are sized from the number
+  of people on the team, and it takes two live sessions a hero to meet them.
+  Below that the camera takes a veil of blood at its corners, heavier the
+  shorter the garrison is, and the HUD says in words how many more sessions
+  would hold the line. Nothing is lost by being short and nothing counts down:
+  starting a session anywhere on the team clears it within one poll.
 
 ## [0.17.0] — 2026-09-18
 

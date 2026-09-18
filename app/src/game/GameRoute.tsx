@@ -18,7 +18,13 @@ import { useEarned } from "./state/use-earned";
 import { hasChosen, marksLeft, readSave, writeSave, type Save } from "./state/save";
 import { loadSave, reconcile, storeSave } from "./state/remote";
 import { ChooseCharacter } from "./ui/ChooseCharacter";
+import { BloodVeil } from "./ui/BloodVeil";
 import { Hud } from "./ui/Hud";
+import { ZoomControls } from "./ui/ZoomControls";
+import { useLayout } from "./state/use-layout";
+import { isCompact } from "./state/layout";
+import { kingdomStrength } from "./world/kingdom";
+import { ZOOM_STEP } from "./engine/zoom";
 import { PauseMenu } from "./ui/PauseMenu";
 import { Prompt } from "./ui/Prompt";
 import "../styles/game.css";
@@ -46,6 +52,23 @@ export default function GameRoute() {
   const [save, setSaveState] = useState<Save>(readSave);
   const [paused, setPaused] = useState(false);
   const device = useInputDevice();
+  /*
+   * Which shape of screen this is, watched rather than read once. A handset
+   * turned on its side is a different interface, and the one that arrived at
+   * the old answer and never revisited it is the one that was full size on a
+   * phone in landscape.
+   */
+  const layout = useLayout();
+  const compact = isCompact(layout);
+
+  /*
+   * Whether the zoom controls have anywhere left to go.
+   *
+   * Kept in state because it is two booleans that change when somebody stops
+   * pinching, not sixty times a second -- and a control that says it is at the
+   * limit when it is not is worse than no control.
+   */
+  const [zoomAt, setZoomAt] = useState({ out: false, in: false });
 
   /*
    * The OS setting is watched rather than read once. Somebody who turns
@@ -198,8 +221,14 @@ export default function GameRoute() {
     lookAt: () => {},
     wear: () => {},
     still: () => {},
+    zoomBy: () => {},
+    fit: () => {},
   });
   handle.current.onPick = setPicked;
+  handle.current.onZoom = (at) =>
+    setZoomAt((current) =>
+      current.out === at.out && current.in === at.in ? current : { out: at.out, in: at.in },
+    );
   /*
    * The scene still tells us whether the selected figure is visible, but the
    * card itself stays against the edge of the window. A moving information
@@ -222,6 +251,27 @@ export default function GameRoute() {
    * stand-in garrison when there are none or the service cannot be reached.
    */
   const garrison = useGarrison(sim.current, DEMO_ROSTER, save.characterClass);
+
+  /*
+   * Whether the kingdom has the sessions to meet what is coming for it.
+   *
+   * From the team's own totals, not from the figures on the field. Two
+   * reasons, and they pull in opposite directions from the same rule -- that
+   * this is a read-out of real work:
+   *
+   * The field is capped and the read-out is not, so a team of sixty holding
+   * its ground must not be told it is losing because the drawing budget ran
+   * out before their soldiers did.
+   *
+   * And the field shows the *example* team when an account has nothing
+   * running, which is the one case where somebody most needs to be told their
+   * kingdom is short. Reading the strain off the example would tell a person
+   * with nothing open that everything is fine.
+   *
+   * When the service could not be reached at all there is no answer, and the
+   * kingdom is left alone rather than accused.
+   */
+  const strength = kingdomStrength(garrison.team ?? { heroes: 0, soldiers: 0 });
 
   /*
    * The game takes the window. The corporate shell scrolls; a field that
@@ -264,7 +314,7 @@ export default function GameRoute() {
     [options, setOptions, reducedMotion, device, paused],
   );
 
-  const style = optionsToStyle(options, systemReduced) as React.CSSProperties;
+  const style = optionsToStyle(options, systemReduced, layout) as React.CSSProperties;
 
   return (
     <GameShellContext.Provider value={shell}>
@@ -278,6 +328,14 @@ export default function GameRoute() {
         data-keep={SHELL_KEEP_MARKER}
         data-motion={reducedMotion ? "reduced" : "full"}
         data-colour={options.colour}
+        /*
+         * The shape of the screen, for the stylesheet.
+         *
+         * A media query cannot ask the question this answers: a handset in
+         * landscape is 844 pixels across and sails past every `width <= 640px`
+         * rule in the file. See state/layout.ts.
+         */
+        data-layout={layout}
         style={style}
       >
         {/*
@@ -298,6 +356,15 @@ export default function GameRoute() {
         </main>
 
         {/*
+          * The kingdom struggling, laid over the field and under the HUD.
+          *
+          * Under, so that the words explaining it stay legible through it --
+          * a signal that obscures its own explanation is a signal that only
+          * worries people.
+          */}
+        <BloodVeil strength={strength} />
+
+        {/*
           * Everything that must survive a television sits inside this, laid
           * over the field rather than beside it. The picture may bleed into
           * the crop; the things you need to read may not.
@@ -313,6 +380,10 @@ export default function GameRoute() {
             demo={garrison.demo}
             counted={known}
             sessionTotal={garrison.soldiers}
+            strength={strength}
+            /* Whether the numbers behind it are this account's or an example. */
+            real={garrison.team !== undefined}
+            compact={compact}
             dataState={
               garrison.loading
                 ? "Updating sessions"
@@ -342,16 +413,54 @@ export default function GameRoute() {
             <button
               type="button"
               className="keep-button keep-pause-button"
+              /*
+               * Named here as well as written on, because a handset drops the
+               * word to keep the button inside a corner it has to share with
+               * the map -- and a control whose name is only its visible text
+               * is a control that loses its name when the text goes.
+               */
+              aria-label="Pause"
               onClick={() => setPaused(true)}
             >
               <span aria-hidden="true">❙❙</span>
-              Pause
+              {/*
+                * The word is a separate node so a handset can drop it and keep
+                * the button, the hit area and the accessible name. Shrinking
+                * the text to nothing would leave a label nobody can read
+                * claiming to be readable.
+                */}
+              <span className="keep-button-word">Pause</span>
             </button>
           </div>
 
-          <div className="keep-corner is-bottom-centre">
-            <Prompt action="pause" verb="open the menu" />
+          {/*
+            * The way out of the map, for a screen with no wheel on it.
+            *
+            * Shown to everybody rather than to touch alone: a visible control
+            * costs a mouse nothing and it is the only thing on screen that
+            * says the map can be pulled back at all.
+            */}
+          <div className="keep-corner is-right">
+            <ZoomControls
+              onZoomIn={() => handle.current.zoomBy(ZOOM_STEP)}
+              onZoomOut={() => handle.current.zoomBy(1 / ZOOM_STEP)}
+              onFit={() => handle.current.fit()}
+              atOut={zoomAt.out}
+              atIn={zoomAt.in}
+            />
           </div>
+
+          {/*
+            * The key prompt goes on a handset. It names a key that phone does
+            * not have, and it is one more thing across the foot of a screen
+            * that has none to spare; the pause button beside it does the same
+            * job and can be hit.
+            */}
+          {!compact && (
+            <div className="keep-corner is-bottom-centre">
+              <Prompt action="pause" verb="open the menu" />
+            </div>
+          )}
         </div>
 
         {picked && (

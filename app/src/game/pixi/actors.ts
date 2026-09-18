@@ -21,6 +21,21 @@ import { UNIT_FOR } from "./units";
 const FIGURE = 1.85;
 
 /**
+ * And how much bigger the Unmade are drawn than they are built.
+ *
+ * They were built at their natural size while everybody else was enlarged to
+ * stand on a map 128 tiles across, so a crawler came out 33 pixels tall beside
+ * a soldier of 102 and a hero of 153 -- present, fighting, counted, and to the
+ * eye a smudge in the grass. "The bugs do not appear" was true of the picture
+ * and false of the simulation, which is the worst kind of bug to look for.
+ *
+ * Enlarged by the same argument the figures were: the pack's scale is right
+ * for a courtyard and useless here. The three builds keep their proportions to
+ * each other, so a mite is still a mite next to a heisenbug.
+ */
+const UNMADE = 1.9;
+
+/**
  * How much bigger again a hero is.
  *
  * Two thirds again on top of a soldier, and both have grown. A hero is a person
@@ -152,7 +167,7 @@ export class ActorLayer {
    * name -- which is also the zoom at which you are looking at the country
    * rather than at anybody in it.
    */
-  zoomed(scale: number): void {
+  zoomed(scale: number, ceiling: number): void {
     /*
      * Against the zoom, and allowed to grow further than it shrinks.
      *
@@ -161,8 +176,12 @@ export class ActorLayer {
      * also when the figure under it is smallest. So the far end of the range is
      * generous. Close up it settles to about its drawn size, because at that
      * zoom the figure is doing the identifying.
+     *
+     * How generous depends on the canvas, which is the caller's to know. The
+     * same rule that is right on a monitor put a board at twice its drawn size
+     * across a phone, and a map behind its own labels is not a map.
      */
-    this.plateScale = Math.min(2.6, Math.max(0.75, 1 / scale));
+    this.plateScale = Math.min(ceiling, Math.max(0.75, 1 / scale));
     /*
      * Every board is shown at every zoom the wheel allows, heroes and soldiers
      * alike. A dozen of them over one camp do interleave; the answer to that is
@@ -187,12 +206,15 @@ export class ActorLayer {
 
     if (actor.side === "unmade") {
       const bug = makeUnmade(actor.kind);
+      bug.root.scale.set(UNMADE);
       bug.root.position.set(0, TILE_H * 0.25);
       root.addChild(bug.root);
+      /* The shadow grows with what casts it, or the creature floats. */
+      shadow.scale.set(UNMADE);
 
       /* Health over the creature, shown only once something is off it. */
       const hurt = new Graphics();
-      hurt.position.set(0, -24);
+      hurt.position.set(0, -24 * UNMADE);
       hurt.visible = false;
       root.addChild(hurt);
 
@@ -206,8 +228,8 @@ export class ActorLayer {
         bar: hurt,
         plate: undefined,
         headroom: 0,
-        halfWidth: 18,
-        rise: 24,
+        halfWidth: 18 * UNMADE,
+        rise: 24 * UNMADE,
         lastHp: actor.hp,
       };
     }
@@ -362,7 +384,12 @@ export class ActorLayer {
         const size = actor.role === "hero" ? HERO : FIGURE;
         piece.sprite.scale.x = actor.facing === 1 ? size : -size;
       } else {
-        piece.figure.scale.x = actor.facing === 1 ? 1 : -1;
+        /*
+         * Mirrored about its own enlarged scale, not about 1. Setting it to
+         * ±1 here silently shrank every creature back to its built size the
+         * first time it turned round.
+         */
+        piece.figure.scale.x = actor.facing === 1 ? UNMADE : -UNMADE;
       }
 
       /*

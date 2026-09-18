@@ -1,4 +1,5 @@
 import { CLASS_LORE, WORLD } from "../lore/world";
+import { SOLDIERS_PER_HERO, type Strength } from "../world/kingdom";
 import { nextUnlock, type Standing } from "../state/progress";
 import type { Actor } from "../world/sim";
 import { sessionBreakdown } from "./session-breakdown";
@@ -38,6 +39,12 @@ export interface HudProps {
   sessionTotal: number;
   /** Says whether the map is live, loading, or an explicitly labelled preview. */
   dataState: string;
+  /** Whether the kingdom has the sessions to meet what is coming for it. */
+  strength: Strength;
+  /** True when that reading is this account's own and not an example. */
+  real: boolean;
+  /** The trimmed HUD, for a handset either way up. See state/layout.ts. */
+  compact: boolean;
   onOpenRoster: () => void;
   /** Opens the gathering: the notice when it is off, the bill when it is on. */
   onOpenGathering: () => void;
@@ -129,6 +136,39 @@ function Elixir({ tokens, gathering }: { tokens: number; gathering: boolean }) {
   );
 }
 
+/**
+ * How the kingdom is holding, in words and a number.
+ *
+ * The veil over the camera says this too, in red at the corners, and this is
+ * the half of it somebody can act on: what is short, and how short. A wash of
+ * colour cannot say "three" and cannot be read aloud.
+ *
+ * `role="status"` rather than an alert. It is worth announcing when it
+ * changes, and it is not worth interrupting anybody over: nothing is lost
+ * while it is up.
+ */
+function Muster({ strength, real }: { strength: Strength; real: boolean }) {
+  if (!strength.struggling) {
+    return (
+      <p className="keep-muster is-held" role="status">
+        <span aria-hidden="true">⚑ </span>
+        The kingdom holds.
+      </p>
+    );
+  }
+
+  const more = strength.short;
+  return (
+    <p className="keep-muster is-pressed" role="status">
+      <span aria-hidden="true">⚔ </span>
+      <strong>The kingdom is struggling.</strong>{" "}
+      {real
+        ? `Start ${more} more ${more === 1 ? "session" : "sessions"} to hold the line — ${SOLDIERS_PER_HERO} a hero.`
+        : `${SOLDIERS_PER_HERO} sessions a hero holds the line.`}
+    </p>
+  );
+}
+
 export function Hud({
   standing,
   marks,
@@ -140,6 +180,9 @@ export function Hud({
   counted,
   sessionTotal,
   dataState,
+  strength,
+  real,
+  compact,
   onOpenRoster,
   onOpenGathering,
 }: HudProps) {
@@ -174,6 +217,7 @@ export function Hud({
           <p className="keep-operational-breakdown">
             {fixing} fixing · {building} building · {waiting} waiting
           </p>
+          <Muster strength={strength} real={real} />
           <span className={`keep-data-state${demo ? " is-preview" : " is-live"}`}>
             {dataState}
           </span>
@@ -203,6 +247,17 @@ export function Hud({
         </div>
       </div>
 
+      {/*
+        * On a handset these three go, rather than shrinking.
+        *
+        * The floor this interface holds itself to is a floor: text does not
+        * get smaller to fit. So what gives is the content, and what gives
+        * first is the three panels whose numbers are looked up rather than
+        * glanced at -- all of which are one tap away in the pause menu. They
+        * are left out of the tree rather than hidden with CSS, because a
+        * hidden button is still in the tab order and still read aloud.
+        */}
+      {!compact && (
       <div className="keep-corner is-bottom-left">
         <div className="keep-panel keep-purse">
           <span className="keep-coin" aria-hidden="true">◈</span>
@@ -227,7 +282,9 @@ export function Hud({
           <Elixir tokens={elixir} gathering={gathering} />
         </button>
       </div>
+      )}
 
+      {!compact && (
       <div className="keep-corner is-bottom-right">
         <button type="button" className="keep-panel keep-roster-button" onClick={onOpenRoster}>
           <span className="keep-roster-count">{wrights.length}</span>
@@ -244,6 +301,7 @@ export function Hud({
           </span>
         </button>
       </div>
+      )}
     </>
   );
 }

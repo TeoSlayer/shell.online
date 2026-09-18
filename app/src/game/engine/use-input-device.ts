@@ -13,8 +13,18 @@ import {
  * resting should not win over the keyboard being typed on, so connection alone
  * does not count -- a button has to move.
  */
-export function useInputDevice(initial: InputDevice = "keyboard"): InputDevice {
-  const [device, setDevice] = useState<InputDevice>(initial);
+export function useInputDevice(initial?: InputDevice): InputDevice {
+  /*
+   * A coarse pointer is a finger, and the first thing the interface says on a
+   * handset should not be the name of a key it does not have. Guessed from the
+   * device rather than assumed, and corrected the moment anything is actually
+   * used -- which is what the rest of this hook is for.
+   */
+  const [device, setDevice] = useState<InputDevice>(
+    () =>
+      initial ??
+      (window.matchMedia?.("(pointer: coarse)").matches ? "touch" : "keyboard"),
+  );
   /* When the current device was last used, for the anti-flapping grace. */
   const lastUsed = useRef(0);
   const currentRef = useRef(device);

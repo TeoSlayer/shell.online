@@ -88,6 +88,12 @@
    * of not having a scale, so here is the scale.
    */
   --keep-z-field: 1;
+  /*
+   * The veil sits over the field and under the HUD. Over, because it is about
+   * the map; under, because the words explaining it are on the HUD and a
+   * signal that obscures its own explanation only worries people.
+   */
+  --keep-z-veil: 50;
   --keep-z-hud: 100;
   --keep-z-modal: 200;
   --keep-z-tooltip: 300;
@@ -2056,4 +2062,325 @@
   font-family: inherit;
   font-size: var(--keep-text-sm);
   overflow-wrap: anywhere;
+}
+
+/* ---- the veil: the kingdom struggling --------------------------------- */
+
+/*
+ * Blood at the corners of the picture, heavier the further the garrison is
+ * from meeting what is coming for it.
+ *
+ * Two layers in one paint. The first is a vignette that leaves the middle of
+ * the map alone -- the map is the game, and a filter across the middle of it
+ * is a filter over the thing somebody is trying to look at. The second is four
+ * blooms, one in each corner, so the corners are distinctly bloodier than the
+ * edges between them: the effect reads as something pressing in at the edges
+ * rather than as a red screen.
+ *
+ * `--keep-blood` rather than a literal red, so the colourblind palettes move
+ * it with everything else. Its opacity is set inline from the strain; see
+ * world/kingdom.ts, which is the one place that arithmetic lives.
+ *
+ * No animation. A slow pulse is the obvious thing to reach for here and it is
+ * the wrong thing twice over: this file holds itself to interface motion at or
+ * under 300ms, and a screen that breathes red is exactly the sort of motion
+ * the reduced-motion setting exists for. It is a state, so it is still.
+ */
+.keep-veil {
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-veil);
+  background:
+    radial-gradient(circle at 0% 0%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 100% 0%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 0% 100%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 100% 100%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(120% 85% at 50% 50%, transparent 42%, var(--keep-blood) 100%);
+  /*
+   * Plain alpha, not `multiply`.
+   *
+   * Multiply is the better-looking answer and it is not a reliable one: the
+   * backdrop here is a WebGL canvas in a stacking context of its own, and the
+   * blend came out as nothing at all -- a veil in the document, at the right
+   * opacity, drawing no pixels. A signal that silently does not appear is
+   * worse than a plainer one that does.
+   */
+  pointer-events: none;
+  transition: opacity var(--keep-normal) linear;
+}
+
+/*
+ * How the kingdom is holding, in words.
+ *
+ * The other half of the veil, and the half somebody can act on: a wash of
+ * colour cannot say "three" and cannot be read aloud. It keeps its place in
+ * the HUD whether the news is good or bad, so the good news is not the absence
+ * of anything -- a line that only appears when something is wrong is a line
+ * nobody learns to read.
+ */
+.keep-muster {
+  margin: 0;
+  font-size: var(--keep-text-sm);
+}
+
+.keep-muster.is-held {
+  color: var(--keep-mist);
+}
+
+.keep-muster.is-pressed {
+  color: var(--keep-parchment);
+}
+
+.keep-muster.is-pressed strong {
+  color: var(--keep-blood);
+  /*
+   * Brightened against the stone behind it. The palette's blood is mixed for
+   * a grass field and is too dark to read on a dark panel.
+   */
+  filter: brightness(1.45);
+}
+
+/* ---- the zoom controls ------------------------------------------------- */
+
+/*
+ * The way out of the map on a screen with no wheel.
+ *
+ * The camera had three ways to move and a phone has one of them: drag works,
+ * the wheel does not exist, and pinch is a two-handed gesture on a device
+ * people hold in one -- and nothing on screen ever said it was there. Pinch
+ * still works; this is the part that can be seen.
+ *
+ * Up the right-hand edge, above the thumb rather than under it, and clear of
+ * both bottom corners so it never lands on the roster panel or the wright
+ * card's top edge.
+ */
+.keep-corner.is-right {
+  top: 50%;
+  right: var(--keep-safe);
+  flex-direction: column;
+  transform: translateY(-50%);
+}
+
+.keep-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+  pointer-events: auto;
+}
+
+.keep-zoom-button {
+  width: var(--keep-hit);
+  min-width: var(--keep-hit);
+  min-height: var(--keep-hit);
+  padding: 0;
+  font-size: var(--keep-text-xl);
+  /* A glyph, not a word: no tracking, and centred in its own square. */
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+/*
+ * A control at its limit says so rather than going quiet. Half opacity is not
+ * on its own enough -- `disabled` is what a screen reader reads, and the
+ * cursor says it too.
+ */
+.keep-zoom-button:disabled {
+  border-color: var(--keep-stone-lit);
+  color: var(--keep-mist);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.keep-zoom-button:disabled:hover {
+  background: var(--keep-stone);
+  border-color: var(--keep-stone-lit);
+}
+
+/* ---- a handset, either way up ------------------------------------------ */
+
+/*
+ * Keyed on the layout the game worked out, not on the width of the window.
+ *
+ * This is the whole reason `state/layout.ts` exists. Every responsive rule in
+ * this file used to ask `width <= 640px`, and a phone held sideways is 844
+ * pixels across: it sailed past all of them and then had 390 pixels of height
+ * to fit four framed panels, a pause button and a map into. The short edge is
+ * what is scarce on a handset, and it is scarce whichever way up it is.
+ *
+ * What gives is never the text. The floor this file holds itself to is a
+ * floor -- 16px, because a game is read in a hurry and often at arm's length.
+ * So the frames get thinner, the padding closes up, and whole panels leave for
+ * the pause menu, which is one tap away and is the right home for a number you
+ * look up rather than glance at. `Hud` drops those from the tree rather than
+ * hiding them here, because a hidden button is still in the tab order.
+ */
+.keep[data-layout="phone"] {
+  /* A phone has no overscan; what it has is a notch and a home indicator. */
+  --keep-safe: max(10px, env(safe-area-inset-left));
+}
+
+/*
+ * The frame, thinner.
+ *
+ * The art is a nine-slice: the border width and the slice's rendered size have
+ * to move together or the brass corners stretch. Sixteen pixels of frame on
+ * every side of every panel is most of a phone's width spent on decoration.
+ */
+.keep[data-layout="phone"] .keep-panel,
+.keep[data-layout="snug"] .keep-panel {
+  border-width: 10px;
+  border-image: url("/game/ui/frame-panel.png") 16 / 10px stretch;
+}
+
+.keep[data-layout="phone"] .keep-panel-heavy,
+.keep[data-layout="snug"] .keep-panel-heavy {
+  border-width: 18px;
+  border-image: url("/game/ui/frame-heavy.png") 32 / 18px stretch;
+}
+
+/*
+ * The standing panel is sized to its contents rather than to the window.
+ *
+ * It used to be allowed the whole width less a margin, which on a phone is a
+ * panel across the top of the map whatever is in it.
+ */
+.keep[data-layout="phone"] .keep-standing,
+.keep[data-layout="snug"] .keep-standing {
+  min-width: 0;
+  max-width: min(76vw, calc(340px * var(--keep-scale)));
+  gap: calc(var(--keep-space) / 2);
+}
+
+/*
+ * The big number comes down two steps.
+ *
+ * It is the one thing here that is genuinely glanced at rather than read, so
+ * it stays the largest thing on the panel; it does not need to be 34 pixels
+ * tall on a screen 390 across.
+ */
+.keep[data-layout="phone"] .keep-operational-value {
+  font-size: var(--keep-text-xl);
+}
+
+.keep[data-layout="phone"] .keep-operational-label {
+  font-size: var(--keep-text);
+}
+
+.keep[data-layout="phone"] .keep-operational-head {
+  gap: calc(6px * var(--keep-scale));
+}
+
+/*
+ * Progression leaves the field on a handset.
+ *
+ * The crest, the class, the level and the experience bar are four rows about
+ * what has already happened, and the phone HUD is for what is happening now.
+ * All four are in the pause menu.
+ */
+.keep[data-layout="phone"] .keep-standing-divider,
+.keep[data-layout="phone"] .keep-standing-head,
+.keep[data-layout="phone"] .keep-standing > .keep-meter {
+  display: none;
+}
+
+/*
+ * The pause control keeps its hit area and loses its word.
+ *
+ * The word is dropped rather than shrunk: the accessible name comes from the
+ * text, so it is still announced, and nothing on screen is claiming to be
+ * readable at a size it is not.
+ */
+.keep[data-layout="phone"] .keep-pause-button {
+  width: var(--keep-hit);
+  min-width: var(--keep-hit);
+  padding: 0;
+  gap: 0;
+}
+
+.keep[data-layout="phone"] .keep-pause-button .keep-button-word {
+  display: none;
+}
+
+/*
+ * The zoom controls move down out of the middle of the right edge, where a
+ * thumb reaches and where they do not sit over a camp.
+ */
+.keep[data-layout="phone"] .keep-corner.is-right {
+  top: auto;
+  bottom: calc(var(--keep-safe) + var(--keep-space));
+  transform: none;
+}
+
+/* The card over a figure is a sheet against the foot of the screen. */
+.keep[data-layout="phone"] .keep-wright {
+  top: auto;
+  right: var(--keep-safe);
+  bottom: var(--keep-safe);
+  left: var(--keep-safe);
+  width: auto;
+  max-height: min(58vh, 520px);
+}
+
+/*
+ * A short window, whatever is pointing at it: a phone on its side, a laptop
+ * with the browser half-height, a tablet in split screen. The panels that
+ * scroll need the room more than the padding around them does.
+ */
+.keep[data-layout="snug"] .keep-pause-panel,
+.keep[data-layout="phone"] .keep-pause-panel {
+  gap: var(--keep-space);
+  padding: var(--keep-space-2);
+}
+
+.keep[data-layout="phone"] .keep-pause-head h2 {
+  font-size: var(--keep-text-xl);
+}
+
+/*
+ * The opening screen, on a handset.
+ *
+ * It is the first thing anybody sees and it was three paragraphs of premise, a
+ * five-item list and a description panel, inside a 32-pixel frame, on a screen
+ * 390 across -- which is a scroll before the game has started.
+ *
+ * What goes is prose, not size. The premise is in the Codex in the pause menu
+ * and it is not what somebody is on this screen to do; what they are here to
+ * do is pick a class, and that is what is left.
+ */
+.keep[data-layout="phone"] .keep-opening,
+.keep[data-layout="snug"] .keep-opening {
+  padding: var(--keep-space-2);
+  gap: var(--keep-space);
+}
+
+.keep[data-layout="phone"] .keep-opening-head p ~ p {
+  display: none;
+}
+
+.keep[data-layout="phone"] .keep-opening-head h2 {
+  font-size: var(--keep-text-lg);
+}
+
+/*
+ * The description panel goes too.
+ *
+ * Side by side with the list it stops five classes reflowing under the
+ * cursor, which is a real problem with a cursor and not one with a thumb --
+ * and stacked underneath on a narrow screen it is the same sentence the
+ * highlighted item is already showing, one screen further down.
+ */
+.keep[data-layout="phone"] .keep-opening-detail {
+  display: none;
+}
+
+/*
+ * The foot stacks rather than squeezing the prompt into a column two words
+ * wide. `space-between` on a narrow row turned "Take the keep" into three
+ * lines with a sentence beside it.
+ */
+.keep[data-layout="phone"] .keep-pause-foot {
+  padding-top: var(--keep-space);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--keep-space);
 }

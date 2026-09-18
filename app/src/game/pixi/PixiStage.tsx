@@ -16,7 +16,7 @@ import "pixi.js/unsafe-eval";
 import { Viewport } from "pixi-viewport";
 import { MAP } from "../world/marches";
 import { TILE_H, TILE_W } from "../world/iso";
-import { widestZoom } from "./scene";
+import { zoomBounds } from "../engine/zoom";
 
 export interface Scene {
   /** Everything in world space. The viewport moves this, not the camera. */
@@ -65,6 +65,7 @@ export function PixiStage({
     let app: Application | undefined;
     let scene: Scene | undefined;
     let stopped = false;
+    let onResize: (width: number, height: number) => void = () => {};
 
     const start = async () => {
       const created = new Application();
@@ -91,19 +92,31 @@ export function PixiStage({
       created.canvas.setAttribute("role", "img");
       created.canvas.setAttribute("aria-label", label);
 
+      const worldWidth = MAP.width * TILE_W;
+      const worldHeight = MAP.height * TILE_H;
       const viewport = new Viewport({
         events: created.renderer.events,
-        worldWidth: MAP.width * TILE_W,
-        worldHeight: MAP.height * TILE_H,
+        /*
+         * The canvas, not the window.
+         *
+         * Left out, pixi-viewport measures `window.innerWidth` once and never
+         * again -- so on a phone every limit it enforces was computed against
+         * a screen that included the browser's own furniture, and none of them
+         * was recomputed when the device was turned on its side.
+         */
+        screenWidth: created.screen.width,
+        screenHeight: created.screen.height,
+        worldWidth,
+        worldHeight,
       });
       created.stage.addChild(viewport);
 
       /*
        * Drag to move, wheel or pinch to zoom, with the map kept on screen.
        *
-       * The zoom range is chosen from what is legible: below about half,
-       * buildings are specks and the names have already gone; above two, the
-       * art is visibly enlarged past the resolution it was drawn at.
+       * The zoom range is chosen from what is legible: the floor shows the
+       * whole country, and the ceiling -- `CLOSEST` -- is where the art is
+       * visibly enlarged past the resolution it was drawn at.
        *
        * `clamp` is what stops the country sliding off into an empty corner.
        * It only works because the projection is shifted so that no tile has a
@@ -115,14 +128,35 @@ export function PixiStage({
         .pinch()
         .wheel({ smooth: 4 })
         .decelerate({ friction: 0.92 })
-        /*
-         * The floor is whatever shows the whole country, worked out from the
-         * map rather than picked, so that making the Marches bigger again
-         * cannot leave a corner of them unreachable. The ceiling is where the
-         * art is visibly enlarged past the resolution it was drawn at.
-         */
-        .clampZoom({ minScale: widestZoom(created.screen.width, created.screen.height), maxScale: 2 })
         .clamp({ direction: "all", underflow: "center" });
+
+      /*
+       * The limits, re-read whenever the canvas changes size.
+       *
+       * They used to be worked out once, from `app.screen` -- which, at the
+       * moment this runs, is still Pixi's default 800 by 600, because
+       * `resizeTo` measures the element on the next frame. So the floor on how
+       * far out a phone could pull was a floor computed for a screen that
+       * phone does not have, and rotating the device never corrected it. A
+       * renderer resize is the one event that knows the truth, and it fires
+       * on the first measurement as well as on every rotation.
+       */
+      const relimit = (width: number, height: number) => {
+        const bounds = zoomBounds(width, height, worldWidth, worldHeight);
+        viewport.resize(width, height, worldWidth, worldHeight);
+        viewport.clampZoom({ minScale: bounds.min, maxScale: bounds.max });
+        /*
+         * Re-applied by hand: `clampZoom` corrects the zoom on the next input,
+         * and a rotation is not an input. Without this, turning a phone from
+         * landscape to portrait leaves the map zoomed further out than the new
+         * floor allows and nothing ever pulls it back.
+         */
+        if (viewport.scale.x < bounds.min) viewport.setZoom(bounds.min, true);
+        if (viewport.scale.x > bounds.max) viewport.setZoom(bounds.max, true);
+      };
+      relimit(created.screen.width, created.screen.height);
+      onResize = (width: number, height: number) => relimit(width, height);
+      created.renderer.on("resize", onResize);
 
       scene = await build(created, viewport);
       if (stopped) return;
@@ -145,6 +179,12 @@ export function PixiStage({
 
     return () => {
       stopped = true;
+      /*
+       * The resize listener goes before the renderer does. A handler left on a
+       * destroyed renderer is a handler that runs against a torn-down viewport
+       * the next time the window moves.
+       */
+      if (app) app.renderer.off("resize", onResize);
       scene?.destroy?.();
       app?.destroy(true, { children: true });
     };

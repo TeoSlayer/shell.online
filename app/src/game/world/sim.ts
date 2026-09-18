@@ -3,6 +3,7 @@ import { assignCamps, CAMP_RADIUS, type Camp } from "./camps";
 import { assignBanners } from "./banners";
 import type { Work } from "./work";
 import { pushOut } from "./solids";
+import { kingdomStrength, waveSize, type Strength } from "./kingdom";
 
 /**
  * Who is on the Marches, and what they are doing.
@@ -167,15 +168,15 @@ const HURT_TICKS = 6;
 const MARK_TICKS = 45;
 const EFFECT_TICKS = 18;
 /*
- * How often the Unmade arrive, and how many stand at once.
+ * How often the Unmade arrive.
  *
- * Both raised, because a camp with a fault being worked on should look like it.
- * At the old rate one foe wandered in every three seconds and was put down
- * before the next arrived, so a besieged camp looked much like a quiet one --
- * which is the opposite of what the whole arrangement is for.
+ * Raised once already, because a camp with a fault being worked on should look
+ * like it: at the old rate one foe wandered in every three seconds and was put
+ * down before the next arrived, so a besieged camp looked much like a quiet
+ * one. *How many* stand at once is no longer a constant -- it comes from the
+ * size of the team, through `waveSize`.
  */
 const SPAWN_EVERY = 34;
-const MAX_UNMADE = 40;
 /** How many of the Unmade one camp can have at it before the rest hold back. */
 const MAX_PER_CAMP = 7;
 
@@ -491,6 +492,47 @@ export function besieged(sim: Sim): string[] {
   return [...under].sort();
 }
 
+/**
+ * The camps the Unmade are sent to, in the order they will be sent.
+ *
+ * Every camp is on the list, because a fault does not wait to be named before
+ * it exists; a camp with a session actually on a fault is on it three times,
+ * because that is where the work is and the map should say so. Round-robin
+ * over the list is what shares a wave out rather than throwing it at whoever
+ * happens to sort first.
+ *
+ * Derived from the camps rather than from the heroes, because a camp is what
+ * the Unmade walk to and a hero without one has nowhere to be attacked.
+ */
+export function marchTargets(sim: Sim): string[] {
+  const fixing = new Set(besieged(sim));
+  const targets: string[] = [];
+  for (const uid of [...sim.camps.keys()].sort()) {
+    targets.push(uid);
+    if (!fixing.has(uid)) continue;
+    targets.push(uid, uid);
+  }
+  return targets;
+}
+
+/**
+ * Whether the kingdom has the sessions to meet what is coming for it.
+ *
+ * Read off the field rather than passed in, so the veil over the camera and
+ * the figures on the map cannot disagree about how bad it is. Soldiers are
+ * counted rather than taken from the roster's total because the field is what
+ * the player is looking at.
+ */
+export function kingdomHeld(sim: Sim): Strength {
+  let heroes = 0;
+  let soldiers = 0;
+  for (const actor of sim.actors) {
+    if (actor.role === "hero") heroes += 1;
+    else if (actor.role === "soldier") soldiers += 1;
+  }
+  return kingdomStrength({ heroes, soldiers });
+}
+
 function spawnUnmade(sim: Sim, heroUid: string): void {
   const camp = sim.camps.get(heroUid);
   if (!camp) return;
@@ -659,19 +701,37 @@ export function tickSim(sim: Sim): void {
     if (actor.role === "hero" && actor.heroUid) heroes.set(actor.heroUid, actor);
   }
 
-  const under = besieged(sim);
-  if (under.length > 0 && sim.actors.filter((actor) => actor.side === "unmade").length < MAX_UNMADE) {
+  /*
+   * The wave, which is always coming.
+   *
+   * It used to come only for a hero whose session was on a fault, and on a
+   * real team that meant it never came at all: work is classified from what
+   * somebody called their session, most sessions are called `npm run dev`, and
+   * so the map that was supposed to show a country under pressure showed empty
+   * grass for weeks. A game whose central spectacle depends on a naming
+   * convention is a game nobody sees.
+   *
+   * So the Unmade stand against the kingdom as such. How many is a function of
+   * how many people are on it -- more people is more border to hold -- and
+   * what holds them is sessions. That is the whole incentive and it is honest:
+   * nothing is lost by being short, but a kingdom nobody has mustered for is
+   * visibly a kingdom nobody has mustered for.
+   */
+  const wave = waveSize(sim.camps.size);
+  const standing = sim.actors.filter((actor) => actor.side === "unmade").length;
+  const targets = marchTargets(sim);
+  if (targets.length > 0 && standing < wave) {
     sim.nextSpawn -= 1;
     if (sim.nextSpawn <= 0) {
       sim.nextSpawn = SPAWN_EVERY;
       /*
-       * Round the besieged camps in turn, so one is not singled out, and skip
-       * any that already has a crowd at it. Without the cap, a team where one
-       * person is fixing everything drew the whole wave while everybody else's
-       * camp stayed quiet.
+       * Round the camps in turn, so one is not singled out, and skip any that
+       * already has a crowd at it. Without the cap, a team where one person is
+       * fixing everything drew the whole wave while everybody else's camp
+       * stayed quiet.
        */
-      for (let step = 0; step < under.length; step += 1) {
-        const heroUid = under[(sim.spawned + step) % under.length];
+      for (let step = 0; step < targets.length; step += 1) {
+        const heroUid = targets[(sim.spawned + step) % targets.length];
         const already = sim.actors.filter(
           (actor) => actor.side === "unmade" && actor.heroUid === heroUid,
         ).length;

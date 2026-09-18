@@ -162,6 +162,56 @@ describe("the roster", () => {
     expect(roster.soldiers).toHaveLength(1);
   });
 
+  it("leaves a session whose process has exited off the field", () => {
+    /*
+     * The commoner ending. A row keeps no `closedAt` until the service hears
+     * that it closed, and what the relay reports first is that the process is
+     * gone -- which is why the field used to fill with soldiers standing for
+     * sessions that had finished hours before.
+     */
+    const roster = rosterFrom(
+      [
+        session({ ownerUid: "ada", command: "claude", relayStatus: "connected" }),
+        session({ ownerUid: "ada", command: "claude", relayStatus: "exited" }),
+        session({ ownerUid: "ada", command: "claude", relayStatus: "missing" }),
+      ],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers).toHaveLength(1);
+    expect(roster.soldierTotal).toBe(1);
+  });
+
+  it("keeps a session whose machine is merely offline", () => {
+    /*
+     * Disconnected is reopenable, and the console says "Offline" rather than
+     * "Finished". A soldier standing for it is standing for work that is still
+     * somebody's to come back to.
+     */
+    const roster = rosterFrom(
+      [session({ ownerUid: "ada", command: "claude", relayStatus: "disconnected" })],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers).toHaveLength(1);
+  });
+
+  it("leaves a read-only session off the field", () => {
+    /*
+     * A window onto somebody else's work rather than work of its own. Counting
+     * it would let one session be two soldiers in two companies.
+     */
+    const roster = rosterFrom(
+      [
+        session({ ownerUid: "ada", command: "claude" }),
+        session({ ownerUid: "ada", command: "claude", readOnly: true }),
+      ],
+      [member("ada")],
+      { uid: "ada" },
+    );
+    expect(roster.soldiers).toHaveLength(1);
+  });
+
   it("draws your own hero as the class you chose", () => {
     /*
      * Your choice lives in your own saved game and only this browser can read

@@ -2,13 +2,22 @@ import { Container, Text } from "pixi.js";
 import type { Application } from "pixi.js";
 import type { Viewport } from "pixi-viewport";
 import { buildWorld, homeView, loadArt, loadKingdom } from "./scene";
-import { toScreen, toTile } from "../world/iso";
+import { TILE_H, TILE_W, toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import { Banners, OrderMark } from "./banners";
 import { loadSigils } from "./sigils";
 import type { Scene } from "./PixiStage";
-import { GARRISONS } from "../world/marches";
+import { GARRISONS, MAP } from "../world/marches";
+import {
+  atLimit,
+  headroom,
+  openingZoom,
+  plateCeiling,
+  stepZoom,
+  zoomBounds,
+  type ZoomBounds,
+} from "../engine/zoom";
 import { createSim, garrisonSoldiers, orderHero, tickSim, yourHero, type Actor, type Mark, type Sim } from "../world/sim";
 
 /**
@@ -20,8 +29,8 @@ import { createSim, garrisonSoldiers, orderHero, tickSim, yourHero, type Actor, 
  * shaking findable — it was a question about numbers, not about pixels.
  */
 
-/** How far above a holding the camera sits, so the HUD does not cover it. */
-const RIDE_LIFT = 150;
+/** How long the camera takes to answer a control. Short: this is not a ride. */
+const ZOOM_MS = 180;
 
 export interface KeepHandle {
   sim: Sim;
@@ -39,6 +48,23 @@ export interface KeepHandle {
    */
   onTrack?: (at: { x: number; y: number } | undefined) => void;
   select(id: string | undefined): void;
+  /**
+   * Pulls the camera back or pushes it in by one step.
+   *
+   * On the handle rather than left to the wheel, because a wheel is a thing a
+   * phone does not have. Pinch works and is still there; it is a two-handed
+   * gesture on a device people hold in one, and it is undiscoverable -- a map
+   * with no visible way out of it is a map somebody is stuck in.
+   */
+  zoomBy(factor: number): void;
+  /** Pulls all the way back, to the whole country at once. */
+  fit(): void;
+  /**
+   * Told when the zoom changes, so a control can say honestly whether it has
+   * anywhere left to go. Called on every frame of a pinch, which is why it is
+   * a callback and not React state.
+   */
+  onZoom?: (at: { scale: number; out: boolean; in: boolean }) => void;
   /** What the player's own hero and their soldiers are drawn in. */
   wear(skin: number, livery: number): void;
   /** Stops everything that drifts or flaps, for reduced motion. */
@@ -95,6 +121,32 @@ export async function buildKeepScene(
   const sim = handle.sim;
   garrisonSoldiers(sim);
 
+  /*
+   * The camera's limits, asked for rather than remembered.
+   *
+   * `app.screen` is the live canvas, so this is correct after a rotation, a
+   * split-screen resize, or the moment before the first measurement lands --
+   * all three of which a stored copy got wrong.
+   */
+  const bounds = (): ZoomBounds =>
+    zoomBounds(app.screen.width, app.screen.height, MAP.width * TILE_W, MAP.height * TILE_H);
+
+  /*
+   * The zoom a ride ends on.
+   *
+   * The same one the game opens at, which is the point: a ride that ends
+   * somewhere else teaches the player that the camera has moods. It was the
+   * constant 1 for arriving at your own hero and 0.95 for a holding, both of
+   * which are a face filling a phone.
+   */
+  const settled = () => openingZoom(app.screen.width, app.screen.height, bounds());
+
+  const tellZoom = (scale: number) => {
+    const limits = bounds();
+    const at = atLimit(scale, limits);
+    handle.onZoom?.({ scale, out: at.out, in: at.in });
+  };
+
   let selected: string | undefined;
   const actors = new ActorLayer(art, things, labels, sigils);
   const companies = new Banners(banners);
@@ -136,13 +188,35 @@ export async function buildKeepScene(
      * no idea which way you came from. The ride is short enough not to be a
      * wait and long enough to show the direction.
      */
+    const scale = settled();
     viewport.animate({
-      position: { x, y: y - RIDE_LIFT },
-      scale: 0.95,
+      position: { x, y: y - headroom(app.screen.height) / scale },
+      scale,
       time: 600,
       ease: "easeInOutSine",
     });
   };
+
+  /*
+   * The zoom controls.
+   *
+   * Everything here goes through `stepZoom` against the live limits rather
+   * than through pixi-viewport's own zoom helpers, so a control can never put
+   * the camera somewhere the clamp will immediately drag it back out of --
+   * which on a phone looked exactly like a zoom button that did nothing.
+   */
+  const zoomTo = (scale: number) => {
+    viewport.animate({
+      /* Held on the middle of the screen, which is where the eye already is. */
+      position: { x: viewport.center.x, y: viewport.center.y },
+      scale,
+      time: ZOOM_MS,
+      ease: "easeInOutSine",
+    });
+    tellZoom(scale);
+  };
+  handle.zoomBy = (factor) => zoomTo(stepZoom(viewport.scale.x, factor, bounds()));
+  handle.fit = () => zoomTo(bounds().min);
 
   /*
    * Picking is done by finding the nearest wright to where the map was
@@ -208,9 +282,10 @@ export async function buildKeepScene(
   };
   app.stage.on("pointertap", onTap);
 
-  const home = homeView();
+  const home = homeView(app.screen.width, app.screen.height);
   viewport.setZoom(home.zoom, true);
   viewport.moveCenter(home.x, home.y);
+  tellZoom(home.zoom);
 
   /*
    * Once the roster arrives, the view moves to the player's own hero.
@@ -281,9 +356,10 @@ export async function buildKeepScene(
     if (!hero) return;
     found = true;
     const seat = toScreen(hero.x, hero.y);
+    const scale = settled();
     viewport.animate({
-      position: { x: seat.x, y: seat.y - RIDE_LIFT },
-      scale: 1,
+      position: { x: seat.x, y: seat.y - headroom(app.screen.height) / scale },
+      scale,
       time: 700,
       ease: "easeInOutSine",
     });
@@ -314,7 +390,13 @@ export async function buildKeepScene(
       const bottom = top + bounds.height * screenScale;
       sign.visible = left >= 8 && top >= 8 && right <= app.screen.width - 8 && bottom <= app.screen.height - 8;
     }
-    actors.zoomed(viewport.scale.x);
+    actors.zoomed(viewport.scale.x, plateCeiling(app.screen.width));
+    /*
+     * The controls are told from here rather than from their own listener:
+     * this already runs on every zoom and every frame of a drag, and a second
+     * listener on the same events is a second thing to remember to remove.
+     */
+    tellZoom(viewport.scale.x);
     /*
      * Only when it changes. Showing the sentence redraws every board, and
      * `moved` fires on every frame of a drag -- redrawing six boards a frame to

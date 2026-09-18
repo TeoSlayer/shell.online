@@ -4,6 +4,8 @@ import { assignCamps, CAMP_RADIUS, campSites } from "./camps";
 import {
   besieged,
   createSim,
+  kingdomHeld,
+  marchTargets,
   garrisonSoldiers,
   orderHero,
   setRoster,
@@ -352,31 +354,98 @@ describe("the Unmade", () => {
     expect(sim.raised).toBeGreaterThan(0);
   });
 
-  it("leaves alone a hero who is only building", () => {
+  it("comes for a kingdom where nobody is fixing anything", () => {
+    /*
+     * The bug this replaces: the wave came only for a hero whose session was
+     * on a fault, work is read from what somebody called their session, and
+     * most sessions are called `npm run dev` -- so on a real team nothing ever
+     * arrived and the map showed empty grass. The Unmade stand against the
+     * kingdom, not against a naming convention.
+     */
     const sim = theExample();
-    /* Ten features and three idle: nothing broken, so nothing comes. */
     run(sim, 600);
-    expect(sim.actors.some((actor) => actor.side === "unmade")).toBe(false);
+    expect(sim.actors.some((actor) => actor.side === "unmade")).toBe(true);
   });
 
-  it("comes to the right camp", () => {
+  it("sends a wave that grows with the team", () => {
+    /*
+     * More people is more border to hold. What holds it is sessions, which is
+     * the whole of the incentive.
+     */
+    const small = createSim();
+    setRoster(small, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [],
+    });
+    const large = createSim();
+    setRoster(large, {
+      heroes: Array.from({ length: 6 }, (_, index) => ({
+        uid: `hero-${index}`,
+        name: `Hero ${index}`,
+        characterClass: "codex",
+      })),
+      soldiers: [],
+    });
+    run(small, 4000);
+    run(large, 4000);
+
+    const count = (sim: Sim) => sim.actors.filter((actor) => actor.side === "unmade").length;
+    expect(count(large)).toBeGreaterThan(count(small));
+  });
+
+  it("says when the kingdom has too few sessions for what is coming", () => {
+    const sim = createSim();
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [],
+      youUid: "ada",
+    });
+    expect(kingdomHeld(sim).struggling).toBe(true);
+    expect(kingdomHeld(sim).strain).toBe(1);
+
+    setRoster(sim, {
+      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
+      soldiers: [
+        { id: "a", name: "one", kind: "codex", work: "idle", heroUid: "ada" },
+        { id: "b", name: "two", kind: "codex", work: "idle", heroUid: "ada" },
+      ],
+      youUid: "ada",
+    });
+    expect(kingdomHeld(sim).struggling).toBe(false);
+  });
+
+  it("comes to a camp, and to the one on a fault hardest", () => {
+    /*
+     * Everybody's ground is walked on; the person actually fixing something
+     * gets the larger share of it, because that is where the work is and the
+     * map should say so.
+     */
     const sim = createSim();
     setRoster(sim, {
       heroes: [
         { uid: "ada", name: "Ada", characterClass: "codex" },
         { uid: "alan", name: "Alan", characterClass: "codex" },
       ],
-      soldiers: [{ id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" }],
+      soldiers: [
+        { id: "a", name: "fix: it", kind: "codex", work: "bug", heroUid: "ada" },
+        { id: "b", name: "npm run dev", kind: "codex", work: "idle", heroUid: "alan" },
+      ],
       youUid: "ada",
     });
-    run(sim, 200);
-    const adaCamp = sim.camps.get("ada")!;
+    expect(marchTargets(sim)).toEqual(["ada", "ada", "ada", "alan"]);
+
+    run(sim, 400);
     const unmade = sim.actors.filter((actor) => actor.side === "unmade");
     expect(unmade.length).toBeGreaterThan(0);
     for (const foe of unmade) {
-      expect(foe.heroUid).toBe("ada");
-      expect(Math.hypot(foe.x - adaCamp.x, foe.y - adaCamp.y)).toBeLessThan(30);
+      /* Nobody wanders: every one of them is walking to somebody's camp. */
+      const camp = sim.camps.get(foe.heroUid ?? "")!;
+      expect(camp).toBeDefined();
+      expect(Math.hypot(foe.x - camp.x, foe.y - camp.y)).toBeLessThan(30);
     }
+    const atAda = unmade.filter((foe) => foe.heroUid === "ada").length;
+    const atAlan = unmade.filter((foe) => foe.heroUid === "alan").length;
+    expect(atAda).toBeGreaterThan(atAlan);
   });
 
   it("is bounded however long it runs", () => {

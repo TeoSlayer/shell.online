@@ -78,3 +78,20 @@ describe("handing the options to the stylesheet", () => {
     expect(style["--keep-motion"]).toBe("0");
   });
 });
+
+describe("the safe area on a handset", () => {
+  it("comes from the device rather than from the overscan slider", () => {
+    /*
+     * These properties are set inline, and an inline property beats every rule
+     * in the stylesheet -- so the media query that used to redefine this for a
+     * phone had never once applied. A phone has no overscan; it has a notch.
+     */
+    const style = optionsToStyle({ ...DEFAULT_OPTIONS, safeZone: 10 }, false, "phone");
+    expect(style["--keep-safe"]).toContain("env(safe-area-inset-left)");
+  });
+
+  it("is still the slider's on anything else", () => {
+    const style = optionsToStyle({ ...DEFAULT_OPTIONS, safeZone: 7 }, false, "room");
+    expect(style["--keep-safe"]).toBe("7%");
+  });
+});

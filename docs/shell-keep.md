@@ -33,10 +33,10 @@ roster is labelled as a preview, never presented as live account data.
 |---|---|---|
 | **Hero** | A team member | `members` from `GET /api/sessions` |
 | **Your hero** | You | `you` from `GET /api/sessions` |
-| **Soldier** | A session | `sessions`, grouped by `ownerUid` |
+| **Soldier** | A live, writable session | `sessions`, grouped by `ownerUid` |
 | **Soldier's class** | The harness that session runs | `kindForCommand(session.command)` |
 | **Camp** | That member's working area | Derived: placed from their `uid` |
-| **The Unmade** | Faults being worked on | Sessions whose work reads as `bug` |
+| **The Unmade** | The faults, which are always out there | A wave sized from the number of heroes; heaviest where a session reads as `bug` |
 | **Holding** | A part of the product | Fixed; see §4 |
 | **The Barrow** | Sessions that have closed | `game-stats` counts; see §4 |
 | **Marks** | — | Derived from level |
@@ -87,6 +87,15 @@ A soldier is one session, and belongs to the hero who owns it. A member with ten
 Claude Code sessions and three OpenClaw sessions has **thirteen soldiers of two
 classes**, all of them theirs, all of them around their camp.
 
+It is a session that is **live and writable**. A session that has finished has
+no soldier: the field asks `sessionEnded`, which is the same question the
+session list asks before it greys a row out — not merely whether the row
+carries a `closedAt`, which is the slower of the two ways a session ends, and
+asking only that put finished sessions on the field as live soldiers, so the
+garrison only ever grew. A read-only session has none either; it is a window
+onto somebody else's work rather than work of its own, and counting it would
+make one session two soldiers in two companies.
+
 Above each soldier: **its harness's own logo** on a brass-rimmed disc, and the
 session's name. The logos are the ones in `public/icons/`, which is where the
 session list gets them — a soldier *is* a session, so the mark over its head
@@ -104,14 +113,48 @@ retinue in formation reads as a parade.
 
 ### The Unmade
 
-Faults, made visible. They come for a hero who has soldiers doing bug work, and
-they come to **that hero's camp**, in numbers, continuously. Each besieged camp
-takes a share rather than one drawing the whole wave.
+Faults, made visible, and they are **always coming**. They march on the camps,
+in numbers, continuously; each camp takes a share rather than one drawing the
+whole wave, and the camp with a session actually on a fault takes three times
+the share of a quiet one.
 
-A team where nobody is fixing anything has a quiet map, and that is the correct
-picture of a quiet day; it is also what makes a loud one mean something. Soldiers
-doing feature work **visibly build** for the same reason — a map where only
-broken things move would quietly teach everybody that only broken things count.
+They used to come *only* for a hero whose session read as bug work, which was a
+better story and a worse game: work is read from what somebody called their
+session, most sessions are called `npm run dev`, and so on a real team the wave
+never came at all. A map whose central spectacle depends on a naming convention
+is a map nobody ever sees move. Soldiers doing feature work **visibly build**
+for the same reason — a map where only broken things move would quietly teach
+everybody that only broken things count.
+
+**How many come is a function of the team**: three of the Unmade for every
+hero, floored so that a kingdom of one is still worth defending and capped at
+forty so that a large organisation cannot exhaust a browser.
+
+### Whether the kingdom is holding
+
+**Two sessions a hero.** That is what it takes to hold the ground, and it is
+not a number chosen to be hard — it is what an ordinary working day already
+looks like, one thing being fixed and one being built. A team doing its
+ordinary work has a quiet border. A team that has stopped has a loud one.
+
+Short of it, the camera takes a **veil of blood at its corners**, heavier the
+further the garrison is from what is coming for it: faint at one session short,
+heaviest — and still well short of opaque — when nothing at all is standing.
+The map has to stay readable through it, or the only thing it teaches anybody
+is where the pause button is.
+
+It is never the only signal. The HUD says the same thing in words and a number
+— *the kingdom is struggling; start three more sessions to hold the line* —
+because a wash of colour says nothing to somebody who cannot separate it from
+the grass, nothing in a screenshot, and nothing at all to a screen reader.
+
+And it is **not a failure state**. Nothing is lost while it is up, nothing is
+counting down, and a session started anywhere on the team takes it down within
+one poll. It is the one piece of pressure in a game that is otherwise a
+read-out, and what it asks for is the thing the product is for.
+
+The arithmetic is in `world/kingdom.ts`, in one place, because the simulation,
+the HUD and the veil must agree about it or the game lies to somebody.
 
 ### The fallen
 
@@ -135,6 +178,26 @@ hold, so they do not wander back to camp.
 Nobody else's hero can be ordered. Marching a colleague around the map would be a
 toy, and it would be the only thing in this game that changes what somebody else
 sees.
+
+### The camera
+
+Drag to move, wheel or pinch to zoom, and **three buttons up the right-hand
+edge**: in, out, and the whole country at once. The buttons are not decoration
+for people who have a wheel. The camera had three ways to move and a phone has
+one of them — drag — because a handset has no wheel, and pinch is a two-handed
+gesture on a device people hold in one with nothing on screen to say it is
+there. A map with no visible way out of it is a map somebody is stuck in.
+
+Every limit the camera enforces is worked out **from the canvas, and again
+whenever the canvas changes size**. They used to be computed once from
+`app.screen`, which at that moment is still Pixi's default 800 by 600 because
+`resizeTo` measures the element on the next frame — so the floor on how far a
+phone could pull back was a floor for a screen that phone does not have, and
+turning the device over never corrected it.
+
+Where the camera opens is worked out the same way. It was the constant 0.75,
+which is a reasonable view of a laptop and about eight tiles of country on a
+phone.
 
 Clicking a figure inspects it instead of moving — a hero or a soldier, not the
 watch and not the Unmade. **The whole drawn body answers**, not the tile it
@@ -350,7 +413,32 @@ Nothing about other members is stored by the game.
 The HUD lives in the **corners**, not in a strip. Everything on it is glanced at
 rather than read, and things that are glanced at belong at the edges of the eye:
 who you are top left, what you have bottom left, who is out bottom right, pause
-top right, the key prompt at the foot.
+top right, the zoom controls up the right-hand edge, the key prompt at the foot.
+
+### On a handset
+
+**The phone shows less, never smaller.** The floor this interface holds itself
+to is a floor: 16px, because a game is read in a hurry. So what gives is the
+content — the purse, the vial and the garrison count leave the field for the
+pause menu, which is one tap away and is the right home for a number you look
+up rather than glance at; the frames thin; the premise on the opening screen
+goes, since what somebody is there to do is pick a class; and the pause control
+keeps its hit area and loses its word. What stays is what is happening now:
+sessions, what they are doing, and whether the kingdom is holding.
+
+Which screen this is comes from `state/layout.ts` and **not from a media
+query**, because a media query cannot ask the question. Every responsive rule
+in the stylesheet used to ask `width <= 640px`, and a handset held sideways is
+844 pixels across: it sailed past all of them and then had 390 pixels of height
+to fit the whole interface into. The short edge is what is scarce on a phone,
+and it is scarce whichever way up it is. A short *desktop* window is a
+different case and keeps every panel — it has room for four corners and no
+thumb over any of them.
+
+One thing the attribute cannot fix from the stylesheet: the safe-area inset is
+set **inline**, from the options, and an inline property beats every rule in a
+file. So the layout decides that one too. A television crops its edges and a
+phone does not; what a phone has is a notch.
 
 The names of places are lettered in **Pirata One** (SIL OFL, vendored), and
 nothing else is. A whole interface in blackletter is one nobody can read in a
