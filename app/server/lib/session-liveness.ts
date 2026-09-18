@@ -18,7 +18,7 @@ export interface SessionLiveness {
 
 export interface SessionLivenessSource {
   one(sessionId: string): Promise<SessionLiveness>;
-  many(sessions: readonly Pick<SessionRecord, "id" | "closedAt" | "startedAt">[]): Promise<Map<string, SessionLiveness>>;
+  many(sessions: readonly Pick<SessionRecord, "id" | "closedAt">[]): Promise<Map<string, SessionLiveness>>;
 }
 
 interface CacheEntry extends SessionLiveness {
@@ -43,6 +43,8 @@ interface LivenessOptions {
   failureTtlMs?: number;
   maxChecksPerBatch?: number;
   maxChecksPerMinute?: number;
+  /** Breaks ties between equally stale sessions. Injected so tests can fix it. */
+  random?: () => number;
 }
 
 const SESSION_ID = /^[A-Za-z0-9_-]{32}$/;
@@ -66,9 +68,23 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
   const timeoutMs = options.timeoutMs ?? 2_500;
   const successTtlMs = options.successTtlMs ?? 30_000;
   const failureTtlMs = options.failureTtlMs ?? 5_000;
-  /* A browser polls every four seconds and the relay allows 120 checks/minute. */
-  const maxChecksPerBatch = options.maxChecksPerBatch ?? 2;
+  /*
+   * The per-minute figure is the one that protects the relay: it allows 120
+   * checks a minute per address, shared with the websocket connects a viewer
+   * needs, so this stays well under it and `reserveCheck` enforces it however
+   * large a batch asks for.
+   *
+   * The per-batch figure is only about how much of the working set one request
+   * may seed. It was two, which starved: three open sessions and a worker
+   * instance that had never checked any of them meant one of the three was
+   * reported as "unknown", and because the order was decided by a fixed
+   * property of the session it was the same one every time, in every cold
+   * instance, indefinitely. Eight covers an ordinary working set in the first
+   * request, and the minute budget still bounds what a busy account can spend.
+   */
+  const maxChecksPerBatch = options.maxChecksPerBatch ?? 8;
   const maxChecksPerMinute = options.maxChecksPerMinute ?? 30;
+  const random = options.random ?? Math.random;
   const cache = new Map<string, CacheEntry>();
   const inFlight = new Map<string, Promise<SessionLiveness>>();
   const checks: number[] = [];
@@ -166,14 +182,28 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
     async many(sessions) {
       const answer = new Map<string, SessionLiveness>();
       const open = sessions.filter((session) => !session.closedAt && SESSION_ID.test(session.id));
+      /*
+       * Least recently checked first, and among sessions that are equally
+       * stale -- which is all of them in an instance that has just started --
+       * at random.
+       *
+       * Any fixed tiebreak is a session that is never chosen. Each request may
+       * land on a different worker instance with an empty cache, so a rule
+       * that prefers, say, the most recently started session picks the same
+       * winners in every one of them, and whatever sorts last is never checked
+       * by anybody. Randomising means a session that misses one request is
+       * very unlikely to miss the next.
+       */
       const due = open
         .filter((session) => (cache.get(session.id)?.expiresAt ?? 0) <= now())
-        .sort((left, right) => {
-          const leftChecked = cache.get(left.id)?.relayCheckedAt ?? 0;
-          const rightChecked = cache.get(right.id)?.relayCheckedAt ?? 0;
-          return leftChecked - rightChecked || right.startedAt - left.startedAt;
-        })
-        .slice(0, Math.max(0, maxChecksPerBatch));
+        .map((session) => ({
+          session,
+          checkedAt: cache.get(session.id)?.relayCheckedAt ?? 0,
+          tiebreak: random(),
+        }))
+        .sort((left, right) => left.checkedAt - right.checkedAt || left.tiebreak - right.tiebreak)
+        .slice(0, Math.max(0, maxChecksPerBatch))
+        .map((entry) => entry.session);
       await Promise.all(due.map((session) => query(session.id)));
       for (const session of open) {
         const entry = cache.get(session.id);

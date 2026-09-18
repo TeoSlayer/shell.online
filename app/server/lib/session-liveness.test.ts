@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { relaySessionLiveness } from "./session-liveness";
 
 const id = "a".repeat(32);
-const session = { id, startedAt: 1 };
+const session = { id };
 
 describe("relay session liveness", () => {
   it("reports relay states without fetching a stored share URL", async () => {
@@ -45,9 +45,11 @@ describe("relay session liveness", () => {
       fetcher,
       now: () => clock,
       maxChecksPerBatch: 1,
+      /* Fixed, so which of the two goes first is this test's to decide. */
+      random: () => 0,
     });
-    const first = { id: "a".repeat(32), startedAt: 2 };
-    const second = { id: "b".repeat(32), startedAt: 1 };
+    const first = { id: "a".repeat(32) };
+    const second = { id: "b".repeat(32) };
 
     expect((await source.many([first, second])).get(first.id)?.relayStatus).toBe("connected");
     clock += 1;
@@ -55,12 +57,50 @@ describe("relay session liveness", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  /*
+   * The batch has to cover an ordinary working set in one request. Each
+   * request may land on a worker instance that has never checked anything, so
+   * whatever a single cold batch does not reach is reported as "unknown" --
+   * and with three open sessions and a batch of two, one of them was.
+   */
+  it("seeds an ordinary working set from a single cold batch", async () => {
+    const fetcher = vi.fn(async () => Response.json({ exists: true, status: "connected" }));
+    const source = relaySessionLiveness("https://relay.example", { fetcher });
+    const sessions = ["a", "b", "c", "d", "e", "f"].map((letter) => ({ id: letter.repeat(32) }));
+
+    const states = await source.many(sessions);
+
+    expect([...states.values()].every((state) => state.relayStatus === "connected")).toBe(true);
+  });
+
+  /*
+   * Any fixed tiebreak is a session that is never chosen. The order used to
+   * come from the session itself, so the one that sorted last lost in every
+   * cold instance, for as long as it stayed open.
+   */
+  it("does not starve the same session in every cold instance", async () => {
+    const fetcher = vi.fn(async () => Response.json({ exists: true, status: "connected" }));
+    const sessions = ["a", "b", "c"].map((letter) => ({ id: letter.repeat(32) }));
+    const reached = new Set<string>();
+
+    /* Ten instances, each starting empty, each able to check only one. */
+    for (let instance = 0; instance < 10; instance += 1) {
+      const cold = relaySessionLiveness("https://relay.example", { fetcher, maxChecksPerBatch: 1 });
+      const states = await cold.many(sessions);
+      for (const [sessionId, state] of states) {
+        if (state.relayStatus === "connected") reached.add(sessionId);
+      }
+    }
+
+    expect(reached.size).toBe(sessions.length);
+  });
+
   it("does not spend relay checks on locally closed or invalid session ids", async () => {
     const fetcher = vi.fn();
     const source = relaySessionLiveness("https://relay.example", { fetcher });
     const result = await source.many([
       { ...session, closedAt: 3 },
-      { id: "../../metadata", startedAt: 1 },
+      { id: "../../metadata" },
     ]);
 
     expect(result.size).toBe(0);

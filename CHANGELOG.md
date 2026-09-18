@@ -4,6 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- A session could be reported as "Status unavailable" indefinitely while the
+  relay knew perfectly well it was connected. The service seeds its view of the
+  relay a couple of sessions per request, and each request may land on a worker
+  instance whose cache is empty; whatever a single cold batch did not reach was
+  answered as unknown. The order it worked through was decided by a fixed
+  property of the session, so in every cold instance the same one sorted last
+  and was never checked by anybody. A batch now covers an ordinary working set,
+  and sessions that are equally stale are chosen between at random, so one that
+  misses a request is very unlikely to miss the next. The per-minute budget
+  that actually protects the relay is unchanged.
+
 ## [0.17.0] — 2026-09-18
 
 ### Changed
