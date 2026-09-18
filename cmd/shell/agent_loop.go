@@ -40,6 +40,19 @@ type agentLoop struct {
 	// onPoll runs after each successful poll. The daemon uses it to notice
 	// that the person has signed out or withdrawn consent.
 	onPoll func() error
+	// interval overrides how often work is asked for. Zero means
+	// agentPollInterval, which is what everything but a test uses: the
+	// alternative is a test that waits out real seconds, and one of those
+	// under -race on an emulated architecture is a test that fails for
+	// reasons that have nothing to do with the code.
+	interval time.Duration
+}
+
+func (loop *agentLoop) pollInterval() time.Duration {
+	if loop.interval > 0 {
+		return loop.interval
+	}
+	return agentPollInterval
 }
 
 // run polls until the context ends or onPoll asks it to stop.
@@ -68,8 +81,9 @@ func (loop *agentLoop) run(ctx context.Context) error {
 	// granularity the agent key above already has.
 	harnesses := installedHarnesses()
 
+	poll := loop.pollInterval()
 	/* Grows while renewal keeps being refused, so a dead token is quiet. */
-	refreshBackoff := agentPollInterval
+	refreshBackoff := poll
 	/* When renewal may be tried again. Zero means now. */
 	var renewNotBefore time.Time
 	/*
@@ -98,7 +112,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 				if reloaded, loadErr := account.Load(loop.credentialsPath); loadErr == nil &&
 					reloaded.RefreshToken != loop.credentials.RefreshToken {
 					loop.credentials = reloaded
-					refreshBackoff = agentPollInterval
+					refreshBackoff = poll
 					renewNotBefore = time.Time{}
 					refused = false
 					signInRetired = false
@@ -136,7 +150,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 				renewNotBefore = now.Add(refreshBackoff)
 				refreshBackoff = min(refreshBackoff*2, maxRefreshBackoff)
 			default:
-				refreshBackoff = agentPollInterval
+				refreshBackoff = poll
 				renewNotBefore = time.Time{}
 				refused = false
 				signInRetired = false
@@ -166,7 +180,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 			 * left the machine renewing on a minute's delay for the rest of
 			 * its life.
 			 */
-			refreshBackoff = agentPollInterval
+			refreshBackoff = poll
 			renewNotBefore = time.Time{}
 			refused = false
 		}
@@ -193,7 +207,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 		 * stayed up. Any other state polls at the normal interval, because
 		 * that poll is what keeps the machine showing as online.
 		 */
-		wait := agentPollInterval
+		wait := poll
 		if refused && time.Now().Before(renewNotBefore) {
 			wait = refreshBackoff
 		}

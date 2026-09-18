@@ -77,6 +77,20 @@ func (service *pollService) setRefreshFails(fails bool) {
 	service.refreshFails = fails
 }
 
+/*
+ * testPollInterval keeps these tests off the wall clock. The loop's real
+ * interval is two seconds; waiting out several of those under -race, and again
+ * under QEMU on an emulated architecture, is a test that fails for reasons
+ * that have nothing to do with what it is checking.
+ */
+const testPollInterval = 5 * time.Millisecond
+
+// settleFor is how long to allow for a handful of polls at that interval.
+// Generous by three orders of magnitude, because what is being judged is
+// whether the loop polls at all, never how fast. waitFor, in
+// daemon_integration_test.go, is the same idea with its own budget.
+const settleFor = 15 * time.Second
+
 // runBriefly runs the loop until it has polled enough times to judge, or the
 // deadline passes.
 func runBriefly(t *testing.T, loop *agentLoop, service *pollService, wantPolls int) int {
@@ -84,7 +98,7 @@ func runBriefly(t *testing.T, loop *agentLoop, service *pollService, wantPolls i
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { _ = loop.run(ctx); close(done) }()
-	deadline := time.After(10 * time.Second)
+	deadline := time.After(settleFor)
 	for {
 		if polls, _ := service.counts(); polls >= wantPolls {
 			break
@@ -95,7 +109,7 @@ func runBriefly(t *testing.T, loop *agentLoop, service *pollService, wantPolls i
 			<-done
 			polls, _ := service.counts()
 			return polls
-		case <-time.After(20 * time.Millisecond):
+		case <-time.After(time.Millisecond):
 		}
 	}
 	cancel()
@@ -116,6 +130,7 @@ func loopFor(t *testing.T, service *httptest.Server, credentials account.Credent
 		credentials:     credentials,
 		self:            "/nonexistent/shell",
 		report:          &strings.Builder{},
+		interval:        testPollInterval,
 	}
 }
 
@@ -213,31 +228,16 @@ func TestASuccessfulPollClearsTheRenewalBackoff(t *testing.T) {
 	defer func() { cancel(); <-done }()
 
 	/* Let a couple of renewals fail, then let renewal work again. */
-	deadline := time.After(10 * time.Second)
-	for {
-		if _, refreshes := stub.counts(); refreshes >= 2 {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("renewal was never attempted twice")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
+	waitFor(t, "two failed renewals", func() bool {
+		_, refreshes := stub.counts()
+		return refreshes >= 2
+	})
 	stub.setRefreshFails(false)
 
 	/* The backoff was reset by every successful poll, so this is quick. */
 	before, _ := stub.counts()
-	settle := time.After(6 * time.Second)
-	for {
-		if polls, _ := stub.counts(); polls > before+2 {
-			return
-		}
-		select {
-		case <-settle:
-			polls, refreshes := stub.counts()
-			t.Fatalf("stalled after renewal recovered: %d polls, %d refreshes", polls, refreshes)
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
+	waitFor(t, "polling to continue once renewal recovered", func() bool {
+		polls, _ := stub.counts()
+		return polls > before+2
+	})
 }
