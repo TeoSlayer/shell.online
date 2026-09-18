@@ -67,6 +67,31 @@
    */
   --keep-scale: 1;
   --keep-safe: 5%;
+  /*
+   * And the same inset, per edge.
+   *
+   * A television crops all four edges by about as much, so one number is the
+   * right shape for overscan. A phone does not crop at all: what it has is a
+   * notch on one edge and a home indicator on another, and the two are
+   * nothing like the same size. These default to the single value and are
+   * overridden per edge, inline, for a handset -- inline because that is where
+   * `--keep-safe` itself is set, and an inline property beats a stylesheet.
+   */
+  --keep-safe-top: var(--keep-safe);
+  --keep-safe-right: var(--keep-safe);
+  --keep-safe-bottom: var(--keep-safe);
+  --keep-safe-left: var(--keep-safe);
+
+  /*
+   * How much room the card over a figure takes, in one place.
+   *
+   * Two things need these numbers: the card itself, and the zoom controls,
+   * which get out of its way while it is up. Written twice they would agree
+   * until somebody changed one of them, and the way that failure shows is the
+   * only visible way to zoom out sitting underneath a panel.
+   */
+  --keep-card-width: min(360px, calc(100vw - var(--keep-space-4)));
+  --keep-card-height: min(58vh, 520px);
   --keep-motion: 1;
 
   --keep-text: calc(16px * var(--keep-scale));
@@ -689,7 +714,7 @@
   position: absolute;
   inset: 0;
   z-index: var(--keep-z-modal);
-  padding: var(--keep-safe);
+  padding: var(--keep-safe-top) var(--keep-safe-right) var(--keep-safe-bottom) var(--keep-safe-left);
   align-items: center;
   justify-content: center;
   /*
@@ -949,10 +974,10 @@
   border: 4px solid var(--keep-elixir);
 }
 
-.keep-safe-corner.is-tl { top: var(--keep-safe); left: var(--keep-safe); border-right: 0; border-bottom: 0; }
-.keep-safe-corner.is-tr { top: var(--keep-safe); right: var(--keep-safe); border-bottom: 0; border-left: 0; }
-.keep-safe-corner.is-bl { bottom: var(--keep-safe); left: var(--keep-safe); border-top: 0; border-right: 0; }
-.keep-safe-corner.is-br { bottom: var(--keep-safe); right: var(--keep-safe); border-top: 0; border-left: 0; }
+.keep-safe-corner.is-tl { top: var(--keep-safe-top); left: var(--keep-safe-left); border-right: 0; border-bottom: 0; }
+.keep-safe-corner.is-tr { top: var(--keep-safe-top); right: var(--keep-safe-right); border-bottom: 0; border-left: 0; }
+.keep-safe-corner.is-bl { bottom: var(--keep-safe-bottom); left: var(--keep-safe-left); border-top: 0; border-right: 0; }
+.keep-safe-corner.is-br { bottom: var(--keep-safe-bottom); right: var(--keep-safe-right); border-top: 0; border-left: 0; }
 
 .keep-choices {
   display: flex;
@@ -1111,33 +1136,33 @@
 }
 
 .keep-corner.is-top-left {
-  top: var(--keep-safe);
-  left: var(--keep-safe);
+  top: var(--keep-safe-top);
+  left: var(--keep-safe-left);
   flex-direction: column;
   align-items: flex-start;
 }
 
 .keep-corner.is-top-right {
-  top: var(--keep-safe);
-  right: var(--keep-safe);
+  top: var(--keep-safe-top);
+  right: var(--keep-safe-right);
   flex-direction: column;
   align-items: flex-end;
 }
 
 .keep-corner.is-bottom-left {
-  bottom: var(--keep-safe);
-  left: var(--keep-safe);
+  bottom: var(--keep-safe-bottom);
+  left: var(--keep-safe-left);
   align-items: flex-end;
 }
 
 .keep-corner.is-bottom-right {
-  right: var(--keep-safe);
-  bottom: var(--keep-safe);
+  right: var(--keep-safe-right);
+  bottom: var(--keep-safe-bottom);
   align-items: flex-end;
 }
 
 .keep-corner.is-bottom-centre {
-  bottom: var(--keep-safe);
+  bottom: var(--keep-safe-bottom);
   left: 50%;
   transform: translateX(-50%);
 }
@@ -1532,7 +1557,7 @@
   position: absolute;
   inset: 0;
   z-index: var(--keep-z-modal);
-  padding: var(--keep-safe);
+  padding: var(--keep-safe-top) var(--keep-safe-right) var(--keep-safe-bottom) var(--keep-safe-left);
   align-items: center;
   justify-content: center;
   background: rgb(9 7 5 / 92%);
@@ -1902,11 +1927,11 @@
 .keep-wright {
   display: flex;
   position: fixed;
-  top: calc(var(--keep-safe) + var(--keep-hit) + var(--keep-space-2));
-  right: var(--keep-safe);
+  top: calc(var(--keep-safe-top) + var(--keep-hit) + var(--keep-space-2));
+  right: var(--keep-safe-right);
   z-index: var(--keep-z-modal);
-  width: min(360px, calc(100vw - var(--keep-space-4)));
-  max-height: calc(100vh - var(--keep-safe) - var(--keep-safe) - var(--keep-hit) - var(--keep-space-3));
+  width: var(--keep-card-width);
+  max-height: calc(100vh - var(--keep-safe-top) - var(--keep-safe-bottom) - var(--keep-hit) - var(--keep-space-3));
   padding: var(--keep-space-2);
   flex-direction: column;
   gap: var(--keep-space);
@@ -1918,11 +1943,11 @@
 @media (width <= 640px) {
   .keep-wright {
     top: auto;
-    right: var(--keep-safe);
-    bottom: var(--keep-safe);
-    left: var(--keep-safe);
+    right: var(--keep-safe-right);
+    bottom: var(--keep-safe-bottom);
+    left: var(--keep-safe-left);
     width: auto;
-    max-height: min(62vh, 560px);
+    max-height: var(--keep-card-height);
     border-bottom-right-radius: 0;
     border-bottom-left-radius: 0;
   }
@@ -2156,9 +2181,21 @@
  */
 .keep-corner.is-right {
   top: 50%;
-  right: var(--keep-safe);
+  right: var(--keep-safe-right);
   flex-direction: column;
   transform: translateY(-50%);
+}
+
+/*
+ * And out of the card's way while a figure is inspected.
+ *
+ * The card is a modal layer over the HUD, pinned to the same edge these sit
+ * on -- so inspecting anything covered the only visible way to zoom out, which
+ * is the affordance this corner exists to be. It steps aside by exactly the
+ * card's own width, from the same variable the card is sized by.
+ */
+.keep[data-card="open"] .keep-corner.is-right {
+  right: calc(var(--keep-safe-right) + var(--keep-card-width) + var(--keep-space));
 }
 
 .keep-zoom {
@@ -2307,18 +2344,27 @@
  */
 .keep[data-layout="phone"] .keep-corner.is-right {
   top: auto;
-  bottom: calc(var(--keep-safe) + var(--keep-space));
+  bottom: calc(var(--keep-safe-bottom) + var(--keep-space));
   transform: none;
+}
+
+/*
+ * On a handset the card is a sheet across the foot of the screen rather than
+ * a panel down one side, so the controls go up rather than across.
+ */
+.keep[data-layout="phone"][data-card="open"] .keep-corner.is-right {
+  right: var(--keep-safe-right);
+  bottom: calc(var(--keep-safe-bottom) + var(--keep-card-height) + var(--keep-space));
 }
 
 /* The card over a figure is a sheet against the foot of the screen. */
 .keep[data-layout="phone"] .keep-wright {
   top: auto;
-  right: var(--keep-safe);
-  bottom: var(--keep-safe);
-  left: var(--keep-safe);
+  right: var(--keep-safe-right);
+  bottom: var(--keep-safe-bottom);
+  left: var(--keep-safe-left);
   width: auto;
-  max-height: min(58vh, 520px);
+  max-height: var(--keep-card-height);
 }
 
 /*

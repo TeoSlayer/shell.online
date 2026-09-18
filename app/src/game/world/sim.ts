@@ -3,7 +3,7 @@ import { assignCamps, CAMP_RADIUS, type Camp } from "./camps";
 import { assignBanners } from "./banners";
 import type { Work } from "./work";
 import { pushOut } from "./solids";
-import { kingdomStrength, waveSize, type Strength } from "./kingdom";
+import { waveSize } from "./kingdom";
 
 /**
  * Who is on the Marches, and what they are doing.
@@ -515,23 +515,17 @@ export function marchTargets(sim: Sim): string[] {
   return targets;
 }
 
-/**
- * Whether the kingdom has the sessions to meet what is coming for it.
+/*
+ * There is deliberately no "is the kingdom holding" reading off the field.
  *
- * Read off the field rather than passed in, so the veil over the camera and
- * the figures on the map cannot disagree about how bad it is. Soldiers are
- * counted rather than taken from the roster's total because the field is what
- * the player is looking at.
+ * It is the obvious thing to put here, and it would be a second answer to a
+ * question that already has one. The strain is worked out in `GameRoute` from
+ * the team's own totals, because the field is capped for a large organisation
+ * and shows an example garrison for an account with nothing running -- so a
+ * version counting figures on the map would disagree with the HUD by
+ * construction, in exactly the cases that matter. The arithmetic both would
+ * have used is in `world/kingdom.ts`.
  */
-export function kingdomHeld(sim: Sim): Strength {
-  let heroes = 0;
-  let soldiers = 0;
-  for (const actor of sim.actors) {
-    if (actor.role === "hero") heroes += 1;
-    else if (actor.role === "soldier") soldiers += 1;
-  }
-  return kingdomStrength({ heroes, soldiers });
-}
 
 function spawnUnmade(sim: Sim, heroUid: string): void {
   const camp = sim.camps.get(heroUid);

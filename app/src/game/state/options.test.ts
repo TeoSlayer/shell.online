@@ -87,11 +87,28 @@ describe("the safe area on a handset", () => {
      * phone had never once applied. A phone has no overscan; it has a notch.
      */
     const style = optionsToStyle({ ...DEFAULT_OPTIONS, safeZone: 10 }, false, "phone");
-    expect(style["--keep-safe"]).toContain("env(safe-area-inset-left)");
+    expect(style["--keep-safe-top"]).toContain("env(safe-area-inset-top)");
+    expect(style["--keep-safe-bottom"]).toContain("env(safe-area-inset-bottom)");
   });
 
-  it("is still the slider's on anything else", () => {
+  it("asks each edge about itself", () => {
+    /*
+     * One number is the right shape for overscan and the wrong shape for a
+     * handset: in portrait the left and right insets are zero while the top is
+     * the status bar and the bottom is the gesture strip. Taking the left
+     * inset for all four is how a HUD ends up under the clock.
+     */
+    const style = optionsToStyle(DEFAULT_OPTIONS, false, "phone");
+    const sides = ["top", "right", "bottom", "left"] as const;
+    for (const side of sides) {
+      expect(style[`--keep-safe-${side}`]).toContain(`env(safe-area-inset-${side})`);
+    }
+  });
+
+  it("is still the slider's on anything else, on every edge", () => {
     const style = optionsToStyle({ ...DEFAULT_OPTIONS, safeZone: 7 }, false, "room");
     expect(style["--keep-safe"]).toBe("7%");
+    expect(style["--keep-safe-top"]).toBe("7%");
+    expect(style["--keep-safe-bottom"]).toBe("7%");
   });
 });

@@ -4,7 +4,6 @@ import { assignCamps, CAMP_RADIUS, campSites } from "./camps";
 import {
   besieged,
   createSim,
-  kingdomHeld,
   marchTargets,
   garrisonSoldiers,
   orderHero,
@@ -393,26 +392,6 @@ describe("the Unmade", () => {
     expect(count(large)).toBeGreaterThan(count(small));
   });
 
-  it("says when the kingdom has too few sessions for what is coming", () => {
-    const sim = createSim();
-    setRoster(sim, {
-      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
-      soldiers: [],
-      youUid: "ada",
-    });
-    expect(kingdomHeld(sim).struggling).toBe(true);
-    expect(kingdomHeld(sim).strain).toBe(1);
-
-    setRoster(sim, {
-      heroes: [{ uid: "ada", name: "Ada", characterClass: "codex" }],
-      soldiers: [
-        { id: "a", name: "one", kind: "codex", work: "idle", heroUid: "ada" },
-        { id: "b", name: "two", kind: "codex", work: "idle", heroUid: "ada" },
-      ],
-      youUid: "ada",
-    });
-    expect(kingdomHeld(sim).struggling).toBe(false);
-  });
 
   it("comes to a camp, and to the one on a fault hardest", () => {
     /*

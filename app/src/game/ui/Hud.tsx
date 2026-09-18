@@ -148,6 +148,24 @@ function Elixir({ tokens, gathering }: { tokens: number; gathering: boolean }) {
  * while it is up.
  */
 function Muster({ strength, real }: { strength: Strength; real: boolean }) {
+  /*
+   * Nothing is claimed about a kingdom nobody could count.
+   *
+   * When the service cannot be reached there is no reading, and the strain
+   * arithmetic reports "holding" because nothing is known to be short -- which
+   * is the right thing for the veil, which should not accuse anybody on the
+   * strength of a failed request, and the wrong thing to print. Reporting good
+   * news for data we do not have is the same mistake as reporting bad.
+   */
+  if (!real) {
+    return (
+      <p className="keep-muster is-held" role="status">
+        <span aria-hidden="true">⚑ </span>
+        An example garrison. {SOLDIERS_PER_HERO} sessions a hero holds the line.
+      </p>
+    );
+  }
+
   if (!strength.struggling) {
     return (
       <p className="keep-muster is-held" role="status">
@@ -162,9 +180,7 @@ function Muster({ strength, real }: { strength: Strength; real: boolean }) {
     <p className="keep-muster is-pressed" role="status">
       <span aria-hidden="true">⚔ </span>
       <strong>The kingdom is struggling.</strong>{" "}
-      {real
-        ? `Start ${more} more ${more === 1 ? "session" : "sessions"} to hold the line — ${SOLDIERS_PER_HERO} a hero.`
-        : `${SOLDIERS_PER_HERO} sessions a hero holds the line.`}
+      {`Start ${more} more ${more === 1 ? "session" : "sessions"} to hold the line — ${SOLDIERS_PER_HERO} a hero.`}
     </p>
   );
 }

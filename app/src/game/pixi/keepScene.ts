@@ -412,6 +412,18 @@ export async function buildKeepScene(
   rescaleSigns();
   viewport.on("zoomed", rescaleSigns);
   viewport.on("moved", rescaleSigns);
+  /*
+   * And on a resize, which is not an input and so is not a `zoomed`.
+   *
+   * Two things go stale when the canvas changes shape. The zoom limits move,
+   * and pixi-viewport emits `zoomed` only when the clamp actually changes the
+   * scale -- so a phone turned from landscape to portrait, where the floor
+   * drops and the current zoom is already legal, left the zoom-out control
+   * disabled with nothing to tell the player otherwise. And the ceiling on a
+   * name board comes from the width of the screen, which has just changed.
+   * `rescaleSigns` is both answers.
+   */
+  app.renderer.on("resize", rescaleSigns);
 
   /*
    * The simulation runs at a fixed thirty ticks a second whatever the display
@@ -446,6 +458,7 @@ export async function buildKeepScene(
     destroy() {
       viewport.off("zoomed", rescaleSigns);
       viewport.off("moved", rescaleSigns);
+      app.renderer.off("resize", rescaleSigns);
       app.stage.off("pointertap", onTap);
       companies.destroy();
       orderMark.destroy();

@@ -131,16 +131,32 @@ export function optionsToStyle(
    */
   layout: Layout = "room",
 ): Record<string, string> {
+  /*
+   * A safe zone is overscan, and overscan is a television: it takes about as
+   * much off all four edges, so one number is the right shape for it.
+   *
+   * A handset crops nothing. What it has is a notch on one edge and a home
+   * indicator on another, and those are nothing like the same size -- so one
+   * number there is wrong on at least two edges. In portrait the left and
+   * right insets are zero while the top is the status bar and the bottom is
+   * the gesture strip, which is precisely how a HUD ends up under the clock.
+   *
+   * `viewport-fit=cover` in index.html is what makes the `env()` values mean
+   * anything; the 10px floor is so the interface is not flush against a glass
+   * edge on a device that reports nothing.
+   */
+  const edge = (side: "top" | "right" | "bottom" | "left") =>
+    layout === "phone"
+      ? `max(10px, env(safe-area-inset-${side}))`
+      : `${options.safeZone}%`;
+
   return {
-    /*
-     * A safe zone is overscan, and overscan is a television. A handset has no
-     * crop and does have a notch, so there the inset comes from the device
-     * rather than from a slider that cannot mean anything on it.
-     */
-    "--keep-safe":
-      layout === "phone"
-        ? "max(10px, env(safe-area-inset-left))"
-        : `${options.safeZone}%`,
+    /* Kept for anything that still wants one number, and as the fallback. */
+    "--keep-safe": `${options.safeZone}%`,
+    "--keep-safe-top": edge("top"),
+    "--keep-safe-right": edge("right"),
+    "--keep-safe-bottom": edge("bottom"),
+    "--keep-safe-left": edge("left"),
     "--keep-scale": String(options.uiScale / 100),
     "--keep-motion": motionReduced(options, systemPrefersReduced) ? "0" : "1",
   };

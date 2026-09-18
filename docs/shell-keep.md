@@ -437,8 +437,17 @@ thumb over any of them.
 
 One thing the attribute cannot fix from the stylesheet: the safe-area inset is
 set **inline**, from the options, and an inline property beats every rule in a
-file. So the layout decides that one too. A television crops its edges and a
-phone does not; what a phone has is a notch.
+file. So the layout decides that one too — and it decides it **per edge**. A
+television crops all four edges by about as much, which is why one number was
+ever the right shape for it. A phone crops nothing: what it has is a status bar
+on one edge and a home indicator on another, and in portrait the left and right
+insets are zero while those two are not. Taking one inset for all four is how a
+HUD ends up under the clock.
+
+The card over an inspected figure is a modal layer pinned to the same edge the
+zoom controls are on — the right on a desktop, the foot on a handset — so while
+it is up they **step out of its way**, by exactly the card's own width or
+height, read from the same variable the card is sized by.
 
 The names of places are lettered in **Pirata One** (SIL OFL, vendored), and
 nothing else is. A whole interface in blackletter is one nobody can read in a

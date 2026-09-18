@@ -72,10 +72,14 @@ const MAX_PER_HERO = 14;
  * as live soldiers -- a garrison that only ever grew, and a read-out that said
  * a quiet afternoon was the busiest day of the week.
  *
- * **It can be written to.** A read-only session is a window onto somebody
- * else's work rather than work of its own, and counting it would let one
- * session be two soldiers in two people's companies. A soldier is a session
- * somebody is actually holding.
+ * **It can be written to.** `readOnly` is set when the session is started and
+ * means nobody can type into it: it is a broadcast of a terminal rather than
+ * work being done in one. A soldier stands for work in progress, so a session
+ * nobody can act in does not have one.
+ *
+ * That is a deliberate narrowing and it has a cost worth knowing about: a live
+ * read-only session is not counted towards the garrison either, so somebody
+ * who shares a terminal read-only is, by this reckoning, one session short.
  *
  * Neither kind is thrown away: a finished session is what experience is made
  * of, which the service counts separately, and a read-only one is still in the

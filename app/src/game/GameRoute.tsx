@@ -336,6 +336,13 @@ export default function GameRoute() {
          * rule in the file. See state/layout.ts.
          */
         data-layout={layout}
+        /*
+         * Whether the card over a figure is up, so the zoom controls can step
+         * out from under it. The card is a modal layer pinned to the same edge
+         * they are, and inspecting anything used to cover the only visible way
+         * to zoom out.
+         */
+        data-card={picked ? "open" : "closed"}
         style={style}
       >
         {/*
