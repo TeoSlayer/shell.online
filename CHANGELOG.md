@@ -25,9 +25,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   The game opens at a zoom chosen for the screen instead of a constant that
   showed about eight tiles of country on a handset.
 - A soldier is a session that is live and writable. Sessions whose process had
-  exited, whose machine the relay had lost, or that were shared read-only were
-  standing on the field as live soldiers, so the garrison only ever grew and
-  the session count on the HUD read high.
+  exited, whose machine the relay had lost or that had been away too long to
+  come back, or that were shared read-only were standing on the field as live
+  soldiers, so the garrison only ever grew and the session count on the HUD
+  read high. The field now reads liveness through the same functions as the
+  session list, including the one that keeps a known state across a poll that
+  did not manage to look.
 - The Unmade appear. They used to march only on a hero whose session name read
   as bug work, which on a real team meant they never marched at all, and they
   were drawn at a third the height of the figures fighting them.

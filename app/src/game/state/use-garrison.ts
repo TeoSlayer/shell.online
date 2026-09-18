@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { fetchSessions } from "../../lib/api";
+import { fetchSessions, type SessionRecord } from "../../lib/api";
+import { keepKnownLiveness } from "../../lib/session-liveness";
 import { rosterFrom, type Roster } from "./sessions";
 import { setRoster, type Sim } from "../world/sim";
 
@@ -66,6 +67,19 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
   const chosen = useRef(yourClass);
   chosen.current = yourClass;
 
+  /*
+   * What the last poll knew, so a poll that knew less cannot undo it.
+   *
+   * The service checks a bounded number of sessions per request and answers
+   * "unknown" for the rest, and its cache is per worker, so two polls four
+   * seconds apart disagree about sessions that have not changed. The session
+   * list carries the known state across that gap; without doing the same here,
+   * a soldier whose session had ended would be re-mustered by the next poll
+   * that failed to look, march back to the Barrow on the one after, and count
+   * as a finished session every time round.
+   */
+  const seen = useRef<SessionRecord[] | null>(null);
+
   useEffect(() => {
     let live = true;
 
@@ -73,7 +87,9 @@ export function useGarrison(sim: Sim, standIn: Roster, yourClass: string): Garri
       try {
         const result = await fetchSessions();
         if (!live) return;
-        const roster = rosterFrom(result.sessions, result.members, result.you, chosen.current);
+        const sessions = keepKnownLiveness(seen.current, result.sessions);
+        seen.current = sessions;
+        const roster = rosterFrom(sessions, result.members, result.you, chosen.current);
         const demo = roster.soldiers.length === 0;
         const shown = demo ? fallback.current : roster;
         setRoster(sim, shown);

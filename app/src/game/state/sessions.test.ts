@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classFor, nameOf, ownerOf, rosterFrom, workFor } from "./sessions";
+import { keepKnownLiveness } from "../../lib/session-liveness";
 import type { Member, SessionRecord } from "../../lib/api";
 
 /**
@@ -194,6 +195,47 @@ describe("the roster", () => {
       { uid: "ada" },
     );
     expect(roster.soldiers).toHaveLength(1);
+  });
+
+  it("does not re-muster a finished session on a poll that did not look", () => {
+    /*
+     * The service checks a bounded number of sessions per request and answers
+     * "unknown" for the rest, so two polls four seconds apart disagree about a
+     * session that has not changed. Read straight, that re-musters a soldier
+     * whose session has ended, marches it back to the Barrow on the next poll,
+     * and counts it as finished every time round. `useGarrison` carries the
+     * known state across the gap exactly as the session list does.
+     */
+    const ended = session({ id: "s-1", ownerUid: "ada", command: "claude", relayStatus: "exited" });
+    const blind = { ...ended, relayStatus: "unknown" as const };
+
+    const carried = keepKnownLiveness([ended], [blind]);
+    const roster = rosterFrom(carried, [member("ada")], { uid: "ada" });
+    expect(roster.soldiers).toHaveLength(0);
+  });
+
+  it("leaves a session off the field once its machine is gone", () => {
+    /*
+     * The commonest ending of all, and the one nothing used to close: a
+     * machine that is rebooted or loses power never reports an exit. The
+     * console reads that as "Machine gone" rather than merely offline, and a
+     * soldier standing for it is standing for work nobody can return to.
+     */
+    const away = session({
+      ownerUid: "ada",
+      command: "claude",
+      relayStatus: "disconnected",
+      hostLastSeenAt: Date.now() - 60 * 60_000,
+    });
+    const blip = session({
+      ownerUid: "ada",
+      command: "claude",
+      relayStatus: "disconnected",
+      hostLastSeenAt: Date.now() - 5_000,
+    });
+    const roster = rosterFrom([away, blip], [member("ada")], { uid: "ada" });
+    expect(roster.soldiers).toHaveLength(1);
+    expect(roster.soldiers[0].session?.id).toBe(blip.id);
   });
 
   it("leaves a read-only session off the field", () => {

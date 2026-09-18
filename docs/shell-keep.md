@@ -90,9 +90,19 @@ classes**, all of them theirs, all of them around their camp.
 It is a session that is **live and writable**. A session that has finished has
 no soldier: the field asks `sessionEnded`, which is the same question the
 session list asks before it greys a row out — not merely whether the row
-carries a `closedAt`, which is the slower of the two ways a session ends, and
+carries a `closedAt`, which is the slowest of the ways a session ends, and
 asking only that put finished sessions on the field as live soldiers, so the
-garrison only ever grew. A read-only session has none either; it is a window
+garrison only ever grew. A process that exited, a relay that no longer has the
+session, and a machine that has been away longer than any reconnect could take
+are all endings, and the game reads them through that one function rather than
+keeping an opinion of its own.
+
+The poll also carries what the last one knew, through `keepKnownLiveness`. The
+service checks a bounded number of sessions per request and answers "unknown"
+for the rest, so two polls four seconds apart disagree about a session that has
+not changed; read straight, that re-musters a soldier whose session has ended,
+marches it back to the Barrow on the next poll, and counts it as finished every
+time round. A read-only session has none either; it is a window
 onto somebody else's work rather than work of its own, and counting it would
 make one session two soldiers in two companies.
 
