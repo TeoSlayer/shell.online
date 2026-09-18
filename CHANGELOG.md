@@ -15,13 +15,29 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   has been silent longer than any reconnect could take reads as "Machine gone"
   rather than merely offline -- and reads as live again by itself if it comes
   back. And a session the relay no longer has at all is written down as closed.
+- A signed-in machine no longer drops to "offline" while nothing is wrong with
+  it. What keeps a machine online is one thing -- the agent's poll, which the
+  service dates -- and two situations stopped that poll. A renewal that failed
+  stood the poll down for as long as the retry backoff, up to a minute, even
+  though renewal begins a minute *before* the token expires and the token in
+  hand was still good; the poll now continues while renewal retries on its own
+  schedule, and a poll that succeeds clears the backoff rather than leaving the
+  machine renewing on a minute's delay for the rest of its life. And a token
+  the service refused was never renewed at all if the machine's own clock said
+  it was still valid, so a skewed clock or a sign-in retired elsewhere left it
+  presenting the same dead token every two seconds until somebody ran
+  `shell login`. A refusal now renews whatever the clock says, and credentials
+  that are genuinely finished say so and ask for `shell login` instead of going
+  quiet.
 - Session state stopped flickering. A card could alternate between "Offline"
   and "Status unavailable" every few seconds, and so between the Write and
   Finished columns, while nothing about the session changed: a relay check
   that was rate-limited, timed out, or landed on a worker with a cold cache
   overwrote a state the service already had with "unknown". A failed check is
   now a gap in knowledge rather than news, and no longer replaces what was
-  last seen.
+  last seen. Machines that are away are also no longer re-confirmed every five
+  seconds, which used to spend the whole check budget and leave sessions nobody
+  had looked at yet reading "Status unavailable" indefinitely.
 
 ## [0.16.2] — 2026-09-17
 

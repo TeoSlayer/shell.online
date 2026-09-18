@@ -60,6 +60,19 @@ type statusError struct {
 
 func (failure *statusError) Error() string { return failure.message }
 
+// Unauthorized reports that the accounts service refused a token.
+//
+// It exists so the poll loop can tell "this machine's credentials are not
+// accepted" from every other reason a request fails. The service is the
+// authority on its own tokens: a machine whose clock is slow, or whose token
+// was revoked or invalidated before its stated expiry, has no way to know
+// that from the expiry time it was handed, and would otherwise present the
+// same dead token every two seconds for as long as it stayed up.
+func Unauthorized(err error) bool {
+	var failure *statusError
+	return errors.As(err, &failure) && failure.status == http.StatusUnauthorized
+}
+
 // maxErrorBytes caps how much of a failing body is read into an error message.
 const maxErrorBytes = 4 << 10
 

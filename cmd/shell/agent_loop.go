@@ -70,53 +70,105 @@ func (loop *agentLoop) run(ctx context.Context) error {
 
 	/* Grows while renewal keeps being refused, so a dead token is quiet. */
 	refreshBackoff := agentPollInterval
+	/* When renewal may be tried again. Zero means now. */
+	var renewNotBefore time.Time
+	/*
+	 * Set when the service has refused this machine's token. The expiry it
+	 * was handed is a claim about a clock, and this is what actually
+	 * happened, so it renews on this whatever the clock says.
+	 */
+	refused := false
+	/* Said once, not every time the wait elapses. */
+	signInRetired := false
 
 	for {
-		if loop.credentials.Expired(time.Now()) {
+		now := time.Now()
+		if (loop.credentials.Expired(now) || refused) && !now.Before(renewNotBefore) {
 			refreshed, refreshErr := client.Refresh(ctx, loop.credentials)
-			if refreshErr != nil {
+			switch {
+			case refreshErr != nil:
 				if ctx.Err() != nil {
 					return nil
 				}
 				/*
-				 * A refusal is not a blip. The token is revoked or unknown
-				 * and asking again in two seconds will be refused in exactly
-				 * the same way, so retrying at the poll interval is a request
-				 * every two seconds for as long as the machine is up. That
-				 * earns a rate limit, which then hides any real recovery
-				 * behind a second failure.
-				 *
-				 * Two things break the loop instead. Credentials are re-read
-				 * from disk first, because a login in another terminal has
-				 * written working ones and this process would otherwise never
-				 * look. Failing that, the wait grows.
+				 * Credentials are re-read from disk first, because a login in
+				 * another terminal has written working ones and this process
+				 * would otherwise never look.
 				 */
 				if reloaded, loadErr := account.Load(loop.credentialsPath); loadErr == nil &&
 					reloaded.RefreshToken != loop.credentials.RefreshToken {
 					loop.credentials = reloaded
 					refreshBackoff = agentPollInterval
+					renewNotBefore = time.Time{}
+					refused = false
+					signInRetired = false
 					continue
 				}
+				/*
+				 * Otherwise the wait between renewals grows: a revoked token
+				 * will be refused in exactly the same way in two seconds, and
+				 * asking that often for as long as the machine is up earns a
+				 * rate limit that then hides the real recovery.
+				 *
+				 * The poll below still happens. Renewal starts a minute
+				 * before the token expires, so a refusal here usually means a
+				 * network blip with a token that is still perfectly good --
+				 * and this loop is the only thing that keeps the machine
+				 * showing as online. Standing down from that for up to a
+				 * minute over a renewal that was not needed yet is how a
+				 * machine came to be reported offline while nothing was wrong
+				 * with it. If the token really is dead the poll says so, and
+				 * says it in a way the clock cannot argue with.
+				 */
 				fmt.Fprintf(loop.report, "shell: could not renew this machine's token: %v\n", refreshErr)
-				if !sleepOrDone(ctx, refreshBackoff) {
-					return nil
+				/*
+				 * A refusal, as opposed to a failure to reach the service, is
+				 * the end of these credentials: signing in again on this
+				 * machine retires whatever the previous login was handed. Say
+				 * so once, because from outside it looks like the machine has
+				 * gone quiet for no reason.
+				 */
+				if account.Unauthorized(refreshErr) && !signInRetired {
+					signInRetired = true
+					fmt.Fprintln(loop.report,
+						"shell: this machine's sign-in is no longer accepted. Run 'shell login' to link it again.")
 				}
+				renewNotBefore = now.Add(refreshBackoff)
 				refreshBackoff = min(refreshBackoff*2, maxRefreshBackoff)
-				continue
-			}
-			refreshBackoff = agentPollInterval
-			loop.credentials = refreshed
-			if saveErr := account.Save(loop.credentialsPath, loop.credentials); saveErr != nil {
-				fmt.Fprintf(loop.report, "shell: could not store the renewed token: %v\n", saveErr)
+			default:
+				refreshBackoff = agentPollInterval
+				renewNotBefore = time.Time{}
+				refused = false
+				signInRetired = false
+				loop.credentials = refreshed
+				if saveErr := account.Save(loop.credentialsPath, loop.credentials); saveErr != nil {
+					fmt.Fprintf(loop.report, "shell: could not store the renewed token: %v\n", saveErr)
+				}
 			}
 		}
 
 		commands, pollErr := client.PollCommands(ctx, loop.credentials.AccessToken, agentKey.PublicKey(), harnesses)
-		if pollErr != nil {
+		switch {
+		case pollErr != nil:
 			if ctx.Err() != nil {
 				return nil
 			}
+			if account.Unauthorized(pollErr) && !refused {
+				/* Renew at once: this is news, and the backoff has not earned a wait yet. */
+				refused = true
+				renewNotBefore = time.Time{}
+			}
 			fmt.Fprintf(loop.report, "shell: %v\n", pollErr)
+		default:
+			/*
+			 * The service is reachable and this token is good, so whatever
+			 * made a renewal fail earlier is over. Without this a single blip
+			 * left the machine renewing on a minute's delay for the rest of
+			 * its life.
+			 */
+			refreshBackoff = agentPollInterval
+			renewNotBefore = time.Time{}
+			refused = false
 		}
 		for _, command := range commands {
 			gather := func(ctx context.Context, run account.GatheredStats) error {
@@ -133,7 +185,19 @@ func (loop *agentLoop) run(ctx context.Context) error {
 				return err
 			}
 		}
-		if !sleepOrDone(ctx, agentPollInterval) {
+		/*
+		 * Slow down only once both halves have failed: the service has
+		 * refused this token and renewing it did not work either. There is
+		 * nothing for a poll to discover every two seconds in that state, and
+		 * a machine that is signed out would otherwise ask for as long as it
+		 * stayed up. Any other state polls at the normal interval, because
+		 * that poll is what keeps the machine showing as online.
+		 */
+		wait := agentPollInterval
+		if refused && time.Now().Before(renewNotBefore) {
+			wait = refreshBackoff
+		}
+		if !sleepOrDone(ctx, wait) {
 			return nil
 		}
 	}

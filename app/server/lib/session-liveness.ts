@@ -133,9 +133,24 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
         }
       }
       const result = { relayStatus, relayCheckedAt: now(), hostLastSeenAt };
-      const ttl = relayStatus === "connected" || relayStatus === "exited" || relayStatus === "missing"
-        ? successTtlMs
-        : failureTtlMs;
+      /*
+       * Only two answers are worth re-asking about quickly. "unknown" is not
+       * an answer at all, and "waiting" is a session whose host is expected
+       * within seconds.
+       *
+       * "disconnected" used to be in that group, on the reading that a
+       * machine might come back at any moment. It cost six times the checks
+       * of any other state, out of a budget of two per request -- so an
+       * account with a few absent machines spent every check re-confirming
+       * them and had none left for a session nobody had looked at yet, which
+       * then read as "Status unavailable" indefinitely. It is a real answer,
+       * it now carries the timestamp that makes it meaningful, and a host
+       * that returns is worth finding out about within thirty seconds rather
+       * than five.
+       */
+      const ttl = relayStatus === "unknown" || relayStatus === "waiting"
+        ? failureTtlMs
+        : successTtlMs;
       cache.set(sessionId, {
         ...result,
         expiresAt: result.relayCheckedAt + ttl,

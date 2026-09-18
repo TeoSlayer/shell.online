@@ -94,8 +94,8 @@ describe("relay session liveness", () => {
     });
 
     await source.many([session]);
-    /* Past the failure TTL, so the next batch re-checks and the relay refuses. */
-    clock += 6_000;
+    /* Past the cached answer's life, so the next batch re-checks and is refused. */
+    clock += 31_000;
     reply = () => new Response(null, { status: 429 });
     const rateLimited = (await source.many([session])).get(id);
     /* And again with the relay unreachable rather than refusing. */
@@ -118,6 +118,25 @@ describe("relay session liveness", () => {
     expect((await source.one(id)).relayStatus).toBe("connected");
     clock += 6_000;
     expect((await source.one(id)).relayStatus).toBe("connected");
+  });
+
+  /*
+   * The checks are a small shared budget. Re-confirming machines that are
+   * away every five seconds spent all of it, and a session nobody had
+   * managed to look at yet never got a turn.
+   */
+  it("does not spend the check budget re-confirming an absent machine", async () => {
+    let clock = 1_000;
+    const fetcher = vi.fn(async () => Response.json({ exists: true, status: "disconnected", host_last_seen_at: 1 }));
+    const source = relaySessionLiveness("https://relay.example", { fetcher, now: () => clock });
+
+    await source.many([session]);
+    for (let poll = 0; poll < 5; poll += 1) {
+      clock += 4_000;
+      await source.many([session]);
+    }
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("keeps aggregate reconciliation below the relay's connection-rate budget", async () => {

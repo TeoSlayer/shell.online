@@ -49,6 +49,21 @@ export function sessionEnded(session: LivenessFields, now: number = Date.now()):
   );
 }
 
+/**
+ * When an ended session ended, for "ran for" and "finished after".
+ *
+ * A machine that is gone never reported an exit, so there is no `closedAt` to
+ * read: the last moment the relay held its host socket is the closest thing to
+ * one. Reaching for `relayCheckedAt` instead -- the moment this poll happened
+ * to look -- makes the run appear to grow by a minute every minute, which is
+ * the one thing a finished session should never do.
+ */
+export function sessionEndedAt(session: LivenessFields & Pick<SessionRecord, "relayCheckedAt">, now: number = Date.now()): number {
+  if (session.closedAt) return session.closedAt;
+  if (hostGone(session, now)) return session.hostLastSeenAt ?? session.relayCheckedAt ?? now;
+  return session.relayCheckedAt ?? now;
+}
+
 /** "Online" means the relay currently has the machine's host socket. */
 export function sessionOnline(session: LivenessFields, now: number = Date.now()): boolean {
   if (sessionEnded(session, now)) return false;

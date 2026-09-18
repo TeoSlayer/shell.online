@@ -59,7 +59,7 @@ import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 import { shouldOpenSurface } from "../lib/surface-navigation";
 import { SearchSelect } from "../components/SearchSelect";
-import { keepKnownLiveness, sessionEnded, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
+import { keepKnownLiveness, sessionEnded, sessionEndedAt, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 import {
   readTerminalRenderer,
   writeTerminalRenderer,
@@ -1215,7 +1215,7 @@ function SessionGroup({
                 <td className="table-quiet" data-label={live ? "Open for" : "Ran for"}>
                   {live ? (
                     <>{sessionStateLabel(session)} · {elapsed(session.startedAt, now)}</>
-                  ) : elapsed(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? now)}
+                  ) : elapsed(session.startedAt, sessionEndedAt(session, now))}
                   {!live && session.exitCode !== undefined && (
                     <span className="table-exit">exit {session.exitCode}</span>
                   )}
