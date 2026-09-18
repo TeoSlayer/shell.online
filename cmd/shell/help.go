@@ -192,12 +192,17 @@ Driving this machine from the browser
     shell daemon stop                  Stop until the next shell command
     shell logout                       Stop it and unlink the machine
 
-  The daemon starts again whenever you run a shell command, which covers a
-  reboot the moment you use the tool. For a machine that sits idle and still
-  has to be reachable, install it as a background service:
+  Saying yes the first time also installs the daemon as a background service,
+  so the machine is reachable after a restart without anybody logging in and
+  running something. That is the case the service exists for: a machine you
+  want to reach from a browser is a machine nobody is sitting at.
 
-    shell service install              Keep it running across restarts
+    shell service status               Say whether one is installed
+    shell service install              Install it again after removing it
     shell service uninstall            Remove it
+
+  Without one the daemon still starts whenever you run a shell command, which
+  covers a reboot the moment you use the tool.
     shell service status               Say whether it is installed
 
   shell agent does the same thing in the foreground, printing each session as

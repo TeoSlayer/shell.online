@@ -24,6 +24,15 @@ import (
 // serviceLabel identifies the unit to the operating system.
 const serviceLabel = "online.shell.daemon"
 
+// errServiceUnsupported is what a platform with no installer returns.
+//
+// Declared here rather than beside the one implementation that returns it, so
+// that a caller which merely wants to stay quiet about it -- the first login --
+// can say so on every platform.
+var errServiceUnsupported = errors.New(
+	"installing a background service is not supported on this platform yet.\n" +
+		"The daemon still starts whenever you run a shell command")
+
 // servicePassthrough are the variables a service inherits nothing of.
 //
 // A service starts from the operating system, not from a shell, so it sees
@@ -68,6 +77,33 @@ func runServiceCommand(arguments []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// installDaemonService writes and loads the user service for this binary.
+//
+// Shared by `shell service install` and by the first login, so the two cannot
+// disagree about when installing one is a bad idea.
+func installDaemonService() (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate this binary: %w", err)
+	}
+	// A service points at a path, so a binary that moves leaves one pointing
+	// at nothing. Worth saying before it happens rather than after.
+	if strings.HasPrefix(self, os.TempDir()) {
+		return "", fmt.Errorf("%s looks temporary. Install shell somewhere permanent first", self)
+	}
+	/*
+	 * Never from a test binary. Installing one would hand the operating
+	 * system a path under the build cache and ask it to keep running it,
+	 * which is the supervised version of the fork bomb daemon.go guards
+	 * against. The temporary-path check above already catches the usual
+	 * layout; this catches the rest.
+	 */
+	if isGoTestBinary(self) {
+		return "", errors.New("a test binary is never installed as a service")
+	}
+	return installService(self, serviceEnvironment())
+}
+
 func installServiceCommand(stdout, stderr io.Writer) int {
 	path, err := account.DefaultPath()
 	if err != nil {
@@ -91,19 +127,7 @@ func installServiceCommand(stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	self, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(stderr, "shell: locate this binary: %v\n", err)
-		return 1
-	}
-	// A service points at a path, so a binary that moves leaves one pointing
-	// at nothing. Worth saying before it happens rather than after.
-	if strings.HasPrefix(self, os.TempDir()) {
-		fmt.Fprintf(stderr, "shell: %s looks temporary. Install shell somewhere permanent first.\n", self)
-		return 1
-	}
-
-	written, err := installService(self, serviceEnvironment())
+	written, err := installDaemonService()
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 		return 1

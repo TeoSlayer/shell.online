@@ -21,11 +21,17 @@ type Credentials struct {
 
 	// RemoteStart records that the person agreed, on this machine, to let
 	// their signed-in browser start processes here.
-	//
-	// Absent means they have not. Only agreement is remembered: declining is
-	// not a decision worth holding someone to, so the next login asks again,
-	// while agreeing is never asked about twice.
 	RemoteStart bool `json:"remote_start,omitempty"`
+
+	// RemoteStartAsked records that the question above has been put to them
+	// for this account, whichever way they answered.
+	//
+	// It exists because the answer and the asking are different facts. A
+	// declined machine and a machine nobody has asked yet both have
+	// RemoteStart false, and only one of them should be interrupted at the
+	// next login. Absent on credentials written before this field, which
+	// reads as "not asked" and so asks once more -- the right way round.
+	RemoteStartAsked bool `json:"remote_start_asked,omitempty"`
 
 	// AccountKey is the account's vault public key, as this machine trusts it.
 	//

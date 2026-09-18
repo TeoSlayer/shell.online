@@ -373,6 +373,14 @@ func restartDaemon() {
 	if err != nil || !credentials.RemoteStart {
 		return
 	}
+	/*
+	 * A supervised daemon is the supervisor's to replace. Spawning a detached
+	 * one beside it leaves two things trying to own one process, and the
+	 * service would restart its own copy regardless.
+	 */
+	if restartService() {
+		return
+	}
 	if daemonAnswering() {
 		stopDaemon()
 	}

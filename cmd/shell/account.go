@@ -157,21 +157,20 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		credentials.AccountKey = previous.AccountKey
 	}
 	alreadyGranted := samePrincipal && previous.RemoteStart
+	alreadyAsked := samePrincipal && previous.RemoteStartAsked
 	if !samePrincipal {
 		// A daemon keeps the credentials it started with in memory. Stop it
 		// before replacing the file so an account switch cannot leave the old
 		// account polling while the new account appears to own the consent.
 		stopDaemon()
 	}
-	grant, ask := decideRemoteStart(
-		alreadyGranted,
-		remoteStartFlags{allow: *allowRemote, deny: *denyRemote},
-		interactiveTerminal(stderr),
-	)
+	consent := remoteStartFlags{allow: *allowRemote, deny: *denyRemote}
+	grant, ask := decideRemoteStart(alreadyGranted, alreadyAsked, consent, interactiveTerminal(stderr))
 	if ask {
 		grant = askRemoteStart(os.Stdin, stderr, credentials.Email, alreadyGranted)
 	}
 	credentials.RemoteStart = grant
+	credentials.RemoteStartAsked = remoteStartSettled(alreadyAsked, ask, consent)
 
 	if err := account.Save(path, credentials); err != nil {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
@@ -181,6 +180,22 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	// The daemon is what makes the answer mean anything, so it starts here
 	// rather than waiting for the next command.
 	if grant {
+		/*
+		 * The first yes for this account is also the moment to hand the
+		 * daemon to the operating system. Every other route back to a running
+		 * daemon needs somebody to run a shell command, which is exactly what
+		 * the person who wants to reach this machine from a browser is not
+		 * doing -- so a machine that had been reachable all week stopped being
+		 * reachable the moment it restarted, and nothing said why.
+		 *
+		 * Only on the first yes. After that an absent service is a decision
+		 * somebody made with 'shell service uninstall', and reinstalling it
+		 * behind their back on the next login would be a worse bug than the
+		 * one this fixes.
+		 */
+		if !alreadyAsked {
+			installServiceAfterLogin(stdout, stderr)
+		}
 		/*
 		 * Restart rather than ensure. The credentials just written are new,
 		 * and a daemon that is already running is holding the previous ones
@@ -196,6 +211,30 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// installServiceAfterLogin keeps this machine reachable across restarts, and
+// carries on if it cannot.
+//
+// A login that failed at the last step because the operating system would not
+// take a launch agent is a login that worked. The daemon still starts with the
+// next shell command either way; what is lost is only surviving a restart
+// untouched, so that is what the message is about.
+func installServiceAfterLogin(stdout, stderr io.Writer) {
+	if _, installed := serviceInstalled(); installed {
+		return
+	}
+	written, err := installDaemonService()
+	if err != nil {
+		if errors.Is(err, errServiceUnsupported) {
+			return
+		}
+		fmt.Fprintf(stderr, "shell: this machine will not stay reachable across restarts: %v\n", err)
+		fmt.Fprintln(stderr, "Run 'shell service install' once that is sorted.")
+		return
+	}
+	fmt.Fprintf(stdout, "\n  Installed %s\n", written)
+	fmt.Fprintf(stdout, "  %s\n", "This machine stays reachable across restarts. Remove it with 'shell service uninstall'.")
+}
+
 // sameAccount is deliberately stricter than matching an email address. The
 // provider UID is the identity, and the server is part of its authority: a
 // development account and a production account with the same UID are not the
@@ -204,23 +243,26 @@ func sameAccount(previous, next account.Credentials) bool {
 	return previous.UID != "" && previous.UID == next.UID && previous.Server == next.Server
 }
 
-// printRemoteStartNote says what this machine will and will not do.
+// printRemoteStartNote says what this machine will and will not do, and how to
+// change it.
 //
-// Printed on every login, not only the one that asked: a decision made months
-// ago still governs what a browser can do here, and it should not take reading
-// a config file to find out which way it went.
+// Printed on every login, not only the one that asked, and it carries more
+// weight now that the question itself is put once: a decision made months ago
+// still governs what a browser can do here, and this line is the way back to
+// it. Every branch names the command that reverses it -- a state somebody
+// cannot see and cannot change is worse than a question asked too often. See
+// decideRemoteStart.
 func printRemoteStartNote(writer io.Writer, granted, asked bool) {
 	color := sessionOutputUsesColor(writer)
 	dim := func(text string) string { return styleSessionText(color, "2", text) }
-	if granted {
-		fmt.Fprintf(writer, "  %s\n\n", dim("Your browser can start sessions here. Turn it off with 'shell logout'."))
-		return
+	switch {
+	case granted:
+		fmt.Fprintf(writer, "  %s\n\n", dim("Your browser can start sessions here. Turn it off with 'shell login --no-remote-start'."))
+	case asked:
+		fmt.Fprintf(writer, "  %s\n\n", dim("Left as publish-only. Turn it on with 'shell login --allow-remote-start'."))
+	default:
+		fmt.Fprintf(writer, "  %s\n\n", dim("Publish-only. Run 'shell login --allow-remote-start' to start sessions from the browser."))
 	}
-	if asked {
-		fmt.Fprintf(writer, "  %s\n\n", dim("Left as publish-only. Sessions you start with 'shell <command>' still appear."))
-		return
-	}
-	fmt.Fprintf(writer, "  %s\n\n", dim("Publish-only. Run 'shell login --allow-remote-start' to start sessions from the browser."))
 }
 
 func runLogout(arguments []string, stdout, stderr io.Writer) int {

@@ -14,6 +14,9 @@ import (
 // unit: this holds one account's credentials and starts processes as that
 // person.
 
+// serviceUnitName is what systemctl addresses the unit by.
+func serviceUnitName() string { return "shell-online.service" }
+
 func servicePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -23,7 +26,7 @@ func servicePath() (string, error) {
 	if base == "" {
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "systemd", "user", "shell-online.service"), nil
+	return filepath.Join(base, "systemd", "user", serviceUnitName()), nil
 }
 
 func serviceInstalled() (string, bool) {
@@ -81,7 +84,7 @@ func installService(self string, environment map[string]string) (string, error) 
 	if output, err := exec.Command("systemctl", "--user", "daemon-reload").CombinedOutput(); err != nil {
 		return "", fmt.Errorf("reload systemd: %v: %s", err, strings.TrimSpace(string(output)))
 	}
-	if output, err := exec.Command("systemctl", "--user", "enable", "--now", "shell-online.service").CombinedOutput(); err != nil {
+	if output, err := exec.Command("systemctl", "--user", "enable", "--now", serviceUnitName()).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("enable the unit: %v: %s", err, strings.TrimSpace(string(output)))
 	}
 	// Without lingering, a user's units stop when their last session ends,
@@ -97,12 +100,22 @@ func installService(self string, environment map[string]string) (string, error) 
 	return path, nil
 }
 
+// restartService replaces the running daemon through systemd, for the same
+// reason the darwin build does: a supervised process is the supervisor's to
+// replace, and Restart= would undo a detached one anyway.
+func restartService() bool {
+	if _, installed := serviceInstalled(); !installed {
+		return false
+	}
+	return exec.Command("systemctl", "--user", "restart", serviceUnitName()).Run() == nil
+}
+
 func uninstallService() (bool, error) {
 	path, installed := serviceInstalled()
 	if !installed {
 		return false, nil
 	}
-	_ = exec.Command("systemctl", "--user", "disable", "--now", "shell-online.service").Run()
+	_ = exec.Command("systemctl", "--user", "disable", "--now", serviceUnitName()).Run()
 	if err := os.Remove(path); err != nil {
 		return false, fmt.Errorf("remove the unit: %w", err)
 	}

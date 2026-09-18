@@ -4,6 +4,28 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.17.0] — 2026-09-18
+
+### Changed
+
+- `shell login` asks whether your browser may start sessions on this machine
+  once, on the first login for that account, instead of at every sign-in. The
+  question was re-put every time so that somebody who missed it had a way back
+  to it; the way back is the line printed after every login, which now names
+  the command that reverses whichever way it stands, on all three branches.
+  Signing in again is not a consent decision. A different account signing in is,
+  so it is asked again. `--allow-remote-start` and `--no-remote-start` still
+  answer it outright, and still reverse a settled answer without a prompt.
+- Agreeing for the first time also installs the daemon as a user service -- a
+  LaunchAgent on macOS, a systemd user unit on Linux -- so the machine is
+  reachable after a restart without anybody logging in and running something.
+  That is the case the service exists for: a machine you want to reach from a
+  browser is a machine nobody is sitting at. Only on the first agreement, so
+  `shell service uninstall` is not quietly undone by the next login; a machine
+  that cannot install one still signs in and says what it could not do.
+- A login on a machine that has a service installed now restarts the daemon
+  through that service rather than spawning a detached one beside it.
+
 ### Fixed
 
 - A session whose machine is rebooted or loses power now reaches Finished

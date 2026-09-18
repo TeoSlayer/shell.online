@@ -1,5 +1,5 @@
 {
-  "version": "0.16.2",
+  "version": "0.17.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -45,7 +45,7 @@
         ],
         [
           "Start sessions from the browser",
-          "Every interactive shell login asks whether your signed-in browser may start sessions on this machine, using the previous answer as the default. Agree and a small daemon runs in the background for as long as you stay signed in, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. A machine that sits idle and still has to be reachable can run shell service install instead."
+          "The first shell login on a machine asks whether your signed-in browser may start sessions there; after that the answer stands, and every login prints which way it went. Agree and a small daemon runs in the background for as long as you stay signed in, and is installed as a background service so the machine is still reachable after a restart, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. Remove that service with shell service uninstall, and put it back with shell service install."
         ],
         [
           "Organizations and collaboration",
@@ -104,7 +104,7 @@
         ],
         [
           "Start from the browser",
-          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while shell service install is the opt-in path for a machine that should remain reachable across logins.",
+          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while the first agreement installs a user service so the machine remains reachable across restarts; shell service uninstall removes it.",
           [
             [
               "shell login --no-remote-start",
@@ -921,7 +921,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.16.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.17.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

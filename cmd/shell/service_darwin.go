@@ -109,6 +109,21 @@ func installService(self string, environment map[string]string) (string, error) 
 	return path, nil
 }
 
+// restartService replaces the running daemon through launchd.
+//
+// A daemon that launchd started is launchd's to replace: stopping it and
+// spawning a detached one leaves two supervisors for one process, and the
+// KeepAlive would bring the agent's back anyway. kickstart -k does the whole
+// exchange at once, so the new credentials are picked up without waiting out
+// ThrottleInterval.
+func restartService() bool {
+	if _, installed := serviceInstalled(); !installed {
+		return false
+	}
+	target := fmt.Sprintf("gui/%d/%s", os.Getuid(), serviceLabel)
+	return exec.Command("launchctl", "kickstart", "-k", target).Run() == nil
+}
+
 func uninstallService() (bool, error) {
 	path, installed := serviceInstalled()
 	if !installed {
