@@ -67,6 +67,59 @@ describe("relay session liveness", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("passes on when the relay last had the host socket", async () => {
+    const source = relaySessionLiveness("https://relay.example", {
+      fetcher: vi.fn(async () =>
+        Response.json({ exists: true, status: "disconnected", host_last_seen_at: 1_700_000_000_000 })),
+    });
+
+    await expect(source.one(id)).resolves.toMatchObject({
+      relayStatus: "disconnected",
+      hostLastSeenAt: 1_700_000_000_000,
+    });
+  });
+
+  /*
+   * A card that alternated between "Offline" and "Status unavailable" every
+   * few seconds -- and so between the Write and Finished columns -- was this:
+   * a rate-limited or timed-out check overwrote a state the service already
+   * had with "unknown".
+   */
+  it("keeps the last known state when a later check cannot be made", async () => {
+    let clock = 1_000;
+    let reply = () => Response.json({ exists: true, status: "disconnected", host_last_seen_at: 500 });
+    const source = relaySessionLiveness("https://relay.example", {
+      fetcher: vi.fn(async () => reply()),
+      now: () => clock,
+    });
+
+    await source.many([session]);
+    /* Past the failure TTL, so the next batch re-checks and the relay refuses. */
+    clock += 6_000;
+    reply = () => new Response(null, { status: 429 });
+    const rateLimited = (await source.many([session])).get(id);
+    /* And again with the relay unreachable rather than refusing. */
+    clock += 6_000;
+    reply = () => { throw new Error("network down"); };
+    const unreachable = (await source.many([session])).get(id);
+
+    expect(rateLimited).toMatchObject({ relayStatus: "disconnected", hostLastSeenAt: 500 });
+    expect(unreachable).toMatchObject({ relayStatus: "disconnected", hostLastSeenAt: 500 });
+  });
+
+  it("reports a known state rather than unknown when the budget is spent", async () => {
+    let clock = 1_000;
+    const source = relaySessionLiveness("https://relay.example", {
+      fetcher: vi.fn(async () => Response.json({ exists: true, status: "connected" })),
+      now: () => clock,
+      maxChecksPerMinute: 1,
+    });
+
+    expect((await source.one(id)).relayStatus).toBe("connected");
+    clock += 6_000;
+    expect((await source.one(id)).relayStatus).toBe("connected");
+  });
+
   it("keeps aggregate reconciliation below the relay's connection-rate budget", async () => {
     const fetcher = vi.fn(async () => Response.json({ exists: true, status: "connected" }));
     const source = relaySessionLiveness("https://relay.example", {

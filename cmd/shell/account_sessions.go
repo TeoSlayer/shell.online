@@ -73,9 +73,10 @@ func runAccountSessionList(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
+	now := time.Now()
 	shown := make([]account.AccountSession, 0, len(sessions))
 	for _, session := range sessions {
-		if *all || !accountSessionEnded(session) {
+		if *all || !accountSessionEnded(session, now) {
 			shown = append(shown, session)
 		}
 	}
@@ -84,7 +85,7 @@ func runAccountSessionList(arguments []string, stdout, stderr io.Writer) int {
 	if *jsonOutput {
 		listed := make([]accountSessionJSON, 0, len(shown))
 		for _, session := range shown {
-			listed = append(listed, accountSessionForJSON(session))
+			listed = append(listed, accountSessionForJSON(session, now))
 		}
 		encoder := json.NewEncoder(stdout)
 		encoder.SetEscapeHTML(false)
@@ -95,7 +96,6 @@ func runAccountSessionList(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	now := time.Now()
 	if len(shown) == 0 {
 		if *all {
 			fmt.Fprintln(stdout, "No sessions in your account.")
@@ -138,19 +138,45 @@ func linkedAccountClient(ctx context.Context, warn io.Writer) (*account.Client, 
 	return client, credentials, nil
 }
 
-// accountSessionEnded mirrors the web app: closed, or gone from the relay.
-// A disconnected session may still come back, so it is not ended.
-func accountSessionEnded(session account.AccountSession) bool {
-	return session.ClosedAt != nil || session.RelayStatus == "exited" || session.RelayStatus == "missing"
+// hostGoneAfter is how long a machine may be away before its sessions are
+// treated as over. It is the same window the web app uses; see HOST_GONE_MS in
+// app/src/lib/session-liveness.ts for why ten minutes.
+const hostGoneAfter = 10 * time.Minute
+
+// accountHostGone reports a machine that stopped answering long enough ago
+// that it is not coming back on its own. The relay's reconnect loop retries
+// with a backoff capped at ten seconds, so a host that still exists returns
+// well inside the window. A persistent session is excluded: waiting to be
+// resumed is what it is for.
+func accountHostGone(session account.AccountSession, now time.Time) bool {
+	if session.RelayStatus != "disconnected" || session.Persistent {
+		return false
+	}
+	if session.HostLastSeenAt == nil {
+		return false
+	}
+	return now.Sub(time.UnixMilli(*session.HostLastSeenAt)) >= hostGoneAfter
+}
+
+// accountSessionEnded mirrors the web app: closed, gone from the relay, or
+// left behind by a machine that never came back. A session that has only just
+// disconnected may still return, so it is not ended.
+func accountSessionEnded(session account.AccountSession, now time.Time) bool {
+	return session.ClosedAt != nil ||
+		session.RelayStatus == "exited" ||
+		session.RelayStatus == "missing" ||
+		accountHostGone(session, now)
 }
 
 // accountSessionStatus uses the words the web app shows for the same states.
-func accountSessionStatus(session account.AccountSession) string {
+func accountSessionStatus(session account.AccountSession, now time.Time) string {
 	switch {
 	case session.ClosedAt != nil || session.RelayStatus == "exited":
 		return "finished"
 	case session.RelayStatus == "missing":
 		return "unavailable"
+	case accountHostGone(session, now):
+		return "machine gone"
 	case session.RelayStatus == "disconnected":
 		return "offline"
 	case session.RelayStatus == "waiting":
@@ -171,7 +197,7 @@ func accountSessionDuration(session account.AccountSession, now time.Time) strin
 	return compactDuration(end.Sub(time.UnixMilli(session.StartedAt)))
 }
 
-func accountSessionForJSON(session account.AccountSession) accountSessionJSON {
+func accountSessionForJSON(session account.AccountSession, now time.Time) accountSessionJSON {
 	listed := accountSessionJSON{
 		ID:          session.ID,
 		Name:        session.Name,
@@ -183,7 +209,7 @@ func accountSessionForJSON(session account.AccountSession) accountSessionJSON {
 		Persistent:  session.Persistent,
 		StartedAt:   time.UnixMilli(session.StartedAt).UTC(),
 		ExitCode:    session.ExitCode,
-		Status:      accountSessionStatus(session),
+		Status:      accountSessionStatus(session, now),
 		RelayStatus: session.RelayStatus,
 	}
 	if session.ClosedAt != nil {
@@ -200,7 +226,7 @@ func printAccountSessionTable(writer io.Writer, sessions []account.AccountSessio
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			shortSessionID(session.ID),
 			sessionNameLabel(session.Name, 32),
-			accountSessionStatus(session),
+			accountSessionStatus(session, now),
 			accountSessionDuration(session, now),
 			truncateText(session.Host, 24),
 			truncateText(session.Command, 48),
@@ -219,7 +245,7 @@ func printCompactAccountSessions(writer io.Writer, sessions []account.AccountSes
 			title = session.Command
 		}
 		fmt.Fprintf(writer, "%s  %s\n", shortSessionID(session.ID), truncateText(title, 64))
-		fmt.Fprintf(writer, "  %s · %s · %s\n", accountSessionStatus(session), accountSessionDuration(session, now), session.Host)
+		fmt.Fprintf(writer, "  %s · %s · %s\n", accountSessionStatus(session, now), accountSessionDuration(session, now), session.Host)
 		if session.Name != "" {
 			fmt.Fprintf(writer, "  Command   %s\n", truncateText(session.Command, 64))
 		}

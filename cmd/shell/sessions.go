@@ -43,6 +43,12 @@ type localSessionRecord struct {
 	PID             int        `json:"pid"`
 	StartedAt       time.Time  `json:"started_at"`
 	ClosesAt        *time.Time `json:"closes_at,omitempty"`
+	// AbandonedAt is when this machine noticed the process was gone without
+	// having reported it. A session that ends normally deletes its own record
+	// and tells the accounts service; one whose machine was rebooted or lost
+	// power does neither, and this is the note left behind so the next run can
+	// finish the job. See reclaimAbandonedSessions.
+	AbandonedAt *time.Time `json:"abandoned_at,omitempty"`
 }
 
 type localSessionControl interface {

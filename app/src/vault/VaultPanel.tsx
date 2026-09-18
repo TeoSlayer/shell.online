@@ -112,7 +112,8 @@ function VaultContents() {
   const legacy = (sessions ?? []).filter(
     (session) => session.keyShare && !isVaultShare(session.keyShare.sealed),
   ).length;
-  const running = held.filter(sessionOnline).length;
+  /* Not a bare reference: filter passes the index, which is the second argument. */
+  const running = held.filter((session) => sessionOnline(session)).length;
   const shown = showAll ? held : held.slice(0, SHORT_LIST);
 
   return (

@@ -288,6 +288,11 @@ type AccountSession struct {
 	// connected, disconnected, exited, missing or unknown. Empty when the
 	// service has no relay to ask.
 	RelayStatus string `json:"relayStatus,omitempty"`
+	// HostLastSeenAt is when the relay last held the machine's host socket,
+	// in milliseconds. It dates a disconnection, which is what separates a
+	// network blip from a machine that was rebooted or lost power. Absent
+	// when no host has ever reached the session.
+	HostLastSeenAt *int64 `json:"hostLastSeenAt,omitempty"`
 }
 
 // ListSessions returns every session this account has published, newest first.

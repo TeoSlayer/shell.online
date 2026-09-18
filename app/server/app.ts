@@ -6,6 +6,7 @@ import type { AuditEvent, SessionRecord,
 } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
 import type { SessionLiveness, SessionLivenessSource } from "./lib/session-liveness";
+import { closeEndedSessions } from "./lib/session-reconcile";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
   checkAccessToken,
@@ -347,8 +348,9 @@ export function createApp(options: AppOptions) {
     const states = options.sessionLiveness
       ? await options.sessionLiveness.many(sessions)
       : new Map<string, SessionLiveness>();
-    return sessions.map((session) =>
-      sessionForMember(membership, session, states.get(session.id))
+    const settled = await closeEndedSessions(store, sessions, states, log);
+    return settled.map((session) =>
+      sessionForMember(membership, session, session.closedAt ? undefined : states.get(session.id))
     );
   }
 
@@ -563,8 +565,12 @@ export function createApp(options: AppOptions) {
         const states = options.sessionLiveness
           ? await options.sessionLiveness.many(sessions)
           : new Map<string, SessionLiveness>();
+        const settled = await closeEndedSessions(store, sessions, states, log);
         return send(response, 200, {
-          sessions: sessions.map((session) => ({ ...sessionForApi(session), ...states.get(session.id) })),
+          sessions: settled.map((session) => ({
+            ...sessionForApi(session),
+            ...(session.closedAt ? {} : states.get(session.id)),
+          })),
         });
       }
 
@@ -1664,8 +1670,14 @@ export function createApp(options: AppOptions) {
         const liveness = !session.closedAt && options.sessionLiveness
           ? await options.sessionLiveness.one(session.id)
           : undefined;
+        const [settled] = await closeEndedSessions(
+          store,
+          [session],
+          new Map(liveness ? [[session.id, liveness]] : []),
+          log,
+        );
         return send(response, 200, {
-          session: sessionForMember(membership, session, liveness),
+          session: sessionForMember(membership, settled, settled.closedAt ? undefined : liveness),
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

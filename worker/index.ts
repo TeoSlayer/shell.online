@@ -903,8 +903,21 @@ export class TerminalSession extends DurableObject<Env> {
         await this.expire();
         return json({ exists: false }, 404, { "Cache-Control": "no-store" });
       }
+      /*
+       * host_last_seen_at dates a disconnection. Without it "disconnected" is
+       * one word for two different things -- a network blip the host's
+       * reconnect loop is about to heal, and a machine that was rebooted or
+       * lost power -- so a caller deciding whether a session is over has
+       * nothing to decide on. Absent until a host has connected once.
+       */
       return json(
-        { exists: true, status: this.meta.status, read_only: this.isReadOnly(), encrypted: this.isEncrypted() },
+        {
+          exists: true,
+          status: this.meta.status,
+          read_only: this.isReadOnly(),
+          encrypted: this.isEncrypted(),
+          host_last_seen_at: this.meta.hostLastSeenAt,
+        },
         200,
         { "Cache-Control": "no-store" },
       );
@@ -1549,6 +1562,7 @@ export class TerminalSession extends DurableObject<Env> {
         return;
       }
       this.meta.status = "disconnected";
+      this.meta.hostLastSeenAt ??= Date.now();
       await this.persistMeta();
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1558,6 +1572,13 @@ export class TerminalSession extends DurableObject<Env> {
 
     if (this.meta.status === "connected") {
       this.meta.status = "disconnected";
+      /*
+       * The close handler normally dates this. It does not run when the socket
+       * died with the isolate, which is the abrupt case -- a reboot or a power
+       * cut -- so the alarm is the first to notice. Only filled in when it is
+       * missing: a real close timestamp is always the better one.
+       */
+      this.meta.hostLastSeenAt ??= Date.now();
       this.meta.expiresAt = disconnectedSessionExpiry(Date.now(), false);
       await this.persistMeta();
       this.broadcastStatus();

@@ -4,6 +4,25 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- A session whose machine is rebooted or loses power now reaches Finished
+  instead of sitting in Write for the relay's twelve-hour retention. Nothing
+  used to close those sessions: the CLI reports an exit as its process ends,
+  and a machine that dies never gets to. Three things now do. The machine
+  closes them itself when it comes back up, having kept a note of what it left
+  running. The relay says when it last held a host socket, so a machine that
+  has been silent longer than any reconnect could take reads as "Machine gone"
+  rather than merely offline -- and reads as live again by itself if it comes
+  back. And a session the relay no longer has at all is written down as closed.
+- Session state stopped flickering. A card could alternate between "Offline"
+  and "Status unavailable" every few seconds, and so between the Write and
+  Finished columns, while nothing about the session changed: a relay check
+  that was rate-limited, timed out, or landed on a worker with a cold cache
+  overwrote a state the service already had with "unknown". A failed check is
+  now a gap in knowledge rather than news, and no longer replaces what was
+  last seen.
+
 ## [0.16.2] — 2026-09-17
 
 ### Fixed

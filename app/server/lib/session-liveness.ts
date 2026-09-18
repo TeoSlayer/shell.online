@@ -7,6 +7,13 @@ export interface SessionLiveness {
   relayStatus: SessionRelayState;
   /** Absent when a bounded batch has not reached this session yet. */
   relayCheckedAt?: number;
+  /**
+   * When the relay last had the machine's host socket, as the relay reports
+   * it. This is what dates a disconnection, and so what separates a network
+   * blip from a machine that was rebooted or lost power. Absent for a session
+   * no host has ever reached, and from a relay too old to report it.
+   */
+  hostLastSeenAt?: number;
 }
 
 export interface SessionLivenessSource {
@@ -17,6 +24,15 @@ export interface SessionLivenessSource {
 interface CacheEntry extends SessionLiveness {
   relayCheckedAt: number;
   expiresAt: number;
+}
+
+/** What a cached observation looks like to a caller: everything but its TTL. */
+function reported(entry: CacheEntry): SessionLiveness {
+  return {
+    relayStatus: entry.relayStatus,
+    relayCheckedAt: entry.relayCheckedAt,
+    hostLastSeenAt: entry.hostLastSeenAt,
+  };
 }
 
 interface LivenessOptions {
@@ -69,15 +85,15 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
     if (!SESSION_ID.test(sessionId)) return { relayStatus: "unknown", relayCheckedAt: checkedAt };
 
     const cached = cache.get(sessionId);
-    if (cached && cached.expiresAt > checkedAt) {
-      return { relayStatus: cached.relayStatus, relayCheckedAt: cached.relayCheckedAt };
-    }
+    if (cached && cached.expiresAt > checkedAt) return reported(cached);
     const underway = inFlight.get(sessionId);
     if (underway) return underway;
-    if (!reserveCheck(checkedAt)) return { relayStatus: "unknown" };
+    /* Out of budget: say what was last seen rather than forgetting it. */
+    if (!reserveCheck(checkedAt)) return cached ? reported(cached) : { relayStatus: "unknown" };
 
     const request = (async (): Promise<SessionLiveness> => {
       let relayStatus: SessionRelayState = "unknown";
+      let hostLastSeenAt: number | undefined;
       try {
         const response = await fetcher(
           new URL(`/api/sessions/${encodeURIComponent(sessionId)}`, relayOrigin),
@@ -86,16 +102,37 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
         if (response.status === 404) {
           relayStatus = "missing";
         } else if (response.ok) {
-          const body = await response.json() as { exists?: unknown; status?: unknown };
+          const body = await response.json() as {
+            exists?: unknown;
+            status?: unknown;
+            host_last_seen_at?: unknown;
+          };
           if (body.exists === false) relayStatus = "missing";
           else if (typeof body.status === "string" && STATUSES.has(body.status as RelaySessionStatus)) {
             relayStatus = body.status as RelaySessionStatus;
+            if (typeof body.host_last_seen_at === "number" && Number.isFinite(body.host_last_seen_at)) {
+              hostLastSeenAt = body.host_last_seen_at;
+            }
           }
         }
       } catch {
         /* An unreachable relay is not evidence that the process ended. */
       }
-      const result = { relayStatus, relayCheckedAt: now() };
+      /*
+       * A failed check is a gap in this service's knowledge, not a change in
+       * the session's. Overwriting a state we did have with "unknown" is what
+       * made a card flip between "Offline" and "Status unavailable" every few
+       * seconds while nothing about the session moved, so the last answer is
+       * kept and simply re-aged.
+       */
+      if (relayStatus === "unknown") {
+        const known = cache.get(sessionId);
+        if (known && known.relayStatus !== "unknown") {
+          cache.set(sessionId, { ...known, expiresAt: now() + failureTtlMs });
+          return reported(known);
+        }
+      }
+      const result = { relayStatus, relayCheckedAt: now(), hostLastSeenAt };
       const ttl = relayStatus === "connected" || relayStatus === "exited" || relayStatus === "missing"
         ? successTtlMs
         : failureTtlMs;
@@ -125,9 +162,7 @@ export function relaySessionLiveness(relayUrl: string, options: LivenessOptions 
       await Promise.all(due.map((session) => query(session.id)));
       for (const session of open) {
         const entry = cache.get(session.id);
-        answer.set(session.id, entry
-          ? { relayStatus: entry.relayStatus, relayCheckedAt: entry.relayCheckedAt }
-          : { relayStatus: "unknown" });
+        answer.set(session.id, entry ? reported(entry) : { relayStatus: "unknown" });
       }
       return answer;
     },

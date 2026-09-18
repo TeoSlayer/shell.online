@@ -164,7 +164,7 @@ export function SessionBoard({
     {
       key: "finished",
       title: "Finished",
-      hint: "The process has exited",
+      hint: "The process exited, or its machine stopped answering",
       sessions: finished,
     },
   ];

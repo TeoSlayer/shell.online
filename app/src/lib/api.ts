@@ -276,6 +276,8 @@ export interface SessionRecord {
   /** Current process state as reported by the configured terminal relay. */
   relayStatus?: "waiting" | "connected" | "disconnected" | "exited" | "missing" | "unknown";
   relayCheckedAt?: number;
+  /** When the relay last held this session's host socket. See session-liveness. */
+  hostLastSeenAt?: number;
 }
 
 class ApiError extends Error {}

@@ -51,6 +51,17 @@ func (loop *agentLoop) run(ctx context.Context) error {
 		return err
 	}
 	client := account.NewClient(loop.credentials.Server, "shell/"+version)
+
+	/*
+	 * Before taking any work: report the sessions this machine left open when
+	 * it last stopped. A reboot or a power cut kills the process without it
+	 * getting to close its session, and the browser has no way to tell that
+	 * apart from a machine that is briefly off the network -- so those rows sat
+	 * in "Write", offered as live, until the relay expired them. Starting up is
+	 * the moment the machine knows better, and this is where it says so.
+	 */
+	reclaimAbandonedSessions(ctx, client, loop.credentials.AccessToken, loop.report)
+
 	// Detected once per run, not once per poll. Which agent tools are on PATH
 	// does not change while the daemon is up in any way worth a filesystem
 	// search every two seconds, and restarting re-detects -- the same
