@@ -83,11 +83,24 @@ describe("relay session liveness", () => {
     const sessions = ["a", "b", "c"].map((letter) => ({ id: letter.repeat(32) }));
     const reached = new Set<string>();
 
-    /* Ten instances, each starting empty, each able to check only one. */
-    for (let instance = 0; instance < 10; instance += 1) {
-      const cold = relaySessionLiveness("https://relay.example", { fetcher, maxChecksPerBatch: 1 });
-      const states = await cold.many(sessions);
-      for (const [sessionId, state] of states) {
+    /*
+     * Three instances, each starting empty and able to check only one, each
+     * drawing a different tiebreak. The draws are fixed rather than left to
+     * chance: what is being checked is that the draw is what decides, and a
+     * test that samples a random process to prove it is a test that fails
+     * every so often for no reason. With the tiebreak taken from the session
+     * instead, every instance chose the same one and the other two were never
+     * checked by anybody, which is the bug.
+     */
+    for (let winner = 0; winner < sessions.length; winner += 1) {
+      const draws = sessions.map((_, index) => (index === winner ? 0 : 1));
+      let draw = 0;
+      const cold = relaySessionLiveness("https://relay.example", {
+        fetcher,
+        maxChecksPerBatch: 1,
+        random: () => draws[draw++],
+      });
+      for (const [sessionId, state] of await cold.many(sessions)) {
         if (state.relayStatus === "connected") reached.add(sessionId);
       }
     }
