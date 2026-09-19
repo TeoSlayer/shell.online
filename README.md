@@ -4,49 +4,86 @@
 [![CodeQL](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml/badge.svg)](https://github.com/TeoSlayer/shell.online/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-53658c.svg)](LICENSE)
 
-A browser link to any terminal process.
+Share any terminal process in one command.
 
 ```sh
 shell claude
 ```
 
-The command keeps running on your machine. shell.online prints a URL, password,
-and QR code that open the same terminal in a desktop or mobile browser. Terminal
-traffic is end-to-end encrypted by default.
+The process stays on your machine. The CLI prints a browser link, password,
+and QR code. Terminal traffic is end-to-end encrypted by default.
 
 ## Install
 
-macOS, Linux, BSD, and Solaris:
+| Platform | Command |
+| --- | --- |
+| macOS, Linux, BSD, Solaris | `curl -fsSL https://shell.online/install \| sh` |
+| Windows PowerShell | `irm https://shell.online/install.ps1 \| iex` |
+| Homebrew | `brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online`<br>`brew trust --tap teoslayer/shell-online`<br>`brew install shell-online` |
 
-```sh
-curl -fsSL https://shell.online/install | sh
-```
+Installers verify release checksums. Downloads and `SHA256SUMS` are on the
+[releases page](https://github.com/TeoSlayer/shell.online/releases).
 
-Windows PowerShell:
+## Use
 
-```powershell
-irm https://shell.online/install.ps1 | iex
-```
+| Goal | Command |
+| --- | --- |
+| Share a process | `shell <command>` |
+| Share a new shell | `shell` |
+| Watch without typing | `shell --read-only <command>` |
+| Name a session | `shell --name "web app" <command>` |
+| Keep local foreground control | `shell --foreground <command>` |
+| Close after a duration | `shell --auto-close 5m <command>` |
+| Reuse a link across restarts | `shell --persistent <file> <command>` |
+| Share working-directory files | `shell --files <command>` |
+| Share another file root | `shell --files-root <dir> <command>` |
 
-At the end, and on failure, the installer sends one word back, its outcome,
-so a platform that keeps failing gets noticed and fixed. Nothing else goes
-with it. Set `SHELL_ONLINE_INSTALL_REPORT=0` to skip that.
+Sessions run in the background unless `--foreground` is used. They close when
+the wrapped process exits.
 
-Homebrew (the tap lives in this repository):
+### Manage sessions
 
-```sh
-brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
-brew trust --tap teoslayer/shell-online
-brew install shell-online
-```
+| Goal | Command |
+| --- | --- |
+| List local sessions | `shell list` |
+| List account sessions | `shell ls` |
+| Attach locally | `shell attach <id>` |
+| Show an active password | `shell password <id>` |
+| Rotate a password | `shell password rotate <id>` |
+| Stop a session | `shell kill <id>` |
+| Link this machine | `shell login` |
+| Full reference | `shell help reference` |
 
-Homebrew 6 asks you to trust a third-party tap once. Older versions have no
-`brew trust` and can skip that line.
+Press `Ctrl-X`, then `D`, to detach from `shell attach`.
 
-Installers verify checksums. Release binaries and `SHA256SUMS` are available on
-the [releases page](https://github.com/TeoSlayer/shell.online/releases).
+## Included
 
-## Platform compatibility
+- Interactive desktop and mobile browser terminal
+- PTY, full-screen TUI, resize, reconnect, tmux, and mosh-style redraw support
+- E2EE by default; read-only shares are also enforced by the CLI
+- Multi-viewer collaboration with input ownership
+- QR handoff from terminal to phone
+- Optional file browser with root and traversal controls
+- Optional account, machine linking, personal password vault, and web app
+- Refstream renderer and agent connection path *(alpha)*
+- Persistent Docker session and self-hosted deployment
+
+## Security
+
+| Property | Behavior |
+| --- | --- |
+| Access | Anyone with both the URL and password can open a share |
+| Encryption | The CLI encrypts; the browser decrypts locally |
+| Relay visibility | Metadata, timing, encrypted frame sizes, labels, and lifecycle |
+| Browser input | Runs with the wrapped process's local permissions |
+| Password recovery | Local session or optional personal vault; no service backdoor |
+| Plain transport mode | Explicit `--no-e2ee` only |
+
+Use `--read-only` for viewers who should not type. See the
+[security model](https://shell.online/security/) and
+[security policy](.github/SECURITY.md).
+
+## Platforms
 
 | OS | Architectures | Verification |
 | --- | --- | --- |
@@ -59,105 +96,17 @@ the [releases page](https://github.com/TeoSlayer/shell.online/releases).
 | DragonFly BSD | amd64 | Build |
 | Solaris | amd64 | Build |
 
-See [platform details](https://shell.online/platforms/) for PTY, router, ROS,
-installer, and test caveats.
-
-## Usage
-
-```sh
-shell <command>                           # share a command
-shell                                     # share a new shell
-shell --read-only <command>               # disable browser input
-shell --name "web app" <command>          # label it in lists and the web app
-shell --foreground <command>              # also show it locally
-shell --auto-close 5m <command>           # set an earlier deadline
-shell --persistent <file> <command>       # reuse a URL and password
-shell --files <command>                   # opt in working-directory files
-shell --files-root <dir> <command>        # opt in a different file root
-
-shell list                                # list local sessions (adapts to terminal width)
-shell ls                                  # list your account's sessions on every machine
-shell password <id>                       # retrieve an active password locally
-shell password rotate <id>                # revoke it without restarting the process
-shell attach <id>                         # attach locally
-shell kill <id>                           # stop a session
-```
-
-Press `Ctrl-X`, then `D`, to detach from an attached session. See
-[`shell help reference`](https://shell.online/cli/) for every command and option.
-
-Full-screen and nested terminals are supported. Release checks exercise tmux,
-Herdr, and mosh-style redraw, input, split-pane, and reconnect behavior; a
-restored browser snapshot cannot answer historical terminal queries into the
-live process.
-
-File sharing is disabled unless `--files` or `--files-root` is present. Once
-enabled, browsers can browse that root and open referenced files on demand.
-Paths and contents use the session's E2EE WebSocket; the CLI rejects traversal,
-non-regular files, and symlink escapes. File flags cannot be combined with
-`--no-e2ee`. Refstream (unstable alpha) adds inline backed-file
-previews, while the Files panel works with either renderer.
-
-Refstream (alpha) also provides a scoped **Connect agent** invitation. An agent
-connects once, then can read, wait, and follow up without pairing again; control
-permission also allows terminal input and Ctrl-C. Task IDs, progress, and answers
-survive panel changes and reconnection. Reload recovery is kept only in that
-browser tab for up to four hours and still requires the local process to be
-running. Revoking access is immediate and does not stop the terminal. Files stay
-unavailable unless the host separately used `--files` or `--files-root`.
-See the [agent handoff protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md).
-The shell.online-specific behavior and fallback path are documented in the
-[Refstream alpha guide](https://shell.online/refstream/).
-
-## Security
-
-The CLI owns the PTY and encrypts terminal frames before sending them to the
-relay. The browser decrypts them locally. The relay still sees connection
-metadata, encrypted frame sizes, timing, labels, and session lifecycle events.
-Use `--no-e2ee` only when transport encryption without payload E2EE is required.
-
-Anyone with both the URL and password can open a share. Interactive shares can
-type with the permissions of the wrapped process; use `--read-only` when viewers
-should only watch. See the [security model](https://shell.online/security/) and
-[the security policy](.github/SECURITY.md).
-
-The CLI always prints the generated password and retains it while the local
-session is active. After `shell login`, it also saves an encrypted copy when
-that account has enabled its optional personal vault. A vault belongs to one
-person, not the team, and unlocks with its password or a supported passkey;
-the recovery key is the break-glass fallback. Without an owner-held copy there
-is intentionally no service-side recovery backdoor.
-
-## Accounts and containers
-
-Accounts are optional. `shell login` groups sessions from linked machines in
-[app.shell.online](https://app.shell.online/). The vault is separately optional,
-and the CLI reports whether each password was saved there.
-
-The published container keeps one encrypted shell, URL, and password across
-restarts:
-
-```sh
-docker compose up -d
-docker compose logs shell-online
-```
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=TeoSlayer/shell.online&type=Date)](https://www.star-history.com/#TeoSlayer/shell.online&Date)
+[Platform details](https://shell.online/platforms/) cover PTYs, routers, ROS,
+installers, and test caveats.
 
 ## Documentation
 
-- [Quick start](https://shell.online/docs/)
-- [Web app](https://shell.online/app/)
-- [CLI reference](https://shell.online/cli/)
-- [Mobile behavior](https://shell.online/mobile/)
-- [Refstream alpha](https://shell.online/refstream/)
-- [Reliability](https://shell.online/reliability/)
-- [End-to-end encryption](https://shell.online/e2ee/)
-- [Containers](https://shell.online/docker/)
-- [Platforms](https://shell.online/platforms/)
-- [Self-hosting](https://shell.online/self-hosting/) — Docker or Cloudflare
+| Start | Operate | Understand |
+| --- | --- | --- |
+| [Quick start](https://shell.online/docs/) | [Web app](https://shell.online/app/) | [Security](https://shell.online/security/) |
+| [CLI reference](https://shell.online/cli/) | [Mobile](https://shell.online/mobile/) | [E2EE](https://shell.online/e2ee/) |
+| [Containers](https://shell.online/docker/) | [Reliability](https://shell.online/reliability/) | [Refstream alpha](https://shell.online/refstream/) |
+| [Self-hosting](https://shell.online/self-hosting/) | [Platforms](https://shell.online/platforms/) | [Contributing](.github/CONTRIBUTING.md) |
 
 ## Development
 
@@ -170,14 +119,13 @@ go test -race ./...
 npm run test:app
 ```
 
-`npm run check:published` checks what shell.online is serving from outside: the
-two install scripts, the checksum and release manifests, and every release
-binary. The Downloads workflow runs it every half hour, runs a real install on
-macOS, Linux and Windows, and keeps one issue open while anything is missing.
+## Star History
 
-See [the contribution guide](.github/CONTRIBUTING.md) before opening a pull request.
+[![Star History Chart](https://api.star-history.com/svg?repos=TeoSlayer/shell.online&type=Date)](https://www.star-history.com/#TeoSlayer/shell.online&Date)
 
 ## Contributors
+
+[![shell.online contributors](https://contrib.rocks/image?repo=TeoSlayer/shell.online)](https://github.com/TeoSlayer/shell.online/graphs/contributors)
 
 [TeoSlayer](https://github.com/TeoSlayer) ·
 [teovl](https://github.com/teovl) ·
@@ -186,8 +134,4 @@ See [the contribution guide](.github/CONTRIBUTING.md) before opening a pull requ
 [monperrus](https://github.com/monperrus) ·
 [artemiia](https://github.com/artemiia)
 
-[![shell.online contributors](https://contrib.rocks/image?repo=TeoSlayer/shell.online)](https://github.com/TeoSlayer/shell.online/graphs/contributors)
-
-MIT licensed. See [`LICENSE`](LICENSE).
-
-Developed by [Pilot Protocol](https://pilotprotocol.network/).
+MIT licensed. Developed by [Pilot Protocol](https://pilotprotocol.network/).
