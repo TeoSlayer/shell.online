@@ -38,7 +38,7 @@
     "ws": "^8.21.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260905.1",
+    "@cloudflare/workers-types": "^5.20260916.1",
     "@types/node": "^26.5.1",
     "@types/ws": "^8.18.1",
     "esbuild": "^0.28.2",
