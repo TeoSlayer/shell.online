@@ -188,7 +188,14 @@ func TestHelpLoginTopicExplainsWhatIsPublished(t *testing.T) {
 	for _, expected := range []string{
 		"--no-browser",
 		"127.0.0.1",
-		"same machine",
+		/*
+		 * A browser elsewhere cannot reach the loopback listener, and the way
+		 * out of that is the thing the topic has to say: the help used to
+		 * promise the opposite, that the link had to be opened on this same
+		 * machine, and it was the only place that said what to do instead.
+		 */
+		"different computer",
+		"Paste that page's address",
 		"What is published",
 		"never the E2EE key",
 		"SHELL_ONLINE_CONFIG",

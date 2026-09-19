@@ -98,17 +98,27 @@ func TestASilentLoginDoesNotSettleTheQuestion(t *testing.T) {
 	}
 }
 
+// typed turns what somebody types into the line channel askRemoteStart reads.
+func typed(lines ...string) <-chan string {
+	channel := make(chan string, len(lines))
+	for _, line := range lines {
+		channel <- line
+	}
+	close(channel)
+	return channel
+}
+
 func TestAskRemoteStartAcceptsOnlyAnExplicitYes(t *testing.T) {
 	for _, answer := range []string{"y\n", "Y\n", "yes\n", "YES\n", " y \n"} {
 		var output bytes.Buffer
-		if !askRemoteStart(strings.NewReader(answer), &output, "ana@example.com", false) {
+		if !askRemoteStart(typed(strings.TrimSuffix(answer, "\n")), &output, "ana@example.com", false) {
 			t.Fatalf("%q should have been taken as yes", answer)
 		}
 	}
 	// Enter on its own is the common case of not reading the question.
 	for _, answer := range []string{"\n", "n\n", "no\n", "sure\n", "ok\n", ""} {
 		var output bytes.Buffer
-		if askRemoteStart(strings.NewReader(answer), &output, "ana@example.com", false) {
+		if askRemoteStart(typed(strings.TrimSuffix(answer, "\n")), &output, "ana@example.com", false) {
 			t.Fatalf("%q should not have been taken as yes", answer)
 		}
 	}
@@ -118,7 +128,7 @@ func TestAskRemoteStartAcceptsOnlyAnExplicitYes(t *testing.T) {
 // access?" would be true and useless.
 func TestAskRemoteStartSaysWhatItGrants(t *testing.T) {
 	var output bytes.Buffer
-	askRemoteStart(strings.NewReader("n\n"), &output, "ana@example.com", false)
+	askRemoteStart(typed("n"), &output, "ana@example.com", false)
 	text := output.String()
 	for _, phrase := range []string{"ana@example.com", "start processes", "without touching this terminal"} {
 		if !strings.Contains(text, phrase) {
@@ -153,7 +163,7 @@ func TestWantsDaemonRunning(t *testing.T) {
 func TestAskRemoteStartTreatsEnterAsLeaveItAlone(t *testing.T) {
 	for _, current := range []bool{false, true} {
 		var output bytes.Buffer
-		if got := askRemoteStart(strings.NewReader("\n"), &output, "ana@example.com", current); got != current {
+		if got := askRemoteStart(typed(""), &output, "ana@example.com", current); got != current {
 			t.Fatalf("enter with current=%v returned %v; it should change nothing", current, got)
 		}
 	}
@@ -162,8 +172,8 @@ func TestAskRemoteStartTreatsEnterAsLeaveItAlone(t *testing.T) {
 // The prompt shows which way enter will go.
 func TestAskRemoteStartShowsTheStandingAnswerAsTheDefault(t *testing.T) {
 	var granted, fresh bytes.Buffer
-	askRemoteStart(strings.NewReader("\n"), &granted, "ana@example.com", true)
-	askRemoteStart(strings.NewReader("\n"), &fresh, "ana@example.com", false)
+	askRemoteStart(typed(""), &granted, "ana@example.com", true)
+	askRemoteStart(typed(""), &fresh, "ana@example.com", false)
 	if !strings.Contains(granted.String(), "[Y/n]") {
 		t.Fatalf("a machine that agreed should offer [Y/n], got: %s", granted.String())
 	}
