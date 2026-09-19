@@ -85,4 +85,59 @@ if (blank.length > 0) {
   process.exit(1);
 }
 
+// The game skin must not be in what the corporate view downloads.
+//
+// src/game carries a renderer, a sprite atlas and a stylesheet of its own, for
+// a screen most sessions never open. It is reached through a dynamic import so
+// that none of it is fetched until somebody asks for it, and that is the sort
+// of property which holds right up until a convenient-looking direct import
+// puts it back. So it is checked rather than trusted.
+//
+// What is checked is everything the browser loads before first paint: the entry
+// script, plus the chunks Vite preloads alongside it because the entry imports
+// them statically. A lazily-imported chunk appears in neither, which is exactly
+// the point.
+const KEEP_MARKER = "__SHELL_KEEP__";
+
+async function eagerChunks(dir) {
+  let html;
+  try {
+    html = await readFile(join(dir, "index.html"), "utf8");
+  } catch {
+    // No index.html means this is not a client build; nothing to check.
+    return [];
+  }
+  const paths = new Set();
+  for (const [, src] of html.matchAll(/<script[^>]+src="([^"]+\.js)"/gu)) paths.add(src);
+  for (const [, href] of html.matchAll(
+    /<link[^>]+rel="modulepreload"[^>]+href="([^"]+\.js)"/gu,
+  )) {
+    paths.add(href);
+  }
+  // Written as absolute URLs against the site root; read them against dist.
+  return [...paths].map((path) => join(dir, path.replace(/^\//u, "")));
+}
+
+const leaked = [];
+for (const path of await eagerChunks(directory)) {
+  let body;
+  try {
+    body = await readFile(path, "utf8");
+  } catch {
+    continue;
+  }
+  if (body.includes(KEEP_MARKER)) leaked.push(path);
+}
+
+if (leaked.length > 0) {
+  console.error("check-bundle: the game skin is in the bundle the session list loads");
+  for (const path of leaked) console.error(`  ${path}`);
+  console.error("  src/game is meant to be reached only through the dynamic import in");
+  console.error("  src/App.tsx. Something now imports it directly, so every visitor pays");
+  console.error("  for a renderer and a sprite atlas to look at a list of sessions.");
+  console.error("  Find the static import and make it lazy again.");
+  process.exit(1);
+}
+
 console.log("check-bundle: no loopback addresses in the production build.");
+console.log("check-bundle: the game skin is not in the entry bundle.");

@@ -60,7 +60,13 @@ export { StatsStore };
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
-const MAX_ENCRYPTION_OVERHEAD_BYTES = 29;
+const LEGACY_ENCRYPTION_OVERHEAD_BYTES = 29;
+const MAX_ENCRYPTION_OVERHEAD_BYTES = 46;
+
+function validEncryptedFrameLength(length: number, plaintextLength: number): boolean {
+  return length === plaintextLength + LEGACY_ENCRYPTION_OVERHEAD_BYTES ||
+    length === plaintextLength + MAX_ENCRYPTION_OVERHEAD_BYTES;
+}
 /*
  * The last screen a host sent is kept so a viewer arriving while that machine
  * is away sees what it was doing instead of a blank terminal. Durable Object
@@ -857,8 +863,21 @@ export class TerminalSession extends DurableObject<Env> {
         await this.expire();
         return json({ exists: false }, 404, { "Cache-Control": "no-store" });
       }
+      /*
+       * host_last_seen_at dates a disconnection. Without it "disconnected" is
+       * one word for two different things -- a network blip the host's
+       * reconnect loop is about to heal, and a machine that was rebooted or
+       * lost power -- so a caller deciding whether a session is over has
+       * nothing to decide on. Absent until a host has connected once.
+       */
       return json(
-        { exists: true, status: this.meta.status, read_only: this.isReadOnly(), encrypted: this.isEncrypted() },
+        {
+          exists: true,
+          status: this.meta.status,
+          read_only: this.isReadOnly(),
+          encrypted: this.isEncrypted(),
+          host_last_seen_at: this.meta.hostLastSeenAt,
+        },
         200,
         { "Cache-Control": "no-store" },
       );
@@ -1292,7 +1311,7 @@ export class TerminalSession extends DurableObject<Env> {
         return;
 
       case Opcode.Pong:
-        if (frame.byteLength !== (this.isEncrypted() ? 34 : 5)) {
+        if (this.isEncrypted() ? !validEncryptedFrameLength(frame.byteLength, 5) : frame.byteLength !== 5) {
           safeClose(socket, 4002, "invalid latency response");
           return;
         }
@@ -1357,7 +1376,7 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (action === "confirmed-eof") {
-      if (frame.byteLength !== (this.isEncrypted() ? 30 : 1)) {
+      if (this.isEncrypted() ? !validEncryptedFrameLength(frame.byteLength, 1) : frame.byteLength !== 1) {
         safeClose(socket, 4002, "invalid confirmed EOF frame");
         return;
       }
@@ -1386,7 +1405,7 @@ export class TerminalSession extends DurableObject<Env> {
 
     if (action === "resize") {
       if (this.isEncrypted()) {
-        if (frame.byteLength !== 34) {
+        if (!validEncryptedFrameLength(frame.byteLength, 5)) {
           safeClose(socket, 4002, "invalid encrypted terminal size");
           return;
         }
@@ -1403,7 +1422,7 @@ export class TerminalSession extends DurableObject<Env> {
     }
 
     if (action === "ping") {
-      if (frame.byteLength !== (this.isEncrypted() ? 34 : 5)) {
+      if (this.isEncrypted() ? !validEncryptedFrameLength(frame.byteLength, 5) : frame.byteLength !== 5) {
         safeClose(socket, 4002, "invalid latency probe");
         return;
       }
@@ -1503,6 +1522,7 @@ export class TerminalSession extends DurableObject<Env> {
         return;
       }
       this.meta.status = "disconnected";
+      this.meta.hostLastSeenAt ??= Date.now();
       await this.persistMeta();
       await this.refreshLivePresence(true);
       await this.scheduleNextAlarm();
@@ -1512,6 +1532,13 @@ export class TerminalSession extends DurableObject<Env> {
 
     if (this.meta.status === "connected") {
       this.meta.status = "disconnected";
+      /*
+       * The close handler normally dates this. It does not run when the socket
+       * died with the isolate, which is the abrupt case -- a reboot or a power
+       * cut -- so the alarm is the first to notice. Only filled in when it is
+       * missing: a real close timestamp is always the better one.
+       */
+      this.meta.hostLastSeenAt ??= Date.now();
       this.meta.expiresAt = disconnectedSessionExpiry(Date.now(), false);
       await this.persistMeta();
       this.broadcastStatus();

@@ -26,6 +26,8 @@ import type {
   Comment,
   Device,
   Feedback,
+  GameCollectionRun,
+  GameProfile,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -348,6 +350,26 @@ function toFeedback(row: Row): Feedback {
  * atomic -- claiming queued work, marking a code consumed -- are single
  * statements, so two instances of the service can serve the same database.
  */
+/**
+ * The skins an account owns, from the JSON text they are stored as.
+ *
+ * A value that will not parse is read as owning nothing rather than throwing.
+ * A save that cannot be read should cost somebody their hats, not their
+ * ability to open the game at all.
+ */
+function readOwned(value: unknown): string[] {
+  if (Array.isArray(value)) return value.filter((entry): entry is string => typeof entry === "string");
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export class PostgresStore implements Store {
   private constructor(private readonly pool: pg.Pool) {}
 
@@ -1015,6 +1037,8 @@ export class PostgresStore implements Store {
         "DELETE FROM session_key_shares WHERE uid = $1",
         "DELETE FROM account_keys WHERE uid = $1",
         "DELETE FROM account_activity WHERE uid = $1",
+        /* The keep goes with the account. It is nobody else's progress. */
+        "DELETE FROM game_profiles WHERE uid = $1",
         "DELETE FROM comments WHERE author_uid = $1",
         "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
         /* The address an invite was sent to is theirs once they accepted it. */
@@ -1641,6 +1665,131 @@ export class PostgresStore implements Store {
       joinedAt: row.joined_at as number,
       days: byUid.get(row.uid as string) ?? [],
       internal: isInternal((row.email as string | null) ?? ""),
+    }));
+  }
+
+  /* ---- The saved game ---- */
+
+  async gameProfile(uid: string): Promise<GameProfile | null> {
+    const rows = await this.rows("SELECT * FROM game_profiles WHERE uid = $1", [uid]);
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      uid: row.uid as string,
+      characterClass: row.character_class as string,
+      skinId: row.skin_id as string,
+      liveryId: (row.livery_id as string) ?? "",
+      owned: readOwned(row.owned),
+      spent: Number(row.spent),
+      gathering: row.gathering === true,
+      tokens: Number(row.tokens),
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  async putGameProfile(profile: GameProfile): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO game_profiles
+         (uid, character_class, skin_id, livery_id, owned, spent, gathering, tokens, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (uid) DO UPDATE SET
+         character_class = EXCLUDED.character_class,
+         skin_id = EXCLUDED.skin_id,
+         livery_id = EXCLUDED.livery_id,
+         owned = EXCLUDED.owned,
+         spent = EXCLUDED.spent,
+         gathering = EXCLUDED.gathering,
+         tokens = EXCLUDED.tokens,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        profile.uid,
+        profile.characterClass,
+        profile.skinId,
+        profile.liveryId,
+        JSON.stringify(profile.owned),
+        profile.spent,
+        profile.gathering,
+        profile.tokens,
+        profile.createdAt,
+        profile.updatedAt,
+      ],
+    );
+  }
+
+  /**
+   * One run, and its cost, in a single transaction.
+   *
+   * The total on the profile is the sum of these rows, so the two have to move
+   * together or the vial can disagree with the breakdown behind it. The insert
+   * makes the profile when there is not one: the agent reporting is proof the
+   * account is real, and losing somebody's first run because they had not
+   * opened the game yet would be a hole in the account nobody could explain.
+   */
+  async recordCollectionRun(run: GameCollectionRun): Promise<void> {
+    /*
+     * One statement, so the row and the total cannot come apart.
+     *
+     * The total on the profile is the sum of these rows, and the second insert
+     * draws its numbers from what the first one actually wrote -- so a run that
+     * was already recorded inserts nothing and therefore adds nothing. Written
+     * as two statements in a transaction, the conflict clause skipped the
+     * duplicate row and the token add ran anyway, which doubled the bill of any
+     * agent that reported, lost the reply and retried. The bill is the one
+     * number in this game that stands for real money.
+     *
+     * The profile is made when there is not one: the agent reporting is proof
+     * the account is real, and losing somebody's first run because they had not
+     * opened the keep yet would be a hole nobody could explain afterwards.
+     */
+    await this.pool.query(
+      `WITH recorded AS (
+         INSERT INTO game_collection_runs
+           (id, uid, device_id, device_name, ran_at, tokens,
+            pull_requests, commits, insertions, deletions, error)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING uid, tokens, ran_at
+       )
+       INSERT INTO game_profiles (uid, gathering, tokens, created_at, updated_at)
+       SELECT uid, TRUE, tokens, ran_at, ran_at FROM recorded
+       ON CONFLICT (uid) DO UPDATE SET
+         tokens = game_profiles.tokens + EXCLUDED.tokens,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        run.id,
+        run.uid,
+        run.deviceId,
+        run.deviceName,
+        run.ranAt,
+        run.tokens,
+        run.pullRequests,
+        run.commits,
+        run.insertions,
+        run.deletions,
+        run.error,
+      ],
+    );
+  }
+
+  async listCollectionRuns(uid: string, limit = 20): Promise<GameCollectionRun[]> {
+    const rows = await this.rows(
+      `SELECT * FROM game_collection_runs
+       WHERE uid = $1 ORDER BY ran_at DESC LIMIT $2`,
+      [uid, limit],
+    );
+    return rows.map((row) => ({
+      id: row.id as string,
+      uid: row.uid as string,
+      deviceId: row.device_id as string,
+      deviceName: row.device_name as string,
+      ranAt: Number(row.ran_at),
+      tokens: Number(row.tokens),
+      pullRequests: Number(row.pull_requests),
+      commits: Number(row.commits),
+      insertions: Number(row.insertions),
+      deletions: Number(row.deletions),
+      error: row.error as string,
     }));
   }
 

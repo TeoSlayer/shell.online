@@ -60,6 +60,19 @@ type statusError struct {
 
 func (failure *statusError) Error() string { return failure.message }
 
+// Unauthorized reports that the accounts service refused a token.
+//
+// It exists so the poll loop can tell "this machine's credentials are not
+// accepted" from every other reason a request fails. The service is the
+// authority on its own tokens: a machine whose clock is slow, or whose token
+// was revoked or invalidated before its stated expiry, has no way to know
+// that from the expiry time it was handed, and would otherwise present the
+// same dead token every two seconds for as long as it stayed up.
+func Unauthorized(err error) bool {
+	var failure *statusError
+	return errors.As(err, &failure) && failure.status == http.StatusUnauthorized
+}
+
 // maxErrorBytes caps how much of a failing body is read into an error message.
 const maxErrorBytes = 4 << 10
 
@@ -288,6 +301,11 @@ type AccountSession struct {
 	// connected, disconnected, exited, missing or unknown. Empty when the
 	// service has no relay to ask.
 	RelayStatus string `json:"relayStatus,omitempty"`
+	// HostLastSeenAt is when the relay last held the machine's host socket,
+	// in milliseconds. It dates a disconnection, which is what separates a
+	// network blip from a machine that was rebooted or lost power. Absent
+	// when no host has ever reached the session.
+	HostLastSeenAt *int64 `json:"hostLastSeenAt,omitempty"`
 }
 
 // ListSessions returns every session this account has published, newest first.
@@ -381,6 +399,33 @@ func (client *Client) PollCommands(
 		return nil, fmt.Errorf("decode commands: %w", err)
 	}
 	return decoded.Commands, nil
+}
+
+// GatheredStats is what one gathering run found, as counts.
+//
+// Counts, and a sentence saying what went wrong. There is deliberately nowhere
+// in this struct for a branch name, a commit message, a path or a line of
+// output: the service on the other end refuses anything else, and a shape that
+// cannot carry those cannot leak them because somebody later found it
+// convenient. See internal/stats for the collection itself.
+type GatheredStats struct {
+	// ID names the run, so reporting twice after a lost reply costs nothing.
+	ID           string `json:"id"`
+	Tokens       int64  `json:"tokens"`
+	PullRequests int64  `json:"pull_requests"`
+	Commits      int64  `json:"commits"`
+	Insertions   int64  `json:"insertions"`
+	Deletions    int64  `json:"deletions"`
+	Error        string `json:"error,omitempty"`
+}
+
+// ReportStats sends what a gathering run found.
+//
+// Authenticated as the machine. This is the one figure in the game a browser
+// may not set, because it stands for money somebody has actually spent.
+func (client *Client) ReportStats(ctx context.Context, accessToken string, run GatheredStats) error {
+	_, err := client.do(ctx, http.MethodPost, "/api/agent/stats", accessToken, run)
+	return err
 }
 
 // FinishCommand reports a command as done, with an error when it failed.

@@ -59,7 +59,7 @@ import { usePageTitle } from "../lib/page-title";
 import { wasJustLinked, withoutLinkedFlag } from "../lib/linked";
 import { shouldOpenSurface } from "../lib/surface-navigation";
 import { SearchSelect } from "../components/SearchSelect";
-import { sessionEnded, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
+import { keepKnownLiveness, sessionEnded, sessionEndedAt, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 import {
   readTerminalRenderer,
   writeTerminalRenderer,
@@ -79,7 +79,7 @@ const SESSION_SCOPES = [
   { value: "all", label: "All sessions", detail: "Available and finished sessions" },
   { value: "write", label: "Write access", detail: "Sessions you can control" },
   { value: "read", label: "Read access", detail: "Sessions you can watch" },
-  { value: "finished", label: "Finished", detail: "Processes that have exited" },
+  { value: "finished", label: "Finished", detail: "Processes that exited, and machines that stopped answering" },
 ];
 
 /*
@@ -257,7 +257,7 @@ export function Workspace() {
           canType: canEdit(arrived, result.you ?? null),
         });
       }
-      setSessions(result.sessions);
+      setSessions((current) => keepKnownLiveness(current, result.sessions));
       setMembers(result.members ?? []);
       setYou(result.you ?? null);
       await shareAnyPending(result.sessions, result.members ?? [], result.you ?? null);
@@ -1215,7 +1215,7 @@ function SessionGroup({
                 <td className="table-quiet" data-label={live ? "Open for" : "Ran for"}>
                   {live ? (
                     <>{sessionStateLabel(session)} · {elapsed(session.startedAt, now)}</>
-                  ) : elapsed(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? now)}
+                  ) : elapsed(session.startedAt, sessionEndedAt(session, now))}
                   {!live && session.exitCode !== undefined && (
                     <span className="table-exit">exit {session.exitCode}</span>
                   )}

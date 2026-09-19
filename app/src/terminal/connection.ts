@@ -1,5 +1,5 @@
 import { Opcode, encodeFrame, isSnapshotOpcode } from "./protocol";
-import { BrowserFrameCipher, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
+import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
 import {
   DESKTOP_TERMINAL_GRID,
   LEGACY_MOBILE_TERMINAL_GRID,
@@ -262,7 +262,8 @@ export class TerminalConnection {
           this.proven = true;
           this.options.events.onUnlocked?.();
         }
-      } catch {
+      } catch (error) {
+        if (error instanceof E2EEReplayError) return;
         /*
          * A frame that will not open means the derived key is wrong. Drop it,
          * stop retrying, and ask again rather than looping on bad output.

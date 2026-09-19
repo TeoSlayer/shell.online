@@ -1,5 +1,7 @@
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthProvider";
+import { Booting } from "./components/Booting";
 import { RequireAuth, RedirectIfAuthed } from "./auth/RequireAuth";
 import { SignIn } from "./routes/SignIn";
 import AuthCallback from "./routes/AuthCallback";
@@ -20,10 +22,34 @@ import { VaultProvider } from "./vault/VaultProvider";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 import { FeedbackProvider } from "./feedback/FeedbackProvider";
 
-export default function App() {
+/*
+ * The game skin, and the only reference to it anywhere outside src/game.
+ *
+ * Imported this way on purpose: the keep carries an engine, a sprite atlas and
+ * a stylesheet of its own, and none of that belongs in the bundle somebody
+ * downloads to look at a list of sessions. The dynamic import puts all of it in
+ * a separate chunk that is fetched the first time somebody asks for it, and
+ * `npm run verify:bundle` fails the build if it ever leaks back into the entry
+ * chunk.
+ *
+ * The fallback is the app's ordinary Booting card rather than something
+ * game-shaped, for the same reason: anything prettier would have to be imported
+ * here, and then it would not be in the game's chunk either.
+ */
+const GameRoute = lazy(() => import("./game/GameRoute"));
+
+/**
+ * Everything below sign-in: the providers that need an identity, and the
+ * routes.
+ *
+ * Split out from App so the development QA harness can mount the same tree
+ * with a stand-in identity on a machine that has no sign-in provider
+ * configured. Production mounts it through App below, under the real provider,
+ * and nothing about the guards changes either way.
+ */
+export function SignedInApp() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
+    <>
         <VaultProvider>
         <TeamKeyProvider>
         <FeedbackProvider>
@@ -103,6 +129,17 @@ export default function App() {
               </RequireAuth>
             }
           />
+          {/* The same product, in armour. See src/game/GameRoute.tsx. */}
+          <Route
+            path="/game"
+            element={
+              <RequireAuth>
+                <Suspense fallback={<Booting label="Opening the keep" />}>
+                  <GameRoute />
+                </Suspense>
+              </RequireAuth>
+            }
+          />
           {/*
             No guard here. CliAuthorize handles the signed-out case itself so
             it can send the user back to this exact URL, query string included.
@@ -113,6 +150,15 @@ export default function App() {
         </FeedbackProvider>
         </TeamKeyProvider>
         </VaultProvider>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <SignedInApp />
       </AuthProvider>
     </BrowserRouter>
   );

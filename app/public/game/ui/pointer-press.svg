@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="26" height="30" viewBox="0 0 26 30">
+  <!--
+    The same arrowhead, lit, for anything that can be pressed. A second file
+    rather than a filter, because a cursor cannot be styled once it is a cursor.
+  -->
+  <path d="M3 2 L3 22 L8.5 17.5 L12 26 L16.5 24 L13 15.5 L20 15 Z"
+        fill="#ffe9a8" stroke="#241d15" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M5 6 L5 17 L8.5 14 Z" fill="#ffffff" opacity="0.8"/>
+</svg>

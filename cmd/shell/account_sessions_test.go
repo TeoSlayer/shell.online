@@ -143,6 +143,9 @@ func TestRunSessionCommandRoutesLs(t *testing.T) {
 
 func TestAccountSessionStatusMatchesTheWebApp(t *testing.T) {
 	closed := int64(1)
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	justNow := now.Add(-30 * time.Second).UnixMilli()
+	longAgo := now.Add(-2 * time.Hour).UnixMilli()
 	tests := []struct {
 		session account.AccountSession
 		status  string
@@ -156,12 +159,18 @@ func TestAccountSessionStatusMatchesTheWebApp(t *testing.T) {
 		{account.AccountSession{RelayStatus: "missing"}, "unavailable", true},
 		{account.AccountSession{RelayStatus: "exited"}, "finished", true},
 		{account.AccountSession{ClosedAt: &closed, RelayStatus: "connected"}, "finished", true},
+		/* A machine that dropped a moment ago is reconnecting, not gone. */
+		{account.AccountSession{RelayStatus: "disconnected", HostLastSeenAt: &justNow}, "offline", false},
+		/* One that has said nothing for hours was rebooted or lost power. */
+		{account.AccountSession{RelayStatus: "disconnected", HostLastSeenAt: &longAgo}, "machine gone", true},
+		/* Waiting to be resumed is what a persistent session is for. */
+		{account.AccountSession{RelayStatus: "disconnected", HostLastSeenAt: &longAgo, Persistent: true}, "offline", false},
 	}
 	for _, test := range tests {
-		if got := accountSessionStatus(test.session); got != test.status {
+		if got := accountSessionStatus(test.session, now); got != test.status {
 			t.Errorf("status(%+v) = %q, want %q", test.session, got, test.status)
 		}
-		if got := accountSessionEnded(test.session); got != test.ended {
+		if got := accountSessionEnded(test.session, now); got != test.ended {
 			t.Errorf("ended(%+v) = %v, want %v", test.session, got, test.ended)
 		}
 	}

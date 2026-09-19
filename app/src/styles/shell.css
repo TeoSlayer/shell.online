@@ -207,6 +207,55 @@
 }
 
 /*
+ * The way into the game skin, last in the bar.
+ *
+ * The button is the brand's terminal green rather than the page's blue: it is
+ * the one control here that leaves the console for somewhere else, and it
+ * should read as a door rather than as another action on this page.
+ */
+.launch-game {
+  display: flex;
+  position: relative;
+  align-items: center;
+}
+
+.launch-game-button {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--terminal);
+  color: var(--acid);
+  align-items: center;
+  justify-content: center;
+  transition: transform 160ms var(--ease), border-color 160ms var(--ease);
+}
+
+.launch-game-button:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+/*
+ * Decoration, and marked as such: the control already carries the same words
+ * as its accessible name, so announcing this as well would say it twice.
+ */
+.launch-game-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  padding: 6px 10px;
+  border-radius: var(--radius-chip);
+  background: var(--terminal);
+  color: var(--terminal-ink);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/*
  * A page action in the bar keeps its label on one line. `.btn` is built for a
  * form, where it is full width and wrapping is not a question; up here the row
  * is tight enough on a phone that "Export CSV" broke across two lines and the

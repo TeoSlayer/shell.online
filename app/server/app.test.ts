@@ -271,6 +271,51 @@ describe("session registry", () => {
     expect(one).toHaveBeenCalledWith(session.id);
   });
 
+  /*
+   * The reboot and power-cut case: the machine never got to PATCH the session,
+   * so nothing ever closed the row and the browser went on offering it. Once
+   * the relay has given up on the session there is nothing left to come back,
+   * and the service writes the end down itself.
+   */
+  it("closes a session the relay no longer has", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const state = { relayStatus: "missing" as const, relayCheckedAt: 5_000, hostLastSeenAt: 4_000 };
+    const many = vi.fn(async () => new Map([[session.id, state]]));
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      sessionLiveness: { one: vi.fn(async () => state), many },
+    });
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+
+    /* Answered as finished straight away, not only on the next poll. */
+    expect(listed.body.sessions[0].closedAt).toBe(4_000);
+    expect(listed.body.sessions[0].relayStatus).toBeUndefined();
+    /* And written down, so it is not asked about again. */
+    expect((await store.sessionInOrg(listed.body.you.orgId, session.id))?.closedAt).toBe(4_000);
+  });
+
+  it("leaves a machine that is merely away open to reconnecting", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const state = { relayStatus: "disconnected" as const, relayCheckedAt: 5_000, hostLastSeenAt: 4_000 };
+    handle = createApp({
+      store,
+      verifyIdToken: verifyIdToken as never,
+      allowedOrigins: [ORIGIN],
+      sessionLiveness: { one: vi.fn(async () => state), many: vi.fn(async () => new Map([[session.id, state]])) },
+    });
+
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+
+    expect(listed.body.sessions[0].closedAt).toBeUndefined();
+    /* The browser decides when this has gone on too long; see hostGone. */
+    expect(listed.body.sessions[0]).toMatchObject({ relayStatus: "disconnected", hostLastSeenAt: 4_000 });
+  });
+
   it("does not query relay liveness after the CLI has reported an exit", async () => {
     const tokens = await login();
     await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });

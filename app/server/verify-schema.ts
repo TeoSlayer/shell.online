@@ -35,6 +35,13 @@ const REQUIRED_TABLES = [
   "comments",
   "deleted_accounts",
   "feedback",
+  /*
+   * The game's two. The Worker serves /api/game, /api/game/runs and the
+   * gathering from these, so a deploy that reached production without them
+   * would verify clean and then fail on the first request to the keep.
+   */
+  "game_collection_runs",
+  "game_profiles",
   "invites",
   "memberships",
   "notifications",

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0d1009" />
+    <title>Shell Keep — preview</title>
+    <!--
+      A development-only door onto the game skin.
+
+      The real route is /game inside the app, behind sign-in. This page mounts
+      the same component with no authentication around it so the interface can
+      be looked at on a machine that has no provider configured.
+
+      It is not an input to `vite build` -- that builds index.html and nothing
+      else -- so this exists while `npm run dev` is running and in no
+      deployment. See src/game/preview.tsx.
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/game/preview.tsx"></script>
+  </body>
+</html>

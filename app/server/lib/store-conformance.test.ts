@@ -147,6 +147,22 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
 }
 
 const TABLES = [
+  /*
+   * The game's two tables truncate with the rest.
+   *
+   * They were missed when the game was added, and the way that showed was a
+   * failure nowhere near the cause: `recordCollectionRun` makes a profile row
+   * when there is not one, so a run recorded in one test left a `game_profiles`
+   * row behind, and the next test's `putGameProfile` upserted onto it. The
+   * upsert deliberately keeps the original `created_at` -- which is correct, and
+   * meant the leaked row's timestamp came back instead of the one the test had
+   * just written.
+   *
+   * Only against Postgres, because MemoryStore is built fresh per test. So it
+   * passed locally for anybody without a database and failed in CI.
+   */
+  "game_collection_runs",
+  "game_profiles",
   "feedback",
   "account_activity",
   "app_events",
@@ -569,6 +585,162 @@ for (const implementation of implementations) {
         const roster = await store.members("org_1");
         expect(roster.find((entry) => entry.uid === "uid-2")?.accountKey).toBe("pk-bo");
         expect(roster.find((entry) => entry.uid === "uid-1")?.accountKey).toBeUndefined();
+      });
+    });
+
+    describe("the saved game", () => {
+      const profile = (overrides: Record<string, unknown> = {}) => ({
+        uid: "uid-1",
+        characterClass: "codex",
+        skinId: "gilt",
+        liveryId: "moss",
+        owned: ["ash", "gilt"],
+        spent: 300,
+        gathering: true,
+        tokens: 12_345,
+        createdAt: 1000,
+        updatedAt: 1000,
+        ...overrides,
+      });
+
+      it("has nothing for somebody who has never opened it", async () => {
+        expect(await store.gameProfile("uid-nobody")).toBeNull();
+      });
+
+      /* ---- what the gathering cost ---- */
+
+      const run = (overrides: Record<string, unknown> = {}) => ({
+        id: "run-1",
+        uid: "uid-1",
+        deviceId: "dev-1",
+        deviceName: "laptop",
+        ranAt: 5000,
+        tokens: 1200,
+        pullRequests: 3,
+        commits: 9,
+        insertions: 410,
+        deletions: 88,
+        error: "",
+        ...overrides,
+      });
+
+      it("has no runs for somebody who has never gathered", async () => {
+        expect(await store.listCollectionRuns("uid-nobody")).toEqual([]);
+      });
+
+      it("keeps a run and hands it back whole", async () => {
+        await store.recordCollectionRun(run());
+        expect(await store.listCollectionRuns("uid-1")).toEqual([run()]);
+      });
+
+      it("adds what a run cost to the account's total", async () => {
+        /*
+         * The figure in the vial is the sum of these rows. A writer that could
+         * record a run without adding its cost would let the vial disagree with
+         * the breakdown behind it, which is the one thing the breakdown exists
+         * to prevent.
+         */
+        await store.putGameProfile(profile({ tokens: 0 }));
+        await store.recordCollectionRun(run({ tokens: 500 }));
+        await store.recordCollectionRun(run({ id: "run-2", tokens: 700, ranAt: 6000 }));
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(1200);
+      });
+
+      it("records a run for an account that has not opened the game", async () => {
+        /*
+         * The agent reporting is proof the account is real. Losing somebody's
+         * first run because they had not opened the keep yet would be a hole in
+         * the account that nobody could explain afterwards.
+         */
+        await store.recordCollectionRun(run({ uid: "uid-new", tokens: 90 }));
+        const made = await store.gameProfile("uid-new");
+        expect(made?.tokens).toBe(90);
+        expect(await store.listCollectionRuns("uid-new")).toHaveLength(1);
+      });
+
+      it("hands back the newest run first", async () => {
+        await store.recordCollectionRun(run({ id: "old", ranAt: 1000 }));
+        await store.recordCollectionRun(run({ id: "new", ranAt: 9000 }));
+        await store.recordCollectionRun(run({ id: "middle", ranAt: 5000 }));
+        expect((await store.listCollectionRuns("uid-1")).map((entry) => entry.id))
+          .toEqual(["new", "middle", "old"]);
+      });
+
+      it("keeps one account's runs out of another's", async () => {
+        await store.recordCollectionRun(run());
+        await store.recordCollectionRun(run({ id: "run-2", uid: "uid-2" }));
+        expect(await store.listCollectionRuns("uid-1")).toHaveLength(1);
+        expect(await store.listCollectionRuns("uid-2")).toHaveLength(1);
+      });
+
+      it("keeps a run that failed", async () => {
+        /* A run that failed still happened, and hiding it makes the vial wrong. */
+        await store.recordCollectionRun(run({ tokens: 40, error: "no git on PATH" }));
+        const [only] = await store.listCollectionRuns("uid-1");
+        expect(only.error).toBe("no git on PATH");
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(40);
+      });
+
+      it("takes the same run twice without charging for it twice", async () => {
+        /*
+         * An agent that reports, loses the reply and retries must not double
+         * somebody's bill, and the bill is the one number in this game that
+         * stands for real money. The run's own id is what makes the write
+         * idempotent -- and the total has to be idempotent with it, which is
+         * the half that is easy to miss: skipping the duplicate row while
+         * adding its tokens anyway looks correct and is not.
+         */
+        await store.recordCollectionRun(run({ tokens: 300 }));
+        await store.recordCollectionRun(run({ tokens: 300 }));
+        expect(await store.listCollectionRuns("uid-1")).toHaveLength(1);
+        expect((await store.gameProfile("uid-1"))?.tokens).toBe(300);
+      });
+
+      it("limits how many runs it hands back", async () => {
+        for (let index = 0; index < 8; index += 1) {
+          await store.recordCollectionRun(run({ id: `run-${index}`, ranAt: 1000 + index }));
+        }
+        expect(await store.listCollectionRuns("uid-1", 3)).toHaveLength(3);
+      });
+
+      it("keeps a profile and hands it back whole", async () => {
+        await store.putGameProfile(profile());
+        expect(await store.gameProfile("uid-1")).toEqual(profile());
+      });
+
+      it("replaces rather than adding a second one", async () => {
+        await store.putGameProfile(profile());
+        await store.putGameProfile(profile({ skinId: "moss", spent: 400, updatedAt: 2000 }));
+        const stored = await store.gameProfile("uid-1");
+        expect(stored?.skinId).toBe("moss");
+        expect(stored?.spent).toBe(400);
+        /* Created at is the first save, not the latest. */
+        expect(stored?.createdAt).toBe(1000);
+      });
+
+      it("keeps one account's keep out of another's", async () => {
+        await store.putGameProfile(profile());
+        await store.putGameProfile(profile({ uid: "uid-2", skinId: "wine" }));
+        expect((await store.gameProfile("uid-1"))?.skinId).toBe("gilt");
+        expect((await store.gameProfile("uid-2"))?.skinId).toBe("wine");
+      });
+
+      it("does not hand back a list that can be changed underneath it", async () => {
+        /*
+         * The in-memory store is the one that can get this wrong, by handing
+         * out the array it is holding. A caller that then pushed to it would
+         * be editing the database.
+         */
+        await store.putGameProfile(profile());
+        const first = await store.gameProfile("uid-1");
+        first?.owned.push("smuggled");
+        expect((await store.gameProfile("uid-1"))?.owned).toEqual(["ash", "gilt"]);
+      });
+
+      it("goes when the account goes", async () => {
+        await store.putGameProfile(profile({ uid: "uid-7" }));
+        await store.deleteAccount("uid-7", { dissolve: false }, 5000);
+        expect(await store.gameProfile("uid-7")).toBeNull();
       });
     });
 

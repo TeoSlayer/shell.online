@@ -6,43 +6,191 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
-- The statistics dashboard now carries the accounts, laid out to be read in
-  one pass: how many there are and how that moved against the period before,
-  how many signed up and how many opened the app, how many of those had
-  signed up earlier, a line of sign-ups and use for every day since the first
-  account, what accounts did in the app, how many days each of them has been
-  in it, and which sign-up weeks came back. It sits directly under the funnel,
-  which ends at a first keystroke, because an account is what the funnel is
-  for.
-- Accounts of your own are left out of every account figure, named by
-  `STATS_EXCLUDE` on the accounts app: addresses, or domains and their
-  subdomains. The team's accounts are the most active there are and were
-  always going to use the product, so leaving them in makes a quiet week look
-  like a good one. The dashboard says how many it left out, so the figure can
-  be checked rather than taken on trust. What those accounts do in the app is
-  counted apart from what customers do and never reported.
+- The statistics dashboard now includes account growth and activity: total
+  accounts, sign-ups, app opens, returning accounts, daily trends, feature
+  usage, active days, and retention cohorts.
+- `STATS_EXCLUDE` lets operators omit internal addresses or domains from
+  customer statistics. The dashboard reports the excluded count without
+  exposing identifiers.
 
 ### Fixed
 
-- The scheduled download check installed on three fresh GitHub runners every
-  half hour and was counted as installs, installer runs, installer outcomes
-  and new machines, which is where a dashboard day of ninety installs and
-  fifty-six new machines came from. Both install scripts now take
-  `SHELL_ONLINE_INSTALL_CHECK=1`, which puts a check user agent on every
-  request and reports nothing; the workflow sets it, and the site counts
-  that agent, and monitors in general, as crawlers.
-- HTTP libraries and PowerShell's web cmdlets were classified as desktop
-  browsers, so a Node script or a Windows install read as a person reading
-  the installer. They are tools now, and a Windows install counts as a run.
-- The installs tile drew the sessions line. The trend now carries installs
-  and started sessions as their own series, crawlers left out of every line.
-- "New" people are measured from the day a surface's people were first
-  counted, per surface, and while a whole range has not yet passed since
-  that day the split is replaced by the day it becomes meaningful. Machine
-  rows keyed the old way are dropped once, so they do not sit in the cohorts
-  as machines that never came back.
-- Pages a browser fetched ahead of time (prefetch, prerender) are not views.
-- The 24h range says that people are counted by UTC day, so over two days.
+- Scheduled download checks no longer inflate installs, installer outcomes,
+  or machine counts. Install checks identify themselves and do not report
+  telemetry; monitors, HTTP libraries, and PowerShell web requests are no
+  longer classified as people.
+- Install and session tiles use their own trend series, prefetched pages are
+  ignored, and new-versus-returning labels wait until enough history exists.
+- `shell login` no longer sits there for eleven seconds after it has already
+  succeeded. On a machine with the background service installed it asked the
+  supervisor to replace the daemon and then waited for that to finish, and
+  launchd throttles a relaunch by ten seconds -- so a login that had linked
+  the machine, exchanged its token and written its credentials went silent at
+  the very end. The restart is still asked for; it is no longer waited on,
+  because nothing about the login depends on the answer.
+- `shell login --no-browser` now accepts the sign-in pasted back. The flag is
+  for a machine with no browser on it, so the link gets opened on a different
+  computer -- whose browser is then sent to a loopback address that means
+  nothing there and stops on a page that will not load, with the whole
+  callback in the address bar. There was nowhere to put it and the CLI waited
+  five minutes for a callback that could never arrive. Paste that page's
+  address, or just the code, and the sign-in completes. A paste that is not
+  the answer says what is wrong and the login keeps waiting.
+
+### Fixed
+
+- A session could be reported as "Status unavailable" indefinitely while the
+  relay knew perfectly well it was connected. The service seeds its view of the
+  relay a couple of sessions per request, and each request may land on a worker
+  instance whose cache is empty; whatever a single cold batch did not reach was
+  answered as unknown. The order it worked through was decided by a fixed
+  property of the session, so in every cold instance the same one sorted last
+  and was never checked by anybody. A batch now covers an ordinary working set,
+  and sessions that are equally stale are chosen between at random, so one that
+  misses a request is very unlikely to miss the next. The per-minute budget
+  that actually protects the relay is unchanged.
+- Shell Keep on a phone. The map can be pulled back: three zoom controls sit up
+  the right-hand edge, and the camera's limits are now worked out from the
+  canvas and re-read whenever it changes size, rather than once from a default
+  800×600 that no phone has. The HUD is sized for the screen it is on, which
+  includes a handset held sideways — every responsive rule in the game asked
+  about the window's width, and a phone in landscape is 844 pixels across.
+  The game opens at a zoom chosen for the screen instead of a constant that
+  showed about eight tiles of country on a handset.
+- A soldier is a session that is live and writable. Sessions whose process had
+  exited, whose machine the relay had lost or that had been away too long to
+  come back, or that were shared read-only were standing on the field as live
+  soldiers, so the garrison only ever grew and the session count on the HUD
+  read high. The field now reads liveness through the same functions as the
+  session list, including the one that keeps a known state across a poll that
+  did not manage to look.
+- The Unmade appear. They used to march only on a hero whose session name read
+  as bug work, which on a real team meant they never marched at all, and they
+  were drawn at a third the height of the figures fighting them.
+
+### Added
+
+- The kingdom can be short-handed, and says so. Waves are sized from the number
+  of people on the team, and it takes two live sessions a hero to meet them.
+  Below that the camera takes a veil of blood at its corners, heavier the
+  shorter the garrison is, and the HUD says in words how many more sessions
+  would hold the line. Nothing is lost by being short and nothing counts down:
+  starting a session anywhere on the team clears it within one poll.
+
+## [0.17.0] — 2026-09-18
+
+### Changed
+
+- `shell login` asks whether your browser may start sessions on this machine
+  once, on the first login for that account, instead of at every sign-in. The
+  question was re-put every time so that somebody who missed it had a way back
+  to it; the way back is the line printed after every login, which now names
+  the command that reverses whichever way it stands, on all three branches.
+  Signing in again is not a consent decision. A different account signing in is,
+  so it is asked again. `--allow-remote-start` and `--no-remote-start` still
+  answer it outright, and still reverse a settled answer without a prompt.
+- Agreeing for the first time also installs the daemon as a user service -- a
+  LaunchAgent on macOS, a systemd user unit on Linux -- so the machine is
+  reachable after a restart without anybody logging in and running something.
+  That is the case the service exists for: a machine you want to reach from a
+  browser is a machine nobody is sitting at. Only on the first agreement, so
+  `shell service uninstall` is not quietly undone by the next login; a machine
+  that cannot install one still signs in and says what it could not do.
+- A login on a machine that has a service installed now restarts the daemon
+  through that service rather than spawning a detached one beside it.
+
+### Fixed
+
+- A session whose machine is rebooted or loses power now reaches Finished
+  instead of sitting in Write for the relay's twelve-hour retention. Nothing
+  used to close those sessions: the CLI reports an exit as its process ends,
+  and a machine that dies never gets to. Three things now do. The machine
+  closes them itself when it comes back up, having kept a note of what it left
+  running. The relay says when it last held a host socket, so a machine that
+  has been silent longer than any reconnect could take reads as "Machine gone"
+  rather than merely offline -- and reads as live again by itself if it comes
+  back. And a session the relay no longer has at all is written down as closed.
+- A signed-in machine no longer drops to "offline" while nothing is wrong with
+  it. What keeps a machine online is one thing -- the agent's poll, which the
+  service dates -- and two situations stopped that poll. A renewal that failed
+  stood the poll down for as long as the retry backoff, up to a minute, even
+  though renewal begins a minute *before* the token expires and the token in
+  hand was still good; the poll now continues while renewal retries on its own
+  schedule, and a poll that succeeds clears the backoff rather than leaving the
+  machine renewing on a minute's delay for the rest of its life. And a token
+  the service refused was never renewed at all if the machine's own clock said
+  it was still valid, so a skewed clock or a sign-in retired elsewhere left it
+  presenting the same dead token every two seconds until somebody ran
+  `shell login`. A refusal now renews whatever the clock says, and credentials
+  that are genuinely finished say so and ask for `shell login` instead of going
+  quiet.
+- Session state stopped flickering. A card could alternate between "Offline"
+  and "Status unavailable" every few seconds, and so between the Write and
+  Finished columns, while nothing about the session changed: a relay check
+  that was rate-limited, timed out, or landed on a worker with a cold cache
+  overwrote a state the service already had with "unknown". A failed check is
+  now a gap in knowledge rather than news, and no longer replaces what was
+  last seen. Machines that are away are also no longer re-confirmed every five
+  seconds, which used to spend the whole check budget and leave sessions nobody
+  had looked at yet reading "Status unavailable" indefinitely.
+
+## [0.16.2] — 2026-09-17
+
+### Fixed
+
+- Documentation now matches the ten-character generated password, the current
+  80×40 mobile grid and 80×24 legacy fallback, the complete Linux architecture
+  list, and the remote-start prompt shown on every interactive login. CLI help
+  topic lists now come from one tested source.
+
+## [0.16.1] — 2026-09-17
+
+### Changed
+
+- Shell Keep now leads with the state of the real work: active sessions and
+  how many are fixing, building, or waiting appear before cosmetic progression.
+  Selected sessions open in a stable edge panel with a direct route to the
+  terminal, rather than a card that chases a moving figure. Pause and holdings
+  menus use plain operational labels, fit without hiding the exit, and stack
+  cleanly on narrow screens. First launch explains the session-to-world mapping
+  before asking how the player should appear. Every session class and work
+  state now has a tested visual marker.
+- E2EE envelope v2 authenticates direction, sender stream, and sequence with a
+  bounded replay window; read-only input is rejected again inside the CLI; and
+  encrypted URL fragments can no longer be downgraded by relay metadata.
+
+### Added
+
+- A game skin over the web app, reached from a controller at the right of the
+  top bar and left again through a pause screen whose last item returns to the
+  session list. The Marches are ten holdings spread over open country, each one
+  a rename of a part of the product: the Forge is where features are built, the
+  Watch is where faults are met, the Chronicle is the audit log, the Vault
+  holds session passwords the service cannot open. Live sessions are wrights
+  standing in them, their class is the harness each one runs, and what they are
+  doing is read from what the session is called. Click one to see where it is
+  posted, which machine it came from and how long it has been out. Drag to
+  move, wheel to zoom, and a road book in the pause menu rides you to any
+  holding.
+
+  Levels come from work that has already happened, counted by the service from
+  your own sessions: how many ran and finished, on how many days, from how many
+  machines. Marks come from levelling, and the pedlar sells cloth and dye and
+  nothing that changes a number.
+
+  The elixir vial shows what statistics gathering has cost, itemised by run and
+  by machine. It is off until you turn it on, and the notice explaining what
+  your machine would read — and what it never reads — is one press from the
+  vial. The reading happens on your machine rather than on the service, because
+  sessions are encrypted end to end and the service holds no key; `shell stats`
+  prints exactly what would be sent, and sends nothing.
+
+  It costs the session list nothing: the whole game is one lazily imported
+  chunk, and the build fails if any of it reaches the bundle everybody else
+  downloads. It honours reduced motion — on the map as well as in the
+  interface — offers a safe-area inset for televisions, an interface-size
+  slider and colourblind palettes, and is navigable with a keyboard or a pad
+  throughout.
 
 ## [0.16.0] — 2026-09-15
 

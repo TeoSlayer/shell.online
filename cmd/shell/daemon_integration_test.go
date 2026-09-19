@@ -175,7 +175,9 @@ func TestDaemonRunsAQueuedStartWithNobodyAtTheTerminal(t *testing.T) {
 		t.Fatalf("nothing was launched: %v", err)
 	}
 	text := string(launched)
-	wantArguments := "argv: " + strings.Join(browserCommandArguments("htop"), " ")
+	// Browser-started commands cross an explicit flag boundary so a command
+	// named like one of shell.online's own flags cannot alter the wrapper.
+	wantArguments := "argv: -- " + strings.Join(browserCommandArguments("htop"), " ")
 	if !strings.Contains(text, wantArguments) {
 		t.Fatalf("expected %q to be launched, got:\n%s", wantArguments, text)
 	}

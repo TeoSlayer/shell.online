@@ -1,5 +1,5 @@
 {
-  "version": "0.16.0",
+  "version": "0.17.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -37,7 +37,7 @@
         ],
         [
           "Link a machine",
-          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell login --no-browser prints the URL instead of launching the browser, but the URL must still be opened on that same machine because the callback is deliberately loopback-only. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
+          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell login --no-browser prints the URL instead of launching the browser, for a machine with no browser on it; approve it anywhere, and if that browser cannot reach the loopback listener it stops on a page that will not load, whose address pasted back into the terminal completes the sign-in. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
         ],
         [
           "Work from the web app",
@@ -45,7 +45,7 @@
         ],
         [
           "Start sessions from the browser",
-          "shell login asks once whether your signed-in browser may start sessions on this machine. Agree and a small daemon runs in the background for as long as you stay signed in, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. A machine that sits idle and still has to be reachable can run shell service install instead."
+          "The first shell login on a machine asks whether your signed-in browser may start sessions there; after that the answer stands, and every login prints which way it went. Agree and a small daemon runs in the background for as long as you stay signed in, and is installed as a background service so the machine is still reachable after a restart, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. Remove that service with shell service uninstall, and put it back with shell service install."
         ],
         [
           "Organizations and collaboration",
@@ -104,7 +104,7 @@
         ],
         [
           "Start from the browser",
-          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while shell service install is the opt-in path for a machine that should remain reachable across logins.",
+          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while the first agreement installs a user service so the machine remains reachable across restarts; shell service uninstall removes it.",
           [
             [
               "shell login --no-remote-start",
@@ -158,7 +158,7 @@
     "mobile": {
       "eyebrow": "Terminal fidelity",
       "title": "A real terminal, fitted to the device in your hand.",
-      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches everyone to a compatible 80\u00d724 grid and fits it to each browser.",
+      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches current hosts to an 80\u00d740 portrait grid and fits it to each browser. Older hosts fall back to 80\u00d724.",
       "seo": {
         "description": "How shell.online fits shared terminals to phones with deterministic PTY sizing, touch scrolling, keyboard handling, and bounded paste input.",
         "socialTitle": "A real terminal on mobile | shell.online",
@@ -167,7 +167,7 @@
       "cards": [
         [
           "Deterministic sizing",
-          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide 80\u00d724 compatibility grid before input is forwarded; the last phone leaving restores 120\u00d736. Read-only phones count too."
+          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide portrait grid before input is forwarded: 80\u00d740 on the current CLI, or 80\u00d724 for an older host. The last phone leaving restores 120\u00d736. Read-only phones count too."
         ],
         [
           "Touch that scrolls",
@@ -191,8 +191,8 @@
           "after": 1,
           "title": "A deterministic shared grid",
           "caption": "The relay selects one PTY grid for every viewer. Each browser fits that grid locally without fighting over dimensions.",
-          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 24 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
-          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 24]\n  B --> D[Fit in each browser]\n  C --> D"
+          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 40 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
+          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 40]\n  B --> D[Fit in each browser]\n  C --> D"
         }
       ]
     },
@@ -358,8 +358,8 @@
           "Anyone holding both values for an interactive share can view and type with the wrapped process\u2019s operating-system permissions. Share them only with intended collaborators and run with least privilege."
         ],
         [
-          "Read-only is server-enforced",
-          "With --read-only, ordinary browser input and confirmed EOF are rejected by the Worker. DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
+          "Read-only is enforced twice",
+          "With --read-only, ordinary browser input and confirmed EOF are rejected independently by the relay and the CLI before they reach the PTY. DevTools, a modified browser, or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
         ],
         [
           "Files are off unless the CLI opts in",
@@ -370,12 +370,20 @@
           "The current CLI normally encrypts terminal payloads before the relay. Cloudflare can still observe frame type, encrypted size, timing, connection IP, access mode, command label, and lifecycle metadata. --no-e2ee instead exposes terminal payloads to Cloudflare while retaining HTTPS/WSS transport encryption."
         ],
         [
+          "Captured input cannot be replayed",
+          "Current envelope-v2 frames authenticate their direction, sender stream, and sequence. The CLI accepts limited legitimate reordering but rejects duplicate and stale keystrokes. A relay can still delay or drop ciphertext. Legacy sessions remain viewable for upgrade continuity and gain replay protection when their CLI is updated."
+        ],
+        [
           "No terminal transcript retained",
           "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; ordinary task exit deletes the session state and closes every socket."
         ],
         [
           "Browser-started passwords stay sealed",
           "When a session is started from the web app, the browser picks its password and seals it to that one machine using an ephemeral ECDH P-256 key the machine published. The accounts service relays an envelope it cannot open, and a session password is sealed once per organization member so colleagues can open the session without the service reading it."
+        ],
+        [
+          "Hosted application code is trusted",
+          "E2EE keeps ciphertext opaque to a passive relay, but the JavaScript served while you log in or unlock a vault is trusted. Browser-started commands also trust the accounts service after the machine owner explicitly opts in. The security policy names these operator boundaries directly; use shell daemon stop or link without remote start when that capability is not needed."
         ]
       ],
       "diagrams": [
@@ -416,7 +424,7 @@
         ],
         [
           "Limits, recovery, and opt-out",
-          "E2EE cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
+          "E2EE cannot hide traffic shape or prevent the relay from dropping or delaying ciphertext. Envelope v2 authenticates direction, sender stream, and sequence so current receivers reject replayed keystrokes and stale frames. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
         ]
       ]
     },
@@ -568,7 +576,7 @@
             ],
             [
               "SHELL_ONLINE_E2EE_PASSWORD=<new> shell password rotate <ID>",
-              "Choose the replacement instead of generating eight random base64url characters."
+              "Choose the replacement instead of generating ten random base64url characters."
             ]
           ]
         ],
@@ -668,7 +676,7 @@
             ],
             [
               "shell help <topic>",
-              "Topics: start, attach, list, kill, e2ee, docker, reference."
+              "Topics: start, files, attach, list, ls, password, kill, login, stats, agent, daemon, service, e2ee, docker, platforms, reference."
             ],
             [
               "shell help e2ee",
@@ -913,7 +921,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.16.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.17.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

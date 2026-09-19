@@ -1,0 +1,2432 @@
+@font-face {
+  /*
+   * The face the holdings' signs are lettered in.
+   *
+   * Declared here rather than in tokens.css so it travels in the lazy game
+   * chunk: it is worth eight kilobytes to the person who opened the game and
+   * nothing at all to the person who did not.
+   *
+   * It is used for the names of places and nowhere else. A whole interface set
+   * in blackletter is an interface nobody can read in a hurry, and the rules
+   * this file holds itself to are about reading in a hurry. Pirata One, SIL
+   * Open Font License; see public/fonts/OFL-Pirata-One.txt and the notices.
+   */
+  font-family: "Pirata One";
+  src: url("/fonts/pirata-one.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+/*
+ * Shell Keep — the game skin.
+ *
+ * Imported by src/game/GameRoute.tsx and nowhere else, so it travels in the
+ * lazy game chunk and costs the corporate view nothing.
+ *
+ * The palette is not invented. It is the product's own tokens from tokens.css
+ * read as materials: --terminal is stone, --paper is parchment, --blue is
+ * arcane light and --acid is elixir. That is what stops this looking like a
+ * generic pixel game wearing our name — it is the same product in armour.
+ *
+ * The stones are the product's --terminal warmed, because the map they sit
+ * over is grass and fired clay and a cold green-black interface laid on top of
+ * it read as two pictures rather than one. Same colour, seen by firelight.
+ *
+ * Rules this file holds itself to, from the game-ui-design skill:
+ *   · nothing readable outside the safe area, which the player can widen
+ *   · 16px floor for body text, 24px for anything that matters in a hurry
+ *   · 48px minimum for anything you can hit
+ *   · every state carries an icon or a word, never colour alone
+ *   · interface motion at or under 300ms, and none at all on request
+ *   · z-index never above 400
+ */
+
+.keep {
+  /* ---- materials ---- */
+  --keep-stone: #241d15;
+  --keep-stone-lit: #3e3324;
+  --keep-stone-dark: #120d08;
+  /* Brass: the frames, the rules, and anything the eye is meant to land on. */
+  --keep-brass: #e8b44a;
+  --keep-brass-dim: #c9a06a;
+  --keep-parchment: #f3f1e9;
+  --keep-parchment-shade: #ded9c8;
+  --keep-ink: #191b18;
+  --keep-arcane: #4267f5;
+  --keep-elixir: #c8ff4d;
+  --keep-gold: #e8b44a;
+  --keep-blood: #c2412c;
+  --keep-heal: #4e9e74;
+  --keep-mist: #8d9382;
+
+  /* ---- scale ----
+   * Every size below is a multiple of these two, so the interface-size slider
+   * moves the whole thing together instead of leaving text large in boxes that
+   * stayed small. --keep-scale is set from options; see state/options.ts.
+   */
+  --keep-scale: 1;
+  --keep-safe: 5%;
+  /*
+   * And the same inset, per edge.
+   *
+   * A television crops all four edges by about as much, so one number is the
+   * right shape for overscan. A phone does not crop at all: what it has is a
+   * notch on one edge and a home indicator on another, and the two are
+   * nothing like the same size. These default to the single value and are
+   * overridden per edge, inline, for a handset -- inline because that is where
+   * `--keep-safe` itself is set, and an inline property beats a stylesheet.
+   */
+  --keep-safe-top: var(--keep-safe);
+  --keep-safe-right: var(--keep-safe);
+  --keep-safe-bottom: var(--keep-safe);
+  --keep-safe-left: var(--keep-safe);
+
+  /*
+   * How much room the card over a figure takes, in one place.
+   *
+   * Two things need these numbers: the card itself, and the zoom controls,
+   * which get out of its way while it is up. Written twice they would agree
+   * until somebody changed one of them, and the way that failure shows is the
+   * only visible way to zoom out sitting underneath a panel.
+   */
+  --keep-card-width: min(360px, calc(100vw - var(--keep-space-4)));
+  --keep-card-height: min(58vh, 520px);
+  --keep-motion: 1;
+
+  --keep-text: calc(16px * var(--keep-scale));
+  --keep-text-sm: calc(16px * var(--keep-scale));
+  --keep-text-lg: calc(20px * var(--keep-scale));
+  --keep-text-xl: calc(26px * var(--keep-scale));
+  --keep-text-huge: calc(34px * var(--keep-scale));
+
+  --keep-space: calc(8px * var(--keep-scale));
+  --keep-space-2: calc(16px * var(--keep-scale));
+  --keep-space-3: calc(24px * var(--keep-scale));
+  --keep-space-4: calc(32px * var(--keep-scale));
+
+  /* The smallest thing a thumb or a stick should ever have to land on. */
+  --keep-hit: calc(48px * var(--keep-scale));
+
+  /* ---- layer scale ----
+   * Named, bounded, and nowhere near four digits. A z-index war is a symptom
+   * of not having a scale, so here is the scale.
+   */
+  --keep-z-field: 1;
+  /*
+   * The veil sits over the field and under the HUD. Over, because it is about
+   * the map; under, because the words explaining it are on the HUD and a
+   * signal that obscures its own explanation only worries people.
+   */
+  --keep-z-veil: 50;
+  --keep-z-hud: 100;
+  --keep-z-modal: 200;
+  --keep-z-tooltip: 300;
+  --keep-z-toast: 400;
+
+  --keep-fast: calc(120ms * var(--keep-motion));
+  --keep-normal: calc(220ms * var(--keep-motion));
+
+  /*
+   * The game's own font stack, rather than tokens.css's --mono.
+   *
+   * This stylesheet travels in the lazy chunk and tokens.css does not, so
+   * borrowing a variable from it is a dependency on load order that happens to
+   * hold. It did not hold in the preview harness, where the whole interface
+   * fell back to the browser's default serif and looked nothing like a game.
+   * A stack of its own costs a line and cannot come apart.
+   *
+   * Monospace on purpose. A true pixel typeface at 16px is charming and hard
+   * to read across a room, and legibility is the rule this file is held to.
+   * The uppercase and the letter-spacing do the period work instead.
+   */
+  --keep-font: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  position: fixed;
+  inset: 0;
+  z-index: var(--keep-z-field);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, #232719 0%, var(--keep-stone-dark) 70%);
+  color: var(--keep-parchment);
+  font-family: var(--keep-font);
+  font-size: var(--keep-text);
+  line-height: 1.45;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/*
+ * Colourblind palettes.
+ *
+ * These widen the gaps between the hues the game leans on. They are a second
+ * line of defence, not the first: every state in the keep already carries an
+ * icon and a word, because a palette cannot help somebody reading a screenshot.
+ */
+.keep[data-colour="deuteranopia"],
+.keep[data-colour="protanopia"] {
+  --keep-blood: #e07a3c;
+  --keep-heal: #4a7fd4;
+  --keep-elixir: #f2e94b;
+}
+
+.keep[data-colour="tritanopia"] {
+  --keep-blood: #d94a6a;
+  --keep-heal: #2fa8a0;
+  --keep-elixir: #b6f24b;
+  --keep-arcane: #7a4ad9;
+}
+
+/* ---- safe area -------------------------------------------------------- */
+
+/*
+ * Televisions crop the edges. The field is allowed to bleed into that crop --
+ * it is a view of a meadow and losing a strip of it costs nothing -- but
+ * anything a player has to read is not, so it lives in here.
+ *
+ * Laid over the field rather than beside it, and transparent to the pointer
+ * except where there is actually a control, so a click meant for the ground
+ * does not land on an invisible box.
+ */
+.keep-safe {
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-hud);
+  pointer-events: none;
+}
+
+.keep-safe button,
+.keep-safe a,
+.keep-safe input {
+  pointer-events: auto;
+}
+
+/*
+ * Headings are lettered like the signposts; everything else is not.
+ *
+ * The interface was monospace throughout, in capitals, widely letterspaced --
+ * which is a terminal's voice, and this is supposed to be a keep. Putting the
+ * blackletter on the *titles* alone gives it somewhere to sit without costing
+ * anything in a hurry: a heading is read once, a number is read at a glance,
+ * and the two want different faces.
+ */
+.keep-pause-head h2,
+.keep-shop-shelf-name,
+.keep-gathering-notice h3,
+.keep-gathering-heading,
+.keep-standing-class,
+.keep-opening h2 {
+  font-family: "Pirata One", Georgia, serif;
+  font-weight: 400;
+  /* Blackletter is wide enough already; the tracking was for a monospace. */
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.keep-pause-head h2,
+.keep-opening h2 {
+  font-size: var(--keep-text-huge);
+}
+
+.keep-standing-class {
+  font-size: var(--keep-text-xl);
+  line-height: 1.1;
+}
+
+/* ---- pixel panels ----------------------------------------------------- */
+
+/*
+ * A brass-framed panel on warm stone.
+ *
+ * The frame is a 9-slice from Kenney's Fantasy UI Borders, recoloured to brass
+ * on the way into the repository by scripts/import-fantasy-ui.mjs. Two frames
+ * in the whole interface, and each one means something: this is "laid over the
+ * map", and .keep-panel-heavy is "the game has stopped to ask you something".
+ * An interface where nothing is framed the same way twice reads as a sampler
+ * rather than a place.
+ *
+ * `border-image` rather than a background image, so the frame stays at its
+ * drawn resolution while the panel takes whatever size its contents need --
+ * which is the whole point of a 9-slice and the reason this is not four nested
+ * elements. No `fill` keyword, so the middle slice is left unpainted and the
+ * panel's own background shows through it.
+ *
+ * The border is 16px against 16px of source, which is to say the art is drawn
+ * at its own size. `image-rendering: pixelated` keeps it there: the source is
+ * 1-bit line work, and a browser smoothing it produces exactly the soft grey
+ * fringe that makes pixel art look like a mistake rather than a choice.
+ */
+.keep-panel {
+  border: 16px solid transparent;
+  border-image: url("/game/ui/frame-panel.png") 16 / 16px stretch;
+  /*
+   * `border-box`, not `padding-box`.
+   *
+   * The frame is a sixteen-pixel border, and a background clipped to the
+   * padding box stops where the border begins -- so every panel was a dark
+   * rectangle floating inside a brass rectangle with the map showing through
+   * the gap between them. Filling to the border box puts the stone behind the
+   * frame, which is what a panel with a frame around it looks like.
+   */
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 45%) border-box;
+  image-rendering: pixelated;
+  /* Lifts it off the field, which is busy and in places the same value. */
+  box-shadow: 0 calc(4px * var(--keep-scale)) 0 0 rgb(0 0 0 / 45%);
+}
+
+/*
+ * The heavy frame, for anything that has stopped the game.
+ *
+ * Drawn at 96px against the other's 48, so the rule is genuinely finer relief
+ * rather than the same art enlarged -- which is the difference between a modal
+ * that feels important and one that feels zoomed.
+ */
+.keep-panel-heavy {
+  border: 32px solid transparent;
+  border-image: url("/game/ui/frame-heavy.png") 32 / 32px stretch;
+  background: linear-gradient(180deg, var(--keep-stone-lit) 0%, var(--keep-stone) 30%) border-box;
+  image-rendering: pixelated;
+  box-shadow: 0 calc(6px * var(--keep-scale)) 0 0 rgb(0 0 0 / 50%);
+}
+
+/* ---- buttons ---------------------------------------------------------- */
+
+/*
+ * A brass-edged stone button.
+ *
+ * The bevel is inset shadows rather than a gradient so it stays hard-edged at
+ * any interface scale, and the brass hairline is what separates a button from
+ * the panel it sits in — on a warm stone panel, stone-on-stone disappears.
+ */
+.keep-button {
+  display: inline-flex;
+  min-height: var(--keep-hit);
+  padding: 0 var(--keep-space-3);
+  border: 2px solid var(--keep-brass-dim);
+  background: var(--keep-stone);
+  box-shadow:
+    inset 0 3px 0 0 var(--keep-stone-lit),
+    inset 0 -3px 0 0 var(--keep-stone-dark);
+  color: var(--keep-parchment);
+  font-family: inherit;
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  align-items: center;
+  justify-content: center;
+  gap: var(--keep-space);
+  cursor: pointer;
+  transition: background var(--keep-fast) linear, transform var(--keep-fast) linear;
+}
+
+.keep-button:hover {
+  background: var(--keep-stone-lit);
+  border-color: var(--keep-brass);
+}
+
+/*
+ * Pressed moves down by the height of its own bevel, so the button looks like
+ * it went in rather than like it changed colour.
+ */
+.keep-button:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 3px 0 0 var(--keep-stone-dark);
+}
+
+.keep-pause-button {
+  flex: none;
+}
+
+/* ---- field ------------------------------------------------------------ */
+
+.keep-field {
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-field);
+}
+
+/* ---- button prompts --------------------------------------------------- */
+
+.keep-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--keep-space);
+  padding: calc(var(--keep-space) / 2) var(--keep-space);
+  background: rgb(9 7 5 / 72%);
+  box-shadow: 0 0 0 2px rgb(242 221 164 / 12%);
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.keep-key {
+  display: inline-flex;
+  min-width: calc(44px * var(--keep-scale));
+  min-height: calc(30px * var(--keep-scale));
+  padding: 0 var(--keep-space);
+  border: 3px solid var(--keep-parchment-shade);
+  background: var(--keep-parchment);
+  color: var(--keep-ink);
+  font-family: inherit;
+  font-size: var(--keep-text-sm);
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- the shop's two shelves -------------------------------------------- */
+
+.keep-shop-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-shop-shelf-name {
+  margin: var(--keep-space) 0 0;
+  color: var(--keep-gold);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ---- the Barrow -------------------------------------------------------- */
+
+.keep-barrow {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-barrow-note,
+.keep-barrow-unknown {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+/* Unknown is a state, so it carries a rule as well as a colour. */
+.keep-barrow-unknown {
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-gold);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+}
+
+.keep-barrow-rows {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-barrow-row {
+  display: flex;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-barrow-mark {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  flex: none;
+}
+
+.keep-barrow-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-barrow-label {
+  color: var(--keep-parchment);
+  font-weight: 700;
+}
+
+.keep-barrow-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-barrow-count {
+  display: flex;
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: none;
+}
+
+/* What each is worth, so the sum can be checked by hand. */
+.keep-barrow-each {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  font-weight: 400;
+}
+
+.keep-barrow-total {
+  display: flex;
+  margin: 0;
+  padding: var(--keep-space-2);
+  border: 2px solid var(--keep-gold);
+  background: rgb(0 0 0 / 30%);
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.keep-barrow-total strong {
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-xl);
+}
+
+/* ---- the road book ---------------------------------------------------- */
+
+/*
+ * A list of holdings, each with the sentence from its own board and the line
+ * the board does not carry. Laid out like the shop, because it is the same
+ * shape of thing: a row of readable text with one thing you can do to it.
+ */
+.keep-marches {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-marches-note {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-marches-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: var(--keep-space);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+}
+
+.keep-marches-item {
+  display: grid;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  gap: var(--keep-space-2);
+  grid-template-rows: 1fr auto;
+}
+
+.keep-marches-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.keep-marches-item > .keep-button {
+  width: 100%;
+}
+
+.keep-marches-name {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.keep-marches-purpose {
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+}
+
+/* The rename, set apart, because it is the part that is not in character. */
+.keep-marches-truth {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  font-style: italic;
+}
+
+/* ---- the gathering ----------------------------------------------------- */
+
+/*
+ * Written plainly, and looking it. Everywhere else the game is brass and stone;
+ * this screen is a notice, and a consent notice dressed as a fantasy scroll is
+ * a consent notice designed not to be read.
+ */
+.keep-gathering {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-gathering-state {
+  margin: 0;
+  padding: var(--keep-space-2);
+  border-left: 4px solid var(--keep-elixir);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+}
+
+.keep-gathering-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-notice h3,
+.keep-gathering-heading {
+  margin: var(--keep-space) 0 0;
+  color: var(--keep-gold);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-gathering-notice ul {
+  display: flex;
+  margin: 0;
+  padding-left: var(--keep-space-3);
+  flex-direction: column;
+  gap: 4px;
+}
+
+.keep-gathering-notice li,
+.keep-gathering-notice p {
+  margin: 0;
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+.keep-gathering-cost {
+  color: var(--keep-mist) !important;
+}
+
+.keep-gathering-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-said,
+.keep-gathering-refusal,
+.keep-gathering-empty,
+.keep-gathering-foot {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+  line-height: 1.5;
+}
+
+/* A refusal is a state, so it carries a word as well as a colour. */
+.keep-gathering-refusal {
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-blood);
+  background: rgb(0 0 0 / 25%);
+  color: var(--keep-parchment);
+}
+
+.keep-gathering-runs {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-gathering-run {
+  display: grid;
+  padding: var(--keep-space-2);
+  border: 2px solid rgb(232 180 74 / 25%);
+  background: rgb(0 0 0 / 22%);
+  gap: 2px;
+  grid-template-columns: 1fr auto;
+}
+
+.keep-gathering-run-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--keep-space);
+}
+
+.keep-gathering-run-where {
+  color: var(--keep-parchment);
+  font-weight: 700;
+}
+
+.keep-gathering-run-when {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+.keep-gathering-run-found,
+.keep-gathering-run-error {
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text);
+  grid-column: 1;
+}
+
+.keep-gathering-run-error {
+  color: var(--keep-blood);
+}
+
+/* The cost, set apart, because it is the figure the vial is showing. */
+.keep-gathering-run-cost {
+  align-self: center;
+  color: var(--keep-elixir);
+  font-weight: 700;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.keep-gathering code {
+  padding: 1px 5px;
+  background: rgb(0 0 0 / 40%);
+  color: var(--keep-elixir);
+  font-family: inherit;
+}
+
+/* ---- pause ------------------------------------------------------------ */
+
+.keep-pause {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-modal);
+  padding: var(--keep-safe-top) var(--keep-safe-right) var(--keep-safe-bottom) var(--keep-safe-left);
+  align-items: center;
+  justify-content: center;
+  /*
+   * Dimmed, not hidden. Seeing the field you paused stops the menu feeling
+   * like it left the game, and it is the difference between a pause screen and
+   * a loading screen.
+   */
+  background: rgb(9 11 7 / 78%);
+  animation: keep-fade var(--keep-normal) ease-out;
+}
+
+@keyframes keep-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/*
+ * Header and footer pinned, middle scrolls.
+ *
+ * Scrolling the whole panel took the footer with it, so on a long panel -- the
+ * Chronicle, the shop -- the way out and the button prompt were below the
+ * fold. A dialog whose close is off screen is a dialog somebody is stuck in.
+ */
+.keep-pause-panel {
+  display: flex;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: var(--keep-space-3);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+/* The root has eight destinations; two columns keep every one visible. */
+.keep-pause-panel.is-root {
+  width: min(760px, 100%);
+}
+
+@media (width > 480px) {
+  .keep-pause-panel.is-root > .keep-menu {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+
+  .keep-pause-panel.is-root .keep-menu-item.is-danger {
+    margin-top: 0;
+    border-top-color: transparent;
+  }
+}
+
+/*
+ * The scrolling child is named rather than positioned.
+ *
+ * This was a three-row grid, which broke the moment a fourth child was added:
+ * the row that was meant to scroll became whichever one happened to be second.
+ * Saying which element scrolls cannot go wrong when the panel gains a line.
+ */
+.keep-pause-panel > .keep-menu,
+.keep-pause-panel > .keep-options,
+.keep-pause-panel > .keep-shop,
+.keep-pause-panel > .keep-marches,
+.keep-pause-panel > .keep-barrow,
+.keep-pause-panel > .keep-gathering,
+.keep-pause-panel > .keep-codex {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.keep-pause-panel > .keep-pause-head,
+.keep-pause-panel > .keep-pause-stats,
+.keep-pause-panel > .keep-pause-foot {
+  flex: none;
+}
+
+.keep-pause-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-pause-head h2 {
+  margin: 0;
+  font-size: var(--keep-text-huge);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.keep-pause-glyph {
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-xl);
+}
+
+.keep-pause-foot {
+  display: flex;
+  padding-top: var(--keep-space-2);
+  border-top: 4px solid var(--keep-stone-dark);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--keep-space-2);
+}
+
+.keep-build {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- menus ------------------------------------------------------------ */
+
+.keep-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-menu-item {
+  display: flex;
+  min-height: var(--keep-hit);
+  padding: var(--keep-space) var(--keep-space-2);
+  border: 4px solid transparent;
+  background: transparent;
+  color: var(--keep-parchment);
+  font-family: inherit;
+  font-size: var(--keep-text);
+  text-align: left;
+  align-items: center;
+  gap: var(--keep-space-2);
+  cursor: pointer;
+  transition: background var(--keep-fast) linear;
+}
+
+.keep-menu-item:hover:not(:disabled) {
+  background: var(--keep-stone-lit);
+}
+
+/*
+ * The focused item, marked by more than colour: it gains a border and a caret
+ * as well, so it is still obvious in a palette somebody cannot separate and in
+ * a screenshot with no cursor in it.
+ */
+.keep-menu-item:focus-visible,
+.keep-menu-item.is-current:focus {
+  outline: none;
+  border-color: var(--keep-elixir);
+  background: var(--keep-stone-lit);
+}
+
+.keep-menu-item:focus-visible::before,
+.keep-menu-item.is-current:focus::before {
+  content: "▶";
+  margin-right: calc(-1 * var(--keep-space));
+  color: var(--keep-elixir);
+}
+
+.keep-menu-item:disabled {
+  color: var(--keep-mist);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Marked by a word and a rule above it, not by being red on its own. */
+.keep-menu-item.is-danger {
+  margin-top: var(--keep-space);
+  border-top: 4px solid var(--keep-stone-dark);
+  color: var(--keep-blood);
+}
+
+.keep-menu-item.is-danger:focus-visible {
+  border-color: var(--keep-blood);
+}
+
+.keep-menu-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.keep-menu-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-menu-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.02em;
+}
+
+/* ---- options ---------------------------------------------------------- */
+
+.keep-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space-3);
+}
+
+.keep-option-group {
+  margin: 0;
+  padding: var(--keep-space-2);
+  border: 4px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 18%);
+}
+
+.keep-option-group legend {
+  padding: 0 var(--keep-space);
+  color: var(--keep-elixir);
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.keep-option-why {
+  margin: 0 0 var(--keep-space-2);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  line-height: 1.5;
+}
+
+.keep-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-slider input[type="range"] {
+  min-height: var(--keep-hit);
+  flex: 1;
+  accent-color: var(--keep-elixir);
+}
+
+.keep-slider output {
+  min-width: calc(64px * var(--keep-scale));
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  text-align: right;
+}
+
+/*
+ * The safe-area calibration target. It is inset by exactly the amount the
+ * slider sets, so "can you see all four corners" is answerable by looking.
+ */
+.keep-safe-test {
+  position: relative;
+  height: calc(72px * var(--keep-scale));
+  margin-top: var(--keep-space-2);
+  border: 3px dashed var(--keep-stone-lit);
+}
+
+.keep-safe-corner {
+  position: absolute;
+  width: calc(20px * var(--keep-scale));
+  height: calc(20px * var(--keep-scale));
+  border: 4px solid var(--keep-elixir);
+}
+
+.keep-safe-corner.is-tl { top: var(--keep-safe-top); left: var(--keep-safe-left); border-right: 0; border-bottom: 0; }
+.keep-safe-corner.is-tr { top: var(--keep-safe-top); right: var(--keep-safe-right); border-bottom: 0; border-left: 0; }
+.keep-safe-corner.is-bl { bottom: var(--keep-safe-bottom); left: var(--keep-safe-left); border-top: 0; border-right: 0; }
+.keep-safe-corner.is-br { bottom: var(--keep-safe-bottom); right: var(--keep-safe-right); border-top: 0; border-left: 0; }
+
+.keep-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-choices.is-inline {
+  flex-flow: row wrap;
+}
+
+.keep-choice {
+  display: flex;
+  min-height: var(--keep-hit);
+  padding: var(--keep-space);
+  border: 4px solid transparent;
+  align-items: center;
+  gap: var(--keep-space-2);
+  cursor: pointer;
+}
+
+.keep-choice:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-choice:focus-within {
+  border-color: var(--keep-elixir);
+}
+
+.keep-choice input {
+  width: calc(22px * var(--keep-scale));
+  height: calc(22px * var(--keep-scale));
+  accent-color: var(--keep-elixir);
+  flex: none;
+}
+
+.keep-choice-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.keep-choice-label {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.keep-choice-detail {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- focus, everywhere ------------------------------------------------ */
+
+/*
+ * One visible focus ring for anything the menu system does not style itself.
+ * Without this a pad can move focus somewhere invisible, which is the same as
+ * losing it.
+ */
+.keep :focus-visible {
+  outline: 4px solid var(--keep-elixir);
+  outline-offset: 2px;
+}
+
+/* ---- reduced motion --------------------------------------------------- */
+
+/*
+ * Two ways in: the player's own choice, which sets --keep-motion to 0 and
+ * collapses every duration above, and the system setting, which is honoured
+ * even before the game has read its options.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .keep *,
+  .keep *::before,
+  .keep *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+.keep[data-motion="reduced"] *,
+.keep[data-motion="reduced"] *::before,
+.keep[data-motion="reduced"] *::after {
+  animation-duration: 1ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important;
+}
+
+/* ---- small screens ---------------------------------------------------- */
+
+/*
+ * A phone has no overscan, so the safe area is wasted margin there; it is
+ * clamped rather than removed, because the notch is a crop of its own.
+ */
+@media (width <= 640px) {
+  .keep {
+    --keep-safe: max(12px, env(safe-area-inset-left));
+  }
+
+  .keep-pause-panel {
+    width: 100%;
+  }
+}
+
+/* ---- canvas stage ----------------------------------------------------- */
+
+/*
+ * The two canvases sit exactly on top of one another and cover the host
+ * completely. The backing store is a whole number of design pixels; stretching
+ * the element over the last sliver of the window is at most one scale factor
+ * and is invisible, where letterboxing would have been a black band somebody
+ * paid for a screen not to have.
+ */
+.keep-stage {
+  display: grid;
+  position: absolute;
+  inset: 0;
+}
+
+.keep-canvas {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.keep-canvas.is-front {
+  pointer-events: none;
+}
+
+/* ---- the HUD, in the corners ------------------------------------------- */
+
+/*
+ * Four corners rather than a bar across the top.
+ *
+ * A strip was one panel wide enough to reach edge to edge and tall enough for
+ * three rows, and what it mostly did was cover the map. Everything on it is
+ * glanced at rather than read, and things that are glanced at belong at the
+ * edges of the eye.
+ *
+ * Each corner is pinned inside the safe area, so a television's crop takes the
+ * same bite out of all four. They do not take pointer events; their contents
+ * do, so a click on the gap between two panels reaches the map underneath.
+ */
+.keep-corner {
+  display: flex;
+  position: absolute;
+  z-index: var(--keep-z-hud);
+  gap: var(--keep-space);
+  pointer-events: none;
+}
+
+.keep-corner > * {
+  pointer-events: auto;
+}
+
+.keep-corner.is-top-left {
+  top: var(--keep-safe-top);
+  left: var(--keep-safe-left);
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.keep-corner.is-top-right {
+  top: var(--keep-safe-top);
+  right: var(--keep-safe-right);
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-left {
+  bottom: var(--keep-safe-bottom);
+  left: var(--keep-safe-left);
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-right {
+  right: var(--keep-safe-right);
+  bottom: var(--keep-safe-bottom);
+  align-items: flex-end;
+}
+
+.keep-corner.is-bottom-centre {
+  bottom: var(--keep-safe-bottom);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/*
+ * A crest rather than a square.
+ *
+ * The rest of the interface is brass on stone; this is the one piece that says
+ * whose interface it is, so it takes the shape a device takes -- a shield,
+ * pointed at the foot. A clip path rather than an image, because it is four
+ * straight lines and a point.
+ */
+.keep-crest {
+  display: inline-flex;
+  width: calc(38px * var(--keep-scale));
+  height: calc(42px * var(--keep-scale));
+  background: var(--keep-gold);
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%);
+}
+
+.keep-crest-letter {
+  color: var(--keep-stone-dark);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  line-height: 1;
+  /* Off the geometric middle, because the point below drags the eye down. */
+  transform: translateY(calc(-3px * var(--keep-scale)));
+}
+
+.keep-standing {
+  display: flex;
+  min-width: calc(240px * var(--keep-scale));
+  max-width: calc(320px * var(--keep-scale));
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-operational-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--keep-space);
+}
+
+.keep-operational-value {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-huge);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.keep-operational-label {
+  color: var(--keep-parchment);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-operational-breakdown {
+  margin: 0;
+  color: var(--keep-parchment-shade);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-data-state {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: calc(6px * var(--keep-scale));
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-data-state::before {
+  width: calc(8px * var(--keep-scale));
+  height: calc(8px * var(--keep-scale));
+  border-radius: 50%;
+  background: var(--keep-heal);
+  box-shadow: 0 0 calc(6px * var(--keep-scale)) var(--keep-heal);
+  content: "";
+}
+
+.keep-data-state.is-preview::before {
+  background: var(--keep-gold);
+  box-shadow: none;
+}
+
+.keep-standing-divider {
+  height: 2px;
+  background: var(--keep-stone-dark);
+}
+
+.keep-standing-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-standing-text,
+.keep-purse-text,
+.keep-roster-text,
+.keep-elixir-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.keep-standing-class {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-purse,
+.keep-elixir-panel,
+.keep-roster-button {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+.keep-roster-button,
+.keep-elixir-panel {
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--keep-fast) linear;
+}
+
+.keep-roster-button:hover,
+.keep-elixir-panel:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-standing-level,
+.keep-purse-label,
+.keep-roster-detail,
+.keep-elixir-value {
+  color: var(--keep-mist);
+  font-size: var(--keep-text);
+}
+
+/* ---- meters ----------------------------------------------------------- */
+
+.keep-meter {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--keep-space) / 2);
+}
+
+.keep-meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--keep-space);
+}
+
+.keep-meter-label {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-meter-value {
+  font-size: var(--keep-text-sm);
+  font-weight: 700;
+}
+
+.keep-meter-of {
+  color: var(--keep-mist);
+  font-weight: 400;
+}
+
+.keep-meter-track {
+  height: calc(14px * var(--keep-scale));
+  border: 3px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 35%);
+  overflow: hidden;
+}
+
+.keep-meter-fill {
+  display: block;
+  height: 100%;
+  background: var(--keep-gold);
+  transition: width var(--keep-normal) linear;
+}
+
+.keep-meter.is-elixir .keep-meter-fill {
+  background: var(--keep-elixir);
+}
+
+.keep-meter-detail {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* ---- purse, elixir, roster -------------------------------------------- */
+
+.keep-coin {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-xl);
+}
+
+.keep-purse-value,
+.keep-roster-count,
+.keep-elixir-label {
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-elixir {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+/*
+ * The vial. A pixel vessel rather than a bar, because this is the one gauge
+ * that is not a game resource: it is real money, and it should not look like
+ * the experience bar next to it.
+ */
+/*
+ * The vial: glass with something green in it.
+ *
+ * It used to be a black slot that filled with green, which at zero tokens --
+ * where most accounts start -- was a black slot, and read as an empty box
+ * somebody had forgotten to style. Glass is glass whether or not there is
+ * anything in it, so the vessel now has a dark green cast of its own and the
+ * fill is the bright thing inside it.
+ */
+.keep-vial {
+  display: block;
+  position: relative;
+  width: calc(20px * var(--keep-scale));
+  height: calc(36px * var(--keep-scale));
+  border: 2px solid var(--keep-brass-dim);
+  border-radius: calc(3px * var(--keep-scale)) calc(3px * var(--keep-scale))
+    calc(8px * var(--keep-scale)) calc(8px * var(--keep-scale));
+  background: linear-gradient(180deg, rgb(17 28 12 / 90%), var(--keep-elixir-dim));
+  box-shadow: inset 0 0 calc(6px * var(--keep-scale)) rgb(0 0 0 / 60%);
+  overflow: hidden;
+  flex: none;
+}
+
+.keep-vial-fill {
+  display: block;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(180deg, #a6f56b, var(--keep-elixir));
+  box-shadow: 0 0 calc(8px * var(--keep-scale)) var(--keep-elixir);
+  transition: height var(--keep-normal) linear;
+}
+
+/* A highlight down one side, which is what makes a rectangle read as glass. */
+.keep-vial::after {
+  position: absolute;
+  top: 12%;
+  left: 16%;
+  width: 18%;
+  height: 56%;
+  border-radius: 40%;
+  background: rgb(255 255 255 / 22%);
+  content: "";
+}
+
+.keep-elixir-label {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-roster-count {
+  color: var(--keep-gold);
+}
+
+.keep-roster-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (width <= 900px) {
+  .keep-standing {
+    min-width: calc(200px * var(--keep-scale));
+  }
+}
+
+/*
+ * On a phone the HUD shows less rather than smaller.
+ *
+ * Four panels at full detail stacked into a column and covered most of the
+ * field, which is the one thing worth looking at. The floor this file holds
+ * itself to is a floor -- text does not shrink to fit -- so what gives is the
+ * content: the bars keep their numbers, the explanations go, and the detail
+ * they carried is a tap away in the pause menu.
+ */
+@media (width <= 640px) {
+  /*
+   * The corners still do not fit 390 pixels at a 16px floor, so three of them
+   * leave: the purse, the vial and the garrison count are all repeated in the
+   * pause menu, which is one tap away and is the right home for a number you
+   * look up rather than glance at.
+   */
+  .keep-purse,
+  .keep-elixir-panel,
+  .keep-roster-button {
+    display: none;
+  }
+
+  .keep-standing {
+    min-width: 0;
+    max-width: calc(100vw - var(--keep-space-4));
+  }
+
+  .keep-operational-head {
+    gap: calc(6px * var(--keep-scale));
+  }
+
+  .keep-operational-value {
+    font-size: var(--keep-text-xl);
+  }
+
+  .keep-operational-label {
+    font-size: var(--keep-text);
+  }
+
+  /* Progression remains in the pause screen; the phone HUD is for live work. */
+  .keep-standing-divider,
+  .keep-standing-head,
+  .keep-standing > .keep-meter {
+    display: none;
+  }
+
+  /* The explanations, which are the first thing that can go. */
+  .keep-standing-level,
+  .keep-meter-label,
+  .keep-meter-detail,
+  .keep-elixir-label,
+  .keep-roster-detail,
+  .keep-purse-label {
+    display: none;
+  }
+
+  /* Names shorten to their first word rather than wrapping to three lines. */
+  .keep-standing-class,
+  .keep-roster-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .keep-crest {
+    width: calc(28px * var(--keep-scale));
+    height: calc(32px * var(--keep-scale));
+  }
+
+  .keep-vial {
+    width: calc(14px * var(--keep-scale));
+    height: calc(26px * var(--keep-scale));
+  }
+
+  .keep-elixir-value {
+    display: block;
+    font-size: var(--keep-text-sm);
+  }
+
+  /* The pause control keeps its full target; it is the way out. */
+  .keep-pause-button {
+    padding: 0 var(--keep-space);
+  }
+
+  /* The class is already named on the HUD behind this; here it only clips. */
+  .keep-pause-who {
+    display: none;
+  }
+}
+
+/* ---- the opening, the shop and the Chronicle -------------------------- */
+
+/*
+ * A full-screen curtain for the one question the game asks. Darker than the
+ * pause overlay: this is not a pause over a running game, it is the game
+ * waiting for an answer.
+ */
+.keep-curtain {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-modal);
+  padding: var(--keep-safe-top) var(--keep-safe-right) var(--keep-safe-bottom) var(--keep-safe-left);
+  align-items: center;
+  justify-content: center;
+  background: rgb(9 7 5 / 92%);
+  animation: keep-fade var(--keep-normal) ease-out;
+}
+
+/* Header and footer pinned, choices scroll. Same reason as the pause panel. */
+.keep-opening {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: 100%;
+  padding: var(--keep-space-3);
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-opening > .keep-opening-head,
+.keep-opening > .keep-pause-foot {
+  flex: none;
+}
+
+.keep-opening > .keep-opening-choose {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.keep-opening-head h2 {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-xl);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.keep-opening-kicker {
+  display: block;
+  margin-bottom: var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.keep-opening-head p {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-pale, var(--keep-mist));
+  line-height: 1.6;
+}
+
+.keep-opening-choose h3 {
+  margin: 0 0 var(--keep-space);
+  font-size: var(--keep-text-lg);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/*
+ * The list and the description side by side, so moving through five classes
+ * does not reflow the panel under the player's cursor.
+ */
+.keep-opening-choose {
+  display: grid;
+  gap: var(--keep-space-2);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "title title" "list detail";
+}
+
+.keep-opening-choose h3 { grid-area: title; }
+.keep-opening-choose .keep-menu { grid-area: list; }
+.keep-opening-detail { grid-area: detail; }
+
+.keep-opening-detail {
+  padding: var(--keep-space-2);
+  border: 4px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 22%);
+}
+
+.keep-opening-title {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-opening-note {
+  margin: 0;
+  color: var(--keep-mist);
+  line-height: 1.6;
+}
+
+.keep-pause-panel.is-wide {
+  width: min(760px, 100%);
+}
+
+.keep-pause-who {
+  margin-left: auto;
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---- shop ------------------------------------------------------------- */
+
+.keep-shop,
+.keep-codex {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-shop-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--keep-space-2);
+  flex-flow: row wrap;
+}
+
+.keep-shop-purse {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: var(--keep-space);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+}
+
+.keep-shop-note,
+.keep-codex-intro {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-refusal {
+  margin: 0;
+  padding: var(--keep-space);
+  border: 3px solid var(--keep-blood);
+  color: var(--keep-blood);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-list {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+  list-style: none;
+}
+
+.keep-shop-item {
+  display: flex;
+  padding: var(--keep-space);
+  border: 4px solid var(--keep-stone-dark);
+  align-items: center;
+  gap: var(--keep-space-2);
+}
+
+/*
+ * The goods: the figure the skin dresses, with its colour as a strip under it.
+ *
+ * The portrait is what is being bought and the swatch is what is legible
+ * running an eye down the list, so both are here and the portrait is the one
+ * that gets the room.
+ */
+.keep-shop-goods {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6px * var(--keep-scale));
+}
+
+.keep-shop-portrait {
+  display: block;
+  width: calc(56px * var(--keep-scale));
+  height: auto;
+  /*
+   * Kenney's units are 33 pixels tall and this shows them at four times that,
+   * so the browser must not smooth them on the way up either -- the canvas is
+   * drawn nearest-neighbour and then scaled again by this rule.
+   */
+  image-rendering: pixelated;
+}
+
+.keep-shop-goods .keep-swatch {
+  width: calc(56px * var(--keep-scale));
+  height: calc(10px * var(--keep-scale));
+}
+
+/* The four colours the skin changes, which are the entire product. */
+.keep-swatch {
+  display: grid;
+  width: calc(44px * var(--keep-scale));
+  height: calc(44px * var(--keep-scale));
+  border: 3px solid var(--keep-stone-dark);
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  flex: none;
+}
+
+.keep-swatch span {
+  display: block;
+}
+
+.keep-shop-text {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-shop-name {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.keep-shop-blurb,
+.keep-shop-fits {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-shop-fits {
+  color: var(--keep-gold);
+}
+
+/* ---- the Chronicle ---------------------------------------------------- */
+
+.keep-codex-section h3 {
+  margin: 0 0 var(--keep-space);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-codex-list {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  gap: var(--keep-space);
+}
+
+.keep-codex-list dt {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.keep-codex-list dd {
+  margin: 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  line-height: 1.6;
+}
+
+.keep-codex-list code {
+  color: var(--keep-elixir);
+  font-family: inherit;
+}
+
+@media (width <= 760px) {
+  .keep-opening-choose {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "list" "detail";
+  }
+}
+
+@media (width <= 640px) {
+  .keep-marches-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .keep-pause-panel {
+    gap: var(--keep-space);
+    padding: var(--keep-space-2);
+  }
+
+  .keep-pause-head h2 {
+    font-size: var(--keep-text-xl);
+  }
+
+  .keep-menu {
+    gap: calc(var(--keep-space) / 2);
+  }
+
+  .keep-menu-item {
+    padding-block: calc(var(--keep-space) / 2);
+  }
+}
+
+@media (width <= 480px) {
+  /* One-line root choices keep the exit visible without shrinking text. */
+  .keep-pause-panel.is-root .keep-menu-detail {
+    display: none;
+  }
+}
+
+@media (height <= 800px) {
+  .keep-pause {
+    align-items: stretch;
+  }
+
+  .keep-pause-panel {
+    margin: auto;
+    gap: var(--keep-space);
+    padding-block: var(--keep-space-2);
+  }
+
+  .keep-pause-panel > .keep-menu,
+  .keep-pause-panel > .keep-marches {
+    scrollbar-gutter: stable;
+  }
+
+  .keep-menu-item {
+    min-height: var(--keep-hit);
+    padding-block: calc(var(--keep-space) / 2);
+  }
+}
+
+/* The figures the HUD drops on a narrow screen, repeated in the pause menu. */
+.keep-pause-stats {
+  display: flex;
+  margin: 0;
+  flex-flow: row wrap;
+  gap: var(--keep-space) var(--keep-space-3);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+/* The Pixi canvas fills its host; the renderer sizes itself to this element. */
+.keep-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.keep-stage-failed {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: var(--keep-space-3);
+  color: var(--keep-mist);
+  font-size: var(--keep-text-lg);
+  text-align: center;
+  place-content: center;
+}
+
+/* ---- the wright panel -------------------------------------------------- */
+
+/*
+ * Clicking a figure on the map opens this. At the side rather than over the
+ * middle, because a modal in the middle covers the thing that was just
+ * clicked — the one part of the screen somebody was looking at.
+ */
+/*
+ * The inspect card is an edge-anchored operational panel. It no longer chases
+ * a moving figure around the field: the selected figure stays highlighted on
+ * the map while the facts remain in one predictable place for the eye.
+ */
+.keep-wright {
+  display: flex;
+  position: fixed;
+  top: calc(var(--keep-safe-top) + var(--keep-hit) + var(--keep-space-2));
+  right: var(--keep-safe-right);
+  z-index: var(--keep-z-modal);
+  width: var(--keep-card-width);
+  max-height: calc(100vh - var(--keep-safe-top) - var(--keep-safe-bottom) - var(--keep-hit) - var(--keep-space-3));
+  padding: var(--keep-space-2);
+  flex-direction: column;
+  gap: var(--keep-space);
+  overflow-y: auto;
+  pointer-events: auto;
+  animation: keep-slide var(--keep-normal) ease-out;
+}
+
+@media (width <= 640px) {
+  .keep-wright {
+    top: auto;
+    right: var(--keep-safe-right);
+    bottom: var(--keep-safe-bottom);
+    left: var(--keep-safe-left);
+    width: auto;
+    max-height: var(--keep-card-height);
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+}
+
+/* The harness's own mark, at the size of the crest it replaces. */
+.keep-wright-sigil {
+  display: inline-flex;
+  width: calc(34px * var(--keep-scale));
+  height: calc(34px * var(--keep-scale));
+  border: 2px solid var(--keep-gold);
+  border-radius: 50%;
+  background: var(--keep-stone-dark);
+  color: var(--keep-gold);
+  font-size: var(--keep-text-lg);
+  font-weight: 700;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+}
+
+.keep-wright-sigil img {
+  width: 70%;
+  height: 70%;
+  object-fit: contain;
+}
+
+/*
+ * The mark beside a label.
+ *
+ * Sized in ems so it grows with the interface-size slider, and nudged down a
+ * little because an icon's optical centre sits above a line of text's.
+ */
+.keep-mark {
+  display: inline-block;
+  width: 1.7em;
+  height: 1.7em;
+  margin-right: 0.4em;
+  object-fit: contain;
+  vertical-align: -0.45em;
+}
+
+.keep-barrow-mark .keep-mark {
+  width: calc(28px * var(--keep-scale));
+  height: calc(28px * var(--keep-scale));
+  margin-right: 0;
+  vertical-align: middle;
+}
+
+@keyframes keep-slide {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+
+.keep-wright-head {
+  display: flex;
+  align-items: center;
+  gap: var(--keep-space);
+}
+
+.keep-wright-title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.keep-wright-name {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keep-wright-class {
+  color: var(--keep-gold);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-close {
+  min-width: var(--keep-hit);
+  min-height: var(--keep-hit);
+  border: 4px solid var(--keep-stone-dark);
+  background: var(--keep-stone);
+  color: var(--keep-parchment);
+  font: inherit;
+  cursor: pointer;
+  flex: none;
+}
+
+.keep-close:hover {
+  background: var(--keep-stone-lit);
+}
+
+.keep-wright-motto {
+  margin: 0;
+  padding: var(--keep-space);
+  border-left: 4px solid var(--keep-gold);
+  color: var(--keep-pale, var(--keep-mist));
+  font-style: italic;
+}
+
+.keep-wright-facts {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+  gap: var(--keep-space-2);
+}
+
+.keep-wright-facts dt {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.keep-wright-facts dd {
+  display: flex;
+  margin: 0;
+  flex-direction: column;
+}
+
+.keep-wright-note {
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-wright-command code {
+  display: block;
+  padding: var(--keep-space);
+  border: 3px solid var(--keep-stone-dark);
+  background: rgb(0 0 0 / 30%);
+  color: var(--keep-elixir);
+  font-family: inherit;
+  font-size: var(--keep-text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ---- the veil: the kingdom struggling --------------------------------- */
+
+/*
+ * Blood at the corners of the picture, heavier the further the garrison is
+ * from meeting what is coming for it.
+ *
+ * Two layers in one paint. The first is a vignette that leaves the middle of
+ * the map alone -- the map is the game, and a filter across the middle of it
+ * is a filter over the thing somebody is trying to look at. The second is four
+ * blooms, one in each corner, so the corners are distinctly bloodier than the
+ * edges between them: the effect reads as something pressing in at the edges
+ * rather than as a red screen.
+ *
+ * `--keep-blood` rather than a literal red, so the colourblind palettes move
+ * it with everything else. Its opacity is set inline from the strain; see
+ * world/kingdom.ts, which is the one place that arithmetic lives.
+ *
+ * No animation. A slow pulse is the obvious thing to reach for here and it is
+ * the wrong thing twice over: this file holds itself to interface motion at or
+ * under 300ms, and a screen that breathes red is exactly the sort of motion
+ * the reduced-motion setting exists for. It is a state, so it is still.
+ */
+.keep-veil {
+  position: absolute;
+  inset: 0;
+  z-index: var(--keep-z-veil);
+  background:
+    radial-gradient(circle at 0% 0%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 100% 0%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 0% 100%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(circle at 100% 100%, var(--keep-blood) 0%, transparent 38%),
+    radial-gradient(120% 85% at 50% 50%, transparent 42%, var(--keep-blood) 100%);
+  /*
+   * Plain alpha, not `multiply`.
+   *
+   * Multiply is the better-looking answer and it is not a reliable one: the
+   * backdrop here is a WebGL canvas in a stacking context of its own, and the
+   * blend came out as nothing at all -- a veil in the document, at the right
+   * opacity, drawing no pixels. A signal that silently does not appear is
+   * worse than a plainer one that does.
+   */
+  pointer-events: none;
+  transition: opacity var(--keep-normal) linear;
+}
+
+/*
+ * How the kingdom is holding, in words.
+ *
+ * The other half of the veil, and the half somebody can act on: a wash of
+ * colour cannot say "three" and cannot be read aloud. It keeps its place in
+ * the HUD whether the news is good or bad, so the good news is not the absence
+ * of anything -- a line that only appears when something is wrong is a line
+ * nobody learns to read.
+ */
+.keep-muster {
+  margin: 0;
+  font-size: var(--keep-text-sm);
+}
+
+.keep-muster.is-held {
+  color: var(--keep-mist);
+}
+
+.keep-muster.is-pressed {
+  color: var(--keep-parchment);
+}
+
+.keep-muster.is-pressed strong {
+  color: var(--keep-blood);
+  /*
+   * Brightened against the stone behind it. The palette's blood is mixed for
+   * a grass field and is too dark to read on a dark panel.
+   */
+  filter: brightness(1.45);
+}
+
+/* ---- the zoom controls ------------------------------------------------- */
+
+/*
+ * The way out of the map on a screen with no wheel.
+ *
+ * The camera had three ways to move and a phone has one of them: drag works,
+ * the wheel does not exist, and pinch is a two-handed gesture on a device
+ * people hold in one -- and nothing on screen ever said it was there. Pinch
+ * still works; this is the part that can be seen.
+ *
+ * Up the right-hand edge, above the thumb rather than under it, and clear of
+ * both bottom corners so it never lands on the roster panel or the wright
+ * card's top edge.
+ */
+.keep-corner.is-right {
+  top: 50%;
+  right: var(--keep-safe-right);
+  flex-direction: column;
+  transform: translateY(-50%);
+}
+
+/*
+ * And out of the card's way while a figure is inspected.
+ *
+ * The card is a modal layer over the HUD, pinned to the same edge these sit
+ * on -- so inspecting anything covered the only visible way to zoom out, which
+ * is the affordance this corner exists to be. It steps aside by exactly the
+ * card's own width, from the same variable the card is sized by.
+ */
+.keep[data-card="open"] .keep-corner.is-right {
+  right: calc(var(--keep-safe-right) + var(--keep-card-width) + var(--keep-space));
+}
+
+.keep-zoom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--keep-space);
+  pointer-events: auto;
+}
+
+.keep-zoom-button {
+  width: var(--keep-hit);
+  min-width: var(--keep-hit);
+  min-height: var(--keep-hit);
+  padding: 0;
+  font-size: var(--keep-text-xl);
+  /* A glyph, not a word: no tracking, and centred in its own square. */
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+/*
+ * A control at its limit says so rather than going quiet. Half opacity is not
+ * on its own enough -- `disabled` is what a screen reader reads, and the
+ * cursor says it too.
+ */
+.keep-zoom-button:disabled {
+  border-color: var(--keep-stone-lit);
+  color: var(--keep-mist);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.keep-zoom-button:disabled:hover {
+  background: var(--keep-stone);
+  border-color: var(--keep-stone-lit);
+}
+
+/* ---- a handset, either way up ------------------------------------------ */
+
+/*
+ * Keyed on the layout the game worked out, not on the width of the window.
+ *
+ * This is the whole reason `state/layout.ts` exists. Every responsive rule in
+ * this file used to ask `width <= 640px`, and a phone held sideways is 844
+ * pixels across: it sailed past all of them and then had 390 pixels of height
+ * to fit four framed panels, a pause button and a map into. The short edge is
+ * what is scarce on a handset, and it is scarce whichever way up it is.
+ *
+ * What gives is never the text. The floor this file holds itself to is a
+ * floor -- 16px, because a game is read in a hurry and often at arm's length.
+ * So the frames get thinner, the padding closes up, and whole panels leave for
+ * the pause menu, which is one tap away and is the right home for a number you
+ * look up rather than glance at. `Hud` drops those from the tree rather than
+ * hiding them here, because a hidden button is still in the tab order.
+ */
+.keep[data-layout="phone"] {
+  /* A phone has no overscan; what it has is a notch and a home indicator. */
+  --keep-safe: max(10px, env(safe-area-inset-left));
+}
+
+/*
+ * The frame, thinner.
+ *
+ * The art is a nine-slice: the border width and the slice's rendered size have
+ * to move together or the brass corners stretch. Sixteen pixels of frame on
+ * every side of every panel is most of a phone's width spent on decoration.
+ */
+.keep[data-layout="phone"] .keep-panel,
+.keep[data-layout="snug"] .keep-panel {
+  border-width: 10px;
+  border-image: url("/game/ui/frame-panel.png") 16 / 10px stretch;
+}
+
+.keep[data-layout="phone"] .keep-panel-heavy,
+.keep[data-layout="snug"] .keep-panel-heavy {
+  border-width: 18px;
+  border-image: url("/game/ui/frame-heavy.png") 32 / 18px stretch;
+}
+
+/*
+ * The standing panel is sized to its contents rather than to the window.
+ *
+ * It used to be allowed the whole width less a margin, which on a phone is a
+ * panel across the top of the map whatever is in it.
+ */
+.keep[data-layout="phone"] .keep-standing,
+.keep[data-layout="snug"] .keep-standing {
+  min-width: 0;
+  max-width: min(76vw, calc(340px * var(--keep-scale)));
+  gap: calc(var(--keep-space) / 2);
+}
+
+/*
+ * The big number comes down two steps.
+ *
+ * It is the one thing here that is genuinely glanced at rather than read, so
+ * it stays the largest thing on the panel; it does not need to be 34 pixels
+ * tall on a screen 390 across.
+ */
+.keep[data-layout="phone"] .keep-operational-value {
+  font-size: var(--keep-text-xl);
+}
+
+.keep[data-layout="phone"] .keep-operational-label {
+  font-size: var(--keep-text);
+}
+
+.keep[data-layout="phone"] .keep-operational-head {
+  gap: calc(6px * var(--keep-scale));
+}
+
+/*
+ * Progression leaves the field on a handset.
+ *
+ * The crest, the class, the level and the experience bar are four rows about
+ * what has already happened, and the phone HUD is for what is happening now.
+ * All four are in the pause menu.
+ */
+.keep[data-layout="phone"] .keep-standing-divider,
+.keep[data-layout="phone"] .keep-standing-head,
+.keep[data-layout="phone"] .keep-standing > .keep-meter {
+  display: none;
+}
+
+/*
+ * The pause control keeps its hit area and loses its word.
+ *
+ * The word is dropped rather than shrunk: the accessible name comes from the
+ * text, so it is still announced, and nothing on screen is claiming to be
+ * readable at a size it is not.
+ */
+.keep[data-layout="phone"] .keep-pause-button {
+  width: var(--keep-hit);
+  min-width: var(--keep-hit);
+  padding: 0;
+  gap: 0;
+}
+
+.keep[data-layout="phone"] .keep-pause-button .keep-button-word {
+  display: none;
+}
+
+/*
+ * The zoom controls move down out of the middle of the right edge, where a
+ * thumb reaches and where they do not sit over a camp.
+ */
+.keep[data-layout="phone"] .keep-corner.is-right {
+  top: auto;
+  bottom: calc(var(--keep-safe-bottom) + var(--keep-space));
+  transform: none;
+}
+
+/*
+ * On a handset the card is a sheet across the foot of the screen rather than
+ * a panel down one side, so the controls go up rather than across.
+ */
+.keep[data-layout="phone"][data-card="open"] .keep-corner.is-right {
+  right: var(--keep-safe-right);
+  bottom: calc(var(--keep-safe-bottom) + var(--keep-card-height) + var(--keep-space));
+}
+
+/* The card over a figure is a sheet against the foot of the screen. */
+.keep[data-layout="phone"] .keep-wright {
+  top: auto;
+  right: var(--keep-safe-right);
+  bottom: var(--keep-safe-bottom);
+  left: var(--keep-safe-left);
+  width: auto;
+  max-height: var(--keep-card-height);
+}
+
+/*
+ * A short window, whatever is pointing at it: a phone on its side, a laptop
+ * with the browser half-height, a tablet in split screen. The panels that
+ * scroll need the room more than the padding around them does.
+ */
+.keep[data-layout="snug"] .keep-pause-panel,
+.keep[data-layout="phone"] .keep-pause-panel {
+  gap: var(--keep-space);
+  padding: var(--keep-space-2);
+}
+
+.keep[data-layout="phone"] .keep-pause-head h2 {
+  font-size: var(--keep-text-xl);
+}
+
+/*
+ * The opening screen, on a handset.
+ *
+ * It is the first thing anybody sees and it was three paragraphs of premise, a
+ * five-item list and a description panel, inside a 32-pixel frame, on a screen
+ * 390 across -- which is a scroll before the game has started.
+ *
+ * What goes is prose, not size. The premise is in the Codex in the pause menu
+ * and it is not what somebody is on this screen to do; what they are here to
+ * do is pick a class, and that is what is left.
+ */
+.keep[data-layout="phone"] .keep-opening,
+.keep[data-layout="snug"] .keep-opening {
+  padding: var(--keep-space-2);
+  gap: var(--keep-space);
+}
+
+.keep[data-layout="phone"] .keep-opening-head p ~ p {
+  display: none;
+}
+
+.keep[data-layout="phone"] .keep-opening-head h2 {
+  font-size: var(--keep-text-lg);
+}
+
+/*
+ * The description panel goes too.
+ *
+ * Side by side with the list it stops five classes reflowing under the
+ * cursor, which is a real problem with a cursor and not one with a thumb --
+ * and stacked underneath on a narrow screen it is the same sentence the
+ * highlighted item is already showing, one screen further down.
+ */
+.keep[data-layout="phone"] .keep-opening-detail {
+  display: none;
+}
+
+/*
+ * The foot stacks rather than squeezing the prompt into a column two words
+ * wide. `space-between` on a narrow row turned "Take the keep" into three
+ * lines with a sentence beside it.
+ */
+.keep[data-layout="phone"] .keep-pause-foot {
+  padding-top: var(--keep-space);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--keep-space);
+}

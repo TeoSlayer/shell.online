@@ -3,10 +3,24 @@ package main
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
+var helpTopics = [...]string{
+	"start", "files", "attach", "list", "ls", "password", "kill", "login",
+	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "reference",
+}
+
+func helpTopicUsage() string {
+	return strings.Join(helpTopics[:], "|")
+}
+
+func helpTopicList() string {
+	return strings.Join(helpTopics[:], ", ")
+}
+
 func printShellHelp(writer io.Writer) {
-	fmt.Fprint(writer, `shell.online — a browser link for a local terminal process
+	fmt.Fprintf(writer, `shell.online — a browser link for a local terminal process
 
 Start
   shell <command>                  Share it in the background
@@ -39,6 +53,7 @@ Machine services
   shell agent                      Watch for browser-started sessions in this terminal
   shell daemon status|start|stop   Manage browser-started sessions in the background
   shell service install|status     Keep the machine agent running across restarts
+  shell stats                      Show what this machine would report to the game
 
 Common options
   --read-only                      View only
@@ -49,9 +64,9 @@ Common options
   --files-root <directory>         Opt in a different directory
   --auto-close <time>              Add an earlier deadline, such as 5m
 
-Use shell help <start|files|attach|list|ls|password|kill|login|agent|daemon|service|e2ee|docker|platforms> for a
-guided topic, or shell help reference for every command, flag, and environment variable.
-`)
+Use shell help <%s> for a guided topic, or shell help reference for every command,
+flag, and environment variable.
+`, helpTopicUsage())
 }
 
 func runHelp(arguments []string, stdout, stderr io.Writer) int {
@@ -60,7 +75,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) != 1 {
-		fmt.Fprintln(stderr, "Usage: shell help [start|files|attach|list|ls|kill|login|agent|daemon|service|e2ee|docker|platforms|reference]")
+		fmt.Fprintf(stderr, "Usage: shell help [%s]\n", helpTopicUsage())
 		return 2
 	}
 
@@ -144,10 +159,13 @@ Linking a machine to an account is optional. The CLI works exactly the same
 without it; linking only adds a list of your shares at shell.online.
 
   1. Run shell login. A browser opens on the approval screen.
-     shell login --no-browser prints the URL instead, but you must open it in
-     a browser on this same machine: the callback is deliberately loopback-only.
+     shell login --no-browser prints the URL instead, for a machine with no
+     browser on it.
   2. Approve the request. The browser hands a one-time code back to a listener
      bound to 127.0.0.1, so the code never leaves this computer.
+     A browser on a different computer cannot reach that listener, so it stops
+     on a page that will not load. Paste that page's address back into the
+     terminal and the sign-in completes from there.
   3. Run shell as usual. Each share is published to your account as it starts,
      and marked closed when the process exits.
 
@@ -177,12 +195,17 @@ Driving this machine from the browser
     shell daemon stop                  Stop until the next shell command
     shell logout                       Stop it and unlink the machine
 
-  The daemon starts again whenever you run a shell command, which covers a
-  reboot the moment you use the tool. For a machine that sits idle and still
-  has to be reachable, install it as a background service:
+  Saying yes the first time also installs the daemon as a background service,
+  so the machine is reachable after a restart without anybody logging in and
+  running something. That is the case the service exists for: a machine you
+  want to reach from a browser is a machine nobody is sitting at.
 
-    shell service install              Keep it running across restarts
+    shell service status               Say whether one is installed
+    shell service install              Install it again after removing it
     shell service uninstall            Remove it
+
+  Without one the daemon still starts whenever you run a shell command, which
+  covers a reboot the moment you use the tool.
     shell service status               Say whether it is installed
 
   shell agent does the same thing in the foreground, printing each session as
@@ -203,6 +226,28 @@ Running against a local stack
 
 Credentials live in your user config directory, readable only by you. Set
 SHELL_ONLINE_CONFIG to keep them somewhere else.
+		`)
+	case "stats":
+		fmt.Fprint(stdout, `What this machine would report
+
+  shell stats [--json] [--days N] [--dir PATH]
+
+Prints the numbers a statistics run would send to the game, and sends nothing.
+
+The game's elixir vial is filled by these runs, and they happen on this machine
+rather than on the server because sessions are encrypted end to end: the server
+holds no key and cannot read one. So the reading happens where the plaintext
+already is, and what leaves is counts.
+
+What it reads: how many commits and how many lines changed in this repository,
+how many pull requests you have open if the GitHub CLI is here, and how many
+tokens your coding agents have spent, from their own local files.
+
+What it never reads: terminal output, file contents, diffs, commit messages,
+branch names, prompts or replies. Run it with --json to see the exact report.
+
+Nothing is gathered unless you have turned the gathering on in the game, and
+this command does not turn it on or send anything anywhere.
 		`)
 	case "agent":
 		fmt.Fprint(stdout, `Machine agent
@@ -356,14 +401,14 @@ process. The Docker image combines it with a restart policy for automatic recove
 		printCLIReference(stdout)
 	default:
 		fmt.Fprintf(stderr, "shell: unknown help topic %q\n", arguments[0])
-		fmt.Fprintln(stderr, "Available topics: start, attach, list, ls, password, kill, login, agent, daemon, service, e2ee, docker, platforms, reference")
+		fmt.Fprintf(stderr, "Available topics: %s\n", helpTopicList())
 		return 2
 	}
 	return 0
 }
 
 func printCLIReference(writer io.Writer) {
-	fmt.Fprint(writer, `Complete CLI reference
+	fmt.Fprintf(writer, `Complete CLI reference
 
 SYNOPSIS
   shell [options] [--] [command] [arguments...]
@@ -374,7 +419,7 @@ SYNOPSIS
   shell kill --all
   shell password <session-id-or-prefix>
   shell password rotate <session-id-or-prefix>
-  shell help [start|attach|list|ls|password|kill|e2ee|docker|platforms|reference]
+  shell help [%s]
 
 START AND SHARE
   shell [command] [arguments...]
@@ -485,5 +530,5 @@ OUTPUT AND EXIT STATUS
 SESSION EVENT JSON
   New-session events include encrypted=true and e2ee_password. Agents should give
   operators both share_url and e2ee_password and must preserve the URL fragment.
-`)
+`, helpTopicUsage())
 }

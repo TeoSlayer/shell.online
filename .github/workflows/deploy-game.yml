@@ -1,0 +1,142 @@
+name: Deploy game
+
+# The game skin, deployed on its own Worker.
+#
+# It exists so that the game and the console do not share a blast radius.
+# `shell-online-app` serves the session list, the terminal and the vault; while
+# the game shipped inside it, a bad game build was a bad console build. This
+# builds and deploys only the game, only when the game changed.
+#
+# There is no database step and no migration step, because there is nothing to
+# migrate: the Worker this deploys serves static files and holds no bindings,
+# no secrets and no cron. The game's tables belong to the console's Worker,
+# which is what answers /api/*, and they are migrated by deploy-app.yml.
+#
+# Read docs/deploy-game.md before switching the route on. Until a route exists
+# this deploys something reachable by nothing, on purpose.
+
+on:
+  push:
+    branches: [main]
+    # Only what this Worker is built from. A change to the console, the CLI or
+    # the relay must not redeploy the game, which is the entire point.
+    paths:
+      - "app/src/game/**"
+      - "app/src/styles/game.css"
+      - "app/public/game/**"
+      - "app/game.html"
+      - "app/vite.game.config.ts"
+      - "app/wrangler.game.jsonc"
+      - ".github/workflows/deploy-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One at a time. Two overlapping deploys of the same Worker is a race over
+# which build is left serving.
+concurrency:
+  group: deploy-game
+  cancel-in-progress: false
+
+env:
+  # Pinned, like the console's: a deploy should not change because a new
+  # wrangler was published this morning.
+  WRANGLER_VERSION: "4.131.0"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # A dispatch runs against whatever ref was chosen. Production is built
+      # from main, so anything else is a mistake worth catching before it ships.
+      - name: Refuse to deploy anything but main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -eu
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "this workflow deploys main; asked for $REF" >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+        working-directory: app
+
+      # Fails here, naming what is missing, rather than further in where the
+      # symptom no longer resembles the cause. Values arrive through the
+      # environment rather than ${{ }} inside the script, so nothing configured
+      # elsewhere can be read as shell.
+      - name: Check the deploy has what it needs
+        env:
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -eu
+          missing=
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            eval "value=\${$name-}"
+            if [ -z "$value" ]; then missing="$missing $name"; fi
+          done
+          # The client is compiled against one sign-in configuration or the
+          # other, exactly as the console is. Neither is a build that cannot
+          # sign anybody in.
+          oidc=0; firebase=0
+          if [ -n "${VITE_OIDC_ISSUER-}" ] && [ -n "${VITE_OIDC_CLIENT_ID-}" ]; then oidc=1; fi
+          if [ -n "${VITE_FIREBASE_API_KEY-}" ] && [ -n "${VITE_FIREBASE_PROJECT_ID-}" ]; then firebase=1; fi
+          if [ "$oidc" = 0 ] && [ "$firebase" = 0 ]; then
+            missing="$missing SIGN_IN_CONFIGURATION"
+          fi
+          if [ -n "$missing" ]; then
+            echo "the game deploy is missing:$missing" >&2
+            exit 1
+          fi
+
+      # The same tests the console runs, narrowed to what this Worker ships.
+      # A game that does not typecheck or breaks its own readability rules is
+      # not deployed, however green the console is.
+      - name: Check the game
+        working-directory: app
+        run: |
+          set -eu
+          npm run typecheck
+          npx vitest run src/game
+          node scripts/check-game-ui.mjs
+
+      - name: Build the game
+        working-directory: app
+        env:
+          VITE_OIDC_ISSUER: ${{ vars.VITE_OIDC_ISSUER }}
+          VITE_OIDC_CLIENT_ID: ${{ vars.VITE_OIDC_CLIENT_ID }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_RELAY_URL: ${{ vars.VITE_RELAY_URL }}
+        run: npm run build:game
+
+      - name: Deploy the game Worker
+        working-directory: app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@${{ env.WRANGLER_VERSION }} deploy --config wrangler.game.jsonc

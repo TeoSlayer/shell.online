@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build && npm run build:server && node scripts/check-bundle.mjs",
+    "build:game": "tsc -b && vite build --config vite.game.config.ts",
     "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist-server/index.js && cp -R server/lib/migrations dist-server/migrations",
     "check:protocol": "node scripts/check-protocol.mjs",
     "db:import": "tsx server/import-json.ts",
     "db:migrate": "tsx server/migrate.ts",
-    "db:verify": "tsx server/verify-schema.ts",
     "db:up": "docker run -d --name shell-online-pg -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=shell_online -p 5433:5432 postgres:16-alpine",
+    "db:verify": "tsx server/verify-schema.ts",
     "dev": "vite",
     "dev:accounts": "tsx watch --env-file-if-exists=.env.local server/index.ts",
     "dev:all": "npm-run-all --parallel dev dev:accounts",
@@ -18,12 +19,13 @@
     "preview": "vite preview",
     "render:deploy-config": "node scripts/render-deploy-config.mjs",
     "start": "node dist-server/index.js",
-    "test": "vitest run && node scripts/check-protocol.mjs",
+    "test": "vitest run && node scripts/check-protocol.mjs && node scripts/check-game-ui.mjs",
     "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:dev@localhost:5433/shell_online} vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --force",
+    "verify:bundle": "node scripts/check-bundle.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "verify:bundle": "node scripts/check-bundle.mjs"
+    "verify:game-ui": "node scripts/check-game-ui.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -33,6 +35,8 @@
     "jose": "^6.2.12",
     "oidc-client-ts": "^3.5.0",
     "pg": "^8.23.0",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.20.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3"

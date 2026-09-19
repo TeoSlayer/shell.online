@@ -38,6 +38,21 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestEveryAdvertisedHelpTopicResolves(t *testing.T) {
+	for _, topic := range helpTopics {
+		t.Run(topic, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			if exitCode := runHelp([]string{topic}, &stdout, &stderr); exitCode != 0 {
+				t.Fatalf("runHelp(%q) = %d, stderr = %q", topic, exitCode, stderr.String())
+			}
+			if stdout.Len() == 0 {
+				t.Fatalf("runHelp(%q) produced no guidance", topic)
+			}
+		})
+	}
+}
+
 func TestE2EEHelpExplainsAutomaticPasswordFlow(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -173,7 +188,14 @@ func TestHelpLoginTopicExplainsWhatIsPublished(t *testing.T) {
 	for _, expected := range []string{
 		"--no-browser",
 		"127.0.0.1",
-		"same machine",
+		/*
+		 * A browser elsewhere cannot reach the loopback listener, and the way
+		 * out of that is the thing the topic has to say: the help used to
+		 * promise the opposite, that the link had to be opened on this same
+		 * machine, and it was the only place that said what to do instead.
+		 */
+		"different computer",
+		"Paste that page's address",
 		"What is published",
 		"never the E2EE key",
 		"SHELL_ONLINE_CONFIG",

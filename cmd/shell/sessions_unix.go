@@ -294,16 +294,47 @@ func writeAll(writer io.Writer, value []byte) error {
 	return nil
 }
 
+// abandonedRecordTTL is how long a note about an unreported session is kept.
+//
+// The note only exists to tell the accounts service about an end it never
+// heard about. Past a day the service has worked that out for itself -- the
+// relay has long since expired the session -- so a machine that stays signed
+// out does not collect files forever.
+const abandonedRecordTTL = 24 * time.Hour
+
 func loadActiveLocalSessions() ([]localSessionRecord, error) {
+	sessions, _, err := scanLocalSessions()
+	return sessions, err
+}
+
+// abandonedLocalSessions returns the sessions this machine started and never
+// got to report the end of.
+func abandonedLocalSessions() ([]localSessionRecord, error) {
+	_, abandoned, err := scanLocalSessions()
+	return abandoned, err
+}
+
+// scanLocalSessions reads the session records this machine keeps and sorts
+// them into the ones still running and the ones whose process has gone.
+//
+// A record whose control socket does not answer is not deleted on the spot any
+// more. The process is gone, but whether anybody was told is a separate
+// question: a session that exits normally closes itself in the accounts
+// service, and one that dies with its machine -- a reboot, a power cut -- never
+// does. Deleting the record here threw away the only local evidence that the
+// session had ever existed, and the browser was left showing it as something
+// you could still type into. So the record is kept, dated, and cleared once
+// the service has been told.
+func scanLocalSessions() (active, abandoned []localSessionRecord, err error) {
 	directory, err := ensureLocalSessionDirectory()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	paths, err := filepath.Glob(filepath.Join(directory, "*.json"))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	sessions := make([]localSessionRecord, 0, len(paths))
+	active = make([]localSessionRecord, 0, len(paths))
 	for _, path := range paths {
 		file, openError := os.Open(path)
 		if openError != nil {
@@ -317,15 +348,49 @@ func loadActiveLocalSessions() ([]localSessionRecord, error) {
 			_ = os.Remove(path)
 			continue
 		}
-		response, pingError := sendLocalControl(record.ID, "ping")
-		if pingError != nil || !response.OK || response.ID != record.ID || response.PID != record.PID {
-			_ = os.Remove(path)
-			cleanupLocalControl(record.ID)
+		if record.AbandonedAt != nil {
+			if time.Since(*record.AbandonedAt) >= abandonedRecordTTL {
+				_ = os.Remove(path)
+				continue
+			}
+			abandoned = append(abandoned, record)
 			continue
 		}
-		sessions = append(sessions, record)
+		response, pingError := sendLocalControl(record.ID, "ping")
+		if pingError != nil || !response.OK || response.ID != record.ID || response.PID != record.PID {
+			cleanupLocalControl(record.ID)
+			noticed := time.Now().UTC()
+			record.AbandonedAt = &noticed
+			/*
+			 * Closing the session needs its id and nothing else. The browser
+			 * password would still open the relay's copy for as long as it is
+			 * retained, so a record that outlives its process does not keep it.
+			 */
+			record.Password = ""
+			if writeError := writeLocalSessionRecord(directory, record); writeError != nil {
+				/* Nowhere to leave the note: the old behaviour is still better than a stale record. */
+				_ = os.Remove(path)
+				continue
+			}
+			abandoned = append(abandoned, record)
+			continue
+		}
+		active = append(active, record)
 	}
-	return sessions, nil
+	return active, abandoned, nil
+}
+
+// forgetLocalSession drops the record for a session whose end has been
+// reported, so it is not reported again.
+func forgetLocalSession(id string) {
+	if !localSessionIDPattern.MatchString(id) {
+		return
+	}
+	directory, err := ensureLocalSessionDirectory()
+	if err != nil {
+		return
+	}
+	_ = os.Remove(localSessionRecordPath(directory, id))
 }
 
 func requestLocalSessionStop(id string) error {

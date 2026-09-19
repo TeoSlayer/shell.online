@@ -8,7 +8,7 @@ import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
 import { shouldOpenSurface } from "../lib/surface-navigation";
-import { sessionEnded, sessionStateLabel } from "../lib/session-liveness";
+import { sessionEnded, sessionEndedAt, sessionStateLabel } from "../lib/session-liveness";
 
 /**
  * The same sessions as three columns, one per thing you can do with them.
@@ -78,7 +78,7 @@ function Card({
       <p className="board-card-meta">
         {session.host}
         {sessionEnded(session)
-          ? ` · ${sessionStateLabel(session).toLowerCase()} after ${ago(session.startedAt, session.closedAt ?? session.relayCheckedAt ?? now)}`
+          ? ` · ${sessionStateLabel(session).toLowerCase()} after ${ago(session.startedAt, sessionEndedAt(session, now))}`
           : ` · ${sessionStateLabel(session).toLowerCase()} · open ${ago(session.startedAt, now)}`}
       </p>
 
@@ -164,7 +164,7 @@ export function SessionBoard({
     {
       key: "finished",
       title: "Finished",
-      hint: "The process has exited",
+      hint: "The process exited, or its machine stopped answering",
       sessions: finished,
     },
   ];

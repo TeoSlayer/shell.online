@@ -43,6 +43,12 @@ type localSessionRecord struct {
 	PID             int        `json:"pid"`
 	StartedAt       time.Time  `json:"started_at"`
 	ClosesAt        *time.Time `json:"closes_at,omitempty"`
+	// AbandonedAt is when this machine noticed the process was gone without
+	// having reported it. A session that ends normally deletes its own record
+	// and tells the accounts service; one whose machine was rebooted or lost
+	// power does neither, and this is the note left behind so the next run can
+	// finish the job. See reclaimAbandonedSessions.
+	AbandonedAt *time.Time `json:"abandoned_at,omitempty"`
 }
 
 type localSessionControl interface {
@@ -121,6 +127,8 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runAccountCommand(arguments, stdout, stderr)
 	case "agent":
 		return runAgent(arguments[1:], stdout, stderr), true
+	case "stats":
+		return runStats(context.Background(), stdout, stderr, arguments[1:]), true
 	case "daemon":
 		return runDaemonCommand(arguments[1:], stdout, stderr), true
 	case "service":

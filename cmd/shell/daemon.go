@@ -100,11 +100,13 @@ func startDaemonCommand(stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "Run 'shell login --allow-remote-start' to change that.")
 			return 1
 		}
-		if !askRemoteStart(os.Stdin, stderr, credentials.Email, credentials.RemoteStart) {
+		if !askRemoteStart(terminalLines(os.Stdin), stderr, credentials.Email, credentials.RemoteStart) {
 			fmt.Fprintln(stdout, "Left as publish-only.")
 			return 1
 		}
 		credentials.RemoteStart = true
+		/* Answering here settles it as much as answering it at a login does. */
+		credentials.RemoteStartAsked = true
 		if err := account.Save(path, credentials); err != nil {
 			fmt.Fprintf(stderr, "shell: %v\n", err)
 			return 1
@@ -371,6 +373,14 @@ func restartDaemon() {
 	}
 	credentials, err := account.Load(path)
 	if err != nil || !credentials.RemoteStart {
+		return
+	}
+	/*
+	 * A supervised daemon is the supervisor's to replace. Spawning a detached
+	 * one beside it leaves two things trying to own one process, and the
+	 * service would restart its own copy regardless.
+	 */
+	if restartService() {
 		return
 	}
 	if daemonAnswering() {

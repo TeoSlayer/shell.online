@@ -6,6 +6,7 @@ import type { AuditEvent, SessionRecord,
 } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
 import type { SessionLiveness, SessionLivenessSource } from "./lib/session-liveness";
+import { closeEndedSessions } from "./lib/session-reconcile";
 import { exchangeCode, issueCode } from "./lib/codes";
 import {
   checkAccessToken,
@@ -50,6 +51,9 @@ import { addComment, inbox, notifyAssigned, notifySessionStarted } from "./route
 import { deleteAccount } from "./routes/account";
 import { submitFeedback } from "./routes/feedback";
 import { excludedAccountFilter } from "./lib/internal-accounts";
+import { emptyProfile, profileForApi, readProfile } from "./routes/game";
+import { deriveStats } from "./lib/game-stats";
+import { readRun, reachable, runForApi, runFrom } from "./routes/gathering";
 import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats";
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
@@ -352,8 +356,9 @@ export function createApp(options: AppOptions) {
     const states = options.sessionLiveness
       ? await options.sessionLiveness.many(sessions)
       : new Map<string, SessionLiveness>();
-    return sessions.map((session) =>
-      sessionForMember(membership, session, states.get(session.id))
+    const settled = await closeEndedSessions(store, sessions, states, log);
+    return settled.map((session) =>
+      sessionForMember(membership, session, session.closedAt ? undefined : states.get(session.id))
     );
   }
 
@@ -571,8 +576,12 @@ export function createApp(options: AppOptions) {
         const states = options.sessionLiveness
           ? await options.sessionLiveness.many(sessions)
           : new Map<string, SessionLiveness>();
+        const settled = await closeEndedSessions(store, sessions, states, log);
         return send(response, 200, {
-          sessions: sessions.map((session) => ({ ...sessionForApi(session), ...states.get(session.id) })),
+          sessions: settled.map((session) => ({
+            ...sessionForApi(session),
+            ...(session.closedAt ? {} : states.get(session.id)),
+          })),
         });
       }
 
@@ -703,6 +712,143 @@ export function createApp(options: AppOptions) {
        * `missing` names the members with a vault and no copy yet, so any
        * teammate who holds the key can seal one for them.
        */
+      /*
+       * The saved game: who the player chose to be, what they are wearing,
+       * what they have bought and what they have spent.
+       *
+       * Scoped to the caller's own account rather than to their team, because
+       * a keep is one person's progress. Everything else about it -- the
+       * level, how fortified it is, the purse -- is worked out again from the
+       * work that earned it, so none of that is stored and none of it can
+       * disagree with itself.
+       */
+      if (route === "GET /api/game") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const profile = (await store.gameProfile(caller.uid)) ?? emptyProfile(caller.uid, Date.now());
+        return send(response, 200, { game: profileForApi(profile) });
+      }
+
+      /*
+       * What a level is worth, counted from the caller's own sessions.
+       *
+       * Derived here rather than stored, and derived rather than sent up by
+       * the browser, so the experience bar is a read-out of work that happened
+       * and not of a tab left open. Nothing in the reply came from inside a
+       * session: these are counts of rows and the names people gave their own
+       * sessions, which is all the service can see of an encrypted session and
+       * all it should ever want to.
+       */
+      if (route === "GET /api/game/stats") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const sessions = await store.listSessions(caller.uid);
+        return send(response, 200, { stats: deriveStats(sessions) });
+      }
+
+      /*
+       * What the gathering has cost, itemised.
+       *
+       * The vial shows a total, and a total on its own is a figure somebody has
+       * to take on trust. This is what it is made of: which machine ran, when,
+       * what it spent and what it found. Every number, and not one name.
+       */
+      if (route === "GET /api/game/runs") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const runs = await store.listCollectionRuns(caller.uid, 20);
+        return send(response, 200, { runs: runs.map(runForApi) });
+      }
+
+      /*
+       * Asks the machines to gather, now.
+       *
+       * Refused unless the account has said yes, which is checked here rather
+       * than trusted from the caller: consent is the whole basis on which any
+       * of this is allowed to run, and a button is not where it should be
+       * enforced.
+       */
+      if (route === "POST /api/game/gather") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+
+        const profile = await store.gameProfile(caller.uid);
+        if (!profile?.gathering) {
+          return send(response, 403, { error: "the gathering has not been agreed to" });
+        }
+
+        const now = Date.now();
+        const machines = reachable(await store.listDevices(caller.uid), now, AGENT_ONLINE_MS);
+        if (machines.length === 0) {
+          return send(response, 409, {
+            error:
+              "no machine is listening. Sign in on one with 'shell login' and " +
+              "leave 'shell agent' running.",
+          });
+        }
+
+        for (const machine of machines) {
+          await store.putCommand({
+            id: mintSecret("cmd"),
+            uid: caller.uid,
+            deviceId: machine.id,
+            kind: "probe",
+            createdAt: now,
+          });
+        }
+        return send(response, 202, { asked: machines.map((machine) => machine.label) });
+      }
+
+      /*
+       * A machine reporting what a run cost and found.
+       *
+       * Authenticated as the machine, not as the browser: this is the one
+       * number in the game the browser may not set, because it stands for real
+       * money. Narrowed hard on the way in -- an agent is a program on
+       * somebody's laptop, and these figures are summed and never recomputed,
+       * so one absurd report would make the vial meaningless for good.
+       */
+      if (route === "POST /api/agent/stats") {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+
+        const profile = await store.gameProfile(token.uid);
+        if (!profile?.gathering) {
+          return send(response, 403, { error: "the gathering has not been agreed to" });
+        }
+
+        const body = (await readBody(request)) as Record<string, unknown>;
+        /*
+         * The agent names the run, so reporting twice after a lost reply costs
+         * nothing. Without an id from the machine there is no way to tell a
+         * retry from a second run, and the safe reading of that ambiguity is
+         * the one that charges somebody twice.
+         */
+        const id = typeof body.id === "string" && /^run_[A-Za-z0-9_-]{1,64}$/.test(body.id)
+          ? body.id
+          : mintSecret("run");
+        const device = (await store.listDevices(token.uid)).find((entry) => entry.id === token.id);
+        const run = runFrom(
+          id,
+          token.uid,
+          { id: token.id, label: device?.label ?? "a machine" },
+          readRun(body),
+          Date.now(),
+        );
+        await store.recordCollectionRun(run);
+        return send(response, 202, { run: runForApi(run) });
+      }
+
+      if (route === "PUT /api/game") {
+        const caller = await requireUser(request);
+        if (!caller) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const previous = await store.gameProfile(caller.uid);
+        const profile = readProfile(caller.uid, body, previous, Date.now());
+        await store.putGameProfile(profile);
+        return send(response, 200, { game: profileForApi(profile) });
+      }
+
       if (route === "GET /api/team-key") {
         const membership = await requireMember(request);
         if (!membership) return send(response, 401, { error: "sign in first" });
@@ -1535,8 +1681,14 @@ export function createApp(options: AppOptions) {
         const liveness = !session.closedAt && options.sessionLiveness
           ? await options.sessionLiveness.one(session.id)
           : undefined;
+        const [settled] = await closeEndedSessions(
+          store,
+          [session],
+          new Map(liveness ? [[session.id, liveness]] : []),
+          log,
+        );
         return send(response, 200, {
-          session: sessionForMember(membership, session, liveness),
+          session: sessionForMember(membership, settled, settled.closedAt ? undefined : liveness),
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),

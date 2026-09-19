@@ -54,12 +54,38 @@ func TestCrossLanguageVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for index := range cipher.sendStream {
+		cipher.sendStream[index] = byte(index)
+	}
 	sealed, err := cipher.sealFrameWithNonce(append([]byte{1}, []byte("hello")...), nonce)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hex.EncodeToString(sealed) != "0101000102030405060708090a0b2f67ba77aabc5ea34e96d1ce6b9479978b53be0144" {
+	if hex.EncodeToString(sealed) != "01020100010203040506070000000000000001000102030405060708090a0b2f67ba77aaca8b8b050124ea94b7b8803644a14b0b" {
 		t.Fatalf("vector = %x", sealed)
+	}
+}
+
+func TestFrameSequenceRejectsReplayAndAllowsLimitedReordering(t *testing.T) {
+	key := bytes.Repeat([]byte{4}, KeyBytes)
+	cipher, err := New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frames := make([][]byte, 3)
+	for index := range frames {
+		frames[index], err = cipher.SealFrame([]byte{0x02, byte('a' + index)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, index := range []int{2, 0, 1} {
+		if _, err := cipher.OpenFrame(frames[index]); err != nil {
+			t.Fatalf("open reordered frame %d: %v", index, err)
+		}
+	}
+	if _, err := cipher.OpenFrame(frames[1]); err == nil {
+		t.Fatal("replayed frame authenticated")
 	}
 }
 

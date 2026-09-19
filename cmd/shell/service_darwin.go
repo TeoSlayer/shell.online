@@ -109,6 +109,38 @@ func installService(self string, environment map[string]string) (string, error) 
 	return path, nil
 }
 
+// restartService asks launchd to replace the running daemon.
+//
+// A daemon that launchd started is launchd's to replace: stopping it and
+// spawning a detached one leaves two supervisors for one process, and the
+// KeepAlive would bring launchd's back anyway.
+//
+// It is not waited on. `kickstart -k` kills the job and then blocks until it
+// is running again, and the agent sets ThrottleInterval to ten seconds, so
+// waiting costs eleven seconds of a silent terminal at the end of a login that
+// has already succeeded -- which is exactly what "shell login hangs" looked
+// like. Nothing here needs the answer: the daemon comes back on launchd's
+// schedule and reads the credentials that are already on disk, and the only
+// thing the caller has to know is that a supervisor owns this daemon, which
+// serviceInstalled has already said.
+//
+// The report is therefore whether the request was made, not whether the
+// restart finished. A launchctl that will not start at all is worth falling
+// back from, because a detached daemon beside a stalled agent is better than
+// no daemon at all.
+func restartService() bool {
+	if _, installed := serviceInstalled(); !installed {
+		return false
+	}
+	target := fmt.Sprintf("gui/%d/%s", os.Getuid(), serviceLabel)
+	command := exec.Command("launchctl", "kickstart", "-k", target)
+	if err := command.Start(); err != nil {
+		return false
+	}
+	_ = command.Process.Release()
+	return true
+}
+
 func uninstallService() (bool, error) {
 	path, installed := serviceInstalled()
 	if !installed {

@@ -5,12 +5,14 @@ import type {
   AppEventCount,
   AccountKey,
   AgentCommand,
+  GameCollectionRun,
   AuditEvent,
   AuthorizationCode,
   CliToken,
   Comment,
   Device,
   Feedback,
+  GameProfile,
   Notification,
   SessionKeyShare,
   SessionRecord,
@@ -173,6 +175,28 @@ export interface Store {
   deleteAccount(uid: string, plan: AccountDeletion, now?: number): Promise<void>;
   /** Whether this uid was deleted at or after `since`. */
   recentlyDeleted(uid: string, since: number): Promise<boolean>;
+
+  /* ---- The saved game ---- */
+  /**
+   * One account's saved game, or nothing if they have never opened it.
+   *
+   * Scoped by uid rather than by organization: the keep is a person's own
+   * progress, and two people on the same team have their own.
+   */
+  gameProfile(uid: string): Promise<GameProfile | null>;
+  /** Writes the whole profile. Creates it on first save. */
+  putGameProfile(profile: GameProfile): Promise<void>;
+  /**
+   * Records one gathering run, and adds what it cost to the account's total.
+   *
+   * One call rather than two, because the total in the profile is the sum of
+   * these rows: a writer that could record a run without adding its cost, or
+   * add a cost without recording the run, is a writer that can make the vial
+   * disagree with the breakdown behind it.
+   */
+  recordCollectionRun(run: GameCollectionRun): Promise<void>;
+  /** The most recent runs, newest first, for the breakdown behind the vial. */
+  listCollectionRuns(uid: string, limit?: number): Promise<GameCollectionRun[]>;
 
   /* ---- Team audit key ---- */
   teamKey(orgId: string): Promise<TeamKey | null>;

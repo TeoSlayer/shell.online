@@ -57,11 +57,48 @@ export default defineConfig(({ mode }) => {
    */
   const authHeaders = browserSecurityHeaders(env.VITE_OIDC_ISSUER?.trim());
 
+  /*
+   * The dev server needs one relaxation the others must not have.
+   *
+   * @vitejs/plugin-react injects its Fast Refresh preamble as an inline
+   * <script type="module"> into every page it serves. Under script-src 'self'
+   * the browser refuses to run it, and because that preamble runs before
+   * main.tsx, the refusal takes the whole application with it: `npm run dev`
+   * served a blank page and one CSP error, on every route.
+   *
+   * So the dev server, and only the dev server, also allows inline scripts.
+   * `preview` keeps the strict policy, and preview is the one that matters for
+   * the guarantee above: it serves the real production build, which has no
+   * inline script in it, so a policy problem that would break a deployment
+   * still surfaces before the deployment.
+   */
+  const devHeaders = {
+    ...authHeaders,
+    "Content-Security-Policy": authHeaders["Content-Security-Policy"].replace(
+      "script-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+    ),
+  };
+
   return {
     plugins: [react()],
     define: { __SHELL_ONLINE_VERSION__: JSON.stringify(appVersion) },
+    /*
+     * The game skin is deliberately NOT given a manualChunks entry.
+     *
+     * Naming it as a manual chunk looks tidier and is a trap: Vite treats a
+     * manual chunk as part of the initial graph, so index.html came back with
+     * a `modulepreload` for the game and a `<link rel="stylesheet">` for its
+     * stylesheet. Every visitor then downloaded the keep on their way to the
+     * session list, which is the exact thing the lazy import exists to
+     * prevent. `npm run verify:bundle` is what caught it and what will catch
+     * it again.
+     *
+     * Left alone, the dynamic import in src/App.tsx produces a true async
+     * chunk that is fetched when somebody asks for the game and not before.
+     */
     server: {
-      headers: authHeaders,
+      headers: devHeaders,
       /*
        * The relay refuses a WebSocket whose Origin is not its own
        * (worker/index.ts, "origin not allowed"). In production the app is

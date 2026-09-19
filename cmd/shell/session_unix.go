@@ -282,7 +282,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, outputRing, frameCipher, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
+		err := readRelay(connection, ptmx, outputRing, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
 		select {
 		case <-sharingFinished:
 			return
@@ -478,6 +478,7 @@ func readRelay(
 	ptmx sharedTerminalProcess,
 	output *ringbuffer.Buffer,
 	frameCipher *sessionCipher,
+	readOnly bool,
 	exitAcknowledged chan<- struct{},
 	rotationAcknowledged chan<- struct{},
 	supportsRotation *atomic.Bool,
@@ -546,9 +547,13 @@ func readRelay(
 		}
 		switch message[0] {
 		case protocol.Input:
-			_, _ = ptmx.Write(viewerInputPayload(message))
+			if acceptsViewerInput(readOnly, message[0]) {
+				_, _ = ptmx.Write(viewerInputPayload(message))
+			}
 		case protocol.ConfirmedEOF:
-			_, _ = ptmx.Write(viewerInputPayload(message))
+			if acceptsViewerInput(readOnly, message[0]) {
+				_, _ = ptmx.Write(viewerInputPayload(message))
+			}
 		case protocol.Resize:
 			// A shared PTY keeps one canonical grid. Browser and local viewport
 			// changes are presentation-only so simultaneous viewers cannot
@@ -579,6 +584,10 @@ func viewerInputPayload(frame []byte) []byte {
 		return []byte{4}
 	}
 	return nil
+}
+
+func acceptsViewerInput(readOnly bool, opcode byte) bool {
+	return !readOnly && (opcode == protocol.Input || opcode == protocol.ConfirmedEOF)
 }
 
 func sealFrame(frameCipher *sessionCipher, frame []byte) ([]byte, error) {

@@ -291,10 +291,10 @@ export function Terms() {
         <Section id="browser-sessions">
           <p>
             A background daemon can start and stop terminal sessions on your
-            machine at the request of a signed-in browser. It runs only after
-            you explicitly agree, once, at <code>shell login</code>. Only an
-            explicit yes is recorded; if you decline, you are asked again the
-            next time.
+            machine at the request of a signed-in browser. Every interactive{" "}
+            <code>shell login</code> asks for that permission, using your
+            previous answer as the default. A non-interactive login keeps a
+            previous grant but otherwise defaults to no.
           </p>
           <p>
             While browser-started sessions are allowed, the daemon polls the
