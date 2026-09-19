@@ -100,14 +100,22 @@ func installService(self string, environment map[string]string) (string, error) 
 	return path, nil
 }
 
-// restartService replaces the running daemon through systemd, for the same
+// restartService asks systemd to replace the running daemon, for the same
 // reason the darwin build does: a supervised process is the supervisor's to
 // replace, and Restart= would undo a detached one anyway.
+//
+// Not waited on, also for the same reason. `systemctl restart` blocks until
+// the unit is up again, and a login has nothing to do with that answer.
 func restartService() bool {
 	if _, installed := serviceInstalled(); !installed {
 		return false
 	}
-	return exec.Command("systemctl", "--user", "restart", serviceUnitName()).Run() == nil
+	command := exec.Command("systemctl", "--user", "restart", serviceUnitName())
+	if err := command.Start(); err != nil {
+		return false
+	}
+	_ = command.Process.Release()
+	return true
 }
 
 func uninstallService() (bool, error) {

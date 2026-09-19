@@ -184,6 +184,15 @@ type Options struct {
 	// NoBrowser prints the URL and waits without launching anything, for
 	// headless machines, CI, and agents driving their own browser.
 	NoBrowser bool
+	// Input carries lines typed at the terminal, for pasting back the URL a
+	// browser on another computer stopped at. See paste.go.
+	//
+	// A channel rather than a reader because this has to be waited on beside
+	// the loopback callback, and because whatever else in this process wants a
+	// line -- the remote-start question, right after this returns -- has to
+	// take it from the same place. Two things reading the terminal
+	// independently is how one of them eats the other's answer.
+	Input <-chan string
 }
 
 // Login runs the loopback authorization flow and returns linked credentials.
@@ -229,6 +238,11 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 	if options.Output != nil {
 		if options.NoBrowser {
 			fmt.Fprintf(options.Output, "\n  Open this in a browser to sign in:\n\n  %s\n\n", authorizeURL)
+			if options.Input != nil {
+				fmt.Fprintf(options.Output, "  %s\n  %s\n\n",
+					"If you opened it on another computer, the browser will stop on a page",
+					"that will not load. Paste that page's address here:")
+			}
 		} else {
 			fmt.Fprintf(options.Output, "\n  Opening your browser to sign in.\n")
 			fmt.Fprintf(options.Output, "  If it does not open, paste this into a browser:\n\n  %s\n\n", authorizeURL)
@@ -251,8 +265,48 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 	waitContext, cancelWait := context.WithTimeout(ctx, timeout)
 	defer cancelWait()
 
-	select {
-	case result := <-results:
+	/*
+	 * Nil when there is nobody to paste, and set to nil again when the
+	 * terminal closes: a receive on a nil channel blocks, which is what this
+	 * select wants, where a closed one would spin.
+	 */
+	pastes := options.Input
+	if !options.NoBrowser {
+		pastes = nil
+	}
+
+	var result callbackResult
+	for {
+		var pasted string
+		var stillOpen bool
+		select {
+		case result = <-results:
+		case pasted, stillOpen = <-pastes:
+			if !stillOpen {
+				pastes = nil
+				continue
+			}
+			candidate, err := pastedCallback(pasted, state)
+			if errors.Is(err, errNothingPasted) {
+				continue
+			}
+			if err != nil {
+				if options.Output != nil {
+					fmt.Fprintf(options.Output, "  %v\n\n", err)
+				}
+				continue
+			}
+			result = candidate
+		case <-waitContext.Done():
+			if errors.Is(waitContext.Err(), context.DeadlineExceeded) {
+				return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser", timeout)
+			}
+			return Credentials{}, waitContext.Err()
+		}
+		break
+	}
+
+	{
 		if result.err != nil {
 			return Credentials{}, result.err
 		}
@@ -266,11 +320,6 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 		}
 		credentials.AccountKey = result.accountKey
 		return credentials, nil
-	case <-waitContext.Done():
-		if errors.Is(waitContext.Err(), context.DeadlineExceeded) {
-			return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser", timeout)
-		}
-		return Credentials{}, waitContext.Err()
 	}
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -74,7 +73,7 @@ func remoteStartSettled(alreadyAsked, asked bool, flags remoteStartFlags) bool {
 // That is safe in the direction that matters: the default is only yes for a
 // machine that has already agreed, so nobody grants this by hitting enter
 // without reading, and nobody loses a working machine by doing the same.
-func askRemoteStart(input io.Reader, output io.Writer, email string, current bool) bool {
+func askRemoteStart(lines <-chan string, output io.Writer, email string, current bool) bool {
 	color := sessionOutputUsesColor(output)
 	dim := func(text string) string { return styleSessionText(color, "2", text) }
 
@@ -88,8 +87,9 @@ func askRemoteStart(input io.Reader, output io.Writer, email string, current boo
 	}
 	fmt.Fprintf(output, "  Allow it? %s ", dim(choices))
 
-	line, err := bufio.NewReader(input).ReadString('\n')
-	if err != nil && line == "" {
+	line, ok := <-lines
+	if !ok {
+		/* The terminal closed rather than answered. */
 		fmt.Fprintln(output)
 		return current
 	}

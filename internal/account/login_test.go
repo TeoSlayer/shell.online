@@ -2,11 +2,13 @@ package account
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -446,4 +448,142 @@ func TestCallbackKeepsThePageOnFailure(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "You declined.") {
 		t.Fatalf("the reason should be on the page, got: %s", recorder.Body.String())
 	}
+}
+
+/*
+ * The whole point of --no-browser: the browser is on another computer, so the
+ * loopback callback can never arrive. Before this, the login sat there until
+ * it timed out, with the answer sitting in the other computer's address bar
+ * and nowhere to put it.
+ */
+func TestLoginCompletesFromAPastedCallbackURL(t *testing.T) {
+	exchanged := make(chan string, 1)
+	service := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var body struct {
+			Code string `json:"code"`
+		}
+		_ = json.NewDecoder(request.Body).Decode(&body)
+		exchanged <- body.Code
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"access_token": "sha_x", "refresh_token": "shr_x", "expires_in": 3600,
+			"account": map[string]string{"uid": "uid-1", "email": "ana@example.com", "name": "Ana"},
+		})
+	}))
+	defer service.Close()
+
+	output := &syncBuilder{}
+	pastes := make(chan string, 2)
+	/* Whatever the browser stopped on, state and all, read off its address bar. */
+	go func() {
+		authorize := waitForAuthorizeURL(t, output)
+		pastes <- "" /* somebody pressing return first */
+		pastes <- authorize.redirect + "?code=shc_pasted&state=" + authorize.state
+	}()
+
+	credentials, err := Login(context.Background(), NewClient(service.URL, "test"), Options{
+		WebURL:    "http://localhost:5173",
+		Timeout:   10 * time.Second,
+		Output:    output,
+		NoBrowser: true,
+		Input:     pastes,
+	})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	if credentials.Email != "ana@example.com" {
+		t.Fatalf("credentials = %+v", credentials)
+	}
+	if code := <-exchanged; code != "shc_pasted" {
+		t.Fatalf("exchanged %q, want the pasted code", code)
+	}
+	if !strings.Contains(output.String(), "Paste that page's address here") {
+		t.Errorf("the terminal never offered the paste:\n%s", output.String())
+	}
+}
+
+// A paste that is not the answer says so and the login keeps waiting, rather
+// than failing on a typo.
+func TestLoginKeepsWaitingAfterAnUnusablePaste(t *testing.T) {
+	output := &syncBuilder{}
+	pastes := make(chan string, 1)
+	pastes <- "https://example.com/somewhere?else=1"
+
+	_, err := Login(context.Background(), NewClient("http://127.0.0.1:1", "test"), Options{
+		WebURL:    "http://localhost:5173",
+		Timeout:   300 * time.Millisecond,
+		Output:    output,
+		NoBrowser: true,
+		Input:     pastes,
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("error = %v, want it to have kept waiting", err)
+	}
+	if !strings.Contains(output.String(), "no authorization code") {
+		t.Errorf("the terminal did not say what was wrong:\n%s", output.String())
+	}
+}
+
+// A terminal that closes is not an answer, and must not spin the select.
+func TestLoginSurvivesAClosedTerminal(t *testing.T) {
+	pastes := make(chan string)
+	close(pastes)
+
+	_, err := Login(context.Background(), NewClient("http://127.0.0.1:1", "test"), Options{
+		WebURL:    "http://localhost:5173",
+		Timeout:   200 * time.Millisecond,
+		NoBrowser: true,
+		Input:     pastes,
+	})
+
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("error = %v, want a timeout", err)
+	}
+}
+
+type authorizeParts struct{ redirect, state string }
+
+// syncBuilder collects Login's output while another goroutine reads it, which
+// a strings.Builder is not safe for.
+type syncBuilder struct {
+	mutex sync.Mutex
+	text  strings.Builder
+}
+
+func (builder *syncBuilder) Write(value []byte) (int, error) {
+	builder.mutex.Lock()
+	defer builder.mutex.Unlock()
+	return builder.text.Write(value)
+}
+
+func (builder *syncBuilder) String() string {
+	builder.mutex.Lock()
+	defer builder.mutex.Unlock()
+	return builder.text.String()
+}
+
+// waitForAuthorizeURL reads the link Login printed and pulls out what the
+// browser would have been handed.
+func waitForAuthorizeURL(t *testing.T, output *syncBuilder) authorizeParts {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		printed := output.String()
+		if index := strings.Index(printed, "/cli/authorize?"); index >= 0 {
+			line := printed[index:]
+			if cut := strings.IndexAny(line, " \n"); cut >= 0 {
+				line = line[:cut]
+			}
+			parsed, err := url.Parse(line)
+			if err == nil && parsed.Query().Get("redirect_uri") != "" {
+				return authorizeParts{
+					redirect: parsed.Query().Get("redirect_uri"),
+					state:    parsed.Query().Get("state"),
+				}
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("Login never printed an authorize URL")
+	return authorizeParts{}
 }

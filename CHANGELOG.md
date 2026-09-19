@@ -6,6 +6,24 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- `shell login` no longer sits there for eleven seconds after it has already
+  succeeded. On a machine with the background service installed it asked the
+  supervisor to replace the daemon and then waited for that to finish, and
+  launchd throttles a relaunch by ten seconds -- so a login that had linked
+  the machine, exchanged its token and written its credentials went silent at
+  the very end. The restart is still asked for; it is no longer waited on,
+  because nothing about the login depends on the answer.
+- `shell login --no-browser` now accepts the sign-in pasted back. The flag is
+  for a machine with no browser on it, so the link gets opened on a different
+  computer -- whose browser is then sent to a loopback address that means
+  nothing there and stops on a page that will not load, with the whole
+  callback in the address bar. There was nowhere to put it and the CLI waited
+  five minutes for a callback that could never arrive. Paste that page's
+  address, or just the code, and the sign-in completes. A paste that is not
+  the answer says what is wrong and the login keeps waiting.
+
+### Fixed
+
 - A session could be reported as "Status unavailable" indefinitely while the
   relay knew perfectly well it was connected. The service seeds its view of the
   relay a couple of sessions per request, and each request may land on a worker

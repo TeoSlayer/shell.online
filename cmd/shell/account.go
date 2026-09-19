@@ -137,6 +137,17 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "shell: %v\n", err)
 	}
 
+	/*
+	 * One reader for the terminal, shared by the sign-in and the question
+	 * after it. See terminalLines. Nil when there is nobody there to type:
+	 * a scripted login should not be offered a paste, and nothing should be
+	 * reading its standard input.
+	 */
+	var lines <-chan string
+	if interactiveTerminal(stderr) {
+		lines = terminalLines(os.Stdin)
+	}
+
 	client := account.NewClient(*accountsURL, "shell/"+version)
 	credentials, err := account.Login(ctx, client, account.Options{
 		WebURL:    *webURL,
@@ -144,6 +155,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		MachineID: machineID,
 		Output:    stderr,
 		NoBrowser: *noBrowser,
+		Input:     lines,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "shell: login failed: %v\n", err)
@@ -167,7 +179,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	consent := remoteStartFlags{allow: *allowRemote, deny: *denyRemote}
 	grant, ask := decideRemoteStart(alreadyGranted, alreadyAsked, consent, interactiveTerminal(stderr))
 	if ask {
-		grant = askRemoteStart(os.Stdin, stderr, credentials.Email, alreadyGranted)
+		grant = askRemoteStart(lines, stderr, credentials.Email, alreadyGranted)
 	}
 	credentials.RemoteStart = grant
 	credentials.RemoteStartAsked = remoteStartSettled(alreadyAsked, ask, consent)
