@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.18.0] — 2026-09-20
+
 ### Added
 
 - The statistics dashboard now includes account growth and activity: total
@@ -12,6 +14,14 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - `STATS_EXCLUDE` lets operators omit internal addresses or domains from
   customer statistics. The dashboard reports the excluded count without
   exposing identifiers.
+
+
+- The kingdom can be short-handed, and says so. Waves are sized from the number
+  of people on the team, and it takes two live sessions a hero to meet them.
+  Below that the camera takes a veil of blood at its corners, heavier the
+  shorter the garrison is, and the HUD says in words how many more sessions
+  would hold the line. Nothing is lost by being short and nothing counts down:
+  starting a session anywhere on the team clears it within one poll.
 
 ### Fixed
 
@@ -37,7 +47,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   address, or just the code, and the sign-in completes. A paste that is not
   the answer says what is wrong and the login keeps waiting.
 
-### Fixed
 
 - A session could be reported as "Status unavailable" indefinitely while the
   relay knew perfectly well it was connected. The service seeds its view of the
@@ -67,15 +76,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - The Unmade appear. They used to march only on a hero whose session name read
   as bug work, which on a real team meant they never marched at all, and they
   were drawn at a third the height of the figures fighting them.
-
-### Added
-
-- The kingdom can be short-handed, and says so. Waves are sized from the number
-  of people on the team, and it takes two live sessions a hero to meet them.
-  Below that the camera takes a veil of blood at its corners, heavier the
-  shorter the garrison is, and the HUD says in words how many more sessions
-  would hold the line. Nothing is lost by being short and nothing counts down:
-  starting a session anywhere on the team clears it within one poll.
 
 ## [0.17.0] — 2026-09-18
 
