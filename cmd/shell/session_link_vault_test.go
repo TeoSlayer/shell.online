@@ -253,7 +253,7 @@ func TestSignInWithoutAUIDSkipsTheVault(t *testing.T) {
 	if share := service.lastShare(t); share != nil {
 		t.Fatalf("sealed without knowing whose vault it is: %+v", share)
 	}
-	if !strings.Contains(warn, "run 'shell login'") {
+	if !strings.Contains(warn, "run 'shell auth'") {
 		t.Fatalf("output = %q", warn)
 	}
 }

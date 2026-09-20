@@ -7,7 +7,7 @@ import (
 )
 
 var helpTopics = [...]string{
-	"start", "files", "attach", "list", "ls", "password", "kill", "login",
+	"start", "files", "attach", "list", "ls", "password", "kill", "auth",
 	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "reference",
 }
 
@@ -44,8 +44,8 @@ Then
   shell kill <ID>                  Safely stop the process and close its link
 
 Your account (optional)
-  shell login                      Put this machine and its sessions in the web app
-  shell login --no-browser         Print the approval URL instead of opening it
+  shell auth                      Put this machine and its sessions in the web app
+  shell auth --no-browser         Print the approval URL instead of opening it
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine
 
@@ -152,14 +152,17 @@ Detaching does not stop the process or disable the browser link. While attached,
 the terminal title keeps the Ctrl-X D reminder visible. Ctrl-] is also supported as
 a legacy alternative. Ctrl-Z only suspends the local shell client; it does not detach.
 `)
-	case "login", "logout", "whoami", "account":
-		fmt.Fprint(stdout, `shell login
+	case "auth", "login", "logout", "whoami", "account":
+		fmt.Fprint(stdout, `shell auth
 
 Linking a machine to an account is optional. The CLI works exactly the same
 without it; linking only adds a list of your shares at shell.online.
 
-  1. Run shell login. A browser opens on the approval screen.
-     shell login --no-browser prints the URL instead, for a machine with no
+  shell login is the same command. That is what it was called up to 0.18, and
+  it still works, so nothing anybody wrote down has stopped being true.
+
+  1. Run shell auth. A browser opens on the approval screen.
+     shell auth --no-browser prints the URL instead, for a machine with no
      browser on it.
   2. Approve the request. The browser hands a one-time code back to a listener
      bound to 127.0.0.1, so the code never leaves this computer.
@@ -180,7 +183,7 @@ What is published
   shell daemon stop                Stop accepting browser-started sessions now
 
 Driving this machine from the browser
-  shell login asks, once, whether your signed-in browser may start sessions on
+  shell auth asks, once, whether your signed-in browser may start sessions on
   this machine. Say yes and a small daemon runs in the background for as long
   as you stay signed in, so the machine is there in the web app whether or not
   a terminal is open. Say no and nothing runs: shell <command> still publishes
@@ -190,8 +193,8 @@ Driving this machine from the browser
   allowed, anyone signed in to your account can launch processes here, as you,
   without touching this terminal.
 
-    shell login --allow-remote-start   Agree without being asked
-    shell login --no-remote-start      Withdraw it on this machine
+    shell auth --allow-remote-start   Agree without being asked
+    shell auth --no-remote-start      Withdraw it on this machine
     shell daemon stop                  Stop until the next shell command
     shell logout                       Stop it and unlink the machine
 
@@ -221,7 +224,7 @@ Running against a local stack
     relay     http://127.0.0.1:8788
 
   SHELL_ONLINE_ACCOUNTS, SHELL_ONLINE_WEB and SHELL_ONLINE_SERVER still
-  override individually. shell login prints which services it is using
+  override individually. shell auth prints which services it is using
   whenever they are not the production ones.
 
 Credentials live in your user config directory, readable only by you. Set
@@ -307,7 +310,7 @@ first, with each one's name, status, uptime, and machine. Sessions that have
 ended are hidden and counted; --all includes them. --json prints the complete
 records on stdout, including share_url and the raw relay_status.
 
-shell ls needs a linked machine (shell login). It never prints a password: those
+shell ls needs a linked machine (shell auth). It never prints a password: those
 stay on the machine that started the session and in your vault. To share a
 program that is itself called ls, put -- first: shell -- ls.
 `)
@@ -482,7 +485,7 @@ SESSION COMMANDS
   shell ls [--all] [--json]
       List the sessions in the linked account from every machine, with name,
       status, uptime, machine, and command. Ended sessions are hidden unless
-      --all is given. JSON output omits passwords. Requires shell login.
+      --all is given. JSON output omits passwords. Requires shell auth.
   shell agent
       Watch for browser-started sessions in this terminal.
   shell daemon status|start|stop

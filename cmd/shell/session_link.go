@@ -176,7 +176,7 @@ func (link *sessionLink) Register(ctx context.Context, input account.SessionInpu
 func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password string) (*account.KeyShare, string) {
 	const notSaved = "shell: this session's password was not saved to your vault"
 	if link.credentials.UID == "" {
-		fmt.Fprintf(link.warn, "%s: this machine's sign-in predates the vault; run 'shell login'\n", notSaved)
+		fmt.Fprintf(link.warn, "%s: this machine's sign-in predates the vault; run 'shell auth'\n", notSaved)
 		return nil, vaultSaveFailed
 	}
 
@@ -201,7 +201,7 @@ func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password str
 		fmt.Fprintf(link.warn, "shell: saving session passwords to your vault (key %s)\n", fingerprint)
 	case pinned != fetched:
 		fmt.Fprintf(link.warn, "shell: your vault key changed since this machine signed in. "+
-			"Run 'shell login' to trust the new one; %s.\n", strings.TrimPrefix(notSaved, "shell: "))
+			"Run 'shell auth' to trust the new one; %s.\n", strings.TrimPrefix(notSaved, "shell: "))
 		return nil, vaultSaveFailed
 	}
 

@@ -21,7 +21,7 @@ import (
 // at accounts.shell.online, which never existed, and the approval screen at
 // shell.online, which serves the marketing site and answered /cli/authorize
 // with its own index page. Either would have failed on the first release that
-// carried `shell login`.
+// carried `shell auth`.
 const productionAppURL = "https://app.shell.online"
 
 // Local development addresses, used when SHELL_ONLINE_LOCAL is set.
@@ -70,7 +70,14 @@ func runAccountCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return 0, false
 	}
 	switch arguments[0] {
-	case "login":
+	/*
+	 * "auth" is the name. "login" is what it was called up to 0.18, and it
+	 * still works: the word is printed by every released installer, sits in
+	 * people's scripts and setup notes, and is what the web app told them to
+	 * run. Renaming a published verb is free; taking the old one away is not,
+	 * and there is nothing to gain by it.
+	 */
+	case "auth", "login":
 		return runLogin(arguments[1:], stdout, stderr), true
 	case "logout":
 		return runLogout(arguments[1:], stdout, stderr), true
@@ -82,7 +89,7 @@ func runAccountCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 }
 
 func runLogin(arguments []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("shell login", flag.ContinueOnError)
+	flags := flag.NewFlagSet("shell auth", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	accountsURL := flags.String("accounts", defaultAccountsURL(), "accounts service URL")
 	webURL := flags.String("web", defaultWebURL(), "web app that approves the login")
@@ -91,7 +98,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 	allowRemote := flags.Bool("allow-remote-start", false, "let your signed-in browser start sessions on this machine")
 	denyRemote := flags.Bool("no-remote-start", false, "keep this machine publish-only")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: shell login [--label <name>] [--no-browser] [--allow-remote-start]")
+		fmt.Fprintln(stderr, "Usage: shell auth [--label <name>] [--no-browser] [--allow-remote-start]")
 		fmt.Fprintln(stderr, "Opens a browser to link this machine to your shell.online account.")
 	}
 	if err := flags.Parse(arguments); err != nil {
@@ -101,7 +108,7 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if flags.NArg() > 0 {
-		fmt.Fprintln(stderr, "shell: login takes no positional arguments")
+		fmt.Fprintln(stderr, "shell: auth takes no positional arguments")
 		return 2
 	}
 	if *allowRemote && *denyRemote {
@@ -278,11 +285,11 @@ func printRemoteStartNote(writer io.Writer, granted, asked bool) {
 	dim := func(text string) string { return styleSessionText(color, "2", text) }
 	switch {
 	case granted:
-		fmt.Fprintf(writer, "  %s\n\n", dim("Your browser can start sessions here. Turn it off with 'shell login --no-remote-start'."))
+		fmt.Fprintf(writer, "  %s\n\n", dim("Your browser can start sessions here. Turn it off with 'shell auth --no-remote-start'."))
 	case asked:
-		fmt.Fprintf(writer, "  %s\n\n", dim("Left as publish-only. Turn it on with 'shell login --allow-remote-start'."))
+		fmt.Fprintf(writer, "  %s\n\n", dim("Left as publish-only. Turn it on with 'shell auth --allow-remote-start'."))
 	default:
-		fmt.Fprintf(writer, "  %s\n\n", dim("Publish-only. Run 'shell login --allow-remote-start' to start sessions from the browser."))
+		fmt.Fprintf(writer, "  %s\n\n", dim("Publish-only. Run 'shell auth --allow-remote-start' to start sessions from the browser."))
 	}
 }
 
@@ -362,7 +369,7 @@ func runWhoami(arguments []string, stdout, stderr io.Writer) int {
 	}
 	credentials, err := account.Load(path)
 	if errors.Is(err, account.ErrNotLinked) {
-		fmt.Fprintln(stdout, "Not signed in. Run 'shell login' to link this machine.")
+		fmt.Fprintln(stdout, "Not signed in. Run 'shell auth' to link this machine.")
 		return 1
 	}
 	if err != nil {

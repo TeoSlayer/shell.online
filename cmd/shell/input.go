@@ -9,7 +9,7 @@ import (
 //
 // One goroutine owns the reader and everything that wants a line takes it from
 // the same channel. Two readers on one terminal is how the answer to a
-// question ends up somewhere else: `shell login --no-browser` waits for a
+// question ends up somewhere else: `shell auth --no-browser` waits for a
 // pasted callback URL, the remote-start question waits for a y or an n, and
 // whichever happened to be blocked in a read would take whatever was typed.
 //

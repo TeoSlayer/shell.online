@@ -242,7 +242,7 @@ export function NewSessionModal({
                 <Warning size={14} weight="fill" />
                 <span>
                   <b>{chosenMachine.label}</b> is not reachable. Sign in there
-                  with <code>shell login</code> and allow browser-started
+                  with <code>shell auth</code> and allow browser-started
                   sessions, and this will light up.
                 </span>
               </p>
@@ -318,7 +318,7 @@ export function NewSessionModal({
 
             {devices.length === 0 && (
               <p className="sheet-help">
-                No linked machine is available. Run <code>shell login</code> on one.
+                No linked machine is available. Run <code>shell auth</code> on one.
               </p>
             )}
 

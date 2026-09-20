@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 /**
  * The CLI round trip, as a rule rather than as a rendered page.
  *
- * `shell login` opens /cli/authorize with the request it is waiting on. If the
+ * `shell auth` opens /cli/authorize with the request it is waiting on. If the
  * browser is not signed in, whichever auth page it lands on has to carry that
  * URL through and return to it — losing it leaves a terminal hanging on a
  * request nobody can reach any more.

@@ -11,7 +11,7 @@ interface SignedInModalProps {
 /**
  * Confirms a terminal was linked, on the page that terminal's sessions land on.
  *
- * `shell login` used to end on a plain page served by the CLI itself, which
+ * Linking a machine used to end on a plain page served by the CLI itself, which
  * said the terminal was linked and then left the person on a dead end. The
  * callback now sends them here instead, so the sentence arrives on the page
  * the sessions will appear in.

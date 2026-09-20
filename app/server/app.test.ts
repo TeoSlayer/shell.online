@@ -483,7 +483,7 @@ describe("cors", () => {
 
 describe("signing in again on the same machine", () => {
   /*
-   * The reason any of this exists: `shell login` run three times on one laptop
+   * The reason any of this exists: `shell auth` run three times on one laptop
    * used to leave three identical entries in the device list.
    */
   it("updates the machine's entry instead of adding another", async () => {
@@ -986,7 +986,7 @@ describe("starting on a machine that is not reachable", () => {
     });
     expect(result.status).toBe(409);
     /* Naming the machine and the fix, so the message is actionable. */
-    expect(result.body.error).toContain("shell login");
+    expect(result.body.error).toContain("shell auth");
     expect(result.body.error).toContain("not reachable");
   });
 

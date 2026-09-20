@@ -9,7 +9,7 @@ export interface AgentLiveness {
 /**
  * True while this machine is reachable from here.
  *
- * A machine becomes reachable when someone agrees to it at `shell login`, and
+ * A machine becomes reachable when someone agrees to it at `shell auth`, and
  * its daemon then polls for as long as it is signed in. This deliberately
  * ignores every other sign of life: a machine that publishes sessions but
  * whose owner did not agree to remote starts is linked, not reachable.

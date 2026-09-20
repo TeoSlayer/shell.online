@@ -60,7 +60,7 @@ func runDaemonCommand(arguments []string, stdout, stderr io.Writer) int {
 			stopDaemon()
 			// Stopping is for right now. The next shell command starts it
 			// again, because consent is what decides whether it may run, and
-			// stopping is not withdrawing consent. 'shell login
+			// stopping is not withdrawing consent. 'shell auth
 			// --no-remote-start' is.
 			fmt.Fprintln(stdout, "Stopped. Sessions it started keep running.")
 			return 0
@@ -86,7 +86,7 @@ func startDaemonCommand(stdout, stderr io.Writer) int {
 	}
 	credentials, err := account.Load(path)
 	if errors.Is(err, account.ErrNotLinked) {
-		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell login' first.")
+		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell auth' first.")
 		return 1
 	}
 	if err != nil {
@@ -97,7 +97,7 @@ func startDaemonCommand(stdout, stderr io.Writer) int {
 	if !credentials.RemoteStart {
 		if !interactiveTerminal(stderr) {
 			fmt.Fprintln(stderr, "shell: this machine does not accept sessions started from the browser.")
-			fmt.Fprintln(stderr, "Run 'shell login --allow-remote-start' to change that.")
+			fmt.Fprintln(stderr, "Run 'shell auth --allow-remote-start' to change that.")
 			return 1
 		}
 		if !askRemoteStart(terminalLines(os.Stdin), stderr, credentials.Email, credentials.RemoteStart) {
@@ -139,7 +139,7 @@ func runDaemon(arguments []string, stdout, stderr io.Writer) int {
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: shell daemon [--foreground]")
 		fmt.Fprintln(stderr, "Runs the background service that lets your browser start sessions here.")
-		fmt.Fprintln(stderr, "Started for you by 'shell login'; you do not normally run this.")
+		fmt.Fprintln(stderr, "Started for you by 'shell auth'; you do not normally run this.")
 	}
 	if err := flags.Parse(arguments); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -159,7 +159,7 @@ func runDaemon(arguments []string, stdout, stderr io.Writer) int {
 	}
 	credentials, err := account.Load(path)
 	if errors.Is(err, account.ErrNotLinked) {
-		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell login' first.")
+		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell auth' first.")
 		return 1
 	}
 	if err != nil {
@@ -168,7 +168,7 @@ func runDaemon(arguments []string, stdout, stderr io.Writer) int {
 	}
 	if !credentials.RemoteStart {
 		fmt.Fprintln(stderr, "shell: this machine does not accept sessions started from the browser.")
-		fmt.Fprintln(stderr, "Run 'shell login --allow-remote-start' to change that.")
+		fmt.Fprintln(stderr, "Run 'shell auth --allow-remote-start' to change that.")
 		return 1
 	}
 
@@ -357,7 +357,7 @@ func ensureDaemon() {
 // it already had, and once those stop working it presents them every couple of
 // seconds for as long as the machine is up.
 //
-// That is what "shell login does nothing" looks like from outside. The login
+// That is what "shell auth does nothing" looks like from outside. The login
 // succeeds, writes working credentials, and the machine still reports itself
 // offline because the process doing the polling never looks at them. Found on
 // a machine that had been refusing to renew for eight and a half hours across

@@ -224,7 +224,7 @@ export function Terms() {
 
         <Section id="accounts">
           <p>
-            Accounts are optional. <code>shell login</code> links a machine to
+            Accounts are optional. <code>shell auth</code> links a machine to
             your account; <code>shell logout</code> unlinks it and revokes that
             machine&rsquo;s token.
           </p>
@@ -292,7 +292,7 @@ export function Terms() {
           <p>
             A background daemon can start and stop terminal sessions on your
             machine at the request of a signed-in browser. Every interactive{" "}
-            <code>shell login</code> asks for that permission, using your
+            <code>shell auth</code> asks for that permission, using your
             previous answer as the default. A non-interactive login keeps a
             previous grant but otherwise defaults to no.
           </p>

@@ -20,7 +20,7 @@ const NAV = [
 ] as const;
 
 /* The command a new machine needs. Shown once, in the sidebar, not per page. */
-const LINK_COMMAND = "shell login";
+const LINK_COMMAND = "shell auth";
 
 export function LinkHint({ className = "rail-hint" }: { className?: string }) {
   const { state, copy } = useCopy();

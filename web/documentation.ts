@@ -212,7 +212,7 @@ function documentationLink(
 function documentationCommand(kind: DocumentationKind): string {
   if (kind === "docs") return `<pre class="knowledge-command"><code><span>$</span> curl -fsSL https://shell.online/install | sh
 <span>$</span> shell --read-only python train.py</code></pre>`;
-  if (kind === "app") return `<pre class="knowledge-command"><code><span>$</span> shell login
+  if (kind === "app") return `<pre class="knowledge-command"><code><span>$</span> shell auth
 <span>$</span> shell daemon status</code></pre>`;
   if (kind === "refstream") return `<pre class="knowledge-command"><code>Terminal controls → Renderer
 Refstream (unstable alpha)</code></pre>`;

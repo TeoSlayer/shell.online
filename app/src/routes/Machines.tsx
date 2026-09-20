@@ -178,7 +178,7 @@ export function Machines() {
             </li>
             <li>
               Sign that machine in, then approve the request in this browser.
-              <code className="empty-command">shell login</code>
+              <code className="empty-command">shell auth</code>
             </li>
             <li>The machine appears in this list.</li>
           </ol>
@@ -219,7 +219,7 @@ export function Machines() {
                 {!machineOnline(device, now) && (
                   <span className="session-meta device-offline-hint">
                     Publish-only until it agrees to browser-started sessions.
-                    Run <code>shell login --allow-remote-start</code> there.
+                    Run <code>shell auth --allow-remote-start</code> there.
                   </span>
                 )}
               </div>
@@ -245,7 +245,7 @@ export function Machines() {
         <p className="sessions-note">
           A machine can publish sessions whenever it is linked. It can be
           driven from this page only if someone allowed that at{" "}
-          <code>shell login</code> there. Unlinking cuts the account link; a
+          <code>shell auth</code> there. Unlinking cuts the account link; a
           terminal already running keeps running.
         </p>
       )}

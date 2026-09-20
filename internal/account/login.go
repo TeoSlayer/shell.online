@@ -53,7 +53,7 @@ func writePage(writer http.ResponseWriter, status int, title, heading, body stri
 		The authorization server can return its description through the callback
 		query string. This loopback page is HTML, so every value is escaped even
 		though the normal headings are constants. Otherwise a crafted callback URL
-		could execute markup in the browser that is completing `shell login`.
+		could execute markup in the browser that is completing `shell auth`.
 	*/
 	fmt.Fprintf(
 		writer,
@@ -67,7 +67,7 @@ func writePage(writer http.ResponseWriter, status int, title, heading, body stri
 // signedInPath is where a linked browser is sent once the CLI has its code.
 //
 // The sessions page, because that is the thing the person came for: they ran
-// shell login to get their terminals into the app, and the tab they approved
+// shell auth to get their terminals into the app, and the tab they approved
 // in is already there.
 const signedInPath = "/sessions?linked=1"
 
@@ -129,7 +129,7 @@ func newCallbackHandler(state, webURL string, results chan<- callbackResult) htt
 		// this process started, so the code is not ours to use.
 		if !SameState(state, query.Get("state")) {
 			writePage(writer, http.StatusBadRequest, "Sign-in failed", "Sign-in failed",
-				"This link did not come from the sign-in you started. Run shell login again.")
+				"This link did not come from the sign-in you started. Run shell auth again.")
 			deliver(callbackResult{err: errors.New("state did not match; sign-in was not completed")})
 			return
 		}

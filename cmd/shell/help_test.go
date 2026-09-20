@@ -165,7 +165,7 @@ func TestHelpMentionsTheAccountCommands(t *testing.T) {
 		t.Fatalf("run(help) = %d, stderr = %q", exitCode, stderr.String())
 	}
 	for _, expected := range []string{
-		"shell login",
+		"shell auth",
 		"shell whoami",
 		"shell logout",
 		"--no-browser",
@@ -212,7 +212,7 @@ func TestHelpLoginTopicIsReachableFromEveryAccountVerb(t *testing.T) {
 		if exitCode := run([]string{"help", verb}, &stdout, &stderr); exitCode != 0 {
 			t.Fatalf("run(help %s) = %d", verb, exitCode)
 		}
-		if !strings.Contains(stdout.String(), "shell login") {
+		if !strings.Contains(stdout.String(), "shell auth") {
 			t.Errorf("help %s did not reach the login topic", verb)
 		}
 	}
@@ -224,7 +224,7 @@ func TestLsHelpExplainsTheAccountWideList(t *testing.T) {
 	if exitCode := run([]string{"help", "ls"}, &stdout, &stderr); exitCode != 0 {
 		t.Fatalf("run(help ls) = %d, stderr = %q", exitCode, stderr.String())
 	}
-	for _, expected := range []string{"shell ls --all", "shell ls --json", "any machine linked", "shell login", "shell -- ls"} {
+	for _, expected := range []string{"shell ls --all", "shell ls --json", "any machine linked", "shell auth", "shell -- ls"} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("ls help does not contain %q", expected)
 		}

@@ -220,7 +220,7 @@ func TestAnOrdinaryCommandStartsNoDaemonWithoutConsent(t *testing.T) {
 // ensureDaemon runs on every command, and restarting there would re-key the
 // agent each time. A browser seals a session password to the key the daemon
 // published, so throwing it away mid-session makes work already queued
-// impossible to open. Only `shell login` replaces a daemon, because only a
+// impossible to open. Only `shell auth` replaces a daemon, because only a
 // login produces credentials the running one cannot know about.
 func TestAnOrdinaryCommandLeavesTheDaemonAlone(t *testing.T) {
 	binary := buildShell(t)

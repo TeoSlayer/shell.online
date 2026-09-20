@@ -21,7 +21,7 @@ export function CliAuthorize() {
   if (initializing) return <Booting label="Checking your session" />;
 
   /*
-   * Signing up, not signing in: somebody running `shell login` for the first
+   * Signing up, not signing in: somebody running `shell auth` for the first
    * time has no account yet, and the sign-in form is a dead end for them. The
    * page links to sign-in for everyone else, carrying this state across.
    *
@@ -118,7 +118,7 @@ function Consent({
             <h1>This link is not usable.</h1>
             <p>{parsed.reason}</p>
             <p className="consent-hint">
-              Run <code>shell login</code> in your terminal to start again.
+              Run <code>shell auth</code> in your terminal to start again.
             </p>
           </>
         ) : (

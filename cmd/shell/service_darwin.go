@@ -118,7 +118,7 @@ func installService(self string, environment map[string]string) (string, error) 
 // It is not waited on. `kickstart -k` kills the job and then blocks until it
 // is running again, and the agent sets ThrottleInterval to ten seconds, so
 // waiting costs eleven seconds of a silent terminal at the end of a login that
-// has already succeeded -- which is exactly what "shell login hangs" looked
+// has already succeeded -- which is exactly what "shell auth hangs" looked
 // like. Nothing here needs the answer: the daemon comes back on launchd's
 // schedule and reads the credentials that are already on disk, and the only
 // thing the caller has to know is that a supervisor owns this daemon, which

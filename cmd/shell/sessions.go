@@ -123,7 +123,7 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 	switch arguments[0] {
 	case "help":
 		return runHelp(arguments[1:], stdout, stderr), true
-	case "login", "logout", "whoami":
+	case "auth", "login", "logout", "whoami":
 		return runAccountCommand(arguments, stdout, stderr)
 	case "agent":
 		return runAgent(arguments[1:], stdout, stderr), true

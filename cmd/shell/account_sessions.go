@@ -60,7 +60,7 @@ func runAccountSessionList(arguments []string, stdout, stderr io.Writer) int {
 	client, credentials, err := linkedAccountClient(ctx, stderr)
 	if errors.Is(err, account.ErrNotLinked) {
 		fmt.Fprintln(stderr, "shell: shell ls lists the sessions in your account, and this machine is not signed in.")
-		fmt.Fprintln(stderr, "Run 'shell login' to link it, or 'shell list' for the sessions running here.")
+		fmt.Fprintln(stderr, "Run 'shell auth' to link it, or 'shell list' for the sessions running here.")
 		return 1
 	}
 	if err != nil {

@@ -116,7 +116,7 @@ func TestAccountSessionListExplainsAnUnlinkedMachine(t *testing.T) {
 	if code := runAccountSessionList(nil, &stdout, &stderr); code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
-	for _, expected := range []string{"not signed in", "shell login", "shell list"} {
+	for _, expected := range []string{"not signed in", "shell auth", "shell list"} {
 		if !strings.Contains(stderr.String(), expected) {
 			t.Errorf("stderr does not contain %q: %q", expected, stderr.String())
 		}

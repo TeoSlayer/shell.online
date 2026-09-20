@@ -80,7 +80,7 @@ func Load(path string) (Credentials, error) {
 		return credentials, fmt.Errorf("read credentials: %w", err)
 	}
 	if err := json.Unmarshal(contents, &credentials); err != nil {
-		return Credentials{}, fmt.Errorf("credentials file is corrupt; run 'shell login' again: %w", err)
+		return Credentials{}, fmt.Errorf("credentials file is corrupt; run 'shell auth' again: %w", err)
 	}
 	if credentials.RefreshToken == "" {
 		return Credentials{}, ErrNotLinked

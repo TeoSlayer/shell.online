@@ -782,7 +782,7 @@ export function createApp(options: AppOptions) {
         if (machines.length === 0) {
           return send(response, 409, {
             error:
-              "no machine is listening. Sign in on one with 'shell login' and " +
+              "no machine is listening. Sign in on one with 'shell auth' and " +
               "leave 'shell agent' running.",
           });
         }
@@ -1501,7 +1501,7 @@ export function createApp(options: AppOptions) {
           if (!device.agentSeenAt || Date.now() - device.agentSeenAt > AGENT_ONLINE_MS) {
             return send(response, 409, {
               error:
-                `${device.label} is not reachable. Sign in there with 'shell login' ` +
+                `${device.label} is not reachable. Sign in there with 'shell auth' ` +
                 `and allow browser-started sessions, then try again.`,
             });
           }
@@ -1596,7 +1596,7 @@ export function createApp(options: AppOptions) {
             return send(response, 409, {
               error:
                 `${target.label} is not reachable, so the stop cannot be delivered. ` +
-                `Sign in there with 'shell login' and allow browser-started sessions.`,
+                `Sign in there with 'shell auth' and allow browser-started sessions.`,
             });
           }
 

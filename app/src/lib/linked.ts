@@ -1,5 +1,5 @@
 /**
- * The flag `shell login` sends the browser back with.
+ * The flag `shell auth` sends the browser back with.
  *
  * The CLI's loopback callback redirects to `/sessions?linked=1` once it has
  * its authorization code, so the confirmation lands on the page the terminal's

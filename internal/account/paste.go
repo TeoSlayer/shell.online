@@ -60,7 +60,7 @@ func pastedCallback(line, state string) (callbackResult, error) {
 			return callbackResult{}, errors.New("that link carries no authorization code")
 		}
 		if !SameState(state, query.Get("state")) {
-			return callbackResult{}, errors.New("that link came from a different sign-in; run shell login again")
+			return callbackResult{}, errors.New("that link came from a different sign-in; run shell auth again")
 		}
 		accountKey := query.Get("account_key")
 		if ParseAccountKey(accountKey) != nil {

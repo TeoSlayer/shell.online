@@ -1,5 +1,5 @@
 {
-  "version": "0.18.1",
+  "version": "0.19.0",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -37,7 +37,7 @@
         ],
         [
           "Link a machine",
-          "shell login opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell login --no-browser prints the URL instead of launching the browser, for a machine with no browser on it; approve it anywhere, and if that browser cannot reach the loopback listener it stops on a page that will not load, whose address pasted back into the terminal completes the sign-in. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
+          "shell auth, which up to 0.18 was called shell login and still answers to it, opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell auth --no-browser prints the URL instead of launching the browser, for a machine with no browser on it; approve it anywhere, and if that browser cannot reach the loopback listener it stops on a page that will not load, whose address pasted back into the terminal completes the sign-in. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
         ],
         [
           "Work from the web app",
@@ -45,7 +45,7 @@
         ],
         [
           "Start sessions from the browser",
-          "The first shell login on a machine asks whether your signed-in browser may start sessions there; after that the answer stands, and every login prints which way it went. Agree and a small daemon runs in the background for as long as you stay signed in, and is installed as a background service so the machine is still reachable after a restart, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell login --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. Remove that service with shell service uninstall, and put it back with shell service install."
+          "The first shell auth on a machine asks whether your signed-in browser may start sessions there; after that the answer stands, and every login prints which way it went. Agree and a small daemon runs in the background for as long as you stay signed in, and is installed as a background service so the machine is still reachable after a restart, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell auth --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. Remove that service with shell service uninstall, and put it back with shell service install."
         ],
         [
           "Organizations and collaboration",
@@ -53,7 +53,7 @@
         ],
         [
           "Optional personal vault",
-          "The CLI always prints and locally retains an active session's password. After shell login, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
+          "The CLI always prints and locally retains an active session's password. After shell auth, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
         ]
       ],
       "diagrams": [
@@ -78,10 +78,10 @@
       "cards": [
         [
           "Link a machine",
-          "Run shell login and finish the approval in your browser. The CLI returns the one-time result through a listener bound to 127.0.0.1; shell login --no-browser prints the same local approval URL instead of opening it. Linking is optional and does not change normal share behavior.",
+          "Run shell auth and finish the approval in your browser. The CLI returns the one-time result through a listener bound to 127.0.0.1; shell auth --no-browser prints the same local approval URL instead of opening it. Linking is optional and does not change normal share behavior.",
           [
             [
-              "shell login",
+              "shell auth",
               "Link this machine and optionally allow browser-started sessions."
             ],
             [
@@ -104,10 +104,10 @@
         ],
         [
           "Start from the browser",
-          "Remote start is explicit machine consent, not a hidden agent. shell login can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while the first agreement installs a user service so the machine remains reachable across restarts; shell service uninstall removes it.",
+          "Remote start is explicit machine consent, not a hidden agent. shell auth can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while the first agreement installs a user service so the machine remains reachable across restarts; shell service uninstall removes it.",
           [
             [
-              "shell login --no-remote-start",
+              "shell auth --no-remote-start",
               "Link the account without granting browser-start capability."
             ],
             [
@@ -122,7 +122,7 @@
         ],
         [
           "Personal vault",
-          "The CLI always prints and locally retains an active session password. After shell login, it also saves an encrypted copy only when that person has enabled their optional vault. The vault is per account, not per organization; teammates do not automatically receive its passwords. Unlock it with its vault password or a supported PRF passkey, and retain the recovery key as the break-glass fallback."
+          "The CLI always prints and locally retains an active session password. After shell auth, it also saves an encrypted copy only when that person has enabled their optional vault. The vault is per account, not per organization; teammates do not automatically receive its passwords. Unlock it with its vault password or a supported PRF passkey, and retain the recovery key as the break-glass fallback."
         ],
         [
           "Organizations and audit",
@@ -150,8 +150,8 @@
           "after": 1,
           "title": "Link once, keep the terminal boundary",
           "caption": "The app coordinates identity and metadata. Terminal traffic continues through the independent encrypted relay path.",
-          "desktop": "flowchart LR\n  A[shell login] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]",
-          "mobile": "flowchart TD\n  A[shell login] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]"
+          "desktop": "flowchart LR\n  A[shell auth] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]",
+          "mobile": "flowchart TD\n  A[shell auth] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]"
         }
       ]
     },
@@ -435,7 +435,7 @@
       "seo": {
         "description": "Complete shell.online CLI reference: commands, flags, account linking, the browser-start daemon, environment variables, relay states, and exit status.",
         "socialTitle": "CLI reference | shell.online",
-        "socialDescription": "Every shell.online command and option, including shell login and browser-started sessions."
+        "socialDescription": "Every shell.online command and option, including shell auth and browser-started sessions."
       },
       "cards": [
         [
@@ -625,19 +625,19 @@
           "Linking is optional and does not change how a share behaves. It publishes each share to your account and, if you agree to it, lets your signed-in browser start sessions on this machine.",
           [
             [
-              "shell login",
+              "shell auth",
               "Link this machine and open the browser approval screen."
             ],
             [
-              "shell login --no-browser",
+              "shell auth --no-browser",
               "Print the sign-in URL instead of opening a browser. Open it on the same machine so its loopback callback can reach the CLI."
             ],
             [
-              "shell login --allow-remote-start",
+              "shell auth --allow-remote-start",
               "Agree to browser-started sessions without being asked."
             ],
             [
-              "shell login --no-remote-start",
+              "shell auth --no-remote-start",
               "Withdraw that agreement on this machine."
             ],
             [
@@ -921,7 +921,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.18.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.19.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

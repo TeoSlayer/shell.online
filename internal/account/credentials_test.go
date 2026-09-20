@@ -134,7 +134,7 @@ func TestLoadReportsCorruptionDistinctlyFromNotLinked(t *testing.T) {
 	if errors.Is(err, ErrNotLinked) {
 		t.Fatal("corruption must not be reported as ErrNotLinked")
 	}
-	if !strings.Contains(err.Error(), "shell login") {
+	if !strings.Contains(err.Error(), "shell auth") {
 		t.Fatalf("error should tell the user how to recover, got %q", err)
 	}
 }

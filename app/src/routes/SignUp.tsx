@@ -20,7 +20,7 @@ export function SignUp() {
   const navigate = useNavigate();
   const location = useLocation();
   /*
-   * `shell login` sends people here with the authorize request it is waiting
+   * `shell auth` sends people here with the authorize request it is waiting
    * on. Landing them on the sessions page instead would leave the terminal
    * hanging on a request they can no longer reach.
    */

@@ -62,7 +62,7 @@ func TestWhoamiReportsWhenNotSignedIn(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stdout.String(), "shell login") {
+	if !strings.Contains(stdout.String(), "shell auth") {
 		t.Fatalf("output should point at the fix, got %q", stdout.String())
 	}
 }
@@ -295,7 +295,7 @@ func TestAgentRequiresALinkedAccount(t *testing.T) {
 	if code := runAgent(nil, &stdout, &stderr); code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "shell login") {
+	if !strings.Contains(stderr.String(), "shell auth") {
 		t.Fatalf("stderr should point at the fix, got %q", stderr.String())
 	}
 }
@@ -384,6 +384,25 @@ func TestLocalSwitchIgnoresOtherValues(t *testing.T) {
 		t.Setenv("SHELL_ONLINE_LOCAL", value)
 		if got := defaultWebURL(); got != productionAppURL {
 			t.Fatalf("SHELL_ONLINE_LOCAL=%q gave %q, want production", value, got)
+		}
+	}
+}
+
+// shell login is what this was called up to 0.18. Every released installer
+// prints it, it is in people's scripts and setup notes, and the web app told
+// them to run it, so it goes on working under that name.
+func TestLoginIsStillAcceptedAsTheOldNameForAuth(t *testing.T) {
+	for _, verb := range []string{"auth", "login"} {
+		var stdout, stderr bytes.Buffer
+		code, handled := runSessionCommand([]string{verb, "--help"}, &stdout, &stderr)
+		if !handled {
+			t.Fatalf("%q was not recognised as a command", verb)
+		}
+		if code != 0 {
+			t.Fatalf("%s --help = %d, stderr = %q", verb, code, stderr.String())
+		}
+		if !strings.Contains(stderr.String(), "Usage: shell auth") {
+			t.Errorf("%s --help should name the command as it is now: %q", verb, stderr.String())
 		}
 	}
 }

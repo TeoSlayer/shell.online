@@ -43,8 +43,8 @@ describe("copying, when the browser offers the clipboard API", () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { clipboard: { writeText } });
 
-    await expect(copyText("shell login")).resolves.toBe(true);
-    expect(writeText).toHaveBeenCalledWith("shell login");
+    await expect(copyText("shell auth")).resolves.toBe(true);
+    expect(writeText).toHaveBeenCalledWith("shell auth");
     expect(fake.document.execCommand).not.toHaveBeenCalled();
   });
 });

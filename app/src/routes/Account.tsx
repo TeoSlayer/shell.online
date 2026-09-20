@@ -149,7 +149,7 @@ export function Account() {
 
       {/*
         What the vault is and what it holds, opened in this browser. The key
-        fingerprint in it is what `shell login` prints when a machine first
+        fingerprint in it is what `shell auth` prints when a machine first
         trusts the vault, so the two can be compared by eye.
       */}
       <VaultPanel />
@@ -171,7 +171,7 @@ export function Account() {
             reset
             onDone={() => {
               setResetting(false);
-              setNotice("Your new vault is on. Link your machines again with shell login.");
+              setNotice("Your new vault is on. Link your machines again with shell auth.");
             }}
           />
           <Button type="button" variant="ghost" onClick={() => setResetting(false)}>

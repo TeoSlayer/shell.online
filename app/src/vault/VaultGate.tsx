@@ -164,7 +164,7 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
         <Alert tone="error">
           Passwords sealed to your old vault can no longer be opened. Running
           sessions this browser can still read move across. Machines linked
-          with <code>shell login</code> need to sign in again before they save
+          with <code>shell auth</code> need to sign in again before they save
           to the new vault.
         </Alert>
       )}

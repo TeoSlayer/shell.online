@@ -4,7 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
-## [0.18.1] — 2026-09-20
+## [0.19.0] — 2026-09-20
+
+### Changed
+
+- `shell login` is now `shell auth`. Linking a machine to an account is not a
+  login: nothing is signed in to, the terminal gains no session, and what the
+  command actually does is authorise this machine. The help, the CLI's own
+  messages, the documentation and the instructions the web app gives all say
+  `shell auth`.
+
+  `shell login` still works and is not deprecated out from under anyone. Every
+  released installer prints that name, it is in people's scripts and setup
+  notes, and the web app told them to run it; the word costs nothing to keep.
 
 ### Fixed
 

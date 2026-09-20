@@ -50,7 +50,7 @@ export function parseAuthorizeRequest(search: string): ParseResult {
     return {
       ok: false,
       reason:
-        "This link points somewhere other than a terminal on this computer, so it was not opened by shell login.",
+        "This link points somewhere other than a terminal on this computer, so it was not opened by shell auth.",
     };
   }
   if (url.pathname !== "/callback" || !url.port) {

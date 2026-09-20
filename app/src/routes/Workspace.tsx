@@ -188,7 +188,7 @@ export function Workspace() {
   const [members, setMembers] = useState<Member[]>([]);
   const [you, setYou] = useState<Member | null>(null);
   /*
-   * `shell login` redirects here with ?linked=1 once the CLI has its code, so
+   * `shell auth` redirects here with ?linked=1 once the CLI has its code, so
    * the confirmation lands on the page the terminal's sessions appear on.
    */
   const [search, setSearch] = useSearchParams();
@@ -868,7 +868,7 @@ export function Workspace() {
               </li>
               <li>
                 Sign that machine in, and allow browser-started sessions.
-                <code className="empty-command">shell login</code>
+                <code className="empty-command">shell auth</code>
               </li>
               <li>
                 Press <b>+ Session</b> and pick what to run. It opens here as a

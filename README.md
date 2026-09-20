@@ -51,7 +51,7 @@ the wrapped process exits.
 | Show an active password | `shell password <id>` |
 | Rotate a password | `shell password rotate <id>` |
 | Stop a session | `shell kill <id>` |
-| Link this machine | `shell login` |
+| Link this machine | `shell auth` |
 | Full reference | `shell help reference` |
 
 Press `Ctrl-X`, then `D`, to detach from `shell attach`.

@@ -135,7 +135,7 @@ export function Privacy() {
             <div>
               <dt>Linked machines</dt>
               <dd>
-                For each machine you link with <code>shell login</code>: a
+                For each machine you link with <code>shell auth</code>: a
                 label, a random machine identifier, when it was linked and last
                 seen, the public key used to seal session passwords to it, and
                 which coding-agent commands it found on its <code>PATH</code>.
@@ -356,7 +356,7 @@ export function Privacy() {
               them, or delete your account.
             </li>
             <li>
-              The codes that complete <code>shell login</code> expire within
+              The codes that complete <code>shell auth</code> expire within
               minutes. A browser-started session&rsquo;s command is deleted ten
               minutes after the machine finishes it.
             </li>

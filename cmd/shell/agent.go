@@ -47,7 +47,7 @@ func runAgent(arguments []string, stdout, stderr io.Writer) int {
 	}
 	credentials, err := account.Load(path)
 	if errors.Is(err, account.ErrNotLinked) {
-		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell login' first.")
+		fmt.Fprintln(stderr, "shell: not signed in. Run 'shell auth' first.")
 		return 1
 	}
 	if err != nil {

@@ -145,7 +145,7 @@ func (loop *agentLoop) run(ctx context.Context) error {
 				if account.Unauthorized(refreshErr) && !signInRetired {
 					signInRetired = true
 					fmt.Fprintln(loop.report,
-						"shell: this machine's sign-in is no longer accepted. Run 'shell login' to link it again.")
+						"shell: this machine's sign-in is no longer accepted. Run 'shell auth' to link it again.")
 				}
 				renewNotBefore = now.Add(refreshBackoff)
 				refreshBackoff = min(refreshBackoff*2, maxRefreshBackoff)

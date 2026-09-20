@@ -52,7 +52,7 @@ const PROMPT = `\x1b[38;5;114m~/pilot${RESET} \x1b[38;5;183m❯${RESET} `;
 
 /* Each step types its command, pauses, then prints the real output. */
 const STEPS = [
-  { command: "shell login", card: LOGIN_CARD, think: 900 },
+  { command: "shell auth", card: LOGIN_CARD, think: 900 },
   { command: "shell claude", card: SESSION_CARD, think: 1000 },
 ] as const;
 
@@ -144,7 +144,7 @@ export function SessionPreview() {
   }, []);
 
   const barLabel =
-    state === "linking" ? "shell login" : state === "sharing" ? "shell claude" : "shell claude";
+    state === "linking" ? "shell auth" : state === "sharing" ? "shell claude" : "shell claude";
   const status = state === "linking" ? "linking" : state === "sharing" ? "starting" : "shared";
 
   return (
