@@ -94,10 +94,15 @@ const LIGHT_THEME = {
   brightWhite: "#3a3e37",
 };
 
-/* Refstream paints its own surface, so it needs an opaque theme rather than xterm's clear canvas. */
+/*
+ * Refstream paints its own surface, so it needs an opaque theme rather than
+ * xterm's clear canvas. Chat needs one for a different reason: it uses the
+ * theme as a palette, and a transparent "background" is not a colour it can
+ * paint a line of reverse-video output with.
+ */
 function terminalTheme(renderer: TerminalRenderer, dark: boolean) {
   const base = dark ? DARK_THEME : LIGHT_THEME;
-  if (renderer !== "refstream") return base;
+  if (renderer === "xterm") return base;
   return { ...base, background: dark ? "#161914" : "#f3f1e9" };
 }
 

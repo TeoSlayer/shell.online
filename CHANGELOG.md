@@ -4,6 +4,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A chat renderer in the web app, chosen next to xterm.js and Refstream. It
+  reads a session as a conversation: what you send is a message, and what the
+  process writes back is the reply to it. The box you type in floats over the
+  thread, so the newest output is never the thing behind the controls.
+- Full-screen programs keep their grid. vim, top and an agent drawing its own
+  interface are not utterances, so they appear as one live screen inside the
+  thread, the box forwards keys straight through while they run, and the frame
+  the program exited on stays in the conversation afterwards.
+
 ## [0.20.0] — 2026-09-20
 
 ### Changed

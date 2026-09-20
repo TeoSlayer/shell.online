@@ -4,8 +4,11 @@ import {
   type ITerminalOptions,
 } from "@xterm/xterm";
 import { Terminal as RefstreamTerminal } from "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.js";
+import { ChatTerminal } from "./chat/chat-terminal";
 
-export type TerminalRenderer = "xterm" | "refstream";
+export type TerminalRenderer = "xterm" | "refstream" | "chat";
+
+const RENDERERS: readonly TerminalRenderer[] = ["xterm", "refstream", "chat"];
 export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -31,11 +34,14 @@ export interface TerminalSurface {
 
 const STORAGE_KEY = "shell-online-terminal-renderer";
 
+export function isTerminalRenderer(value: unknown): value is TerminalRenderer {
+  return typeof value === "string" && (RENDERERS as readonly string[]).includes(value);
+}
+
 export function readTerminalRenderer(): TerminalRenderer {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "refstream"
-      ? "refstream"
-      : DEFAULT_TERMINAL_RENDERER;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return isTerminalRenderer(stored) ? stored : DEFAULT_TERMINAL_RENDERER;
   } catch {
     return DEFAULT_TERMINAL_RENDERER;
   }
@@ -52,6 +58,9 @@ export function writeTerminalRenderer(renderer: TerminalRenderer): void {
 export function createTerminal(renderer: TerminalRenderer, options: TerminalOptions): TerminalSurface {
   if (renderer === "refstream") {
     return new RefstreamTerminal(options) as unknown as TerminalSurface;
+  }
+  if (renderer === "chat") {
+    return new ChatTerminal(options) as unknown as TerminalSurface;
   }
   return new XtermTerminal({ ...options, allowProposedApi: true }) as unknown as TerminalSurface;
 }

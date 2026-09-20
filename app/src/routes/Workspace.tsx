@@ -61,6 +61,7 @@ import { shouldOpenSurface } from "../lib/surface-navigation";
 import { SearchSelect } from "../components/SearchSelect";
 import { keepKnownLiveness, sessionEnded, sessionEndedAt, sessionOnline, sessionStateLabel } from "../lib/session-liveness";
 import {
+  isTerminalRenderer,
   readTerminalRenderer,
   writeTerminalRenderer,
   type TerminalRenderer,
@@ -759,12 +760,14 @@ export function Workspace() {
               aria-label="Terminal renderer"
               value={terminalRenderer}
               onChange={(event) => {
-                const next: TerminalRenderer = event.target.value === "refstream" ? "refstream" : "xterm";
+                const value = event.target.value;
+                const next: TerminalRenderer = isTerminalRenderer(value) ? value : "xterm";
                 writeTerminalRenderer(next);
                 setTerminalRenderer(next);
               }}
             >
               <option value="xterm">xterm.js</option>
+              <option value="chat">Chat</option>
               <option value="refstream">Refstream (unstable alpha)</option>
             </select>
           </label>
@@ -775,6 +778,19 @@ export function Workspace() {
       {state.tabs.length > 0 && terminalRenderer === "refstream" && (
         <p className="renderer-warning" role="status">
           Refstream is an experimental alpha renderer. Some TUIs and interactions may still be unstable.
+        </p>
+      )}
+
+      {/*
+        * Chat reads the session rather than drawing it, so it is worth saying
+        * what it does with the parts of a terminal a conversation has no place
+        * for. Nothing is hidden from the session itself: the same bytes go
+        * over the same socket, and switching back to xterm.js shows the grid.
+        */}
+      {state.tabs.length > 0 && terminalRenderer === "chat" && (
+        <p className="renderer-warning" role="status">
+          Chat reads this session as messages: what you send, and what the process writes back.
+          Full-screen programs appear as a live screen inside the thread.
         </p>
       )}
 

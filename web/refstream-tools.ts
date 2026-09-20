@@ -32,7 +32,7 @@ export interface RefstreamToolsOptions {
  * collaboration; Refstream owns terminal-local navigation and inspection.
  */
 export function attachRefstreamTools(
-  renderer: "xterm" | "refstream",
+  renderer: string,
   options: RefstreamToolsOptions,
 ): Promise<TerminalTools | null> {
   if (renderer !== "refstream") return Promise.resolve(null);
