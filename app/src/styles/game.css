@@ -1070,14 +1070,15 @@
 /* ---- small screens ---------------------------------------------------- */
 
 /*
- * A phone has no overscan, so the safe area is wasted margin there; it is
- * clamped rather than removed, because the notch is a crop of its own.
+ * The safe area is not set here, and cannot be.
+ *
+ * There was a rule in this block redefining `--keep-safe` for a phone, and it
+ * had never once applied: the property is set *inline* from the options, and
+ * an inline property beats every rule in a stylesheet. The insets now come
+ * from `optionsToStyle`, per edge, which is also where the layout is known.
+ * See state/options.ts.
  */
 @media (width <= 640px) {
-  .keep {
-    --keep-safe: max(12px, env(safe-area-inset-left));
-  }
-
   .keep-pause-panel {
     width: 100%;
   }
@@ -2251,11 +2252,6 @@
  * look up rather than glance at. `Hud` drops those from the tree rather than
  * hiding them here, because a hidden button is still in the tab order.
  */
-.keep[data-layout="phone"] {
-  /* A phone has no overscan; what it has is a notch and a home indicator. */
-  --keep-safe: max(10px, env(safe-area-inset-left));
-}
-
 /*
  * The frame, thinner.
  *

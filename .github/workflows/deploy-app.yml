@@ -274,21 +274,48 @@ jobs:
       # still answer with the previous index.html, which leaves a fix live at
       # its own URL and invisible to everyone; verify-deploy compares what the
       # origin serves against what was just built.
+      #
+      # Both halves retry, and that is the whole of this step's history. The
+      # health probe always did. The asset comparison ran exactly once, the
+      # moment health first answered -- so an edge that was still handing out
+      # the previous document for another second or two was read as a bad
+      # deploy, and the rollback below put a good build back to the version
+      # before it. That happened on a merge to main on 2026-09-18: every step
+      # through the deploy passed, verify saw the old index-*.js, production
+      # went back a version, and re-running the identical commit deployed it
+      # cleanly. A document propagating is not a failure; never propagating is,
+      # which is what the deadline is for.
       - name: Check the deployment answers
         env:
           WEB_ORIGIN: ${{ vars.WEB_ORIGIN }}
         working-directory: app
         run: |
           set -eu
+          healthy=""
           for _ in $(seq 1 20); do
             if curl -fsS --max-time 10 "${WEB_ORIGIN}/api/health" >/dev/null; then
-              curl -fsS --max-time 20 "${WEB_ORIGIN}/api/ready"
-              node scripts/verify-deploy.mjs "${WEB_ORIGIN}"
-              exit 0
+              healthy=yes
+              break
             fi
             sleep 3
           done
-          echo "the deployment never answered a health check" >&2
+          if [ -z "${healthy}" ]; then
+            echo "the deployment never answered a health check" >&2
+            exit 1
+          fi
+
+          curl -fsS --max-time 20 "${WEB_ORIGIN}/api/ready"
+
+          # Roughly a minute, which is far longer than propagation takes and
+          # far shorter than anybody would wait before rolling back by hand.
+          for attempt in $(seq 1 12); do
+            if node scripts/verify-deploy.mjs "${WEB_ORIGIN}"; then
+              exit 0
+            fi
+            echo "verify-deploy: attempt ${attempt} saw an older document; waiting for it to propagate"
+            sleep 5
+          done
+          echo "the origin never served this build" >&2
           exit 1
 
       # Only when this run is what changed production: a build or a migration
