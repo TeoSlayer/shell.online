@@ -13,7 +13,7 @@
  * changes nothing touches no nodes at all.
  */
 
-import { KEY_CHIPS, bytesForKey } from "./keys";
+import { bytesForKey, chipsFor } from "./keys";
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
 
 export interface ChatViewOptions {
@@ -35,6 +35,8 @@ const STICK_SLACK_PX = 32;
 interface Rendered {
   el: HTMLElement;
   body: HTMLElement | null;
+  /** The message as last drawn, so a button pressed later reads what is there now. */
+  message: Message;
   revision: number;
   lines: number;
 }
@@ -47,7 +49,6 @@ export class ChatView {
   private readonly input: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
   private readonly chips: HTMLElement;
-  private readonly status: HTMLElement;
   private readonly jump: HTMLButtonElement;
   private readonly options: ChatViewOptions;
 
@@ -86,23 +87,9 @@ export class ChatView {
       this.scroller.scrollTop = this.scroller.scrollHeight;
     });
 
-    this.status = el("div", "chat-status");
-    this.status.setAttribute("role", "status");
-
     this.composer = el("form", "chat-composer") as HTMLFormElement;
     this.chips = el("div", "chat-keys");
-    for (const chip of KEY_CHIPS) {
-      const button = el("button", "chat-key") as HTMLButtonElement;
-      button.type = "button";
-      button.textContent = chip.label;
-      button.title = chip.title;
-      button.addEventListener("click", () => {
-        if (this.disabled) return;
-        this.options.onKeys(chip.bytes);
-        this.input.focus();
-      });
-      this.chips.append(button);
-    }
+    this.drawChips();
 
     const row = el("div", "chat-row");
     this.input = el("textarea", "chat-input") as HTMLTextAreaElement;
@@ -119,7 +106,7 @@ export class ChatView {
     row.append(this.input, this.send);
     this.composer.append(this.chips, row);
 
-    root.append(this.scroller, this.jump, this.status, this.composer);
+    root.append(this.scroller, this.jump, this.composer);
 
     this.scroller.addEventListener("scroll", this.onScroll);
     this.composer.addEventListener("submit", this.onSubmit);
@@ -181,12 +168,6 @@ export class ChatView {
     this.input.placeholder = reason ?? (this.direct ? "Keys go straight to the program" : "Run a command");
   }
 
-  /** A short line above the box: connecting, reconnecting, or nothing. */
-  setStatus(text: string): void {
-    this.status.textContent = text;
-    this.status.hidden = text === "";
-  }
-
   /**
    * Direct mode, for as long as a full-screen program owns the screen.
    *
@@ -201,6 +182,7 @@ export class ChatView {
     this.root.dataset.direct = on ? "true" : "false";
     this.input.value = "";
     this.autosize();
+    this.drawChips();
     this.setDisabled(this.disabled);
   }
 
@@ -222,6 +204,23 @@ export class ChatView {
 
   /* ----------------------------------------------------------------- */
 
+  /** The control keys for the mode the composer is in. */
+  private drawChips(): void {
+    this.chips.replaceChildren();
+    for (const chip of chipsFor(this.direct)) {
+      const button = el("button", "chat-key") as HTMLButtonElement;
+      button.type = "button";
+      button.textContent = chip.label;
+      button.title = chip.title;
+      button.addEventListener("click", () => {
+        if (this.disabled) return;
+        this.options.onKeys(chip.bytes);
+        this.input.focus();
+      });
+      this.chips.append(button);
+    }
+  }
+
   private create(message: Message, previous: Message | null): Rendered {
     const el = document.createElement("div");
     el.className = `chat-msg chat-${message.kind}`;
@@ -235,14 +234,21 @@ export class ChatView {
       el.append(stamp);
     }
 
-    if (message.kind === "screen") return { el, body: this.screenCard(el, message), revision: -1, lines: 0 };
-    if (message.kind === "notice") return { el, body: this.noticeCard(el, message), revision: -1, lines: 0 };
+    if (message.kind === "screen") {
+      return { el, body: this.screenCard(el, message), message, revision: -1, lines: 0 };
+    }
+    if (message.kind === "notice") {
+      return { el, body: this.noticeCard(el, message), message, revision: -1, lines: 0 };
+    }
 
     const bubble = document.createElement("div");
     bubble.className = "chat-bubble";
     const body = document.createElement("div");
     body.className = "chat-body";
     bubble.append(body);
+    el.append(bubble);
+
+    const rendered: Rendered = { el, body, message, revision: -1, lines: 0 };
 
     if (message.kind === "received") {
       const meta = document.createElement("div");
@@ -252,7 +258,13 @@ export class ChatView {
       copy.className = "chat-copy";
       copy.textContent = "Copy";
       copy.addEventListener("click", () => {
-        void navigator.clipboard?.writeText(body.textContent ?? "").then(() => {
+        /*
+         * Copied from the lines, not from the element. The rows are separate
+         * elements, so the element's text runs them all together: copying a
+         * directory listing this way produced one unbroken string.
+         */
+        const text = rendered.message.lines.map((line) => line.text).join("\n");
+        void navigator.clipboard?.writeText(text).then(() => {
           copy.textContent = "Copied";
           setTimeout(() => { copy.textContent = "Copy"; }, 1400);
         });
@@ -261,8 +273,7 @@ export class ChatView {
       bubble.append(meta);
     }
 
-    el.append(bubble);
-    return { el, body, revision: -1, lines: 0 };
+    return rendered;
   }
 
   private noticeCard(el: HTMLElement, message: Message): HTMLElement {
@@ -293,6 +304,7 @@ export class ChatView {
 
   private update(node: Rendered, message: Message): void {
     node.revision = message.revision;
+    node.message = message;
     node.el.dataset.open = message.open ? "true" : "false";
     const body = node.body;
     if (!body) return;
@@ -363,17 +375,23 @@ export class ChatView {
     node.el.querySelector(".chat-bubble")?.append(more);
   }
 
-  /** The exit status, when the shell reported one. Zero is not worth saying. */
+  /**
+   * The exit status, when the shell reported one. Zero is not worth saying.
+   *
+   * It goes in the bubble rather than in the meta row beside Copy: that row
+   * only appears under the pointer, and a command's failure is not something
+   * to be found by hovering over it.
+   */
   private stamp(node: Rendered, message: Message): void {
     const existing = node.el.querySelector<HTMLElement>(".chat-exit");
     if (message.exitCode === undefined || message.exitCode === 0) {
       existing?.remove();
       return;
     }
-    const chip = existing ?? document.createElement("span");
+    const chip = existing ?? document.createElement("div");
     chip.className = "chat-exit";
     chip.textContent = `exit ${message.exitCode}`;
-    if (!existing) node.el.querySelector(".chat-meta")?.prepend(chip);
+    if (!existing) node.el.querySelector(".chat-bubble")?.append(chip);
   }
 
   private readonly onScroll = (): void => {
@@ -400,8 +418,20 @@ export class ChatView {
     this.historyAt = -1;
     this.draft = "";
     this.autosize();
-    /* A pasted block is a command per line, which is what a shell would do with it. */
-    for (const line of text.split("\n")) this.options.onSubmit(line);
+    /*
+     * A pasted block is a command per line, which is what a shell would do
+     * with it. A block that ends in a newline ends in one empty piece, which
+     * is punctuation rather than a command, so it is not sent as one.
+     */
+    const lines = text.split("\n");
+    if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    for (const line of lines) this.options.onSubmit(line);
+    /*
+     * Sending something is an explicit act of attention, so the thread
+     * follows the answer to it even if the reader had scrolled away. Output
+     * that arrives on its own never does this: a build finishing does not get
+     * to take somebody off the line they were reading.
+     */
     this.sticking = true;
   }
 
@@ -431,18 +461,6 @@ export class ChatView {
     if (event.key === "c" && event.ctrlKey && !window.getSelection()?.toString()) {
       event.preventDefault();
       this.options.onKeys("\x03");
-      return;
-    }
-
-    if (event.key === "Tab" && this.input.value !== "") {
-      /*
-       * Completion is the shell's, so the line goes over as typed, without a
-       * newline, followed by Tab. What comes back is the shell's answer.
-       */
-      event.preventDefault();
-      this.options.onKeys(`${this.input.value}\t`);
-      this.input.value = "";
-      this.autosize();
       return;
     }
 

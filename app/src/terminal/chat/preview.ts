@@ -134,6 +134,19 @@ const terminal: TerminalSurface = createTerminal("chat", {
 terminal.open(screen);
 
 /*
+ * Two states that are hard to reach by typing but easy to get wrong.
+ *
+ * "?readonly" is the pane a colleague gets when they may watch but not type.
+ * "reconnect", typed at the stand-in shell, is what the relay does when a
+ * session comes back: the screen is replayed from the top, and the
+ * conversation has to be rebuilt rather than played again in front of
+ * whoever is watching.
+ */
+if (new URLSearchParams(window.location.search).has("readonly")) {
+  terminal.options.disableStdin = true;
+}
+
+/*
  * The scripted commands are typed into the real composer and submitted the way
  * a person would, rather than being announced to the transcript directly. That
  * is the whole point of the harness: the echo suppression, the history and the
@@ -147,8 +160,84 @@ function typeAndSend(text: string): void {
   input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
 }
 
-/* Whatever the preview sends is swallowed here; the script writes the replies. */
-terminal.onData(() => {});
+/*
+ * A stand-in for the process, so the composer can be used and not just
+ * watched. It echoes what it is sent the way a PTY does -- the line back,
+ * then the output, then a new prompt -- which is exactly the shape the
+ * renderer has to get right.
+ */
+let scripted = true;
+let pending = "";
+
+terminal.onData((data) => {
+  if (scripted) return;
+  for (const character of data) {
+    if (character === "\x03") {
+      terminal.write(`^C\r\n\x1b]133;A\x07${PROMPT}\x1b]133;B\x07`);
+      pending = "";
+      continue;
+    }
+    if (character === "\r" && pending.trim() === "reconnect") {
+      pending = "";
+      const replay = `${PROMPT}git log --oneline -1\r\n0cd5684 Set Homebrew checksum\r\n\x1b]133;A\x07${PROMPT}\x1b]133;B\x07`;
+      terminal.reset();
+      terminal.write(replay);
+      continue;
+    }
+    if (character !== "\r") {
+      pending += character;
+      continue;
+    }
+    const line = pending;
+    pending = "";
+    terminal.write(`${line}\r\n`);
+    /*
+     * The interactive half publishes shell integration markers and the
+     * scripted half above does not, so both ways of deciding where an answer
+     * ends get exercised: the markers here, the pause up there.
+     */
+    terminal.write("\x1b]133;C\x07");
+    const answer = reply(line);
+    terminal.write(answer);
+    /* "slow" answers on its own schedule and closes itself off below. */
+    if (line.trim() !== "slow") {
+      terminal.write(`\x1b]133;D;${exitFor(line)}\x07`);
+      terminal.write(`\x1b]133;A\x07${PROMPT}\x1b]133;B\x07`);
+    }
+  }
+});
+
+/** What the stand-in shell exits with, so a failure carries a status. */
+function exitFor(line: string): number {
+  const command = line.trim();
+  if (command === "fail") return 1;
+  if (command === "" || ["ls", "seq", "slow"].includes(command)) return 0;
+  return 127;
+}
+
+function reply(line: string): string {
+  const command = line.trim();
+  if (command === "") return "";
+  if (command === "ls") return "notes.md  package.json  src\r\n";
+  if (command === "seq") {
+    /* Long enough that the answer is folded, which is its own thing to look at. */
+    return Array.from({ length: 120 }, (_, index) => `line ${index + 1}\r\n`).join("");
+  }
+  if (command === "fail") return "\x1b[31mfatal: nope\x1b[0m\r\n";
+  if (command === "slow") {
+    /*
+     * Output that arrives after the call returns, the way a build or a server
+     * does. The prompt follows it rather than preceding it, which is what a
+     * shell does and what makes the markers around it mean anything.
+     */
+    for (let step = 1; step <= 4; step += 1) {
+      setTimeout(() => terminal.write(`working ${step}\r\n`), step * 250);
+    }
+    setTimeout(() => terminal.write(`\x1b]133;D;0\x07\x1b]133;A\x07${PROMPT}\x1b]133;B\x07`), 1150);
+    return "";
+  }
+  return `${command}: command not found\r\n`;
+}
 
 async function play(): Promise<void> {
   for (const step of SESSION) {
@@ -168,4 +257,6 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-void play();
+void play().then(() => {
+  scripted = false;
+});

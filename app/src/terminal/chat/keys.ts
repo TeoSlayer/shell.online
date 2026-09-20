@@ -86,12 +86,37 @@ export function bytesForKey(event: KeyPress, applicationCursor = false): string 
   return null;
 }
 
+export interface KeyChip {
+  label: string;
+  bytes: string;
+  title: string;
+  /**
+   * Which mode the chip belongs to.
+   *
+   * The two modes want different keys, and offering the wrong ones is worse
+   * than offering none. An arrow chip while the composer is writing lines
+   * moves the shell's own history, which is a line this browser cannot see
+   * and would then send a different one over the top of; the composer's own
+   * Up and Down walk the conversation instead, which is the history somebody
+   * can actually read. Tab is the same story: the completed line lands on the
+   * prompt row, and the prompt row is the one thing a conversation does not
+   * show.
+   */
+  mode: "line" | "direct" | "both";
+}
+
 /** The control keys the composer offers as buttons, for phones and for TUIs. */
-export const KEY_CHIPS: readonly { label: string; bytes: string; title: string }[] = [
-  { label: "Ctrl-C", bytes: "\x03", title: "Interrupt the running command" },
-  { label: "Ctrl-D", bytes: "\x04", title: "End of input" },
-  { label: "Tab", bytes: "\t", title: "Complete" },
-  { label: "Esc", bytes: "\x1b", title: "Escape" },
-  { label: "↑", bytes: "\x1b[A", title: "Previous command" },
-  { label: "↓", bytes: "\x1b[B", title: "Next command" },
+export const KEY_CHIPS: readonly KeyChip[] = [
+  { label: "Ctrl-C", bytes: "\x03", title: "Interrupt the running command", mode: "both" },
+  { label: "Ctrl-D", bytes: "\x04", title: "End of input", mode: "line" },
+  { label: "Esc", bytes: "\x1b", title: "Escape", mode: "both" },
+  { label: "Tab", bytes: "\t", title: "Complete", mode: "direct" },
+  { label: "Enter", bytes: "\r", title: "Return", mode: "direct" },
+  { label: "↑", bytes: "\x1b[A", title: "Up", mode: "direct" },
+  { label: "↓", bytes: "\x1b[B", title: "Down", mode: "direct" },
 ];
+
+/** The chips to show, given whether a program is reading keys directly. */
+export function chipsFor(direct: boolean): readonly KeyChip[] {
+  return KEY_CHIPS.filter((chip) => chip.mode === "both" || chip.mode === (direct ? "direct" : "line"));
+}

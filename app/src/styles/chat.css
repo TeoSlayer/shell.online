@@ -210,15 +210,17 @@
 
 .chat-copy:hover { color: var(--ink); }
 
-/* A non-zero exit is the one status worth saying out loud. */
+/* A non-zero exit is the one status worth saying out loud, so it is not hidden
+   in the hover row: it sits in the bubble, under the output it explains. */
 .chat-exit {
-  padding: 2px 7px;
+  width: fit-content;
+  padding: 1px 8px;
   border-radius: var(--radius-chip);
+  margin-top: 6px;
   background: var(--danger-wash);
   color: var(--danger);
   font-family: var(--mono);
   font-size: 10.5px;
-  opacity: 1;
 }
 
 /* --- interruptions and gaps ------------------------------------- */
@@ -429,19 +431,7 @@
   font-style: italic;
 }
 
-/* --- status and the way back to the bottom ---------------------- */
-
-.chat-status {
-  position: absolute;
-  z-index: 6;
-  right: 0;
-  bottom: 88px;
-  left: 0;
-  color: var(--muted);
-  font-size: 11px;
-  pointer-events: none;
-  text-align: center;
-}
+/* --- the way back to the bottom --------------------------------- */
 
 .chat-jump {
   position: absolute;
@@ -476,8 +466,6 @@
     bottom: 8px;
     left: 6px;
   }
-
-  .chat-status { bottom: 82px; }
 
   .chat-jump { bottom: 90px; }
 }

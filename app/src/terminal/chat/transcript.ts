@@ -119,6 +119,8 @@ export class Transcript {
   private nextId = 1;
   private open: Message | null = null;
   private echoes: PendingEcho[] = [];
+  /** The shell's current prompt, when it publishes one. Empty otherwise. */
+  private prompt = "";
   /** When the open message last grew, so a caller can time the quiet close. */
   private lastGrewAt = 0;
   /** Bumped on every change, so a view can tell "nothing happened" cheaply. */
@@ -147,11 +149,27 @@ export class Transcript {
     return this.open && this.open.kind === "received" ? this.lastGrewAt + IDLE_CLOSE_MS : null;
   }
 
+  /**
+   * The prompt the shell is currently drawing, taken from its own markers.
+   *
+   * Worth knowing because output does not always start on a fresh row. A dev
+   * server that logs while somebody is sitting at a prompt writes at the
+   * cursor, which is halfway along the prompt row, so the line that is
+   * eventually released reads "~/work/api > listening on :8080". The terminal
+   * shows exactly that too; the difference is that a conversation can take
+   * the prompt back off, and knowing the prompt exactly is what makes that
+   * safe to do.
+   */
+  setPrompt(text: string): void {
+    this.prompt = text;
+  }
+
   /** Forgets everything. Used when the relay replays a session from the top. */
   clear(): void {
     this.items = [];
     this.open = null;
     this.echoes = [];
+    this.prompt = "";
     this.rev += 1;
   }
 
@@ -199,8 +217,15 @@ export class Transcript {
     });
   }
 
-  /** A control key with no text of its own, such as Esc or Tab. */
+  /**
+   * Something that happened between messages rather than inside one, such as
+   * output that scrolled past before it could be kept.
+   *
+   * It closes whatever is open first. A notice pushed under an answer that is
+   * still growing reads as if it came before lines that arrive after it.
+   */
   noticed(text: string, at: number, tone: NoticeTone = "info"): Message {
+    this.close(at);
     return this.push({ kind: "notice", at, text, lines: [], open: false, tone });
   }
 
@@ -212,9 +237,33 @@ export class Transcript {
    */
   output(lines: readonly TranscriptLine[], at: number): void {
     for (const line of lines) {
-      if (this.consumedAsEcho(line)) continue;
-      this.append(line, at);
+      const stripped = this.withoutPrompt(line);
+      if (this.consumedAsEcho(stripped)) continue;
+      this.append(stripped, at);
     }
+  }
+
+  /**
+   * Takes the prompt off the front of a line that was written onto it.
+   *
+   * Only an exact prefix of the prompt the shell last published, so a line of
+   * output that merely begins the same way is left alone. A line that is
+   * nothing but the prompt becomes empty and is dropped by the echo test or
+   * kept as the blank row it now is.
+   */
+  private withoutPrompt(line: TranscriptLine): TranscriptLine {
+    if (this.prompt === "" || !line.text.startsWith(this.prompt)) return line;
+    let remaining = this.prompt.length;
+    const runs: StyleRun[] = [];
+    for (const run of line.runs) {
+      if (remaining >= run.text.length) {
+        remaining -= run.text.length;
+        continue;
+      }
+      runs.push(remaining > 0 ? { ...run, text: run.text.slice(remaining) } : run);
+      remaining = 0;
+    }
+    return { text: line.text.slice(this.prompt.length), runs };
   }
 
   /**

@@ -62,6 +62,23 @@ is moved by the emulator, and reports itself disposed when the row it held was
 dropped — which is the one case where output really was lost, and is shown in
 the thread as a gap rather than silently skipped.
 
+## The prompt
+
+Two different things remove it, and both are exact rather than guessed.
+
+Between commands the prompt sits on the cursor row, which is never released,
+so it simply never arrives. At the moment Enter is pressed it *is* released,
+carrying the command with it — and that line is dropped as the echo, because
+the command is already in the thread as the message that caused it.
+
+The remaining case is output that lands on the prompt row without a command:
+a dev server logging while somebody sits at a prompt writes at the cursor, so
+the row that is eventually released reads `~/work/api > listening on :8080`.
+A shell publishing `OSC 133` markers says exactly where its prompt ends, so
+the prompt is captured at the `B` marker and taken off the front of any line
+that starts with it. Without markers the line is left alone: a guess here
+deletes real output.
+
 ## Where one answer ends
 
 `transcript.ts`, in preference order:
@@ -94,7 +111,7 @@ cannot fall out of step with the session, and there is no second emulator.
 | `screen-reader.ts` | Finished rows out of the grid, with their colours. Pure, apart from the emulator interface it reads. |
 | `transcript.ts` | Rows and submissions into messages. No DOM, no emulator, no clock of its own. |
 | `chat-view.ts` | The thread and the floating box. Renders by difference. |
-| `keys.ts` | A key press into the bytes a terminal expects. |
+| `keys.ts` | A key press into the bytes a terminal expects, and which control chips belong to which mode. |
 | `preview.ts` | A scripted session, at `/chat-preview.html` under `npm run dev`. Development only. |
 
 `transcript.ts`, `screen-reader.ts` and `keys.ts` are tested without a browser,

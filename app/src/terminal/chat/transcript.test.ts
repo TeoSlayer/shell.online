@@ -114,6 +114,40 @@ describe("output nobody asked for", () => {
 
     expect(texts(transcript)).toEqual(["listening on :8080"]);
   });
+
+  /*
+   * It lands at the cursor, and between commands the cursor is halfway along
+   * the prompt. The terminal shows the prompt and the log line on one row;
+   * the conversation takes the prompt back off.
+   */
+  it("loses the prompt it was written on top of", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("~/work/api \u276f ");
+    transcript.output([plainLine("~/work/api \u276f listening on :8080")], 1000);
+
+    expect(texts(transcript)).toEqual(["listening on :8080"]);
+  });
+
+  it("keeps a line that merely starts the way the prompt does", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("~/work/api \u276f ");
+    transcript.output([plainLine("~/work/api is where the build ran")], 1000);
+
+    expect(texts(transcript)).toEqual(["~/work/api is where the build ran"]);
+  });
+
+  it("keeps the colour of what is left after the prompt comes off", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("$ ");
+    transcript.output(
+      [{ text: "$ fatal", runs: [{ text: "$ " }, { text: "fatal", fg: "#b3261e" }] }],
+      1000,
+    );
+
+    const answer = received(transcript)[0];
+    expect(answer.lines[0].text).toBe("fatal");
+    expect(answer.lines[0].runs).toEqual([{ text: "fatal", fg: "#b3261e" }]);
+  });
 });
 
 describe("an interrupted command", () => {
@@ -186,6 +220,22 @@ describe("a session that runs all day", () => {
 
     expect(transcript.messages).toHaveLength(MAX_MESSAGES);
     expect(transcript.messages[0].text).toBe("command 25");
+  });
+});
+
+describe("a notice", () => {
+  it("closes the answer above it, so it is not read as coming before later lines", () => {
+    const transcript = new Transcript();
+    transcript.output([plainLine("first")], 1000);
+    transcript.noticed("Output scrolled past faster than it could be kept.", 1010, "gap");
+    transcript.output([plainLine("second")], 1020);
+
+    expect(transcript.messages.map((message) => message.kind)).toEqual([
+      "received",
+      "notice",
+      "received",
+    ]);
+    expect(received(transcript)[0].open).toBe(false);
   });
 });
 

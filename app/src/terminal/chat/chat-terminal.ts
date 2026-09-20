@@ -55,6 +55,8 @@ export class ChatTerminal {
   private quiet: ReturnType<typeof setTimeout> | null = null;
   private replaying = false;
   private onScreen = false;
+  /** Set while the alternate screen has repainted since the last frame. */
+  private screenDirty = false;
   private lastCommand = "";
   /** Set by the shell's own markers; once seen, the timing rule steps aside. */
   private semantic = false;
@@ -84,6 +86,8 @@ export class ChatTerminal {
     this.inner.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
       if (this.onScreen && params.some(isAltScreen)) {
         this.transcript.screenPainted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), Date.now());
+        /* This is the last frame; a mirror still queued would paint a blank grid. */
+        this.screenDirty = false;
       }
       return false;
     });
@@ -181,8 +185,15 @@ export class ChatTerminal {
    */
   private submit(text: string): void {
     if (this.options.disableStdin) return;
-    this.transcript.submitted(text, Date.now());
-    this.lastCommand = text || this.lastCommand;
+    /*
+     * A bare Return is a real thing to send -- it is how a prompt waiting on
+     * one is answered -- but it is not an utterance, so it goes over the wire
+     * without leaving an empty bubble behind it.
+     */
+    if (text !== "") {
+      this.transcript.submitted(text, Date.now());
+      this.lastCommand = text;
+    }
     this.emit(`${text}\r`);
     this.schedule();
   }
@@ -233,7 +244,12 @@ export class ChatTerminal {
     }
 
     if (alternate) {
-      this.transcript.screenPainted(this.reader.snapshot(terminal), now);
+      /*
+       * Mirrored once per frame, not once per chunk. A program redrawing at
+       * speed can land a dozen chunks between two frames, and reading the
+       * whole grid for each of them is work thrown away before anyone sees it.
+       */
+      this.screenDirty = true;
       this.schedule();
       return;
     }
@@ -267,11 +283,24 @@ export class ChatTerminal {
     const now = Date.now();
     this.semantic = true;
     if (kind === "A") this.transcript.promptStarted(now);
+    /*
+     * B is the end of the prompt and the start of what gets typed, so the row
+     * up to the cursor is the prompt itself. Reading it here is the only way
+     * to know it exactly, and exactly is the only way it is safe to remove.
+     */
+    if (kind === "B") this.transcript.setPrompt(this.promptUnderCursor());
     if (kind === "D") {
       const code = Number.parseInt(rest[0] ?? "", 10);
       this.transcript.commandFinished(Number.isFinite(code) ? code : undefined, now);
     }
     this.schedule();
+  }
+
+  /** The current row up to the cursor, which at a B marker is the prompt. */
+  private promptUnderCursor(): string {
+    const buffer = this.inner.buffer.active;
+    const line = buffer.getLine(buffer.baseY + buffer.cursorY);
+    return line ? line.translateToString(false, 0, buffer.cursorX) : "";
   }
 
   /** Closes an answer that has stopped growing, unless the shell says so itself. */
@@ -292,6 +321,15 @@ export class ChatTerminal {
     if (this.disposed || this.frame || this.transcript.isReplaying) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
+      if (this.screenDirty) {
+        this.screenDirty = false;
+        if (this.onScreen) {
+          this.transcript.screenPainted(
+            this.reader.snapshot(this.inner as unknown as ReaderTerminal),
+            Date.now(),
+          );
+        }
+      }
       this.view?.render(this.transcript.messages, this.transcript.revision);
     });
   }
