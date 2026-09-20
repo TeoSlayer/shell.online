@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.20.0] — 2026-09-20
+
 ### Changed
 
 - The sessions list on a phone is a card of two columns rather than one long
