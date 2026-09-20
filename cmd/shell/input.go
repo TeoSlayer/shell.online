@@ -27,3 +27,18 @@ func terminalLines(input io.Reader) <-chan string {
 	}()
 	return lines
 }
+
+// wantsPasteReader decides whether this login should read the terminal.
+//
+// --no-browser always does. It is the flag for a machine whose browser is
+// somewhere else, so a pasted callback is the only way that login can finish,
+// and there is no reason to require a terminal for it: standard input can
+// perfectly well be a pipe feeding the callback in, and the terminal check
+// also asks about standard error, so redirecting a log turned the paste off.
+//
+// Without that flag there is nothing to paste, and the only thing that wants a
+// line is a question that is only ever asked at a terminal. So a scripted
+// login reads nobody's standard input.
+func wantsPasteReader(noBrowser, interactive bool) bool {
+	return noBrowser || interactive
+}

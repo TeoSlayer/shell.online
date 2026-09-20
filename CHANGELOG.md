@@ -4,6 +4,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.18.1] — 2026-09-20
+
+### Fixed
+
+- `shell login --no-browser` offers the paste whenever the flag is used, not
+  only when both standard input and standard error are terminals. The paste
+  landed in 0.18.0 behind that check, which was wrong twice over: the flag is
+  for a machine whose browser is somewhere else, so the pasted callback is the
+  only way that login can finish, and standard input can perfectly well be a
+  pipe feeding it in -- while the check also asked about standard error, so
+  redirecting a log turned the paste off and left the login waiting out its
+  timeout again. A login without the flag still reads nobody's input.
+
 ## [0.18.0] — 2026-09-20
 
 ### Added

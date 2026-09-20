@@ -139,12 +139,21 @@ func runLogin(arguments []string, stdout, stderr io.Writer) int {
 
 	/*
 	 * One reader for the terminal, shared by the sign-in and the question
-	 * after it. See terminalLines. Nil when there is nobody there to type:
-	 * a scripted login should not be offered a paste, and nothing should be
-	 * reading its standard input.
+	 * after it. See terminalLines.
+	 *
+	 * --no-browser always gets one. It is the flag for a machine whose
+	 * browser is somewhere else, so the pasted callback is the only way that
+	 * login can finish, and requiring a terminal to offer it was wrong twice
+	 * over: standard input can perfectly well be a pipe feeding the callback
+	 * in, and interactiveTerminal also asks about standard error, so
+	 * redirecting a log turned the paste off.
+	 *
+	 * Without that flag there is nothing to paste, and the only thing that
+	 * wants a line is a question that is asked only at a terminal. So a
+	 * scripted login reads nobody's standard input.
 	 */
 	var lines <-chan string
-	if interactiveTerminal(stderr) {
+	if wantsPasteReader(*noBrowser, interactiveTerminal(stderr)) {
 		lines = terminalLines(os.Stdin)
 	}
 
