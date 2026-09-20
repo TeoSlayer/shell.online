@@ -23,6 +23,16 @@
 :root {
   --paper: #f3f1e9;
   --white: #fcfbf7;
+  /*
+   * The face of a button that is not the primary action.
+   *
+   * In light mode these used to be --white, which on a --paper page read as a
+   * row of white blocks rather than as controls: the lightest thing on screen
+   * was a secondary button. Flush with the page, the 1px border does the work
+   * and the eye goes to the content. Dark mode keeps its raised surface, where
+   * lifting a control off the background is what makes it legible.
+   */
+  --control: var(--paper);
   --ink: #191b18;
   --ink-soft: #3a3e37;
   --muted: #686c63;
@@ -75,6 +85,8 @@
   :root:not([data-theme="light"]) {
     --paper: #161914;
     --white: #1d201b;
+    /* Dark keeps the raised face: lifting a control off the page is what makes it legible here. */
+    --control: var(--white);
     --ink: #f1f2ea;
     --ink-soft: #d5d8cc;
     --muted: #9ca194;
@@ -109,6 +121,8 @@
 :root[data-theme="dark"] {
     --paper: #161914;
     --white: #1d201b;
+    /* Dark keeps the raised face: lifting a control off the page is what makes it legible here. */
+    --control: var(--white);
     --ink: #f1f2ea;
     --ink-soft: #d5d8cc;
     --muted: #9ca194;

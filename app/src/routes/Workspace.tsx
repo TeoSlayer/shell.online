@@ -122,7 +122,7 @@ function RemoveSession({
   return (
     <button
       type="button"
-      className="session-copy"
+      className="session-remove"
       onClick={() => setConfirming(true)}
       disabled={busy}
       aria-label={`Remove ${session.name || session.command} from the list`}
@@ -1221,9 +1221,16 @@ function SessionGroup({
                   )}
                 </td>
                 <td className="table-end">
-                  <div className="session-actions">
-                    {live ? (
-                      <>
+                  {/*
+                    * Three groups, not one run of buttons. Open and stop are
+                    * what you do to a running session; copying hands it to
+                    * somebody else; removing takes the row away. They read as
+                    * one line on a wide screen and take separate corners of the
+                    * card on a phone, which is the same grouping either way.
+                    */}
+                  <div className="row-controls">
+                    {live && (
+                      <div className="session-actions">
                         <button
                           type="button"
                           className="session-action is-primary"
@@ -1232,7 +1239,6 @@ function SessionGroup({
                           <TerminalIcon size={15} weight="bold" />
                           {canEdit(session, you) ? "Open" : "Watch"}
                         </button>
-                        <SessionClipboard session={session} you={you} />
                         {canStop(session, you) && (
                           <button
                             type="button"
@@ -1243,17 +1249,11 @@ function SessionGroup({
                             {killing === session.id ? "Stopping" : "Stop"}
                           </button>
                         )}
-                        {canRemove(session, you) && (
-                          <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <SessionClipboard session={session} you={you} />
-                        {canRemove(session, you) && (
-                          <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
-                        )}
-                      </>
+                      </div>
+                    )}
+                    <SessionClipboard session={session} you={you} />
+                    {canRemove(session, you) && (
+                      <RemoveSession session={session} onRemove={onRemove} busy={removing === session.id} />
                     )}
                   </div>
                 </td>

@@ -1073,7 +1073,7 @@
   height: 38px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
-  background: var(--white);
+  background: var(--control);
   color: var(--muted);
   cursor: pointer;
   place-items: center;
@@ -1083,6 +1083,45 @@
 .session-copy:hover {
   border-color: var(--muted);
   color: var(--ink);
+}
+
+/*
+ * Removing a row is not one of the things you do to a session, it is what you
+ * do to the list. It gets no button face of its own: a bordered white box
+ * beside Open and Stop gave a destructive, rarely-wanted action the same
+ * weight as the primary one. An icon in the corner is enough, and it grows a
+ * face on hover so it is still obviously a control.
+ */
+.session-remove {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  place-items: center;
+  transition: color 160ms var(--ease), background 160ms var(--ease);
+}
+
+.session-remove:hover,
+.session-remove:focus-visible {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.session-remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Grouped so a row reads as one line on a pointer. */
+.row-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 /*
@@ -1105,7 +1144,7 @@
   padding: 0 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
-  background: var(--white);
+  background: var(--control);
   color: var(--ink);
   font-size: 13.5px;
   font-weight: 520;
@@ -1234,9 +1273,20 @@
   display: inline-flex;
 }
 
-/* Inside the button, so the whole control reads as one thing that opens. */
+/*
+ * The trigger reads as a dropdown: the icon and the caret sit side by side on
+ * one line, the way every menu button does.
+ *
+ * .session-copy is a square grid, so a second child went underneath the first
+ * and the two were squeezed into a 34px box, one above the other. That is what
+ * made the control look like a mistake rather than a menu.
+ */
 .clip .session-copy {
-  gap: 3px;
+  display: inline-flex;
+  width: auto;
+  padding: 0 8px;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Only the phone sheet has a backdrop; on a pointer the menu is a popover. */
@@ -1271,6 +1321,8 @@
   right: 0;
   display: grid;
   width: 296px;
+  /* Never wider than the window it is pinned inside. */
+  max-width: calc(100vw - 24px);
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);

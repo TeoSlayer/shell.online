@@ -4,6 +4,34 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- The sessions list on a phone is a card of two columns rather than one long
+  stack. Owner and assignees are the same kind of fact and now sit side by
+  side, as do the machine and how long it has been running, so the four read
+  at a glance and the row's buttons are no longer most of a screen below the
+  name. Open and stop sit together at the foot of the card, copying sits in
+  the opposite corner, and removing the row moved to the top corner: it cannot
+  be undone and it was one thumb-width from Open.
+- Secondary buttons in light mode take the page's own background instead of
+  white. On a warm paper page a row of white boxes was the lightest thing on
+  screen, which gave the least important controls the most weight. Dark mode
+  keeps its raised surface, where lifting a control off the page is what makes
+  it legible.
+- Removing a session is an icon rather than a bordered button, and takes a
+  colour only when pointed at.
+- The copy menu is a sheet on a phone, the way the person picker already was.
+  It was a fixed-width popover anchored to a control half a card wide, so it
+  hung off the side and cut off the sentence explaining what you were about to
+  put on the clipboard. Its trigger also reads as a menu now: the icon and the
+  caret sit on one line instead of stacked in a square.
+
+### Fixed
+
+- A session's name no longer truncates at 180px on a phone. The width that
+  lets the table's first column absorb slack and still shrink resolves, once
+  the row is a stacked card, to exactly that minimum.
+
 ## [0.19.0] — 2026-09-20
 
 ### Changed

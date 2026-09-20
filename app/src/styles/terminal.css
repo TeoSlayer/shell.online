@@ -670,7 +670,7 @@ button.tab {
   padding: 0 15px;
   border: 1px solid var(--line);
   border-radius: var(--radius-chip);
-  background: var(--white);
+  background: var(--control);
   color: var(--ink);
   cursor: pointer;
   font-family: inherit;

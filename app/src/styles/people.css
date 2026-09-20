@@ -416,6 +416,11 @@
   height: 34px;
 }
 
+/* The menu trigger carries a caret beside its icon, so it is not a square. */
+.table .clip .session-copy {
+  width: auto;
+}
+
 .table-subject {
   display: inline-flex;
   min-width: 0;
@@ -633,6 +638,93 @@
     display: block;
   }
 
+  /*
+   * The stacked row is a card of two columns, not one long strip.
+   *
+   * Owner and assignees are the same kind of fact and belong side by side; as
+   * a stack they pushed the row's controls a screen and a half down. Two
+   * columns puts the four facts in a block you read at a glance.
+   *
+   * Both tracks are minmax(0, 1fr). The 1fr alone would floor at the content's
+   * min-content width, which for a name chip is the whole name, and the row
+   * would then be wider than the phone. The 0 is what lets a long name
+   * truncate instead of pushing the card sideways.
+   */
+  .table tbody tr {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    column-gap: 12px;
+  }
+
+  .table tbody td {
+    min-width: 0;
+  }
+
+  /*
+   * The name gets the full width, less the corner the remove button sits in.
+   *
+   * max-width:0 with a min-width is how the table lets column one absorb the
+   * slack and still shrink. As a grid item there is no slack to absorb and the
+   * pair resolves to exactly the min-width, so the name truncated at 180px in
+   * a card half again as wide. Both go.
+   */
+  .table tbody td:first-child {
+    grid-column: 1 / -1;
+    min-width: 0;
+    max-width: none;
+    padding-right: 42px;
+  }
+
+  .table tbody td.table-end {
+    grid-column: 1 / -1;
+  }
+
+  /*
+   * The table's minimum was sized for a first name and a surname in a column
+   * of its own. Here it is half a phone, and holding it would be the thing
+   * that overflows the card.
+   */
+  .table-person {
+    min-width: 0;
+  }
+
+  .table-person .people,
+  .table-person .picker,
+  .table-person .picker-trigger {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /*
+   * Open and stop on the left, copy on the right, on one line at the foot of
+   * the card. The remove button is not in this run at all: it is in the top
+   * corner, out of reach of a thumb going for Open.
+   */
+  .table tbody td.table-end .row-controls {
+    width: 100%;
+  }
+
+  .table tbody td.table-end .session-actions {
+    justify-content: flex-start;
+  }
+
+  /*
+   * Pushed right by its own margin rather than by space-between, because a
+   * finished session has no open or stop for space-between to push against
+   * and the copy button landed on the left of those cards instead.
+   */
+  .table tbody td.table-end .clip {
+    margin-left: auto;
+  }
+
+  .table tbody .session-remove {
+    position: absolute;
+    top: 10px;
+    right: 0;
+  }
+
   .table-end,
   .table-end .session-actions {
     justify-content: flex-start;
@@ -641,6 +733,47 @@
 }
 
 @media (max-width: 760px) {
+  /*
+   * The copy menu becomes a sheet, the same way the person picker already
+   * does. It was a 296px popover anchored to the right edge of a control that
+   * is itself half a card wide, so on a phone it hung off the side and its
+   * prose, which is the warning about what you are about to put on a
+   * clipboard, was the part that got cut. Two menus in one row behaving
+   * differently is also its own bug.
+   */
+  .clip-scrim {
+    position: fixed;
+    z-index: 69;
+    display: block;
+    border: 0;
+    background: color-mix(in srgb, var(--ink) 32%, transparent);
+    inset: 0;
+  }
+
+  .clip-pop {
+    position: fixed;
+    z-index: 70;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+    max-height: calc(100dvh / var(--zoom) - 20px);
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border-width: 1px 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+    box-shadow: 0 -18px 50px color-mix(in srgb, var(--ink) 20%, transparent);
+  }
+
+  /* A thumb target, and room for the sentence under each one. */
+  .clip-item {
+    min-height: 56px;
+    padding: 12px;
+    align-items: flex-start;
+  }
+
   .picker-scrim {
     position: fixed;
     z-index: 69;
