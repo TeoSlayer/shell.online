@@ -31,7 +31,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - A session's name no longer truncates at 180px on a phone. The width that
   lets the table's first column absorb slack and still shrink resolves, once
   the row is a stacked card, to exactly that minimum.
-
+- Agent tools are found again on a machine whose daemon runs as a service. The
+  browser said Claude Code was not installed on machines that plainly had it,
+  and starting the session anyway failed with "command not found". Agreeing to
+  browser-started sessions installs the daemon as a user service, and a service
+  is not started by a shell: launchd hands it four system directories, and
+  every agent tool anybody has is installed somewhere else — `~/.local/bin`,
+  Homebrew, a version manager. The daemon now asks the login shell what PATH a
+  terminal on that machine would have, and uses it both for what it reports and
+  for what it launches; where that cannot be asked, the places tools are
+  conventionally installed are searched instead. Update shell on the machine
+  and run `shell auth` again to pick this up.
 ## [0.19.0] — 2026-09-20
 
 ### Changed

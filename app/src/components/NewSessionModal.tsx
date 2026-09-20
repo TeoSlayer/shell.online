@@ -218,9 +218,21 @@ export function NewSessionModal({
               <p className="sheet-note">
                 <Warning size={14} weight="fill" />
                 <span>
-                  {kind.title} was not found on <b>{chosenMachine.label}</b>. The
-                  command will still be sent, and will fail there if the tool is
-                  not installed.
+                  {kind.title} was not found on <b>{chosenMachine.label}</b>.
+                  {/*
+                    * Said as what was reported rather than as what is true.
+                    * The background service searches its own PATH, and a
+                    * service is not started by a shell: before v0.17.1 it was
+                    * handed four system directories and saw nothing installed
+                    * anywhere else, which is everywhere anybody installs
+                    * anything. Telling somebody with the tool open in another
+                    * window that it is not installed is worse than useless --
+                    * it sends them looking for the wrong problem.
+                    */}{" "}
+                  If it is installed there, update shell on that machine and
+                  run <code>shell auth</code> again: older versions could not
+                  see the tools on your shell&rsquo;s PATH. The command will
+                  still be sent.
                 </span>
               </p>
             )}

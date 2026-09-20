@@ -213,6 +213,19 @@ func runDaemon(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "\n  Daemon listening for %s. Stop with Ctrl-C.\n\n", credentials.Email)
 	}
 
+	/*
+	 * Before anything looks for a tool or launches one: give this process the
+	 * PATH a terminal on this machine would have.
+	 *
+	 * The daemon is a user service now, and launchd hands a service four
+	 * system directories. Every agent tool anybody has is installed somewhere
+	 * else, so detection found nothing, the browser reported that nothing was
+	 * installed, and a session started anyway would have failed with "command
+	 * not found". Both read the process environment, so both are fixed here.
+	 * See tool_path.go.
+	 */
+	applyToolPath(report)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(ctx)
