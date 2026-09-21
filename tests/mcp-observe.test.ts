@@ -6,6 +6,7 @@ import { validateConfigFile, REQUIRED_COMPATIBILITY_FLAGS } from "../scripts/wra
 import { base64url, exportJWK, generateKeyPair } from "jose";
 import { BrowserFrameCipher } from "../shared/e2ee";
 import { TerminalModel, type Cursor, type WaitResult } from "../shared/terminal-model";
+import { withGrantClock } from "./helpers/mcp-clock";
 
 // The only value import from cloudflare:workers is the DurableObject base class. Mock it so the
 // DO can be constructed and driven directly in a Node (vitest) environment.
@@ -69,9 +70,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 async function waitFor(condition: () => boolean, ms: number, what: string): Promise<void> {
-  const start = Date.now();
+  const start = performance.now();
   while (!condition()) {
-    if (Date.now() - start > ms) throw new Error(`waitFor timed out: ${what}`);
+    if (performance.now() - start > ms) throw new Error(`waitFor timed out: ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
@@ -648,19 +649,20 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     expect(res.status).toBe(200);
   });
 
-  it("F1: grant expiry retires the model WITHOUT another MCP request", async () => {
+  it("F1: grant expiry retires the model WITHOUT another MCP request", () => withGrantClock(async (expire) => {
     const { do: do_, routeKey, hostSocket, bearer } = await makeGrantDo("F1_EXPIRY_RETIRE", 1, "f1");
     await seedModel(do_, hostSocket, routeKey, bearer, call("shell_output", 1, {}), enc("SEED\n"));
     const doAny = do_ as unknown as DoInternals;
     expect(doAny.mcpModel).not.toBeNull();
     // No further MCP request is sent. The model must be retired when the 1s grant expires.
+    expire(1);
     await waitFor(() => doAny.mcpModel === null, 3000, "model retirement on expiry");
     expect(doAny.mcpModel).toBeNull();
     expect(doAny.mcpCipher).toBeNull();
     expect(doAny.mcpExpiryRetireTimer ?? null).toBeNull();
-  });
+  }));
 
-  it("F1b: encrypted model allocated after DO reconstruction is retired on grant expiry", async () => {
+  it("F1b: encrypted model allocated after DO reconstruction is retired on grant expiry", () => withGrantClock(async (expire) => {
     // Shared durable storage across a "reconstruction" (a fresh DO instance reloading the same
     // storage). The constructor reloads grants from storage; pre-fix it never rescheduled the
     // expiry-retire timer, so a model allocated after reconstruction outlived its last grant.
@@ -712,10 +714,11 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
 
     // No further MCP request is sent. The reconstructed model must be retired when the grant
     // expires — the expiry timer was restored on allocation, so no MCP request is needed.
+    expire(2);
     await waitFor(() => doAny.mcpModel === null, 4000, "reconstructed model retirement on expiry");
     expect(doAny.mcpModel).toBeNull();
     expect(doAny.mcpCipher).toBeNull();
-  });
+  }));
 
   it("Gap4: reconstruction with a LIVE grant re-seeds a new epoch and preserves the grant expiry", async () => {
     // The G6 cold-path gate: a Worker instance can be reconstructed while a grant is still live
@@ -783,7 +786,7 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     expect(grant!.expiresAt).toBeGreaterThan(Math.floor(Date.now() / 1000)); // still live
   });
 
-  it("Gap1: expiry DURING reconstructed seeding frees the model/cipher (no later decryption)", async () => {
+  it("Gap1: expiry DURING reconstructed seeding frees the model/cipher (no later decryption)", () => withGrantClock(async (expire) => {
     // The proactive timer can't catch this: the snapshot is held until the grant has already
     // lapsed, so by the time the seed resolves there is no live grant left to schedule against.
     // The model/cipher must be freed at the end of initialization, not left allocated to decrypt
@@ -833,6 +836,7 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     const req = hostSocket.sent.find((m) => m.includes("snapshot_request"))!;
     const targetId = (JSON.parse(req) as { viewerId: number }).viewerId;
     // Hold the snapshot past the grant's 1s expiry (the seed stays in flight the whole time).
+    expire(1);
     await new Promise((resolve) => setTimeout(resolve, 1300));
     // Release the snapshot: the seed completes, but the grant has already expired.
     await do2.webSocketMessage(asWs(hostSocket), wsFrame(await sealedTargetedSnapshot(cipher, targetId, enc("SEED\n"))));
@@ -849,9 +853,9 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     // The model/cipher must be freed (no live grant remains), so no later grant can decrypt with it.
     expect(doAny.mcpModel).toBeNull();
     expect(doAny.mcpCipher).toBeNull();
-  });
+  }));
 
-  it("F1r4: expiry during seeding frees model BEFORE snapshot arrives (no decryption of intervening frames)", async () => {
+  it("F1r4: expiry during seeding frees model BEFORE snapshot arrives (no decryption of intervening frames)", () => withGrantClock(async (expire) => {
     // The model+cipher are allocated before the snapshot await. If the grant expires during the
     // await, the expiry timer (scheduled before the await) must fire and free the model/cipher,
     // so that any frame arriving in that window is NOT decrypted.
@@ -902,6 +906,7 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
 
     // Hold the snapshot past the grant's 1s expiry. The expiry timer (scheduled before the
     // snapshot await) fires and frees the model/cipher — BEFORE the snapshot arrives.
+    expire(1);
     await new Promise((resolve) => setTimeout(resolve, 1300));
     // The model/cipher must be freed by the expiry timer (not by the seed completing).
     expect(doAny.mcpModel).toBeNull();
@@ -927,7 +932,7 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     // The model/cipher remain freed.
     expect(doAny.mcpModel).toBeNull();
     expect(doAny.mcpCipher).toBeNull();
-  });
+  }));
 
   it("F4: concurrent reads share ONE snapshot init and both get a seeded model", async () => {
     const { do: do_, routeKey, hostSocket, bearer } = await makeGrantDo("F4_CONCURRENT_SEED", 60, "f4");
@@ -1057,15 +1062,16 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     expect(entry.outcome).toBe("revoked");
   });
 
-  it("F7c: grant expiry records an 'expired' lifecycle audit event", async () => {
+  it("F7c: grant expiry records an 'expired' lifecycle audit event", () => withGrantClock(async (expire) => {
     const { do: do_, routeKey, hostSocket, bearer } = await makeGrantDo("F7_EXPIRED", 1, "f7c");
     await seedModel(do_, hostSocket, routeKey, bearer, call("shell_output", 1, {}), enc("SEED\n"));
     const doAny = do_ as unknown as DoInternals;
     // When the 1s grant expires, the model is retired and an "expired" lifecycle event is recorded.
+    expire(1);
     await waitFor(() => doAny.mcpModel === null, 3000, "model retirement on expiry");
     const expired = doAny.mcpAudit.find((e) => e.kind === "expired");
     expect(expired).toBeDefined();
-  });
+  }));
 
   it("Gap2a: revoking the last grant mid-wait does NOT drive mcpWaitCount negative", async () => {
     const { do: do_, routeKey, hostSocket, hostToken, bearer, grant_id } = await makeGrantDo("GAP2_NEGATIVE", 60, "gap2a");

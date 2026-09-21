@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { base64url, exportJWK, generateKeyPair } from "jose";
+import { withGrantClock } from "./helpers/mcp-clock";
 
 // The only value import from cloudflare:workers is the DurableObject base class. Mock it so the
 // DO can be constructed and driven directly in a Node (vitest) environment.
@@ -121,9 +122,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 // admitted (registered) before triggering a cancellation, so the test exercises active
 // cancellation of an in-flight request rather than a pre-admission rejection.
 async function waitFor(condition: () => boolean, ms: number, what: string): Promise<void> {
-  const start = Date.now();
+  const start = performance.now();
   while (!condition()) {
-    if (Date.now() - start > ms) throw new Error(`waitFor timed out: ${what}`);
+    if (performance.now() - start > ms) throw new Error(`waitFor timed out: ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
@@ -215,7 +216,7 @@ function makeWorkerEnv(routeKey: string, do_: TerminalSession) {
 // --- lifecycle: held (in-flight) request cancellation ------------------------------------
 
 describe("MCP lifecycle: in-flight request cancellation", () => {
-  it("grant expiry cancels a held in-flight request, settles it, and releases the slot", async () => {
+  it("grant expiry cancels a held in-flight request, settles it, and releases the slot", () => withGrantClock(async (expire) => {
     const hostToken = "host-token-expiry";
     const hostTokenHash = await sha256Hex(hostToken);
     const do_ = await makeDo("SESS_EXPIRY_TEST_ID");
@@ -243,13 +244,14 @@ describe("MCP lifecycle: in-flight request cancellation", () => {
 
     // The grant's fixed expiry fires the scheduled cancellation: the body reader is aborted, the
     // request settles, and the inflight slot is released.
+    expire(1);
     const response = await withTimeout(mcpPromise, 4000);
     expect(response.status).toBe(401);
     expect(await response.text()).toContain("grant no longer active");
     expect(held.wasCancelled()).toBe(true);
     expect((do_ as unknown as { mcpInflightTotal: number }).mcpInflightTotal).toBe(0);
     expect((do_ as unknown as { mcpInflight: Map<string, number> }).mcpInflight.get(grant_id)).toBe(0);
-  });
+  }));
 
   it("persistent resume cancels a held in-flight request, settles it, and releases the slot", async () => {
     const hostToken = "host-token-resume";
