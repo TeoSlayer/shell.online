@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BrowserFrameCipher, parseEncryptionFragment } from "../web/e2ee";
+import { BrowserFrameCipher, parseEncryptionFragment } from "../shared/e2ee";
 
 describe("browser E2EE envelope", () => {
   it("parses keys and salts only at their exact lengths", () => {

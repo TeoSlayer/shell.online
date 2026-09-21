@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -10,10 +11,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"shell.online/internal/api"
 	"shell.online/internal/e2ee"
 )
 
@@ -31,15 +34,36 @@ type managedLocalSession struct {
 	onAttachChange func(bool)
 	onRotate       func(string) (string, error)
 	attached       net.Conn
+	mcpGrant       func(label string, scopes []string, ttl int) (api.McpGrantCreated, error)
+	mcpList        func() ([]api.McpGrant, error)
+	mcpRevoke      func(grantID string) error
+	mcpRevokeAll   func() error
+	mcpFrameKey    func() []byte
+}
+
+// SetMcpHandlers wires the MCP grant control plane (host token + api client + E2EE key are
+// captured by the caller; the session record itself never stores them).
+func (session *managedLocalSession) SetMcpHandlers(
+	grant func(label string, scopes []string, ttl int) (api.McpGrantCreated, error),
+	list func() ([]api.McpGrant, error),
+	revoke func(grantID string) error,
+	revokeAll func() error,
+) {
+	session.mcpGrant = grant
+	session.mcpList = list
+	session.mcpRevoke = revoke
+	session.mcpRevokeAll = revokeAll
 }
 
 type localControlResponse struct {
-	OK       bool   `json:"ok"`
-	ID       string `json:"id,omitempty"`
-	PID      int    `json:"pid,omitempty"`
-	ShareURL string `json:"share_url,omitempty"`
-	Password string `json:"password,omitempty"`
-	Error    string `json:"error,omitempty"`
+	Bearer   string         `json:"bearer,omitempty"`
+	Grants   []api.McpGrant `json:"grants,omitempty"`
+	OK       bool           `json:"ok"`
+	ID       string         `json:"id,omitempty"`
+	PID      int            `json:"pid,omitempty"`
+	ShareURL string         `json:"share_url,omitempty"`
+	Password string         `json:"password,omitempty"`
+	Error    string         `json:"error,omitempty"`
 }
 
 func (session *managedLocalSession) BindPasswordRotation(rotate func(string) (string, error)) {
@@ -134,6 +158,39 @@ func (session *managedLocalSession) PublishOutput(value []byte) {
 	_ = session.attached.SetWriteDeadline(time.Time{})
 }
 
+// wireMcpControl captures the host token, api client, and raw E2EE key into the live session's
+// MCP closures. The session record itself never stores these secrets.
+func wireMcpControl(control localSessionControl, client *api.Client, session api.Session, ctx context.Context) {
+	unixSession, ok := control.(*managedLocalSession)
+	if !ok {
+		return
+	}
+	unixSession.SetMcpHandlers(
+		func(label string, scopes []string, ttl int) (api.McpGrantCreated, error) {
+			// Serialize issuance with password rotation. Never mint a new grant with a stale key.
+			unixSession.rotationMu.Lock()
+			defer unixSession.rotationMu.Unlock()
+			unixSession.terminalMu.Lock()
+			provider := unixSession.mcpFrameKey
+			unixSession.terminalMu.Unlock()
+			key := session.Cipher.Key()
+			if provider != nil {
+				key = provider()
+			}
+			return client.CreateMcpGrant(ctx, session, label, scopes, ttl, key)
+		},
+		func() ([]api.McpGrant, error) {
+			return client.ListMcpGrants(ctx, session)
+		},
+		func(grantID string) error {
+			return client.RevokeMcpGrant(ctx, session, grantID)
+		},
+		func() error {
+			return client.RevokeAllMcpGrants(ctx, session)
+		},
+	)
+}
+
 func (session *managedLocalSession) Close() error {
 	var closeError error
 	session.close.Do(func() {
@@ -213,11 +270,103 @@ func (session *managedLocalSession) handleConnection(connection net.Conn) {
 		}
 		response.ShareURL = shareURL
 		response.Password = string(encoded)
+	case len(fields) >= 2 && fields[0] == "mcp":
+		session.handleMcp(connection, fields[1:], response)
+		return
 	default:
 		response.OK = false
 		response.Error = "unknown command"
 	}
 	_ = json.NewEncoder(connection).Encode(response)
+}
+
+// mcpControlDeadline bounds a local MCP control operation. Grant issuance performs a remote HTTP
+// call (up to the client's 15s timeout); the connection deadline must outlive it, or a slow but
+// successful issuance would persist the grant yet fail to deliver its one-time bearer.
+const mcpControlDeadline = 20 * time.Second
+
+// handleMcp dispatches the MCP grant control plane over the local socket. The response may carry
+// a one-time bearer (up to 8 KiB) or non-secret grant metadata.
+func (session *managedLocalSession) handleMcp(connection net.Conn, args []string, base localControlResponse) {
+	response := base
+	// The connection inherited a 1s read deadline from handleConnection; extend it so a slow
+	// grant issuance can still write its one-time bearer back to the operator.
+	_ = connection.SetDeadline(time.Now().Add(mcpControlDeadline))
+	switch {
+	case len(args) == 1 && args[0] == "list":
+		if session.mcpList == nil {
+			response.OK = false
+			response.Error = "mcp control is not available"
+			break
+		}
+		grants, err := session.mcpList()
+		if err != nil {
+			response.OK = false
+			response.Error = err.Error()
+			break
+		}
+		response.Grants = grants
+	case len(args) >= 3 && args[0] == "grant":
+		// mcp grant <label> <scopes> [ttl]
+		if session.mcpGrant == nil {
+			response.OK = false
+			response.Error = "mcp control is not available"
+			break
+		}
+		label := args[1]
+		scopes := mcpGrantScopes(args[2])
+		ttl := 0
+		if len(args) >= 4 {
+			ttl, _ = strconv.Atoi(args[3])
+		}
+		created, err := session.mcpGrant(label, scopes, ttl)
+		if err != nil {
+			response.OK = false
+			response.Error = err.Error()
+			break
+		}
+		response.Bearer = created.Bearer
+	case len(args) == 2 && args[0] == "revoke":
+		if session.mcpRevoke == nil {
+			response.OK = false
+			response.Error = "mcp control is not available"
+			break
+		}
+		if err := session.mcpRevoke(args[1]); err != nil {
+			response.OK = false
+			response.Error = err.Error()
+		}
+	case len(args) == 1 && args[0] == "revoke-all":
+		if session.mcpRevokeAll == nil {
+			response.OK = false
+			response.Error = "mcp control is not available"
+			break
+		}
+		if err := session.mcpRevokeAll(); err != nil {
+			response.OK = false
+			response.Error = err.Error()
+		}
+	default:
+		response.OK = false
+		response.Error = "unknown mcp command"
+	}
+	if err := json.NewEncoder(connection).Encode(response); err != nil && response.Bearer != "" {
+		// The grant was issued (and persisted server-side) but its one-time bearer could not be
+		// delivered. It is never re-sent; the operator recovers via `mcp list` / `mcp revoke-all`.
+		fmt.Fprintf(os.Stderr, "shell: mcp grant issued but bearer delivery failed: %v\n", err)
+	}
+}
+
+// Presets are CLI conveniences; the API validates concrete scope sets.
+func mcpGrantScopes(value string) []string {
+	switch value {
+	case "control":
+		return []string{"observe", "input"}
+	case "controlInterrupt":
+		return []string{"observe", "input", "interrupt"}
+	default:
+		return strings.Split(value, ",")
+	}
 }
 
 func (session *managedLocalSession) handleAttach(connection net.Conn) {
@@ -425,6 +574,21 @@ func requestLocalSessionResize(id string, cols, rows int) error {
 }
 
 func sendLocalControl(id, command string) (localControlResponse, error) {
+	return sendLocalControlWithLimit(id, command, 4*1024, 5*time.Second)
+}
+
+// mcpControlClientDeadline must outlive the server's mcpControlDeadline, or a slow-but-successful
+// issuance (up to the server's 20s) would complete server-side yet the client would give up before
+// receiving its one-time bearer.
+const mcpControlClientDeadline = 25 * time.Second
+
+// sendLocalControlMcp reads a larger response (a one-time bearer can be up to 8 KiB) and waits
+// long enough for a remote grant issuance.
+func sendLocalControlMcp(id, command string) (localControlResponse, error) {
+	return sendLocalControlWithLimit(id, command, 16*1024, mcpControlClientDeadline)
+}
+
+func sendLocalControlWithLimit(id, command string, responseLimit int64, deadline time.Duration) (localControlResponse, error) {
 	var response localControlResponse
 	if !localSessionIDPattern.MatchString(id) {
 		return response, fmt.Errorf("invalid session id")
@@ -434,14 +598,116 @@ func sendLocalControl(id, command string) (localControlResponse, error) {
 		return response, err
 	}
 	defer connection.Close()
-	_ = connection.SetDeadline(time.Now().Add(time.Second))
+	_ = connection.SetDeadline(time.Now().Add(deadline))
 	if _, err := fmt.Fprintln(connection, command); err != nil {
 		return response, err
 	}
-	if err := json.NewDecoder(io.LimitReader(connection, 4*1024)).Decode(&response); err != nil {
+	if err := json.NewDecoder(io.LimitReader(connection, responseLimit)).Decode(&response); err != nil {
 		return response, err
 	}
 	return response, nil
+}
+
+func runSessionMcp(arguments []string, stdout, stderr io.Writer) int {
+	if len(arguments) < 2 {
+		fmt.Fprintln(stderr, "Usage:")
+		fmt.Fprintln(stderr, "  shell mcp grant <session-id> <label> <scopes> [ttl-seconds]")
+		fmt.Fprintln(stderr, "  shell mcp list <session-id>")
+		fmt.Fprintln(stderr, "  shell mcp revoke <session-id> <grant-id>")
+		fmt.Fprintln(stderr, "  shell mcp revoke-all <session-id>")
+		return 2
+	}
+	action := arguments[0]
+	record, err := findLocalSession(arguments[1])
+	sessionID := record.ID
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 1
+	}
+	switch action {
+	case "grant":
+		if len(arguments) < 4 {
+			fmt.Fprintln(stderr, "Usage: shell mcp grant <session-id> <label> <scopes> [ttl-seconds]")
+			return 2
+		}
+		label := arguments[2]
+		scopes := arguments[3]
+		ttl := 0
+		if len(arguments) >= 5 {
+			ttl, err = strconv.Atoi(arguments[4])
+			if err != nil {
+				fmt.Fprintln(stderr, "shell: ttl must be a number of seconds")
+				return 2
+			}
+		}
+		response, err := sendLocalControlMcp(sessionID, fmt.Sprintf("mcp grant %s %s %d", label, scopes, ttl))
+		if err != nil {
+			fmt.Fprintf(stderr, "shell: mcp grant: %v\n", err)
+			return 1
+		}
+		if !response.OK {
+			fmt.Fprintf(stderr, "shell: mcp grant: %s\n", response.Error)
+			return 1
+		}
+		fmt.Fprintln(stdout, response.Bearer)
+		return 0
+	case "list":
+		response, err := sendLocalControlMcp(sessionID, "mcp list")
+		if err != nil {
+			fmt.Fprintf(stderr, "shell: mcp list: %v\n", err)
+			return 1
+		}
+		if !response.OK {
+			fmt.Fprintf(stderr, "shell: mcp list: %s\n", response.Error)
+			return 1
+		}
+		if len(response.Grants) == 0 {
+			fmt.Fprintln(stdout, "No MCP grants.")
+			return 0
+		}
+		for _, grant := range response.Grants {
+			status := "live"
+			if grant.Revoked {
+				status = "revoked"
+			} else if !grant.Live {
+				status = "expired"
+			}
+			fmt.Fprintf(stdout, "%s  %s  %s  %s  %s\n",
+				grant.GrantID, status, strings.Join(grant.Scopes, ","), grant.Label, grant.ExpiresAt.Format(time.RFC3339))
+		}
+		return 0
+	case "revoke":
+		if len(arguments) < 3 {
+			fmt.Fprintln(stderr, "Usage: shell mcp revoke <session-id> <grant-id>")
+			return 2
+		}
+		response, err := sendLocalControlMcp(sessionID, "mcp revoke "+arguments[2])
+		if err != nil {
+			fmt.Fprintf(stderr, "shell: mcp revoke: %v\n", err)
+			return 1
+		}
+		if !response.OK {
+			fmt.Fprintf(stderr, "shell: mcp revoke: %s\n", response.Error)
+			return 1
+		}
+		fmt.Fprintf(stdout, "Revoked %s\n", arguments[2])
+		return 0
+	case "revoke-all":
+		response, err := sendLocalControlMcp(sessionID, "mcp revoke-all")
+		if err != nil {
+			fmt.Fprintf(stderr, "shell: mcp revoke-all: %v\n", err)
+			return 1
+		}
+		if !response.OK {
+			fmt.Fprintf(stderr, "shell: mcp revoke-all: %s\n", response.Error)
+			return 1
+		}
+		fmt.Fprintln(stdout, "Revoked all MCP grants.")
+		return 0
+	default:
+		fmt.Fprintf(stderr, "shell: unknown mcp action %q\n", action)
+		return 2
+	}
 }
 
 func localSessionRecordPath(directory, id string) string {

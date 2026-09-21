@@ -17,7 +17,9 @@ func TestHelpCommandGuidesSessionLifecycle(t *testing.T) {
 		"shell --read-only <command>",
 		"browser input is blocked",
 		"shell claude",
-		"fork of this conversation",
+		"shell opencode",
+		"fork of this Claude conversation",
+		"fork of this opencode conversation",
 		"Shares are interactive by default",
 		"ten-character browser",
 		"shell list",
@@ -82,8 +84,8 @@ func TestStartHelpExplainsLocalBackgroundExecution(t *testing.T) {
 		"stays on this machine",
 		"background by default",
 		"view-only link whose browser input is blocked",
-		"shareable fork with its history",
-		"original Claude process",
+		"fork with its history",
+		"original process stays open",
 	} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("start help does not contain %q", expected)

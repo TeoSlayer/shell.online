@@ -34,6 +34,10 @@ const (
 	mobileTerminalRows     = 40
 	legacyMobileRows       = 24
 	backgroundStartupGrace = 250 * time.Millisecond
+	// mcpTypingWindow is the quiescence after the last human PTY write during which an MCP
+	// shell_send is rejected (delivery_uncertain, nothing written) rather than interleaved
+	// with the human's keystrokes.
+	mcpTypingWindow = 250 * time.Millisecond
 )
 
 type sharedTerminalProcess interface {
@@ -79,6 +83,12 @@ func (cipher *sessionCipher) Rotate(value *e2ee.Cipher) *e2ee.Cipher {
 	cipher.value = value
 	cipher.mu.Unlock()
 	return previous
+}
+
+func (cipher *sessionCipher) Key() []byte {
+	cipher.mu.RLock()
+	defer cipher.mu.RUnlock()
+	return cipher.value.Key()
 }
 
 func runSharedProcess(
@@ -135,6 +145,11 @@ func runSharedProcess(
 
 	outputRing := ringbuffer.New(snapshotBytes)
 	frameCipher := newSessionCipher(session.Cipher)
+	if managed, ok := control.(*managedLocalSession); ok {
+		managed.terminalMu.Lock()
+		managed.mcpFrameKey = frameCipher.Key
+		managed.terminalMu.Unlock()
+	}
 	rotationAcknowledged := make(chan struct{}, 1)
 	var supportsRotation atomic.Bool
 
@@ -153,6 +168,10 @@ func runSharedProcess(
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
 	}
 	defer ptmx.Close()
+
+	// All host-side input (foreground stdin, local attachment, browser viewer, MCP send)
+	// routes through one arbiter so a typing human can never be interleaved by an MCP send.
+	arbiter := newInputArbiter(ptmx)
 
 	localTypingMessage := []byte(`{"type":"local_typing"}`)
 	var localTypingMu sync.Mutex
@@ -176,7 +195,7 @@ func runSharedProcess(
 			_ = connection.Send(relay.TextMessage, message)
 		}
 		control.BindTerminal(
-			ptmx,
+			humanPTYWriter{arbiter},
 			outputRing,
 			nil,
 			notifyLocalTyping,
@@ -275,14 +294,14 @@ func runSharedProcess(
 	}()
 
 	go func() {
-		_, _ = io.Copy(ptmx, os.Stdin)
+		_, _ = io.Copy(humanPTYWriter{arbiter}, os.Stdin)
 	}()
 
 	sharingFinished := make(chan struct{})
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, outputRing, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
+		err := readRelay(connection, ptmx, arbiter, outputRing, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
 		select {
 		case <-sharingFinished:
 			return
@@ -476,6 +495,7 @@ func batchOutput(
 func readRelay(
 	connection *relay.Connection,
 	ptmx sharedTerminalProcess,
+	arbiter *inputArbiter,
 	output *ringbuffer.Buffer,
 	frameCipher *sessionCipher,
 	readOnly bool,
@@ -548,12 +568,24 @@ func readRelay(
 		switch message[0] {
 		case protocol.Input:
 			if acceptsViewerInput(readOnly, message[0]) {
-				_, _ = ptmx.Write(viewerInputPayload(message))
+				_, _ = arbiter.humanWrite(viewerInputPayload(message))
 			}
 		case protocol.ConfirmedEOF:
 			if acceptsViewerInput(readOnly, message[0]) {
-				_, _ = ptmx.Write(viewerInputPayload(message))
+				_, _ = arbiter.humanWrite(viewerInputPayload(message))
 			}
+		case protocol.Send:
+			// A human typing outranks the MCP send: the arbiter rejects the write
+			// immediately when the human is inside the typing window; nothing is queued.
+			if readOnly {
+				continue
+			}
+			_ = handleMcpSend(arbiter, message, func(opID string, dispatchToken []byte, result byte) {
+				sealed, sealError := sealFrame(frameCipher, protocol.EncodeSendAck(opID, dispatchToken, result))
+				if sealError == nil {
+					_ = connection.Send(relay.BinaryMessage, sealed)
+				}
+			})
 		case protocol.Resize:
 			// A shared PTY keeps one canonical grid. Browser and local viewport
 			// changes are presentation-only so simultaneous viewers cannot
@@ -588,6 +620,104 @@ func viewerInputPayload(frame []byte) []byte {
 
 func acceptsViewerInput(readOnly bool, opcode byte) bool {
 	return !readOnly && (opcode == protocol.Input || opcode == protocol.ConfirmedEOF)
+}
+
+// inputArbiter routes every host-side PTY write through one priority rule: human input
+// (foreground stdin, local attachment, browser viewer) outranks MCP shell_send. Human writes
+// stamp lastHumanWrite; an MCP write proceeds only when no human wrote within the typing
+// window. The stamp, the human write, and the MCP write all take the same mutex, so an MCP
+// write can never start in the middle of a human burst, and a keystroke made after the MCP
+// check is serialized to land after the MCP write.
+type inputArbiter struct {
+	target io.Writer
+
+	mu             sync.Mutex
+	lastHumanWrite time.Time
+	typingWindow   time.Duration
+}
+
+func newInputArbiter(target io.Writer) *inputArbiter {
+	return &inputArbiter{
+		target:       target,
+		typingWindow: mcpTypingWindow,
+	}
+}
+
+// humanWrite performs one human-originated PTY write and records it as active typing.
+func (a *inputArbiter) humanWrite(value []byte) (int, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lastHumanWrite = time.Now()
+	return a.target.Write(value)
+}
+
+// mcpWrite performs the single atomic MCP PTY write if the human is idle (no human write
+// within the typing window). It returns wrote=false when a human is actively typing; the
+// caller should then REJECT the write — nothing is queued, so a rejected payload can never
+// reach the PTY later.
+func (a *inputArbiter) mcpWrite(payload []byte) (written int, writeErr error, wrote bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.lastHumanWrite.IsZero() && time.Since(a.lastHumanWrite) < a.typingWindow {
+		return 0, nil, false
+	}
+	written, writeErr = a.target.Write(payload)
+	return written, writeErr, true
+}
+
+// humanPTYWriter adapts an inputArbiter to io.Writer for the human input sources
+// (foreground stdin, local attachment).
+type humanPTYWriter struct {
+	arbiter *inputArbiter
+}
+
+func (w humanPTYWriter) Write(value []byte) (int, error) {
+	return w.arbiter.humanWrite(value)
+}
+
+// buildSendPayload builds the atomic PTY write payload for a shell_send: the text, plus a single
+// \r when enter is set. The text and the \r are never split, so the logical operation cannot
+// interleave with another actor's write.
+func buildSendPayload(text []byte, enter bool) []byte {
+	payload := make([]byte, 0, len(text)+1)
+	payload = append(payload, text...)
+	if enter {
+		payload = append(payload, '\r')
+	}
+	return payload
+}
+
+// sendResult maps a PTY write outcome to a SendAck result code: a full write is delivered; a
+// partial write or error is uncertain (the complete operation was not confirmed).
+func sendResult(written, total int, writeErr error) byte {
+	if writeErr != nil || written < total {
+		return protocol.SendResultUncertain
+	}
+	return protocol.SendResultDelivered
+}
+
+// handleMcpSend performs one shell_send operation: it decodes the frame and, through the
+// inputArbiter, writes the text (plus a single \r when enter is set) to the PTY in ONE atomic
+// write. Human input outranks MCP: if a human wrote to the PTY within the typing window the
+// send is REJECTED immediately (ack SendResultUncertain) — no write happens and nothing is
+// queued, so rejected bytes can never reach the PTY later, even after the human stops typing.
+// Otherwise the single write is performed and the real result is reported (delivered for a
+// full write, uncertain for a partial write or error). The dispatch token decoded from the
+// frame is echoed verbatim in the ack (the host never generates or interprets it). ack
+// (injectable for tests) is called exactly once per frame, synchronously.
+func handleMcpSend(arbiter *inputArbiter, frame []byte, ack func(opID string, dispatchToken []byte, result byte)) bool {
+	op, enter, dispatchToken, text, decoded := protocol.DecodeSend(frame)
+	if !decoded {
+		return false
+	}
+	payload := buildSendPayload(text, enter)
+	written, writeErr, wrote := arbiter.mcpWrite(payload)
+	if !wrote {
+		ack(op, dispatchToken, protocol.SendResultUncertain)
+		return true
+	}
+	ack(op, dispatchToken, sendResult(written, len(payload), writeErr))
+	return true
 }
 
 func sealFrame(frameCipher *sessionCipher, frame []byte) ([]byte, error) {

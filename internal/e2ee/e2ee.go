@@ -71,6 +71,7 @@ type replayWindow struct {
 
 type Cipher struct {
 	aead cipher.AEAD
+	key  []byte
 
 	sealMu       sync.Mutex
 	sendStream   [streamBytes]byte
@@ -78,6 +79,14 @@ type Cipher struct {
 
 	replayMu sync.Mutex
 	replay   map[[streamBytes]byte]replayWindow
+}
+
+// Key returns a copy for explicitly authorized MCP issuance. It is never persisted.
+func (c *Cipher) Key() []byte {
+	if c == nil {
+		return nil
+	}
+	return append([]byte(nil), c.key...)
 }
 
 func New(key []byte) (*Cipher, error) {
@@ -92,7 +101,7 @@ func New(key []byte) (*Cipher, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &Cipher{aead: aead, replay: make(map[[streamBytes]byte]replayWindow)}
+	result := &Cipher{aead: aead, key: append([]byte(nil), key...), replay: make(map[[streamBytes]byte]replayWindow)}
 	if _, err := rand.Read(result.sendStream[:]); err != nil {
 		return nil, err
 	}
@@ -241,9 +250,9 @@ func frameAAD(opcode byte, metadata []byte) []byte {
 
 func frameDirection(opcode byte) (byte, error) {
 	switch opcode {
-	case 0x01, 0x03, 0x05, 0x07, 0x08, 0x0b:
+	case 0x01, 0x03, 0x05, 0x07, 0x08, 0x0b, 0x0d:
 		return directionHostToViewer, nil
-	case 0x02, 0x04, 0x06, 0x09, 0x0a:
+	case 0x02, 0x04, 0x06, 0x09, 0x0a, 0x0c:
 		return directionViewerToHost, nil
 	default:
 		return 0, fmt.Errorf("unsupported E2EE frame opcode 0x%02x", opcode)

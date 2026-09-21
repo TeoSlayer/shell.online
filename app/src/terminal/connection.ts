@@ -35,6 +35,8 @@ export interface ConnectionEvents {
    * difference between an explained pause and a terminal that never appears.
    */
   onHostState?(state: HostState): void;
+  /** Full grant-lifetime authorization, independent of recent agent activity. */
+  onMcpAuthorization?(authorized: boolean): void;
   /** Terminal bytes to write. `reset` means the screen should be cleared first. */
   onData(bytes: Uint8Array, reset: boolean): void;
   onReadOnly(readOnly: boolean): void;
@@ -304,6 +306,7 @@ export class TerminalConnection {
       rows?: unknown;
       hostLastSeenAt?: unknown;
       lastScreenAt?: unknown;
+      mcpDecrypt?: unknown;
     };
     try {
       message = JSON.parse(raw) as typeof message;
@@ -313,6 +316,9 @@ export class TerminalConnection {
     if (typeof message.readOnly === "boolean") {
       this.readOnly = message.readOnly;
       this.options.events.onReadOnly(message.readOnly);
+    }
+    if (message.type === "presence" && typeof message.mcpDecrypt === "boolean") {
+      this.options.events.onMcpAuthorization?.(message.mcpDecrypt);
     }
     if (message.type === "status" && isHostPresence(message.status)) {
       this.options.events.onHostState?.({

@@ -34,7 +34,7 @@ import { mountRelayFileBrowser } from "./relay-files-ui";
 import { TerminalInputQueue } from "./terminal-input";
 import { mobileTerminalKeyBytes, terminalKeyAction } from "./terminal-keyboard";
 import { DestructiveInputGuard } from "./destructive-input";
-import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment } from "./e2ee";
+import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment } from "../shared/e2ee";
 import {
   renderDocumentation,
   resolveCurrentDocumentationRoute,
@@ -54,6 +54,7 @@ import {
   LEGACY_MOBILE_TERMINAL_GRID,
   MOBILE_TERMINAL_GRID,
 } from "../shared/terminal-grid";
+import { mcpDisclosure } from "../shared/mcp-disclosure";
 import { renderStatsDashboard } from "./stats";
 import {
   TerminalLineScroller,
@@ -697,6 +698,10 @@ function renderTerminal(sessionId: string): void {
               <path d="M19.1 15.3A7.7 7.7 0 0 1 8.7 4.9 7.7 7.7 0 1 0 19.1 15.3Z"></path>
             </svg>
           </button>
+          <button id="issue-open" class="settings-button" type="button" aria-label="Report an issue" title="Report an issue" aria-haspopup="dialog" aria-controls="issue-report">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4.5"></path><path d="M12 15.5h.01"></path></svg>
+            <span>Report</span>
+          </button>
           <button id="settings-open" class="settings-button" type="button" aria-label="Open terminal controls" title="Terminal controls" aria-haspopup="dialog" aria-controls="terminal-settings">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"></path>
@@ -805,6 +810,25 @@ function renderTerminal(sessionId: string): void {
           </footer>
         </div>
       </dialog>
+      <dialog id="issue-report" class="settings-dialog issue-dialog" aria-labelledby="issue-title">
+        <div class="settings-panel">
+          <header class="settings-header">
+            <div>
+              <span class="settings-kicker">shell.online</span>
+              <h2 id="issue-title">Report an issue</h2>
+            </div>
+            <button id="issue-close" class="settings-close" type="button" aria-label="Close report dialog">×</button>
+          </header>
+          <div class="settings-content issue-content">
+            <p>Found a bug, a broken link, or something that doesn't behave the way it should? Open an issue on GitHub and we'll take a look.</p>
+            <a class="issue-cta" href="${GITHUB_REPOSITORY_URL}/issues" target="_blank" rel="noreferrer" aria-label="Open GitHub issues">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+              Report an issue on GitHub
+              <span aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </div>
+      </dialog>
     </section>
   `;
 
@@ -838,6 +862,9 @@ function renderTerminal(sessionId: string): void {
   const encryptionPassword = requiredElement<HTMLInputElement>("encryption-password");
   const encryptionMessage = requiredElement("encryption-message");
   const settingsCloseButton = requiredElement<HTMLButtonElement>("settings-close");
+  const issueButton = requiredElement<HTMLButtonElement>("issue-open");
+  const issueDialog = requiredElement<HTMLDialogElement>("issue-report");
+  const issueCloseButton = requiredElement<HTMLButtonElement>("issue-close");
   const themeButton = requiredElement<HTMLButtonElement>("theme-toggle");
   const zoomInput = requiredElement<HTMLInputElement>("terminal-zoom");
   const zoomValue = requiredElement<HTMLOutputElement>("zoom-value");
@@ -948,6 +975,11 @@ function renderTerminal(sessionId: string): void {
   let selfViewerId: number | null = null;
   let participants: PresenceParticipant[] = [];
   let localTypingAt: number | undefined;
+  let activeAgents: string[] = [];
+  // The server's actual MCP decryption capability (from the presence broadcast), distinct from the
+  // activity chips: the trust-boundary disclosure tracks whether the server can decrypt frames for
+  // an MCP agent, not whether a presence chip is currently shown.
+  let mcpDecrypt = false;
   let presenceTimer: number | undefined;
   let readOnly = false;
   let snapshotRequestPending = false;
@@ -1025,16 +1057,27 @@ function renderTerminal(sessionId: string): void {
       : `Anyone with the ${credential} can view and type.`;
   };
 
+  // Re-derive the badge label + trust-boundary title from current session state. The MCP
+  // disclosure is state-dependent: it only claims server-side decryption while an MCP grant is
+  // authorized (tracked independently of recent activity) and reverts to the plain E2EE/TLS
+  // disclosure otherwise, so the badge never overstates the control channel's reach.
+  const updateEncryptionDisclosure = (): void => {
+    if (encryptionBadge.hidden) return;
+    // Base the trust-boundary disclosure on the server's actual decryption capability (broadcast),
+    // not the presence chips: the E2EE badge only claims server-side MCP decryption while a
+    // grant is live, and reverts to the plain E2EE/TLS disclosure otherwise.
+    const disclosure = mcpDisclosure(encryptedSession, mcpDecrypt, persistentSession);
+    encryptionBadge.textContent = disclosure.label;
+    encryptionBadge.title = disclosure.title;
+    encryptionBadge.setAttribute("aria-label", disclosure.label);
+    encryptionBadge.dataset.compactLabel = disclosure.label;
+  };
+
   const applyEncryptionMode = (encrypted: boolean): void => {
     encryptedSession = encrypted;
     encryptionBadge.hidden = false;
     encryptionBadge.classList.toggle("unencrypted", !encrypted);
-    const fullLabel = encrypted
-      ? persistentSession ? "Persistent E2EE" : "End-to-end encrypted"
-      : "Transport only";
-    encryptionBadge.textContent = fullLabel;
-    encryptionBadge.setAttribute("aria-label", fullLabel);
-    encryptionBadge.dataset.compactLabel = encrypted ? persistentSession ? "Persistent" : "E2EE" : "Transport";
+    updateEncryptionDisclosure();
     renderAccessDescription();
     if (encrypted && !frameCipher && !encryptionDescriptor) {
       showEncryptionGate("This E2EE link is missing its decryption fragment. Ask the sender for the complete URL, including everything after #.", false);
@@ -1193,6 +1236,17 @@ function renderTerminal(sessionId: string): void {
       overflow.title = `${participants.length - visibleCount} more collaborators`;
       overflow.setAttribute("aria-label", overflow.title);
       presenceElement.append(overflow);
+    }
+
+    // MCP presence: conspicuous `Agent: <label>` chips for active controller grants. Separate from
+    // the viewer avatars and never changes the terminal grid.
+    for (const label of activeAgents) {
+      const chip = document.createElement("span");
+      chip.className = "presence-agent";
+      chip.textContent = `Agent: ${label}`;
+      chip.title = `Controller agent: ${label}`;
+      chip.setAttribute("aria-label", chip.title);
+      presenceElement.append(chip);
     }
 
     const collaboratorCount = Math.max(0, participants.length - 1);
@@ -1613,6 +1667,8 @@ function renderTerminal(sessionId: string): void {
       lastScreenAt?: unknown;
       viewerId?: unknown;
       viewers?: unknown;
+      agents?: unknown;
+      mcpDecrypt?: unknown;
       localTypingAt?: unknown;
       readOnly?: unknown;
       encrypted?: unknown;
@@ -1720,6 +1776,17 @@ function renderTerminal(sessionId: string): void {
     localTypingAt = Number.isFinite(message.localTypingAt)
       ? Number(message.localTypingAt)
       : undefined;
+    activeAgents = Array.isArray(message.agents)
+      ? message.agents.slice(0, 8).flatMap((candidate): string[] => {
+          if (typeof candidate !== "object" || candidate === null) return [];
+          const label = (candidate as Record<string, unknown>).label;
+          return typeof label === "string" && label.length > 0 && label.length <= 64 ? [label] : [];
+        })
+      : [];
+    mcpDecrypt = message.mcpDecrypt === true;
+    // The server's MCP decryption capability changing alters the trust boundary: re-derive the
+    // disclosure (the badge tracks the capability, not the presence chips).
+    updateEncryptionDisclosure();
     renderPresence();
   };
 

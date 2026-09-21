@@ -1,6 +1,12 @@
 #!/bin/sh
 set -eu
 
+# Do not let appended flags replace the validated config, environment, or secrets.
+if [ "$#" -ne 0 ]; then
+  printf 'Production deploy does not accept forwarded arguments.\n' >&2
+  exit 1
+fi
+
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 config_input=${SHELL_ONLINE_WRANGLER_CONFIG:-wrangler.production.jsonc}
 case "$config_input" in
@@ -17,6 +23,7 @@ fi
 # is never counted. Refuse a config that routes fewer paths through the Worker
 # than the example does, before anything is built.
 node "$repository_root/scripts/check-worker-routing.mjs" "$repository_root/wrangler.example.jsonc" "$config"
+node "$repository_root/scripts/preflight-staging-config.mjs" "$config"
 
 # Wrangler resolves `main` and `assets.directory` beside its config file. A
 # private config kept in another checkout would otherwise deploy that other

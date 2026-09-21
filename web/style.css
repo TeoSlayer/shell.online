@@ -1085,6 +1085,19 @@ a {
   font-size: 8px;
 }
 
+.presence-agent {
+  margin-left: 8px;
+  padding: 3px 9px;
+  border: 1px solid rgb(126 164 255 / 45%);
+  border-radius: 999px;
+  background: rgb(96 132 255 / 14%);
+  color: #c6d8ff;
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .settings-button,
 .theme-button {
   min-height: 36px;
@@ -1834,6 +1847,12 @@ a {
 .session-page.theme-light .presence-more {
   background: #dfe4ed;
   color: #566176;
+}
+
+.session-page.theme-light .presence-agent {
+  border-color: rgb(84 116 196 / 40%);
+  background: rgb(96 132 255 / 12%);
+  color: #3a5496;
 }
 
 .session-page.theme-light .settings-button,

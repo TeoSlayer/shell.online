@@ -249,6 +249,15 @@ button.tab {
   gap: 8px;
 }
 
+.pane-mcp-disclosure {
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--terminal-ui-surface, var(--white));
+  color: var(--ink);
+}
+
 .pane-refstream-toolbar:empty {
   display: none;
 }

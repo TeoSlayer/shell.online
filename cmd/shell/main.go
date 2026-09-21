@@ -192,7 +192,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 				frameCipher, encryptionFragment, err = e2ee.Generate(password)
 			}
 			if err == nil {
-				session, err = client.CreateSession(signalContext, filepath.Base(command[0]), *readOnly, encrypted, false)
+				session, err = client.CreateSession(signalContext, filepath.Base(command[0]), *readOnly, encrypted, false, true)
 			}
 			session.Cipher = frameCipher
 			session.ShareURL += encryptionFragment
@@ -249,6 +249,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "shell: local session management unavailable: %v\n", controlError)
 	} else {
 		defer control.Close()
+		wireMcpControl(control, client, session, processContext)
 		go func() {
 			select {
 			case <-control.StopRequested():
@@ -279,19 +280,21 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		vault := link.Register(signalContext, publishedSession, password)
 		if isBackgroundChild() {
 			sendBackgroundResult(backgroundLaunchResult{
-				OK:         true,
-				ID:         session.ID,
-				Name:       sessionName,
-				ShareURL:   session.ShareURL,
-				ReadOnly:   session.ReadOnly,
-				Encrypted:  session.Encrypted,
-				Password:   password,
-				Vault:      vault,
-				Persistent: session.Persistent,
-				Files:      sharedFilesRoot,
-				ExpiresAt:  session.ExpiresAt,
-				ClosesAt:   closesAt,
-				Handoff:    launch.Handoff,
+				OK:             true,
+				ID:             session.ID,
+				Name:           sessionName,
+				ShareURL:       session.ShareURL,
+				ReadOnly:       session.ReadOnly,
+				Encrypted:      session.Encrypted,
+				Password:       password,
+				Vault:          vault,
+				Persistent:     session.Persistent,
+				Files:          sharedFilesRoot,
+				ExpiresAt:      session.ExpiresAt,
+				ClosesAt:       closesAt,
+				Handoff:        launch.Handoff,
+				HandoffDisplay: launch.HandoffDisplay,
+				HandoffNote:    launch.HandoffNote,
 			})
 			return
 		}

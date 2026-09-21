@@ -6,9 +6,11 @@
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["web/**/*.ts", "shared/**/*.ts", "tests/**/*.ts"]
+  "include": ["web/**/*.ts", "shared/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["tests/mcp-lifecycle.test.ts", "tests/mcp-observe.test.ts", "tests/mcp-write-do.test.ts"]
 }

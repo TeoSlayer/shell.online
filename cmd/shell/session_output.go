@@ -64,8 +64,15 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 	if !result.Encrypted {
 		fmt.Fprintf(writer, "  %s %s\n", label("Privacy"), styleSessionText(color, "38;5;209", "The relay can read terminal plaintext (--no-e2ee)"))
 	}
-	if result.Handoff == claudeConversationHandoff {
-		fmt.Fprintf(writer, "  %s forked Claude conversation; the original stays open\n", label("Handoff"))
+	if result.Handoff != "" {
+		display := result.HandoffDisplay
+		if display == "" {
+			display = "agent conversation"
+		}
+		fmt.Fprintf(writer, "  %s forked %s; the original stays open\n", label("Handoff"), display)
+		if result.HandoffNote != "" {
+			fmt.Fprintf(writer, "  %s %s\n", label("Note"), styleSessionText(color, "38;5;209", result.HandoffNote))
+		}
 	}
 
 	if background {

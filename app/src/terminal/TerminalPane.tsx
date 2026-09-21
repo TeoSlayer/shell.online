@@ -179,6 +179,7 @@ export function TerminalPane({
    * missing rather than paused.
    */
   const [hostState, setHostState] = useState<HostState | null>(null);
+  const [mcpAuthorized, setMcpAuthorized] = useState(false);
   const [hasScreen, setHasScreen] = useState(false);
   /* Re-read on a timer so "4 minutes ago" keeps being true on an idle page. */
   const [now, setNow] = useState(() => Date.now());
@@ -394,6 +395,7 @@ export function TerminalPane({
           if (worked.source !== "vault") void keepIfMissing(sessionId, worked.password);
         },
         onHostState: (next) => { setHostState(next); },
+        onMcpAuthorization: setMcpAuthorized,
         onData: (bytes, reset) => {
           if (bytes.byteLength > 0) setHasScreen(true);
           if (!reset) {
@@ -602,6 +604,10 @@ export function TerminalPane({
   return (
     <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
       <div className="pane-tools">
+        {mcpAuthorized && <span className="pane-mcp-disclosure" role="status"
+          title="The host authorizes the server to decrypt terminal frames and send plaintext to MCP agents for the grant lifetime.">
+          MCP · server-side decryption authorized
+        </span>}
         <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
         <div ref={filesMount} className="pane-files-toolbar" aria-label="Shared files" />
       </div>

@@ -1,0 +1,14 @@
+{
+  // Tracked, secret-free CONTRACT for the staging Worker config. This is NOT the deploy config —
+  // the real, gitignored wrangler.staging.jsonc carries the account id, keys, and routes. This
+  // fixture pins the non-secret invariants that every staging deploy must satisfy, so the
+  // ordinary test suite can validate them on a clean checkout. The deployment preflight
+  // (scripts/preflight-staging-config.mjs) applies the SAME parsed-JSONC validation to the actual
+  // private config before any staging deploy.
+  //
+  // P01: request cancellation. Without enable_request_signal the Worker's request.signal never
+  // fires on client disconnect, so a dropped long-poll shell_wait holds its wait slot to the
+  // original timeout. The flag must be present in compatibility_flags (not in a comment or an
+  // unrelated field — the validation parses the JSONC and checks the array).
+  "compatibility_flags": ["enable_request_signal"]
+}

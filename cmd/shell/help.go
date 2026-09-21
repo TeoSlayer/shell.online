@@ -8,7 +8,7 @@ import (
 
 var helpTopics = [...]string{
 	"start", "files", "attach", "list", "ls", "password", "kill", "auth",
-	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "reference",
+	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "mcp", "reference",
 }
 
 func helpTopicUsage() string {
@@ -28,6 +28,10 @@ Start
   shell --files <command>          Add on-demand files from this directory
   shell --name <name> <command>    Label it in shell ls and the web app
   shell                            Share a fresh shell
+
+Conversation handoff
+  shell claude                     Share a fork of this Claude conversation
+  shell opencode                   Share a fork of this opencode conversation
   shell claude                     Share a fork of this conversation
 
 shell prints one URL, a ten-character browser password, and a QR containing
@@ -55,6 +59,11 @@ Machine services
   shell service install|status     Keep the machine agent running across restarts
   shell stats                      Show what this machine would report to the game
 
+MCP access
+  shell mcp grant <ID> <label> <observe|control> [ttl-seconds]
+                                   Print a scoped MCP bearer once (keep it secret)
+  shell mcp revoke-all <ID>        Revoke every MCP grant for this run
+
 Common options
   --read-only                      View only
   --name <name>                    Label the session
@@ -80,6 +89,28 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 	}
 
 	switch arguments[0] {
+	case "mcp":
+		fmt.Fprint(stdout, `MCP observation and control
+
+  shell mcp grant <ID> <label> observe [ttl-seconds]
+  shell mcp grant <ID> <label> control [ttl-seconds]
+  shell mcp list <ID>
+  shell mcp revoke <ID> <grant-id>
+  shell mcp revoke-all <ID>
+
+Endpoint: https://shell.online/mcp (or your configured service URL plus /mcp).
+Issuance prints a secret bearer once. Use the MCP client's secret/environment support;
+never put credentials in URLs, command arguments, repositories, or logs.
+Observe tools: shell_status, shell_screen, shell_output, shell_wait.
+Control adds shell_send on compatible hosts when enabled; read-only always blocks writes.
+shell_key and shell_interrupt are not available in this release.
+
+MCP authorizes server-side in-memory decryption using a host-supplied frame key.
+The controller receives plaintext results. Browser-only sharing remains E2EE.
+shell_send requires a UUID-v4 operation_id. Reuse it with identical arguments on retry.
+delivered means the full PTY write, not task completion. Never blindly retry uncertainty
+with a new ID. Revocation cannot undo completed actions or erase received output.
+`)
 	case "start", "run", "share":
 		fmt.Fprint(stdout, `Start and share
 
@@ -96,6 +127,7 @@ the web app, where it can be renamed later.
 Examples
   shell python train.py
   shell claude
+  shell opencode
   shell codex
   shell --read-only python train.py
   shell --name "web app" npm run dev
@@ -104,10 +136,11 @@ Examples
   shell --files claude
   shell --files-root ./artifacts python train.py
 
-When Claude Code runs "shell claude" through its Bash tool, shell detects the current
-conversation and starts a shareable fork with its history. The original Claude process
-stays open and the two conversations then diverge; shell does not claim to move the
-already-running PID into another terminal.
+When Claude Code runs "shell claude" through its Bash tool, or opencode runs
+"shell opencode", shell detects the current conversation and starts a shareable
+fork with its history. The original process stays open and the two conversations
+then diverge; shell does not claim to move the already-running PID into another
+terminal.
 
 E2EE notes
   Every normal share is encrypted automatically. shell generates and prints a
@@ -423,6 +456,10 @@ SYNOPSIS
   shell password <session-id-or-prefix>
   shell password rotate <session-id-or-prefix>
   shell help [%s]
+  shell mcp grant <ID> <label> <observe|control> [ttl-seconds]
+  shell mcp list <ID>
+  shell mcp revoke <ID> <grant-id>
+  shell mcp revoke-all <ID>
 
 START AND SHARE
   shell [command] [arguments...]
@@ -514,6 +551,9 @@ SESSION COMMANDS
       container, platform, and cli.
 
 ENVIRONMENT
+  MCP grants authorize server-side in-memory decryption. See shell help mcp for
+  credential handling, write retry semantics, revocation and supported tools.
+
   SHELL
       Program used when no command is supplied on Unix. Windows prefers PowerShell,
       then COMSPEC.

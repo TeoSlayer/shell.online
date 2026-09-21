@@ -18,7 +18,7 @@ const upstream = process.env.SHELL_ONLINE_REPO ?? join(here, "..", "..");
 
 const FILES = [
   { vendored: "src/terminal/protocol.ts", source: "shared/protocol.ts" },
-  { vendored: "src/terminal/e2ee.ts", source: "web/e2ee.ts" },
+  { vendored: "src/terminal/e2ee.ts", source: "shared/e2ee.ts" },
   { vendored: "src/terminal/terminal-grid.ts", source: "shared/terminal-grid.ts" },
   { vendored: "src/terminal/terminal-fit.ts", source: "web/terminal-fit.ts" },
   { vendored: "src/terminal/terminal-metrics.ts", source: "web/terminal-metrics.ts" },

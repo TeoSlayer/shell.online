@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,11 +14,15 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/creack/pty"
+	"golang.org/x/term"
 	"shell.online/internal/api"
 	"shell.online/internal/e2ee"
+
 	"shell.online/internal/protocol"
 	"shell.online/internal/ringbuffer"
 )
@@ -440,5 +445,368 @@ func TestViewerInputPayloadRequiresExplicitConfirmedEOF(t *testing.T) {
 		if got := viewerInputPayload(frame); len(got) != 0 {
 			t.Fatalf("invalid frame %v produced input %v", frame, got)
 		}
+	}
+}
+
+func TestBuildSendPayload(t *testing.T) {
+	if got := buildSendPayload([]byte("hello"), false); string(got) != "hello" {
+		t.Fatalf("buildSendPayload(no enter) = %q, want hello", got)
+	}
+	if got := buildSendPayload([]byte("hello"), true); string(got) != "hello\r" {
+		t.Fatalf("buildSendPayload(enter) = %q, want hello\\r", got)
+	}
+}
+
+func TestSendResult(t *testing.T) {
+	if got := sendResult(5, 5, nil); got != protocol.SendResultDelivered {
+		t.Fatalf("sendResult(full) = %d, want delivered", got)
+	}
+	if got := sendResult(3, 5, nil); got != protocol.SendResultUncertain {
+		t.Fatalf("sendResult(partial) = %d, want uncertain", got)
+	}
+	if got := sendResult(0, 5, io.ErrClosedPipe); got != protocol.SendResultUncertain {
+		t.Fatalf("sendResult(error) = %d, want uncertain", got)
+	}
+}
+
+func testDispatchToken() []byte {
+	token := make([]byte, protocol.SendDispatchTokenBytes)
+	for i := range token {
+		token[i] = byte(i + 1)
+	}
+	return token
+}
+
+// TestHandleMcpSendWritesAtomicPayloadAndResult verifies the ACTUAL PTY write (not just a
+// counter): the text + optional \r reach the writer in a single write, the result code
+// reflects the write outcome, and the ack carries the frame's dispatch token verbatim.
+func TestHandleMcpSendWritesAtomicPayloadAndResult(t *testing.T) {
+	opID := "550e8400-e29b-41d4-a716-446655440000"
+	token := testDispatchToken()
+	for _, tc := range []struct {
+		enter bool
+		want  string
+	}{
+		{false, "echo hi"},
+		{true, "echo hi\r"},
+	} {
+		var buf bytes.Buffer
+		var gotOp string
+		var gotToken []byte
+		var result byte
+		acked := false
+		frame := protocol.EncodeSend(opID, tc.enter, token, []byte("echo hi"))
+		ok := handleMcpSend(newInputArbiter(&buf), frame, func(op string, dispatchToken []byte, code byte) {
+			gotOp, gotToken, result, acked = op, append([]byte(nil), dispatchToken...), code, true
+		})
+		if !ok || !acked {
+			t.Fatalf("handleMcpSend ok/acked = %v/%v for enter=%v", ok, acked, tc.enter)
+		}
+		if gotOp != opID {
+			t.Fatalf("handleMcpSend op = %q, want %q", gotOp, opID)
+		}
+		if !bytes.Equal(gotToken, token) {
+			t.Fatalf("handleMcpSend token = %x, want %x", gotToken, token)
+		}
+		if result != protocol.SendResultDelivered {
+			t.Fatalf("handleMcpSend result = %d, want delivered", result)
+		}
+		if buf.String() != tc.want {
+			t.Fatalf("PTY write = %q, want %q", buf.String(), tc.want)
+		}
+	}
+	// a non-Send frame is rejected and writes nothing
+	var buf bytes.Buffer
+	if handleMcpSend(newInputArbiter(&buf), protocol.Frame(protocol.Input, []byte("x")), func(string, []byte, byte) {}) {
+		t.Fatal("handleMcpSend accepted a non-Send frame")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("malformed frame wrote %q", buf.String())
+	}
+}
+
+// shortWriter delivers only a prefix of each write (a partial write, no error).
+type shortWriter struct{ limit int }
+
+func (s *shortWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if n > s.limit {
+		n = s.limit
+	}
+	return n, nil
+}
+
+// TestHandleMcpSendPartialWriteIsUncertain verifies a partial PTY write yields uncertain (the
+// complete operation was not confirmed), never delivered.
+func TestHandleMcpSendPartialWriteIsUncertain(t *testing.T) {
+	opID := "550e8400-e29b-41d4-a716-446655440000"
+	var result byte
+	acked := false
+	ok := handleMcpSend(newInputArbiter(&shortWriter{limit: 3}), protocol.EncodeSend(opID, true, testDispatchToken(), []byte("hello")), func(_ string, _ []byte, code byte) {
+		result, acked = code, true
+	})
+	if !ok || !acked {
+		t.Fatal("handleMcpSend not ok")
+	}
+	if result != protocol.SendResultUncertain {
+		t.Fatalf("partial write result = %d, want uncertain", result)
+	}
+}
+
+// openTestPTY opens a real PTY pair and returns the master (the side the host writes to, as in
+// production) plus a capture of everything that crosses to the slave side. The slave is put in
+// raw mode (as a raw-mode TUI child would be) so host writes arrive byte-exact, without the
+// line discipline canonicalizing or translating them.
+func openTestPTY(t *testing.T) (ptmx *os.File, captured func() string) {
+	t.Helper()
+	master, tty, err := pty.Open()
+	if err != nil {
+		t.Fatalf("open pty: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = master.Close()
+		_ = tty.Close()
+	})
+	if _, err := term.MakeRaw(int(tty.Fd())); err != nil {
+		t.Fatalf("raw pty: %v", err)
+	}
+	var mu sync.Mutex
+	var out []byte
+	go func() {
+		buffer := make([]byte, 4096)
+		for {
+			count, readErr := tty.Read(buffer)
+			if count > 0 {
+				mu.Lock()
+				out = append(out, buffer[:count]...)
+				mu.Unlock()
+			}
+			if readErr != nil {
+				return
+			}
+		}
+	}()
+	return master, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return string(out)
+	}
+}
+
+func waitForPTYCapture(t *testing.T, captured func() string, want string, timeout time.Duration) string {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if out := captured(); strings.Contains(out, want) {
+			return out
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("PTY output never contained %q (got %q)", want, captured())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestMcpSendRejectedWhileHumanIsTyping is the F3 regression on a REAL PTY: a human burst
+// inside the typing window causes the MCP send to be REJECTED (ack SendResultUncertain, token
+// echoed verbatim) and its bytes to NEVER appear in the PTY — not even after the human stops
+// typing and a generous wait elapses. The human's own bytes do appear.
+func TestMcpSendRejectedWhileHumanIsTyping(t *testing.T) {
+	ptmx, captured := openTestPTY(t)
+	arbiter := newInputArbiter(ptmx)
+	opID := "550e8400-e29b-41d4-a716-446655440000"
+	token := testDispatchToken()
+
+	if _, err := arbiter.humanWrite([]byte("human-burst")); err != nil {
+		t.Fatal(err)
+	}
+	var gotOp string
+	var gotToken []byte
+	var result byte
+	acked := make(chan struct{})
+	if !handleMcpSend(arbiter, protocol.EncodeSend(opID, true, token, []byte("mcp-line")), func(op string, dispatchToken []byte, code byte) {
+		gotOp = op
+		gotToken = append([]byte(nil), dispatchToken...)
+		result = code
+		close(acked)
+	}) {
+		t.Fatal("handleMcpSend rejected a well-formed frame")
+	}
+	select {
+	case <-acked:
+	case <-time.After(time.Second):
+		t.Fatal("rejected send was not acknowledged")
+	}
+	if gotOp != opID {
+		t.Fatalf("rejected ack op = %q, want %q", gotOp, opID)
+	}
+	if !bytes.Equal(gotToken, token) {
+		t.Fatalf("rejected ack token = %x, want %x (host must echo verbatim)", gotToken, token)
+	}
+	if result != protocol.SendResultUncertain {
+		t.Fatalf("rejected send result = %d, want uncertain", result)
+	}
+
+	// The human now stops typing. Wait well past the 250ms typing window (and past the old
+	// 2s defer budget) — the rejected payload must still never appear.
+	time.Sleep(1 * time.Second)
+	out := captured()
+	if !strings.Contains(out, "human-burst") {
+		t.Fatalf("PTY output %q missing the human's bytes", out)
+	}
+	if strings.Contains(out, "mcp-line") {
+		t.Fatalf("rejected MCP bytes appeared in the PTY after the human stopped typing: %q", out)
+	}
+}
+
+// TestMcpSendProceedsWhenHumanIsIdle verifies the fast path: once the human is outside the
+// typing window, the MCP write proceeds immediately, is reported delivered, and the ack
+// carries the frame's dispatch token verbatim.
+func TestMcpSendProceedsWhenHumanIsIdle(t *testing.T) {
+	ptmx, captured := openTestPTY(t)
+	arbiter := newInputArbiter(ptmx)
+	opID := "550e8400-e29b-41d4-a716-446655440000"
+	token := testDispatchToken()
+
+	if _, err := arbiter.humanWrite([]byte("earlier")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(320 * time.Millisecond) // beyond the 250ms typing window
+
+	acks := make(chan struct{}, 1)
+	var gotToken []byte
+	var result byte
+	started := time.Now()
+	if !handleMcpSend(arbiter, protocol.EncodeSend(opID, false, token, []byte("quiet-send")), func(_ string, dispatchToken []byte, code byte) {
+		gotToken = append([]byte(nil), dispatchToken...)
+		result = code
+		acks <- struct{}{}
+	}) {
+		t.Fatal("handleMcpSend rejected a well-formed frame")
+	}
+	select {
+	case <-acks:
+	case <-time.After(time.Second):
+		t.Fatal("idle send was not acknowledged")
+	}
+	if result != protocol.SendResultDelivered {
+		t.Fatalf("idle send result = %d, want delivered", result)
+	}
+	if !bytes.Equal(gotToken, token) {
+		t.Fatalf("idle send token = %x, want %x (host must echo verbatim)", gotToken, token)
+	}
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("idle send took %s, want immediate", elapsed)
+	}
+	out := waitForPTYCapture(t, captured, "quiet-send", time.Second)
+	if strings.Index(out, "earlier") > strings.Index(out, "quiet-send") {
+		t.Fatalf("PTY output order = %q, want earlier then quiet-send", out)
+	}
+}
+
+// TestMcpSendRejectedImmediatelyWhileHumanKeepsTyping verifies the rejection is immediate (no
+// defer budget, no goroutine): with a continuously typing human the MCP send is acked
+// delivery_uncertain right away and nothing is written, even while typing continues.
+func TestMcpSendRejectedImmediatelyWhileHumanKeepsTyping(t *testing.T) {
+	ptmx, captured := openTestPTY(t)
+	arbiter := newInputArbiter(ptmx)
+	opID := "550e8400-e29b-41d4-a716-446655440000"
+
+	if _, err := arbiter.humanWrite([]byte("prime")); err != nil {
+		t.Fatal(err)
+	}
+	stopTyping := make(chan struct{})
+	defer close(stopTyping)
+	go func() {
+		for {
+			select {
+			case <-stopTyping:
+				return
+			default:
+			}
+			if _, err := arbiter.humanWrite([]byte("k")); err != nil {
+				return
+			}
+			time.Sleep(30 * time.Millisecond)
+		}
+	}()
+
+	acks := make(chan byte, 1)
+	started := time.Now()
+	if !handleMcpSend(arbiter, protocol.EncodeSend(opID, true, testDispatchToken(), []byte("starved-send")), func(_ string, _ []byte, result byte) {
+		acks <- result
+	}) {
+		t.Fatal("handleMcpSend rejected a well-formed frame")
+	}
+	select {
+	case result := <-acks:
+		if result != protocol.SendResultUncertain {
+			t.Fatalf("rejected send result = %d, want uncertain", result)
+		}
+		if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+			t.Fatalf("rejection took %s, want immediate (no defer budget)", elapsed)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("rejected send was not acknowledged")
+	}
+	if strings.Contains(captured(), "starved-send") {
+		t.Fatalf("rejected MCP write reached the PTY: %q", captured())
+	}
+}
+
+// TestMcpControlDelayedIssuanceDeliversBearer is a regression test for the control-socket
+// deadline alignment: a successful grant issuance that takes longer than the old 5s client
+// deadline must still deliver its one-time bearer. The fake socket delays its response past the
+// old deadline to prove the client waits long enough.
+func TestMcpControlDelayedIssuanceDeliversBearer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("delayed-issuance test takes several seconds")
+	}
+	const sessionID = "abcdefghijklmnopqrstuvwxyzABCDEF"
+	const delay = 6 * time.Second
+	if delay <= 5*time.Second {
+		t.Fatalf("delay must exceed the old 5s client deadline to prove the fix")
+	}
+
+	directory, err := localSessionDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	socketPath := localSessionSocketPath(directory, sessionID)
+	_ = os.Remove(socketPath)
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	defer os.Remove(socketPath)
+
+	go func() {
+		connection, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer connection.Close()
+		_, _ = bufio.NewReader(connection).ReadString('\n')
+		time.Sleep(delay)
+		_ = json.NewEncoder(connection).Encode(localControlResponse{
+			OK: true, ID: sessionID, PID: 1234, Bearer: "delayed-bearer",
+		})
+	}()
+
+	start := time.Now()
+	response, err := sendLocalControlMcp(sessionID, "mcp grant codex observe 0")
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("sendLocalControlMcp: %v (elapsed %s)", err, elapsed)
+	}
+	if response.Bearer != "delayed-bearer" {
+		t.Fatalf("bearer = %q, want delayed-bearer", response.Bearer)
+	}
+	if elapsed < delay {
+		t.Fatalf("response arrived before the delay (elapsed %s)", elapsed)
 	}
 }

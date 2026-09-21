@@ -169,7 +169,10 @@ func TestDetectionFindsToolsAServicePathCannotSee(t *testing.T) {
 		t.Fatalf("the service PATH should find nothing here, found %v", found)
 	}
 
-	merged := mergePath(servicePath, "", commonToolDirs(home, directoryExists))
+	// Model only this fixture's machine, not tools installed in the runner's Homebrew prefix.
+	merged := mergePath(servicePath, "", commonToolDirs(home, func(dir string) bool {
+		return strings.HasPrefix(dir, home+string(os.PathSeparator)) && directoryExists(dir)
+	}))
 	found := detectHarnesses(lookIn(merged))
 	if len(found) != 2 || found[0] != "claude-code" || found[1] != "openclaw" {
 		t.Fatalf("found = %v, want claude-code and openclaw", found)

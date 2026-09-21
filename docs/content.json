@@ -12,6 +12,10 @@
       },
       "cards": [
         [
+          "Scoped MCP access",
+          "shell mcp grant <ID> <label> observe 900 issues a short-lived bearer for status, screen, output and waits at /mcp. The control preset adds shell_send when the operator enables it. The host supplies its frame key for server-side decryption; agents receive plaintext. Revoke with shell mcp revoke-all <ID>. This native channel is separate from Refstream Connect agent."
+        ],
+        [
           "Install",
           "Run curl -fsSL https://shell.online/install | sh on macOS, Linux, BSD, or Solaris; on Windows PowerShell use irm https://shell.online/install.ps1 | iex. Both installers verify SHA-256 before writing the binary and print PATH instructions when needed."
         ],
@@ -367,7 +371,7 @@
         ],
         [
           "Cloudflare relays ciphertext by default",
-          "The current CLI normally encrypts terminal payloads before the relay. Cloudflare can still observe frame type, encrypted size, timing, connection IP, access mode, command label, and lifecycle metadata. --no-e2ee instead exposes terminal payloads to Cloudflare while retaining HTTPS/WSS transport encryption."
+          "The current CLI normally encrypts terminal payloads before the relay. An explicitly issued MCP grant authorizes in-memory server decryption with a host-supplied key and plaintext results to the agent. The visible MCP disclosure lasts until the last grant expires or is revoked. Cloudflare can still observe frame type, encrypted size, timing, connection IP, access mode, command label, and lifecycle metadata. --no-e2ee instead exposes terminal payloads to Cloudflare while retaining HTTPS/WSS transport encryption."
         ],
         [
           "Captured input cannot be replayed",
@@ -375,7 +379,7 @@
         ],
         [
           "No terminal transcript retained",
-          "Cloudflare does not persist terminal contents. The CLI holds only a bounded in-memory replay buffer while the process is alive; ordinary task exit deletes the session state and closes every socket."
+          "The CLI keeps a bounded replay buffer. The hosted relay also retains a bounded last-screen cache for offline viewing: ciphertext for E2EE sessions, potentially plaintext when --no-e2ee was explicitly chosen. MCP adds no durable plaintext or frame keys; its records contain bearer hashes, grant metadata and operation fingerprints/outcomes. Ordinary task exit deletes the session state."
         ],
         [
           "Browser-started passwords stay sealed",
@@ -420,7 +424,7 @@
         ],
         [
           "Protected and visible data",
-          "Terminal input, output, snapshots, and latency probes are authenticated ciphertext. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, lifecycle metadata, and the terminal grid dimensions carried by plaintext terminal_size control messages. The relay selects that shared grid so desktop and mobile viewers render one deterministic PTY size."
+          "Terminal input, output, snapshots, and latency probes are authenticated ciphertext. Explicit MCP issuance authorizes the server to decrypt in memory for the grant lifetime. Live password rotation revokes MCP grants; new grants must use the rotated key. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, lifecycle metadata, and the terminal grid dimensions carried by plaintext terminal_size control messages. The relay selects that shared grid so desktop and mobile viewers render one deterministic PTY size."
         ],
         [
           "Limits, recovery, and opt-out",

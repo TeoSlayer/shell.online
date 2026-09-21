@@ -30,7 +30,14 @@ type backgroundLaunchResult struct {
 	ExpiresAt  time.Time  `json:"expires_at,omitempty"`
 	ClosesAt   *time.Time `json:"closes_at,omitempty"`
 	Handoff    string     `json:"handoff,omitempty"`
-	ExitCode   *int       `json:"exit_code,omitempty"`
+	// HandoffDisplay is the human-readable conversation name for the session
+	// card. It is internal (not part of the operator-facing JSON event) and only
+	// survives the background ready-file round-trip so the card can render it.
+	HandoffDisplay string `json:"handoff_display,omitempty"`
+	// HandoffNote is an optional operator caveat for the fork (e.g. the
+	// best-effort heuristic warning). Shown on the session card and in the JSON.
+	HandoffNote string `json:"handoff_note,omitempty"`
+	ExitCode    *int   `json:"exit_code,omitempty"`
 }
 
 func isBackgroundChild() bool {

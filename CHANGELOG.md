@@ -6,6 +6,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Scoped, expiring, revocable MCP grants with terminal status, screen, output and cancellable waits.
+- Opt-in shell_send with durable duplicate protection, correlated host acknowledgement and human
+  priority. Password rotation revokes MCP access. The visible decryption disclosure follows the
+  full grant lifetime in both browser interfaces. Control remains disabled by default.
+- OpenCode conversation handoff alongside the existing Claude handoff.
+
 - A chat renderer in the web app, chosen next to xterm.js and Refstream. It
   reads a session as a conversation: what you send is a message, and what the
   process writes back is the reply to it. The box you type in floats over the

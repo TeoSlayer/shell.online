@@ -32,6 +32,15 @@ When testing, use your own machine and sessions. Do not access another person's 
 
 ## Hosted-service trust boundary
 
+Host-authorized MCP grants deliberately widen E2EE's boundary: the host supplies its frame key
+over HTTPS for server-side in-memory decryption, and the MCP client receives plaintext results.
+The bearer is separate from the browser URL/password and works only on /mcp; the DO stores its
+hash and grant metadata, not the key or token. Grants are scoped, run-bound, expiring and
+revocable. Live password rotation revokes them. Input is gated off by default and requires
+explicit input scope plus a compatible host. A delivered result acknowledges a PTY write,
+not completion of the requested task. Cross-grant/run delivery, post-revocation access,
+duplicate execution, stale-key retention and credential/content logging are in scope.
+
 E2EE protects terminal frames from passive relay inspection; it does not make hosted application code or account coordination trustless.
 
 - Browser-started commands are disabled until a machine owner opts in. Once enabled, the linked-machine daemon trusts authenticated start requests from the accounts service. Treat that capability like remote command execution and withdraw it with `shell auth --no-remote-start` or `shell daemon stop` when it is not needed.

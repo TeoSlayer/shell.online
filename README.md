@@ -13,6 +13,10 @@ shell claude
 The process stays on your machine. The CLI prints a browser link, password,
 and QR code. Terminal traffic is end-to-end encrypted by default.
 
+An agent can also observe a session through scoped MCP grants and, when explicitly enabled,
+send input with host acknowledgement, human priority and duplicate protection. See
+[MCP access and its decryption boundary](docs/MCP.md). Control is off by default.
+
 ## Install
 
 | Platform | Command |

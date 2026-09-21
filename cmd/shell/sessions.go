@@ -143,6 +143,8 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runSessionKill(arguments[1:], stdout, stderr), true
 	case "password":
 		return runSessionPassword(arguments[1:], stdout, stderr), true
+	case "mcp":
+		return runSessionMcp(arguments[1:], stdout, stderr), true
 	default:
 		return 0, false
 	}

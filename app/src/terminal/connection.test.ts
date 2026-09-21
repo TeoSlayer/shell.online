@@ -69,15 +69,17 @@ interface Recorded {
   readOnly: boolean[];
   grids: TerminalGrid[];
   hostStates: HostState[];
+  mcpAuthorizations: boolean[];
 }
 
 function connect(fragment = "") {
-  const recorded: Recorded = { statuses: [], writes: [], readOnly: [], grids: [], hostStates: [] };
+  const recorded: Recorded = { statuses: [], writes: [], readOnly: [], grids: [], hostStates: [], mcpAuthorizations: [] };
   const connection = new TerminalConnection({
     url: "ws://localhost:5173/relay/api/sessions/x/ws",
     fragment,
     createSocket: (url) => new FakeSocket(url) as unknown as WebSocket,
     events: {
+      onMcpAuthorization: (value) => recorded.mcpAuthorizations.push(value),
       onStatus: (status, detail) => recorded.statuses.push({ status, detail }),
       onData: (bytes, reset) => recorded.writes.push({ text: new TextDecoder().decode(bytes), reset }),
       onReadOnly: (value) => recorded.readOnly.push(value),
@@ -537,6 +539,15 @@ describe("the machine behind the session", () => {
       lastSeenAt: undefined,
       screenCapturedAt: undefined,
     }]);
+  });
+
+  it("tracks MCP authorization independently of an empty agent activity list", async () => {
+    const { recorded, socket } = await connected();
+    socket.control({ type: "presence", mcpDecrypt: true, agents: [{ label: "helper" }] });
+    socket.control({ type: "presence", mcpDecrypt: true, agents: [] });
+    socket.control({ type: "status", status: "connected" });
+    socket.control({ type: "presence", mcpDecrypt: false, agents: [] });
+    expect(recorded.mcpAuthorizations).toEqual([true, true, false]);
   });
 
   it("reports the machine coming back", async () => {

@@ -1,5 +1,14 @@
 # shell.online
 
+MCP (unreleased candidate, not deployed to production): endpoint https://shell.online/mcp; create an owner-issued scoped bearer with
+shell mcp grant <session-id> <label> observe|control [ttl-seconds]. Pass the bearer via the
+MCP client's secret environment support, never a URL or public log. Tools: shell_status,
+shell_screen, shell_output, shell_wait; compatible control sessions also offer shell_send.
+shell_send requires a UUID-v4 operation_id; reuse it on retries. delivered confirms the PTY
+write, not agent completion. No shell_key or shell_interrupt in this release. Read-only blocks
+writes. Revoke with shell mcp revoke-all <session-id>. MCP explicitly authorizes server-side
+in-memory decryption using a host-supplied frame key; the agent receives plaintext results.
+
 shell.online wraps a local terminal process and produces an unguessable browser link. The process remains on the local machine. Links can be interactive or server-enforced read-only.
 
 ## Noninteractive installation
