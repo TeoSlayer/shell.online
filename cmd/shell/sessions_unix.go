@@ -37,11 +37,11 @@ type managedLocalSession struct {
 	mcpGrant       func(label string, scopes []string, ttl int) (api.McpGrantCreated, error)
 	// mcpTeamGrant mints a grant for a teammate (requesterUID marks it), so the DO
 	// re-authorizes every use against the accounts service, live.
-	mcpTeamGrant   func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error)
-	mcpList        func() ([]api.McpGrant, error)
-	mcpRevoke      func(grantID string) error
-	mcpRevokeAll   func() error
-	mcpFrameKey    func() []byte
+	mcpTeamGrant func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error)
+	mcpList      func() ([]api.McpGrant, error)
+	mcpRevoke    func(grantID string) error
+	mcpRevokeAll func() error
+	mcpFrameKey  func() []byte
 }
 
 // SetMcpHandlers wires the MCP grant control plane (host token + api client + E2EE key are
