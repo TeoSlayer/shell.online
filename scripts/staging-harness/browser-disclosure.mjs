@@ -22,6 +22,7 @@
 
 import { spawn } from "node:child_process";
 import { createSession, grant, revokeAll, cleanupSession, mcpCall, buildCli, redact } from "./lib.mjs";
+import { browserFunctionParams, SUBMIT_PASSWORD, GRANT_APPEARED } from "./browser-functions.mjs";
 
 const CHROME =
   process.env.SHELL_CHROME_BIN ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -58,23 +59,34 @@ class Chrome {
   send(method, params = {}) {
     this.ws.send(JSON.stringify({ id: this.nextId++, method, params }));
   }
-  eval(expression) {
-    return new Promise((resolve) => {
+  request(method, params) {
+    return new Promise((resolve, reject) => {
       const id = this.nextId++;
       const handler = (msg) => {
         if (msg.id === id) {
           this.handlers = this.handlers.filter((h) => h !== handler);
-          resolve(msg.result?.result?.value);
+          if (msg.error || msg.result?.exceptionDetails) reject(new Error("Chrome command failed"));
+          else resolve(msg.result);
         }
       };
       this.handlers.push(handler);
-      this.ws.send(JSON.stringify({ id, method: "Runtime.evaluate", params: { expression, returnByValue: true } }));
+      this.ws.send(JSON.stringify({ id, method, params }));
     });
+  }
+  async eval(expression) {
+    return (await this.request("Runtime.evaluate", { expression, returnByValue: true }))?.result?.value;
+  }
+  async callFunction(functionDeclaration, ...values) {
+    const global = await this.request("Runtime.evaluate", { expression: "globalThis" });
+    if (!global?.result?.objectId) throw new Error("Chrome context unavailable");
+    const result = await this.request("Runtime.callFunctionOn",
+      browserFunctionParams(global.result.objectId, functionDeclaration, values));
+    return result?.result?.value;
   }
   async waitFor(expression, { timeoutMs = 30000, intervalMs = 500 } = {}) {
     const start = Date.now();
     for (;;) {
-      const value = await this.eval(expression);
+      const value = typeof expression === "function" ? await expression() : await this.eval(expression);
       if (value) return value;
       if (Date.now() - start > timeoutMs) return null;
       await sleep(intervalMs);
@@ -107,7 +119,7 @@ async function showGrant(chrome, sessionId, label, ttl, secrets) {
   secrets.push(bearer);
   await mcpCall(bearer, "shell_status", {});
   const appeared = await chrome.waitFor(
-    `Array.from(document.querySelectorAll('.presence-agent')).some(el => el.textContent === 'Agent: ${label}') && (document.getElementById('session-encryption')?.textContent ?? '').includes('MCP')`,
+    () => chrome.callFunction(GRANT_APPEARED, label),
     { timeoutMs: 20000 },
   );
   return { bearer, appeared };
@@ -147,9 +159,7 @@ async function main() {
     const gateReady = await chrome.waitFor(`!!document.getElementById('encryption-password')`, { timeoutMs: 20000 });
     check("encryption gate appears for the E2EE link", !!gateReady);
     if (gateReady) {
-      await chrome.eval(
-        `(() => { const p = document.getElementById('encryption-password'); p.value = ${JSON.stringify(session.e2ee_password)}; p.form.requestSubmit(); return true; })()`,
-      );
+      await chrome.callFunction(SUBMIT_PASSWORD, session.e2ee_password);
     }
     const connected = await chrome.waitFor(
       `!['Offline','Connecting'].includes(document.querySelector('.status')?.textContent ?? '')`,
@@ -175,9 +185,7 @@ async function main() {
     await revokeAll(session.session_id);
     chrome.send("Page.navigate", { url: session.share_url });
     await chrome.waitFor(`!!document.getElementById('encryption-password')`, { timeoutMs: 20000 });
-    await chrome.eval(
-      `(() => { const p = document.getElementById('encryption-password'); p.value = ${JSON.stringify(session.e2ee_password)}; p.form.requestSubmit(); return true; })()`,
-    );
+    await chrome.callFunction(SUBMIT_PASSWORD, session.e2ee_password);
     await chrome.waitFor(
       `!['Offline','Connecting'].includes(document.querySelector('.status')?.textContent ?? '')`,
       { timeoutMs: 30000 },
