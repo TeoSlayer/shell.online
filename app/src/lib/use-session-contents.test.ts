@@ -43,7 +43,7 @@ function commit() {
   harness.pending = undefined;
   harness.cleanup = effect() || undefined;
 }
-function render(sessions: SessionRecord[] | null, effects = true) {
+function RenderHarness(sessions: SessionRecord[] | null, effects = true) {
   const result = useSessionContents(sessions);
   if (effects) commit();
   return result;
@@ -86,17 +86,17 @@ describe("session content eligibility and projection", () => {
 
 describe("session content hook privacy lifecycle", () => {
   it("makes no content request for locked, unconsented or non-owner sessions", async () => {
-    render([session({ dailyBriefingEnabled: false }), session({ id: "other", ownerUid: "another", assigneeUid: "owner" })]);
+    RenderHarness([session({ dailyBriefingEnabled: false }), session({ id: "other", ownerUid: "another", assigneeUid: "owner" })]);
     await settle();
     expect(harness.request).not.toHaveBeenCalled();
     harness.vault.status = "locked";
-    render([session()]); await settle();
+    RenderHarness([session()]); await settle();
     expect(harness.request).not.toHaveBeenCalled();
     expect(harness.vault.openContent).not.toHaveBeenCalled();
   });
   it("decrypts eligible envelopes and polls without restarting for new session objects", async () => {
-    expect(render([session()])).toEqual({}); await settle();
-    expect(render([session()])).toEqual({ s1: content });
+    expect(RenderHarness([session()])).toEqual({}); await settle();
+    expect(RenderHarness([session()])).toEqual({ s1: content });
     expect(harness.request).toHaveBeenCalledTimes(1);
     expect(harness.vault.openContent).toHaveBeenCalledWith("s1", envelope);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -104,8 +104,8 @@ describe("session content hook privacy lifecycle", () => {
   });
   it.each(["lock", "disable", "owner", "uid", "remove", "version", "share", "vault key", "sender key"])("hides decrypted values synchronously on %s and aborts prior requests", async (change) => {
     const initial = session({ keyShare: { senderPublicKey: "sender", sealed: "v2.first" } });
-    render([initial]); await settle();
-    expect(render([initial])).toEqual({ s1: content });
+    RenderHarness([initial]); await settle();
+    expect(RenderHarness([initial])).toEqual({ s1: content });
     const signal = harness.request.mock.calls[0][1].signal as AbortSignal;
     let records = [initial];
     if (change === "lock") harness.vault.status = "locked";
@@ -117,36 +117,36 @@ describe("session content hook privacy lifecycle", () => {
     if (change === "vault key") harness.vault.publicKey = "rotated-owner-key";
     if (change === "sender key") records = [{ ...initial, keyShare: { senderPublicKey: "rotated-sender", sealed: "v2.first" } }];
     if (change === "share") records = [{ ...initial, keyShare: { senderPublicKey: "sender", sealed: "v2.rotated" } }];
-    expect(render(records, false)).toEqual({});
+    expect(RenderHarness(records, false)).toEqual({});
     expect(signal.aborted).toBe(false);
     commit(); expect(signal.aborted).toBe(true);
   });
   it.each(["disable", "lock", "uid"])("does not restore plaintext when decryption completes after %s", async (change) => {
     const pending = deferred<SessionContent>();
     harness.vault.openContent.mockReturnValue(pending.promise);
-    render([session()]); await settle();
+    RenderHarness([session()]); await settle();
     expect(harness.vault.openContent).toHaveBeenCalledTimes(1);
     const disabled = [session({ dailyBriefingEnabled: change !== "disable" })];
     if (change === "lock") harness.vault.status = "locked";
     if (change === "uid") harness.vault.uid = "new-owner";
-    expect(render(disabled)).toEqual({});
+    expect(RenderHarness(disabled)).toEqual({});
     pending.resolve(content); await settle();
-    expect(render(disabled)).toEqual({});
+    expect(RenderHarness(disabled)).toEqual({});
     expect(vi.getTimerCount()).toBe(0);
   });
   it("replaces stale decrypted content with empty state after a failed refresh", async () => {
-    render([session()]); await settle(); expect(render([session()])).toEqual({ s1: content });
+    RenderHarness([session()]); await settle(); expect(RenderHarness([session()])).toEqual({ s1: content });
     harness.request.mockRejectedValue(new Error("revoked"));
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(render([session()])).toEqual({});
+    expect(RenderHarness([session()])).toEqual({});
   });
   it("caps eligible sessions at 32 and limits in-flight requests to four", async () => {
     const pending = deferred<typeof envelope>(); harness.request.mockReturnValue(pending.promise);
     const sessions = Array.from({ length: 50 }, (_, index) => session({ id: `s${index}` }));
-    render(sessions); expect(harness.request).toHaveBeenCalledTimes(4);
+    RenderHarness(sessions); expect(harness.request).toHaveBeenCalledTimes(4);
     pending.resolve(envelope);
     for (let i = 0; i < 10; i++) await settle();
     expect(harness.request).toHaveBeenCalledTimes(32);
-    expect(Object.keys(render(sessions))).toHaveLength(32);
+    expect(Object.keys(RenderHarness(sessions))).toHaveLength(32);
   });
 });
