@@ -35,6 +35,16 @@ const COLLAPSE_AFTER = 40;
 /** A pause long enough that the next message deserves a time of its own. */
 const TIME_BREAK_MS = 5 * 60_000;
 
+/**
+ * How close two messages from the same side have to be to read as one turn.
+ *
+ * Messaging interfaces group a run of messages from one speaker: they sit
+ * close together, share a corner, and only the last one is given a time. A
+ * command's output arrives as several paragraphs within a second of each
+ * other and is exactly that -- one turn, several things said.
+ */
+const GROUP_WINDOW_MS = 60_000;
+
 /** Distance from the bottom still counted as "watching the latest". */
 const STICK_SLACK_PX = 32;
 
@@ -149,10 +159,33 @@ export class ChatView {
     this.resizes =
       typeof ResizeObserver === "undefined"
         ? null
-        : new ResizeObserver(() => {
+        : new ResizeObserver((entries) => {
+            for (const entry of entries) {
+              /*
+               * The thread ends above the composer, and the composer is not a
+               * fixed height: it carries a row of keys that changes with the
+               * mode and a box that grows with what is being typed. Measured
+               * rather than guessed, because a guess that is three pixels
+               * short still puts the newest message behind the glass.
+               */
+              if (entry.target === this.composer) {
+                /*
+                 * offsetHeight, not the entry's content box: the composer's
+                 * padding and border are part of what the thread has to clear,
+                 * and offsetHeight is already in the element's own units,
+                 * which is what a length written back into CSS has to be in a
+                 * subtree the phone breakpoint zooms.
+                 */
+                this.root.style.setProperty(
+                  "--chat-composer-height",
+                  `${this.composer.offsetHeight}px`,
+                );
+              }
+            }
             if (this.sticking) this.scroller.scrollTop = this.scroller.scrollHeight;
           });
     this.resizes?.observe(this.scroller);
+    this.resizes?.observe(this.composer);
 
     this.scroller.addEventListener("scroll", this.onScroll);
     this.composer.addEventListener("submit", this.onSubmit);
@@ -239,6 +272,7 @@ export class ChatView {
   dispose(): void {
     this.disposed = true;
     this.resizes?.disconnect();
+    this.root.style.removeProperty("--chat-composer-height");
     this.scroller.removeEventListener("scroll", this.onScroll);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
@@ -274,6 +308,18 @@ export class ChatView {
     el.className = `chat-msg chat-${message.kind}`;
     el.dataset.kind = message.kind;
     if (message.tone) el.dataset.tone = message.tone;
+
+    /*
+     * Continues the turn above it: same speaker, close enough in time, and
+     * not a screen card or a notice, both of which are events in their own
+     * right rather than something said.
+     */
+    const grouped =
+      previous !== null &&
+      previous.kind === message.kind &&
+      (message.kind === "sent" || message.kind === "received") &&
+      message.at - previous.at <= GROUP_WINDOW_MS;
+    el.dataset.grouped = grouped ? "true" : "false";
 
     if (!previous || message.at - previous.at > TIME_BREAK_MS) {
       const stamp = document.createElement("div");
@@ -381,6 +427,23 @@ export class ChatView {
       }
       return;
     }
+
+    /*
+     * Prose wraps; a listing does not. Terminal output is a mix of the two,
+     * and showing all of it preformatted is what made a long sentence run off
+     * the side of a phone while a table had nothing to align against.
+     */
+    body.dataset.shape = message.preformatted ? "pre" : "prose";
+    node.el.dataset.shape = body.dataset.shape;
+    /*
+     * Copy belongs on the things worth copying. Now that an answer arrives as
+     * several short messages rather than one block, a control on every one of
+     * them was a column of buttons down the side of the conversation. A
+     * listing or a block of several lines earns one; a single sentence is
+     * quicker to select than to reach for.
+     */
+    node.el.dataset.copyable =
+      message.preformatted || message.lines.length > 2 ? "true" : "false";
 
     /* A growing answer only pays for the lines it gained. */
     if (message.lines.length < node.lines) {

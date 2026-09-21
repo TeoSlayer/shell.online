@@ -51,7 +51,8 @@
    * ends above it. Without this the last answer of a session is the
    * one permanently behind the composer.
    */
-  padding: 4px 2px 116px;
+  /* Clears the composer, whose height is published by the view as it changes. */
+  padding: 4px 2px calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 18px);
   flex: 1;
   scrollbar-width: thin;
 }
@@ -68,7 +69,8 @@
   max-width: 940px;
   flex-direction: column;
   margin-top: auto;
-  gap: 10px;
+  /* Messages within a turn sit together; turns are separated below. */
+  gap: 3px;
 }
 
 /* --- one message ------------------------------------------------ */
@@ -77,6 +79,23 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/*
+ * A turn, not a message.
+ *
+ * One command's output arrives as several paragraphs a fraction of a second
+ * apart, and a person reads that as one thing being said in several parts.
+ * So a run from the same side closes up, shares its corner with the message
+ * above it, and the space goes between turns instead -- which is what every
+ * messaging interface does and what this was missing.
+ */
+.chat-msg[data-grouped="false"] {
+  margin-top: 13px;
+}
+
+.chat-thread > .chat-msg:first-child {
+  margin-top: 0;
 }
 
 .chat-time {
@@ -90,27 +109,77 @@
 .chat-bubble {
   position: relative;
   max-width: 100%;
-  padding: 9px 13px;
-  border-radius: var(--radius-panel);
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.55;
+  padding: 8px 13px;
+  border-radius: 19px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.chat-body {
+/*
+ * Prose is prose.
+ *
+ * Most of what a process writes is sentences: a branch name, a warning, a
+ * line of a build log. Shown preformatted they run off the side of the pane
+ * and have to be scrolled to be read, which is the single thing that made
+ * this look like terminal output with a border drawn round it rather than
+ * something said. They wrap, in the page's own text face, like a message.
+ */
+.chat-body[data-shape="prose"] {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  letter-spacing: 0.005em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/*
+ * And a listing is a listing.
+ *
+ * Where the spacing is carrying meaning -- columns, a tree, a diff, anything
+ * drawn -- it is kept exactly as written, in a block of its own that scrolls
+ * rather than wrapping. The same distinction every messaging application
+ * makes between a message and a code block.
+ */
+.chat-body[data-shape="pre"] {
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  border-bottom-left-radius: 7px;
+  background: color-mix(in srgb, var(--ink) 4%, var(--white));
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
-  /*
-   * Terminal output is already laid out in columns. Wrapping it would
-   * break every table, tree and aligned log line a process prints, so
-   * the bubble scrolls sideways instead.
-   */
   white-space: pre;
 }
 
+/*
+ * A block is its own surface, so it is not also put inside a bubble. Framed
+ * twice it read as a box inside a box, which is the look this renderer was
+ * trying to get away from.
+ */
+.chat-received[data-shape="pre"] .chat-bubble {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.chat-received[data-shape="pre"][data-grouped="true"] .chat-body[data-shape="pre"] {
+  border-top-left-radius: 7px;
+}
+
+/* A command is code, whichever side of the thread it is on. */
+.chat-sent .chat-body {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .chat-line {
-  min-height: 1.55em;
+  min-height: 1.5em;
 }
 
 /* --- what this browser sent ------------------------------------- */
@@ -119,17 +188,20 @@
   align-items: flex-end;
 }
 
+.chat-sent[data-grouped="true"] .chat-bubble {
+  border-top-right-radius: 7px;
+}
+
+.chat-received[data-grouped="true"] .chat-bubble {
+  border-top-left-radius: 7px;
+}
+
 .chat-sent .chat-bubble {
-  border-bottom-right-radius: var(--radius-chip);
+  border-bottom-right-radius: 7px;
   background: var(--blue);
   color: #fff;
   box-shadow: 0 1px 2px rgb(26 31 22 / 10%);
   font-weight: 500;
-}
-
-.chat-sent .chat-body {
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 /* Dark mode's blue is a light accent, so the text on it goes dark. */
@@ -148,7 +220,7 @@
 .chat-received .chat-bubble {
   max-width: 100%;
   border: 1px solid var(--line);
-  border-bottom-left-radius: var(--radius-chip);
+  border-bottom-left-radius: 7px;
   background: var(--white);
   color: var(--ink-soft);
 }
@@ -197,6 +269,10 @@
 }
 
 .chat-more:hover { text-decoration: underline; }
+
+.chat-msg[data-copyable="false"] .chat-meta {
+  display: none;
+}
 
 .chat-meta {
   position: absolute;
@@ -519,7 +595,7 @@
      *
      * The foot clears the composer and whatever the composer is clearing.
      */
-    padding: 2px 10px calc(var(--chat-dock) + 86px);
+    padding: 2px 10px calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
     transition: padding-bottom 200ms var(--ease);
   }
 

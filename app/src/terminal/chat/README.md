@@ -103,6 +103,31 @@ in the conversation afterwards.
 The mirror is read from the same parse everything else is read from, so it
 cannot fall out of step with the session, and there is no second emulator.
 
+## What a message is
+
+A command's output is not one utterance. `git status` says which branch you
+are on, then what is staged, then what is not, and a person reading that in a
+chat reads three things. Output is cut on blank lines -- the one separator
+every program agrees on -- and each paragraph is its own message.
+`paragraphs.ts` also decides how each one is shown: sentences wrap as text,
+while anything whose spacing is load-bearing (columns, indentation, box
+drawing) is kept exactly as written in a monospace block that scrolls. It is
+the distinction every messaging application makes between a message and a
+code block, and it is why a long sentence no longer runs off the side of a
+phone while a table still lines up.
+
+## Commands entered elsewhere
+
+The conversation is not only this browser's. Somebody typing on the machine
+itself, or in another browser watching the same session, should appear in it.
+
+Between the shell's `B` marker (prompt end) and its `C` marker (the command is
+running), anything written onto the prompt row is a command. One sent from
+here is recognised as its own echo and is already in the thread; anything else
+becomes a message from the other side. Without markers there is no safe way to
+tell a command from a log line that landed on the prompt, so only local
+commands appear — and nothing is invented.
+
 ## Phones
 
 Four things are different below the phone breakpoint, and all four were bugs

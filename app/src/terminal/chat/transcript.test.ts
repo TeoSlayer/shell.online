@@ -251,3 +251,52 @@ describe("the revision", () => {
     expect(transcript.revision).toBe(after);
   });
 });
+
+describe("a command entered somewhere else", () => {
+  /*
+   * The machine's own keyboard, or another person watching the same session.
+   * It arrives as a line written onto the prompt, and it is the whole reason
+   * a session driven from the terminal used to read as a monologue.
+   */
+  it("appears as a message, not as a line of output", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("~/work/api ❯ ");
+    transcript.expectCommand();
+    transcript.output([plainLine("~/work/api ❯ npm test")], 1000);
+    transcript.commandStarted();
+    transcript.output([plainLine("67 passed")], 1010);
+
+    expect(transcript.messages.map((m) => m.kind)).toEqual(["sent", "received"]);
+    expect(transcript.messages[0].text).toBe("npm test");
+  });
+
+  it("does not arrive twice when it was this browser that sent it", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("$ ");
+    transcript.submitted("npm test", 1000);
+    transcript.expectCommand();
+    transcript.output([plainLine("$ npm test")], 1010);
+    transcript.commandStarted();
+
+    expect(transcript.messages.map((m) => m.text)).toEqual(["npm test"]);
+  });
+
+  it("stops looking once the command is running, so output is never mistaken for one", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("$ ");
+    transcript.expectCommand();
+    transcript.commandStarted();
+    transcript.output([plainLine("$ this is output that landed on the prompt")], 1000);
+
+    expect(transcript.messages.map((m) => m.kind)).toEqual(["received"]);
+  });
+
+  it("is not invented from a line that never touched the prompt", () => {
+    const transcript = new Transcript();
+    transcript.setPrompt("$ ");
+    transcript.expectCommand();
+    transcript.output([plainLine("listening on :8080")], 1000);
+
+    expect(transcript.messages.map((m) => m.kind)).toEqual(["received"]);
+  });
+});

@@ -25,6 +25,8 @@
  * that the command exited, or the process simply going quiet.
  */
 
+import { looksPreformatted } from "./paragraphs";
+
 export type MessageKind = "sent" | "received" | "notice" | "screen";
 
 /** A run of characters that share one appearance, as the process painted it. */
@@ -66,6 +68,12 @@ export interface Message {
   live?: boolean;
   /** "screen" only: what was running, when that is known. */
   title?: string;
+  /**
+   * Whether this message's spacing is carrying meaning: a listing, a tree, a
+   * diff. Preformatted messages are shown in a monospace block that scrolls;
+   * the rest are shown as text and allowed to wrap.
+   */
+  preformatted?: boolean;
   /** Bumped whenever this message's contents change, so a view can skip redraws. */
   revision: number;
 }
@@ -105,6 +113,15 @@ export const MAX_LINES_PER_MESSAGE = 1500;
  */
 const ECHO_PATIENCE_LINES = 40;
 
+/**
+ * How many lines a paragraph's shape is re-read over.
+ *
+ * Far enough in that a table's heading row cannot decide the matter alone,
+ * and short enough that re-reading is not done once per line for the whole of
+ * a hundred-thousand-line build log.
+ */
+const SHAPE_SETTLES_AFTER = 50;
+
 /** Commands typed ahead of the process are remembered in order, up to this many. */
 const MAX_PENDING_ECHOES = 8;
 
@@ -121,6 +138,12 @@ export class Transcript {
   private echoes: PendingEcho[] = [];
   /** The shell's current prompt, when it publishes one. Empty otherwise. */
   private prompt = "";
+  /**
+   * Set between the shell's prompt-end and command-start markers, which is
+   * exactly the window in which the next line written onto the prompt row is
+   * the command somebody entered.
+   */
+  private awaitingCommand = false;
   /** When the open message last grew, so a caller can time the quiet close. */
   private lastGrewAt = 0;
   /** Bumped on every change, so a view can tell "nothing happened" cheaply. */
@@ -164,12 +187,31 @@ export class Transcript {
     this.prompt = text;
   }
 
+  /**
+   * The shell has finished drawing its prompt and is waiting to be typed at.
+   *
+   * Whatever lands on that row next is a command, wherever it was entered --
+   * this browser, another one, or the machine's own keyboard. One typed here
+   * is already in the conversation and is recognised as its own echo; one
+   * typed anywhere else would otherwise arrive as a line of output, which is
+   * why a session driven from the terminal looked like a monologue.
+   */
+  expectCommand(): void {
+    this.awaitingCommand = true;
+  }
+
+  /** The command is running, so nothing further is one. */
+  commandStarted(): void {
+    this.awaitingCommand = false;
+  }
+
   /** Forgets everything. Used when the relay replays a session from the top. */
   clear(): void {
     this.items = [];
     this.open = null;
     this.echoes = [];
     this.prompt = "";
+    this.awaitingCommand = false;
     this.rev += 1;
   }
 
@@ -239,6 +281,27 @@ export class Transcript {
     for (const line of lines) {
       const stripped = this.withoutPrompt(line);
       if (this.consumedAsEcho(stripped)) continue;
+      /*
+       * Written onto the prompt while the shell was waiting: a command, and
+       * not one of ours, because ours are consumed as their own echo above.
+       * It carries no echo expectation -- this line is the echo.
+       */
+      if (this.awaitingCommand && stripped.text !== line.text && stripped.text.trim() !== "") {
+        this.awaitingCommand = false;
+        this.close(at);
+        this.push({ kind: "sent", at, text: stripped.text.trim(), lines: [], open: false });
+        continue;
+      }
+      /*
+       * A blank line ends the message rather than being kept in it. It is the
+       * break every program agrees on and the one a person already reads as
+       * the end of a thought, so it is where one bubble stops and the next
+       * begins; see paragraphs.ts.
+       */
+      if (stripped.text.trim() === "") {
+        this.close(at);
+        continue;
+      }
       this.append(stripped, at);
     }
   }
@@ -397,6 +460,16 @@ export class Transcript {
       this.open = target;
     }
     target.lines.push(line);
+    /*
+     * Re-read while the paragraph is still small. What a paragraph is cannot
+     * be known from its first line -- one sentence is prose, the same
+     * sentence above two indented ones is a heading over a block -- so the
+     * verdict is taken again as lines arrive, and settled once there are
+     * enough of them for more lines not to change it.
+     */
+    if (target.lines.length <= SHAPE_SETTLES_AFTER) {
+      target.preformatted = looksPreformatted(target.lines);
+    }
     this.touch(target);
     this.lastGrewAt = at;
   }

@@ -288,7 +288,11 @@ export class ChatTerminal {
      * up to the cursor is the prompt itself. Reading it here is the only way
      * to know it exactly, and exactly is the only way it is safe to remove.
      */
-    if (kind === "B") this.transcript.setPrompt(this.promptUnderCursor());
+    if (kind === "B") {
+      this.transcript.setPrompt(this.promptUnderCursor());
+      this.transcript.expectCommand();
+    }
+    if (kind === "C") this.transcript.commandStarted();
     if (kind === "D") {
       const code = Number.parseInt(rest[0] ?? "", 10);
       this.transcript.commandFinished(Number.isFinite(code) ? code : undefined, now);

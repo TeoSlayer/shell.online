@@ -4,6 +4,21 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- The chat renderer reads as a conversation rather than as terminal output
+  with a border drawn round it. A command's output arrives as the paragraphs
+  it was written in, one message each, instead of a single block; sentences
+  wrap as text, and only the parts whose spacing carries meaning -- a listing,
+  a tree, a diff, anything drawn -- are kept as monospace blocks. Messages
+  from the same side group into one turn.
+- A command entered anywhere in the session now appears as a message. Typed on
+  the machine itself, or by somebody else watching the same session, it used
+  to arrive as a line of output, so a session being driven from the terminal
+  read as a monologue. Shells that publish command markers say exactly where
+  their prompt ends, which is what makes this exact rather than a guess.
+- Copy appears on the messages worth copying rather than on every one of them.
+
 ### Fixed
 
 - The chat renderer is usable on a phone. The thread was laid out to its own

@@ -16,6 +16,8 @@ import "../../styles/terminal.css";
 import "../../styles/chat.css";
 import { createTerminal, type TerminalSurface } from "../renderer";
 import { watchKeyboardInset } from "../keyboard-inset";
+import { fittedTerminal } from "../terminal-fit";
+import { cellMeasurer, terminalBox } from "../terminal-metrics";
 import { DESKTOP_TERMINAL_GRID } from "../terminal-grid";
 
 const PROMPT = "\x1b[38;2;66;103;245m~/work/api\x1b[0m \x1b[1m❯\x1b[0m ";
@@ -91,6 +93,32 @@ const SESSION: Step[] = [
     writes: ["\x1b[?1049l", PROMPT],
     after: 600,
   },
+  /*
+   * A command nobody typed here: entered on the machine itself, or by another
+   * person watching the same session. It arrives as an echo wrapped in the
+   * shell's own markers, and has to appear in the conversation as a message
+   * rather than being lost in the output.
+   */
+  {
+    writes: [
+      "\x1b]133;A\x07",
+      PROMPT,
+      "\x1b]133;B\x07",
+      "npm test\r\n",
+      "\x1b]133;C\x07",
+      "> shell-online-app@0.0.0 test\r\n",
+      "\r\n",
+      "\x1b[32mPASS\x1b[0m  src/terminal/chat/transcript.test.ts\r\n",
+      "\x1b[32mPASS\x1b[0m  src/terminal/chat/paragraphs.test.ts\r\n",
+      "\r\n",
+      "Test Files  2 passed (2)\r\n",
+      "     Tests  67 passed (67)\r\n",
+      "\r\n",
+      "Everything is fine, which is a sentence long enough to need wrapping when it is shown as prose in a bubble on a narrow screen.\r\n",
+      "\x1b]133;D;0\x07",
+    ],
+    after: 900,
+  },
   {
     typed: "./deploy --production",
     writes: [
@@ -154,7 +182,16 @@ root.append(shell);
 /* Sizes the pane to what the keyboard has left, exactly as Workspace does. */
 watchKeyboardInset(panes);
 
-const terminal: TerminalSurface = createTerminal("chat", {
+/*
+ * Which renderer to mount. The chat one by default; "?renderer=xterm" mounts
+ * the emulator instead, in the identical shell, so that a change meant for
+ * one can be checked against the other rather than assumed not to reach it.
+ */
+const params = new URLSearchParams(window.location.search);
+const which = params.get("renderer") === "xterm" ? "xterm" : "chat";
+
+const terminal: TerminalSurface = createTerminal(which, {
+  fontFamily: 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace',
   cols: DESKTOP_TERMINAL_GRID.cols,
   rows: DESKTOP_TERMINAL_GRID.rows,
   convertEol: false,
@@ -171,6 +208,33 @@ const terminal: TerminalSurface = createTerminal("chat", {
   },
 });
 terminal.open(screen);
+
+/*
+ * The same fit the pane performs, not an approximation of it.
+ *
+ * The pane draws the session's whole grid as large as it will go and pins the
+ * emulator to that grid; the font and the leading are the only things a
+ * viewer gets to choose. A harness that sets a font size instead cannot show
+ * whether a layout change reached the terminal, which is the entire question
+ * a harness is for.
+ */
+const FONT = 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace';
+const measureCell = cellMeasurer(FONT);
+
+function refit(): void {
+  const box = terminalBox(screen);
+  if (box.width === 0 || box.height === 0) return;
+  const fitted = fittedTerminal(box, DESKTOP_TERMINAL_GRID, measureCell, {
+    pixelRatio: window.devicePixelRatio,
+    maxLineHeight: 1.35,
+  });
+  terminal.options.fontSize = fitted.fontSize;
+  terminal.options.lineHeight = fitted.lineHeight;
+  terminal.refresh(0, terminal.rows - 1);
+}
+
+new ResizeObserver(() => refit()).observe(screen);
+requestAnimationFrame(refit);
 
 /*
  * Two states that are hard to reach by typing but easy to get wrong.
