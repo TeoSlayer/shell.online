@@ -437,7 +437,7 @@ try {
   for (const theme of ['light', 'dark']) {
     await transport.navigate(`http://127.0.0.1:${port}/qa.html?paint=${theme}-${Date.now()}`);
     await waitFor(() => evaluate(`location.origin === 'http://127.0.0.1:${port}' && document.readyState === 'complete'`), 'page load');
-    await evaluate(`(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme)}; return true; })()`);
+    await transport.call((value) => { document.documentElement.dataset.theme = value; return true; }, theme);
     await evaluate(`(async () => { ${SETUP} })()`);
     await evaluate(`(() => { paintTest.mount('a', true); paintTest.mount('b', false); return true; })()`);
     await waitFor(() => evaluate(`paintTest.sockets.length === 2 && !!paintTest.terms.a && !!paintTest.terms.b`), 'two terminals open');
@@ -450,10 +450,10 @@ try {
 
     const common = { rows: ROWS, cols: COLS, statusRow: STATUS_ROW };
     await audit('a', { ...common, label: `${browser}-${theme}-initial` });
-    await evaluate(`(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme === 'light' ? 'dark' : 'light')}; return true; })()`);
+    await transport.call((value) => { document.documentElement.dataset.theme = value; return true; }, theme === 'light' ? 'dark' : 'light');
     await delay(300);
     await audit('a', { ...common, label: `${browser}-${theme}-inverted` });
-    await evaluate(`(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme)}; return true; })()`);
+    await transport.call((value) => { document.documentElement.dataset.theme = value; return true; }, theme);
     await delay(300);
     await audit('a', { ...common, label: `${browser}-${theme}-restored` });
 
@@ -528,9 +528,9 @@ try {
     await delay(450);
     await evaluate(`(() => { const s = document.getElementById('paint-stage'); s.style.height = '280px'; return true; })()`);
     await delay(450);
-    await evaluate(`(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme === 'light' ? 'dark' : 'light')}; return true; })()`);
+    await transport.call((value) => { document.documentElement.dataset.theme = value; return true; }, theme === 'light' ? 'dark' : 'light');
     await delay(450);
-    await evaluate(`(() => { document.documentElement.dataset.theme = ${JSON.stringify(theme)}; return true; })()`);
+    await transport.call((value) => { document.documentElement.dataset.theme = value; return true; }, theme);
     await delay(450);
     await evaluate(socketEmit(0, 0x03, SNAP2));
     await delay(900);

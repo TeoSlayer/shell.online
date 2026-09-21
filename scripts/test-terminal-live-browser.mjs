@@ -392,7 +392,7 @@ try {
   await transport.navigate(`http://127.0.0.1:${vitePort}/qa.html?live=${Date.now()}`);
   await new Promise((r) => setTimeout(r, 800));
   await evaluate(`(async () => { ${SETUP(browserShareUrl(session))} })()`);
-  await evaluate(`(() => { liveTest.mount('a', true, ${JSON.stringify(browserShareUrl(session))}); return true; })()`);
+  await transport.call((url) => { liveTest.mount('a', true, url); return true; }, browserShareUrl(session));
   await waitForPage(() => evaluate(`liveTest.sockets.length >= 1 && liveTest.terms.a && liveTest.terms.a.buffer.active.getLine(0) && liveTest.terms.a.buffer.active.getLine(0).getCell(0) && liveTest.terms.a.buffer.active.getLine(0).getCell(0).getChars() === '┌'`), "viewer decrypted the snapshot");
   check(true, "real viewer connected and decrypted");
 
@@ -483,7 +483,7 @@ try {
   }
 
   stage = "second viewer and tab switch";
-  await evaluate(`(() => { liveTest.mount('b', false, ${JSON.stringify(browserShareUrl(session))}); return true; })()`);
+  await transport.call((url) => { liveTest.mount('b', false, url); return true; }, browserShareUrl(session));
   await waitForPage(() => evaluate(`liveTest.terms.b && liveTest.terms.b.buffer.active.getLine(0) && liveTest.terms.b.buffer.active.getLine(0).getCell(0) && liveTest.terms.b.buffer.active.getLine(0).getCell(0).getChars() === '┌'`), "second viewer decrypted");
   await evaluate(`(() => { liveTest.setActive('a', false); liveTest.setActive('b', true); return true; })()`);
   await delay(500);

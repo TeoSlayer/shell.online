@@ -8,6 +8,17 @@ import (
 
 // --- OSC title tests ---
 
+func TestChannelByteBounds(t *testing.T) {
+	for _, tc := range []struct {
+		input int
+		want  uint8
+	}{{-1, 0}, {0, 0}, {127, 127}, {255, 255}, {256, 0}, {65535, 0}} {
+		if got := channelByte(tc.input); got != tc.want {
+			t.Fatalf("channelByte(%d) = %d, want %d", tc.input, got, tc.want)
+		}
+	}
+}
+
 func TestOSC_SetTitle_OSC2(t *testing.T) {
 	t.Parallel()
 	h := newTestHandler()

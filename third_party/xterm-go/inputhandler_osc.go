@@ -239,22 +239,22 @@ func parseColor(spec string) *ColorRGB {
 			r := parseHex(hex[0:1]) * 0x10
 			g := parseHex(hex[1:2]) * 0x10
 			b := parseHex(hex[2:3]) * 0x10
-			return &ColorRGB{uint8(r), uint8(g), uint8(b)}
+			return &ColorRGB{channelByte(r), channelByte(g), channelByte(b)}
 		case 6: // #RRGGBB
 			r := parseHex(hex[0:2])
 			g := parseHex(hex[2:4])
 			b := parseHex(hex[4:6])
-			return &ColorRGB{uint8(r), uint8(g), uint8(b)}
+			return &ColorRGB{channelByte(r), channelByte(g), channelByte(b)}
 		case 9: // #RRRGGGBBB — 12-bit, truncate to 8-bit
 			r := parseHex(hex[0:2])
 			g := parseHex(hex[3:5])
 			b := parseHex(hex[6:8])
-			return &ColorRGB{uint8(r), uint8(g), uint8(b)}
+			return &ColorRGB{channelByte(r), channelByte(g), channelByte(b)}
 		case 12: // #RRRRGGGGBBBB — 16-bit, truncate to 8-bit
 			r := parseHex(hex[0:2])
 			g := parseHex(hex[4:6])
 			b := parseHex(hex[8:10])
-			return &ColorRGB{uint8(r), uint8(g), uint8(b)}
+			return &ColorRGB{channelByte(r), channelByte(g), channelByte(b)}
 		}
 	}
 
@@ -266,13 +266,21 @@ func scaleHexChannel(s string) uint8 {
 	v := parseHex(s)
 	switch len(s) {
 	case 1: // 4-bit → 8-bit
-		return uint8(v * 0x11)
+		return channelByte(v * 0x11)
 	case 2: // 8-bit
-		return uint8(v)
+		return channelByte(v)
 	case 3: // 12-bit → 8-bit
-		return uint8(v >> 4)
+		return channelByte(v >> 4)
 	case 4: // 16-bit → 8-bit
-		return uint8(v >> 8)
+		return channelByte(v >> 8)
+	}
+	return channelByte(v)
+}
+
+// Keep conversion bounds explicit even when a caller validates hex length.
+func channelByte(v int) uint8 {
+	if v < 0 || v > 255 {
+		return 0
 	}
 	return uint8(v)
 }

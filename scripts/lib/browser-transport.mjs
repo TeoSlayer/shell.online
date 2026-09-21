@@ -135,6 +135,22 @@ export async function launchChromeTransport({ profile }) {
   return {
     name: 'chrome',
     evaluate,
+    // Pass values through CDP's argument channel, never interpolate them into
+    // JavaScript. fn must be a locally defined fixture function.
+    call: async (fn, ...args) => {
+      const global = await request('Runtime.evaluate', { expression: 'globalThis' });
+      const objectId = global.result.objectId;
+      try {
+        const value = await request('Runtime.callFunctionOn', {
+          objectId, functionDeclaration: fn.toString(),
+          arguments: args.map((value) => ({ value })), awaitPromise: true, returnByValue: true,
+        });
+        if (value.exceptionDetails) throw new Error('Browser fixture call failed');
+        return value.result.value;
+      } finally {
+        await request('Runtime.releaseObject', { objectId });
+      }
+    },
     navigate: (url) => request('Page.navigate', { url }),
     screenshot: async (clipExpression) => {
       const clip = clipExpression ? await evaluate(clipExpression) : undefined;
@@ -220,6 +236,21 @@ const safariSession = ({ base, sessionId, driver }) => {
   return {
     name: 'safari',
     evaluate,
+    // WebDriver keeps argument data separate from the fixed function source.
+    call: async (fn, ...args) => {
+      const payload = await webdriver(base, `${path}/execute/async`, {
+        method: 'POST',
+        body: {
+          script: `const done = arguments[arguments.length - 1];
+            const args = Array.from(arguments).slice(0, -1);
+            Promise.resolve().then(() => (${fn.toString()})(...args))
+              .then(value => done({ok:true,value:value ?? null}), () => done({ok:false}));`,
+          args,
+        },
+      });
+      if (payload.value?.ok !== true) throw new Error('Browser fixture call failed');
+      return payload.value.value;
+    },
     navigate: (url) => webdriver(base, `${path}/url`, { method: 'POST', body: { url } }),
     screenshot: async () => (await webdriver(base, `${path}/screenshot`)).value,
     setViewport: async ({ width, height }) => {
