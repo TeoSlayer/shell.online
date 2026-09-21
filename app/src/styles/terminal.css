@@ -196,7 +196,7 @@ button.tab {
 /*
  * No panel: the terminal is drawn straight onto the page, in the page's own
  * colors, so a session reads as part of the app rather than a window inside
- * it. The emulator's canvas is clear and its palette follows the app theme;
+ * it. The emulator's background matches the page and its palette follows the app theme;
  * see TerminalPane.
  */
 .pane {

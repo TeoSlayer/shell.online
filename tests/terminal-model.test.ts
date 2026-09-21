@@ -5,6 +5,20 @@ const enc = (s: string) => new TextEncoder().encode(s);
 const opts = { cols: 80, rows: 24, maxTailChars: 10_000, maxOutputBytes: 10_000 };
 
 describe("TerminalModel: output + cursor contract", () => {
+  it("orders recovery resets after pending VT writes", async () => {
+    const model = new TerminalModel(opts);
+    try {
+      model.append(enc("\x1b[24;1HSTALE"));
+      model.reseed();
+      model.append(enc("FRESH"));
+      const screen = await model.screen();
+      expect(screen.text.split("\n")[0]).toBe("FRESH");
+      expect(screen.text).not.toContain("STALE");
+    } finally {
+      model.free();
+    }
+  });
+
   it("returns the tail with no cursor", () => {
     const model = new TerminalModel(opts);
     model.append(enc("hello world"));

@@ -1815,6 +1815,22 @@
   white-space: nowrap;
 }
 
+/*
+ * A genuine two-line summary, and the one-line empty state when there is
+ * none; same clamp as the table for one visual language.
+ */
+.board-card-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .board-card-foot {
   display: flex;
   align-items: center;

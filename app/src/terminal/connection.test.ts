@@ -113,6 +113,22 @@ beforeEach(() => {
 });
 
 describe("plaintext session", () => {
+  it("requests recovery only on an open socket, including read-only viewers", async () => {
+    const { connection } = connect();
+    await connection.start();
+    const socket = FakeSocket.last!;
+    connection.requestSnapshot();
+    expect(socket.sent).toHaveLength(0);
+    socket.opened();
+    socket.control({ readOnly: true });
+    connection.requestSnapshot();
+    expect(socket.sent).toEqual([JSON.stringify({ type: "snapshot_request" })]);
+    socket.close();
+    connection.requestSnapshot();
+    expect(socket.sent).toHaveLength(1);
+    connection.close();
+  });
+
   it("reports connected and writes output", async () => {
     const { connection, recorded } = connect();
     await connection.start();

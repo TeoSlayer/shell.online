@@ -8,6 +8,7 @@ import (
 
 var helpTopics = [...]string{
 	"start", "files", "attach", "list", "ls", "password", "kill", "auth",
+	"briefings", "permissions",
 	"stats", "agent", "daemon", "service", "e2ee", "docker", "platforms", "mcp", "reference",
 }
 
@@ -52,6 +53,8 @@ Your account (optional)
   shell auth --no-browser         Print the approval URL instead of opening it
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine
+  shell briefings status|on|off   Daily-briefing consent for your sessions [--all]
+  shell permissions <ID>          Read or set a session's automation switches
 
 Machine services
   shell agent                      Watch for browser-started sessions in this terminal
@@ -351,6 +354,44 @@ shell ls needs a linked machine (shell auth). It never prints a password: those
 stay on the machine that started the session and in your vault. To share a
 program that is itself called ls, put -- first: shell -- ls.
 `)
+	case "briefings":
+		fmt.Fprint(stdout, `Daily-briefing consent
+
+  shell briefings status
+  shell briefings on [--all]
+  shell briefings off [--all]
+
+Your daily-briefing consent, stored on your account rather than on any one
+machine, so a re-login or a new machine cannot reset it.
+
+  on/off     The default your new sessions start with.
+  --all      Also apply it to the sessions you currently have.
+
+This is consent only: the switch is saved and read back, but this build does
+not yet generate a briefing, and the command says so rather than implying it.
+Per-session switches live on the session itself; see shell help permissions.
+`)
+	case "permissions":
+		fmt.Fprint(stdout, `Session automation permissions
+
+  shell permissions <session-id>
+  shell permissions <session-id> --mcp-team-access=true|false
+                                 [--daily-briefing=true|false]
+                                 [--briefing-team-access=true|false]
+
+Reads a session's automation permissions, or updates the ones you name. A
+switch you do not name is left exactly as it is.
+
+  --mcp-team-access        Let a teammate's agent reach this session over MCP.
+  --daily-briefing         Generate a daily briefing for this session.
+  --briefing-team-access   Let teammates read this session's briefing.
+
+The three switches are independent: agreeing to one is not agreeing to the
+others. These are the same server-owned switches the web app writes, so a
+change made here is what the browser sees on its next read, and a change made
+in the browser is what this reads. Only the session's owner can change them;
+they are consent, and this build does not act on them yet.
+`)
 	case "kill", "stop":
 		fmt.Fprint(stdout, `Stop sessions
 
@@ -454,6 +495,11 @@ SYNOPSIS
   shell [options] [--] [command] [arguments...]
   shell list [--json]
   shell ls [--all] [--json]
+  shell briefings status
+  shell briefings on [--all]
+  shell briefings off [--all]
+  shell permissions <session-id> [--mcp-team-access=true|false]
+                       [--daily-briefing=true|false] [--briefing-team-access=true|false]
   shell attach <session-id-or-prefix>
   shell kill <session-id-or-prefix>
   shell kill --all
@@ -527,6 +573,24 @@ SESSION COMMANDS
       List the sessions in the linked account from every machine, with name,
       status, uptime, machine, and command. Ended sessions are hidden unless
       --all is given. JSON output omits passwords. Requires shell auth.
+  shell briefings status
+      Show the daily-briefing default your new sessions start with.
+  shell briefings on [--all]
+      Turn the daily-briefing default on. --all also applies it to the
+      sessions you currently have.
+  shell briefings off [--all]
+      Turn the daily-briefing default off. --all also applies it to the
+      sessions you currently have. Consent only: this build does not generate
+      a briefing yet, and the command says so.
+  shell permissions <session-id>
+      Read a session's automation switches: MCP team access, daily briefing,
+      and briefing team access.
+  shell permissions <session-id> --mcp-team-access=true|false
+                                 [--daily-briefing=true|false]
+                                 [--briefing-team-access=true|false]
+      Update the switches you name; a switch you do not name is left as it is.
+      Only the session's owner can change them. They are the same server-owned
+      switches the web app writes, and this build does not act on them yet.
   shell agent
       Watch for browser-started sessions in this terminal.
   shell daemon status|start|stop

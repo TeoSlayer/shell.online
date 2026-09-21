@@ -470,6 +470,150 @@ func TestListSessionsReadsTheAccountSessions(t *testing.T) {
 	}
 }
 
+func TestGetSessionAutomationReadsTheThreeSwitches(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path != "/api/cli/sessions/abc123def456/automation" || request.Method != http.MethodGet {
+				t.Errorf("unexpected request %s %s", request.Method, request.URL.Path)
+			}
+			if request.Header.Get("Authorization") != "Bearer sha_a" {
+				t.Errorf("Authorization = %q", request.Header.Get("Authorization"))
+			}
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"mcpTeamAccess": true, "dailyBriefingEnabled": false, "dailyBriefingTeamAccess": true,
+			})
+		}))
+	defer service.Close()
+
+	got, err := NewClient(service.URL, "test").GetSessionAutomation(context.Background(), "sha_a", "abc123def456")
+	if err != nil {
+		t.Fatalf("GetSessionAutomation: %v", err)
+	}
+	if !got.McpTeamAccess || got.DailyBriefing || !got.BriefingTeamAccess {
+		t.Fatalf("switches = %+v", got)
+	}
+	if got.SwitchValue(AutomationMcpTeamAccess) != true || got.SwitchValue(AutomationDailyBriefing) != false {
+		t.Fatalf("SwitchValue = %+v", got)
+	}
+}
+
+func TestSetSessionAutomationSendsOnlyTheNamedSwitches(t *testing.T) {
+	var body map[string]any
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.Method != http.MethodPut {
+				t.Errorf("method = %s", request.Method)
+			}
+			decodeJSON(t, request, &body)
+			writeJSON(writer, http.StatusOK, map[string]any{
+				"mcpTeamAccess": false, "dailyBriefingEnabled": true, "dailyBriefingTeamAccess": false,
+			})
+		}))
+	defer service.Close()
+
+	updated, err := NewClient(service.URL, "test").SetSessionAutomation(
+		context.Background(), "sha_a", "abc123def456",
+		map[string]bool{AutomationDailyBriefing: true})
+	if err != nil {
+		t.Fatalf("SetSessionAutomation: %v", err)
+	}
+	if body["dailyBriefingEnabled"] != true {
+		t.Fatalf("body = %+v", body)
+	}
+	if _, present := body["mcpTeamAccess"]; present {
+		t.Fatalf("an unnamed switch was sent: %+v", body)
+	}
+	if !updated.DailyBriefing || updated.McpTeamAccess {
+		t.Fatalf("answer = %+v", updated)
+	}
+}
+
+func TestSessionAutomationSurfacesARejection(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, _ *http.Request) {
+			writeJSON(writer, http.StatusForbidden, map[string]string{
+				"error": "only the session's owner can change its automation settings",
+			})
+		}))
+	defer service.Close()
+
+	client := NewClient(service.URL, "test")
+	if _, err := client.GetSessionAutomation(context.Background(), "sha_a", "abc123def456"); err == nil ||
+		!strings.Contains(err.Error(), "owner") {
+		t.Fatalf("GetSessionAutomation err = %v", err)
+	}
+	// A non-2xx answer is an error, never a silent zero value.
+	_, err := client.SetSessionAutomation(context.Background(), "sha_a", "abc123def456",
+		map[string]bool{AutomationMcpTeamAccess: true})
+	if err == nil || !strings.Contains(err.Error(), "owner") {
+		t.Fatalf("SetSessionAutomation err = %v", err)
+	}
+}
+
+func TestGetBriefingPreferenceReadsTheSavedDefault(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path != "/api/cli/briefings" || request.Method != http.MethodGet {
+				t.Errorf("unexpected request %s %s", request.Method, request.URL.Path)
+			}
+			if request.Header.Get("Authorization") != "Bearer sha_a" {
+				t.Errorf("Authorization = %q", request.Header.Get("Authorization"))
+			}
+			writeJSON(writer, http.StatusOK, map[string]any{"enabled": true})
+		}))
+	defer service.Close()
+
+	enabled, err := NewClient(service.URL, "test").GetBriefingPreference(context.Background(), "sha_a")
+	if err != nil {
+		t.Fatalf("GetBriefingPreference: %v", err)
+	}
+	if !enabled {
+		t.Fatal("the saved default was not read back")
+	}
+}
+
+func TestSetBriefingPreferenceSendsTheStrictBody(t *testing.T) {
+	var body map[string]any
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, request *http.Request) {
+			if request.URL.Path != "/api/cli/briefings" || request.Method != http.MethodPut {
+				t.Errorf("unexpected request %s %s", request.Method, request.URL.Path)
+			}
+			decodeJSON(t, request, &body)
+			writeJSON(writer, http.StatusOK, map[string]any{"enabled": true, "applied": 3})
+		}))
+	defer service.Close()
+
+	result, err := NewClient(service.URL, "test").SetBriefingPreference(context.Background(), "sha_a", true, true)
+	if err != nil {
+		t.Fatalf("SetBriefingPreference: %v", err)
+	}
+	if body["enabled"] != true || body["apply_to_existing"] != true {
+		t.Fatalf("body = %+v", body)
+	}
+	if !result.Enabled || result.Applied != 3 {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestBriefingPreferenceSurfacesARejection(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(
+		func(writer http.ResponseWriter, _ *http.Request) {
+			writeJSON(writer, http.StatusUnauthorized, map[string]string{"error": "not signed in"})
+		}))
+	defer service.Close()
+
+	client := NewClient(service.URL, "test")
+	if _, err := client.GetBriefingPreference(context.Background(), "x"); err == nil ||
+		!strings.Contains(err.Error(), "not signed in") {
+		t.Fatalf("GetBriefingPreference err = %v", err)
+	}
+	if _, err := client.SetBriefingPreference(context.Background(), "x", true, false); err == nil ||
+		!Unauthorized(err) {
+		t.Fatalf("SetBriefingPreference err = %v", err)
+	}
+}
+
 func TestListSessionsSurfacesARejection(t *testing.T) {
 	service := httptest.NewServer(http.HandlerFunc(
 		func(writer http.ResponseWriter, request *http.Request) {

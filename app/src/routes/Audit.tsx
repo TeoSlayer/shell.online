@@ -39,6 +39,7 @@ import { usePageTitle } from "../lib/page-title";
 import { displayName } from "../lib/people";
 import { SearchSelect } from "../components/SearchSelect";
 import { sessionStateLabel } from "../lib/session-liveness";
+import { sessionTitle } from "../lib/session-title";
 import type { SearchSelectOption } from "../lib/search-options";
 import { useTeamKey } from "../vault/TeamKeyProvider";
 import { useVault } from "../vault/VaultProvider";
@@ -285,7 +286,7 @@ export function Audit() {
     { value: "", label: "All sessions", detail: "Activity across every session" },
     ...sessions.map((session) => ({
       value: session.id,
-      label: session.name || session.command,
+      label: sessionTitle(session),
       detail: `${session.command}${session.host ? ` · ${session.host}` : ""}`,
       keywords: sessionStateLabel(session).toLowerCase(),
     })),

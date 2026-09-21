@@ -33,6 +33,7 @@ import {
 import { splitMentions } from "../lib/mentions";
 import { displayName, findPerson } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
+import { sessionSummary, sessionTitle } from "../lib/session-title";
 import { assigneeIds, canRemove, canRename, canStop } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
 import { useVault } from "../vault/VaultProvider";
@@ -74,7 +75,6 @@ function CommentRow({ comment, members }: { comment: Comment; members: Member[] 
 }
 
 export function Session() {
-  usePageTitle("Session");
   const { sessionId = "" } = useParams();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [error, setError] = useState("");
@@ -90,6 +90,9 @@ export function Session() {
   const detailGeneration = useRef(0);
   const automationSaving = useRef(false);
   const vault = useVault();
+
+  /* The tab carries the session's short title once it has loaded, not a bare word. */
+  usePageTitle(detail ? sessionTitle(detail.session) : "Session");
 
   const load = useCallback(async () => {
     if (automationSaving.current) return;
@@ -281,7 +284,7 @@ export function Session() {
 
   return (
     <AppShell
-      title={session.name || session.command}
+      title="Session"
       aside={
         <Link className="session-action" to="/sessions">
           <ArrowLeft size={14} weight="bold" />
@@ -313,7 +316,15 @@ export function Session() {
             </form>
           ) : (
             <div className="detail-title">
-              <h2 className="detail-name">{session.name || session.command}</h2>
+              {/*
+                * The short title, not the command: an agent command runs to a
+                * few hundred characters and used to be the page heading. The
+                * full command is one disclosure below, and the full name (when
+                * the title is capped) stays on the element for a pointer.
+                */}
+              <h2 className="detail-name" title={session.name?.trim() || session.command}>
+                {sessionTitle(session)}
+              </h2>
               {canRename(session, you) && (
                 <button
                   type="button"
@@ -328,11 +339,29 @@ export function Session() {
             </div>
           )}
 
+          {/*
+            * A real summary, when the record has one, clamped to two lines.
+            * There is no generated-briefing pipeline yet, so this is usually
+            * the empty state: the command is what runs, not what the session
+            * is, so it is not shown here as a stand-in description.
+            */}
+          <p className="detail-summary">
+            {sessionSummary(session) ?? "No description."}
+          </p>
+
           <div className="detail-head">
             <span className={online ? "detail-status is-live" : "detail-status"}>
               {sessionStateLabel(session)}
             </span>
-            <code className="detail-command">{session.command}</code>
+            {/*
+              * The raw command, behind a disclosure. It is the thing this page
+              * used to shout: always visible, long enough to set the width of
+              * the page. Closed by default it costs a word; open, it wraps.
+              */}
+            <details className="detail-command-details">
+              <summary>Command</summary>
+              <code className="detail-command-full">{session.command}</code>
+            </details>
           </div>
 
           {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}

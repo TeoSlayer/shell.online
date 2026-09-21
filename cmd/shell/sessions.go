@@ -141,6 +141,10 @@ func runSessionCommand(arguments []string, stdout, stderr io.Writer) (int, bool)
 		return runSessionList(arguments[1:], stdout, stderr), true
 	case "ls":
 		return runAccountSessionList(arguments[1:], stdout, stderr), true
+	case "briefings":
+		return runBriefings(arguments[1:], stdout, stderr), true
+	case "permissions":
+		return runPermissions(arguments[1:], stdout, stderr), true
 	case "attach":
 		return runSessionAttach(arguments[1:], stdout, stderr), true
 	case "kill", "stop":

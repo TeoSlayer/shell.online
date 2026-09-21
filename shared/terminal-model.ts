@@ -179,7 +179,10 @@ export class TerminalModel {
   // decoders, and bump the epoch (reconstruction-unique). Pending waits are stale and settle as
   // "reset".
   reseed(): void {
-    this.term.reset();
+    // xterm.write is asynchronous. Queue RIS behind pending writes instead
+    // of resetting immediately and letting old bytes paint over the reset.
+    // CAN first terminates an unfinished control string from the old stream.
+    this.feedVt("\x18\x1bc");
     this.utf8.reset();
     this.tail = "";
     this.tailStart = 0;

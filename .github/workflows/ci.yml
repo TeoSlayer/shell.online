@@ -43,6 +43,8 @@ jobs:
           cache: true
       - name: Build and verify download bundle
         run: npm run build:cli && npm run verify:downloads
+      - name: Compare Go terminal snapshots against xterm.js
+        run: npm run test:terminal-snapshot
 
   cli:
     runs-on: ubuntu-latest

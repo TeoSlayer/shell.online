@@ -39,7 +39,8 @@ describe("open", () => {
     });
     expect(state.tabs[0]).toEqual({
       id: "a",
-      label: "npm run dev",
+      /* The tab shows the executable, not the whole line; the command stays on the tab. */
+      label: "npm",
       command: "npm run dev",
       shareUrl: "http://127.0.0.1:8788/s/a",
       readOnly: true,
@@ -58,12 +59,21 @@ describe("open", () => {
     expect(state.tabs[0].command).toBe("cat");
   });
 
-  it("falls back to the command for a blank name", () => {
+  it("falls back to a short label from the command for a blank name", () => {
     const state = reduce(EMPTY, {
       type: "open",
       session: { ...session("a", "cat"), name: "   " },
     });
     expect(state.tabs[0].label).toBe("cat");
+  });
+
+  it("labels an unnamed session by its executable, not its full command", () => {
+    const state = reduce(EMPTY, {
+      type: "open",
+      session: session("a", "/opt/homebrew/bin/opencode -s ses_abc -m calin/Qwen3.8-27B"),
+    });
+    expect(state.tabs[0].label).toBe("opencode");
+    expect(state.tabs[0].command).toBe("/opt/homebrew/bin/opencode -s ses_abc -m calin/Qwen3.8-27B");
   });
 
   it("drops the oldest tab at the cap and keeps the new one active", () => {

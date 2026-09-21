@@ -1,6 +1,7 @@
 FROM golang:1.26.8-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
+COPY third_party/xterm-go ./third_party/xterm-go
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal

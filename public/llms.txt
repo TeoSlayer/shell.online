@@ -36,9 +36,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.21.2 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.21.3 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.21.2" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.21.3" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -48,6 +48,17 @@ Current release metadata: https://shell.online/downloads/release.json
 SHA-256 manifest: https://shell.online/downloads/SHA256SUMS
 
 ## Agent usage
+
+Account automation consent is owner-controlled and shared by CLI and web:
+shell permissions <ID> reads the three switches; append --daily-briefing=true|false,
+--mcp-team-access=true|false, or --briefing-team-access=true|false to change only
+those switches. shell briefings status|on|off manages the account's default;
+on/off --all also applies it to existing owned sessions. These settings record
+consent only: automatic briefing generation and the team MCP gateway are not
+implemented in v0.21.3. They do not replace explicit scoped MCP grants.
+
+Terminal snapshot fixes require a new Go host process. Updating the binary does
+not restart existing sessions; coordinate restarts with the owner.
 
 Start a long-running process under shell.online:
 

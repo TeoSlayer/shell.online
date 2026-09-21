@@ -28,6 +28,31 @@ afterAll(async () => {
   await Promise.all(openPools.map((pool) => pool.end()));
 });
 
+/*
+ * Transaction handling a real database is hard to force into: a connection
+ * that fails so hard its ROLLBACK fails too. The interesting part is not that
+ * the save fails -- it is which failure the caller sees.
+ */
+describe("setDailyBriefingPreference", () => {
+  it("reports the original failure when the rollback itself fails", async () => {
+    const client = {
+      query: async (text: string) => {
+        if (text === "BEGIN") throw new Error("begin failed");
+        if (text === "ROLLBACK") throw new Error("rollback masked the begin failure");
+        throw new Error(`unexpected query ${text}`);
+      },
+      release: () => {},
+    };
+    const pool = { connect: async () => client };
+    /* The constructor is private; this cast builds the store around a stub. */
+    const build = PostgresStore as unknown as new (pool: unknown) => PostgresStore;
+    const store = new build(pool);
+    await expect(
+      store.setDailyBriefingPreference("org_1", "uid-1", true, false),
+    ).rejects.toThrow("begin failed");
+  });
+});
+
 describe.skipIf(!DATABASE_URL)("migrations", () => {
   it("applies the schema and records it once", async () => {
     const url = await freshDatabase("shell_online_migrate");

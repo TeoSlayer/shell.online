@@ -1810,6 +1810,392 @@ describe("session automation settings", () => {
   });
 });
 
+describe("CLI daily-briefing preference", () => {
+  const firstSession = {
+    id: "Br1ef1ngF1rstSess10nIdXyZ01",
+    share_url: "https://shell.online/s/Br1ef1ngF1rstSess10nIdXyZ01",
+    command: "claude",
+  };
+  const secondSession = {
+    id: "Br1ef1ngS3c0ndSess10nIdXyZ0",
+    share_url: "https://shell.online/s/Br1ef1ngS3c0ndSess10nIdXyZ0",
+    command: "pytest -x",
+  };
+
+  it("refuses a preference request without a CLI token", async () => {
+    expect((await call("GET", "/api/cli/briefings")).status).toBe(401);
+    expect((await call("PUT", "/api/cli/briefings", { body: { enabled: true } })).status).toBe(401);
+  });
+
+  it("reads as off for an account that never set it", async () => {
+    const tokens = await login();
+    const result = await call("GET", "/api/cli/briefings", { auth: tokens.access_token });
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ enabled: false });
+  });
+
+  it("saves the default and reports it back", async () => {
+    const tokens = await login();
+    const saved = await call("PUT", "/api/cli/briefings", {
+      auth: tokens.access_token,
+      body: { enabled: true },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ enabled: true, applied: 0 });
+    const read = await call("GET", "/api/cli/briefings", { auth: tokens.access_token });
+    expect(read.body).toEqual({ enabled: true });
+  });
+
+  it("refuses a body that is not exactly the preference", async () => {
+    const tokens = await login();
+    for (const body of [
+      {},
+      { enabled: "true" },
+      { enabled: 1 },
+      { enabled: null },
+      { apply_to_existing: true },
+      { enabled: true, apply_to_existing: "yes" },
+      { enabled: true, role: "owner" },
+      { enabled: true, dailyBriefingTeamAccess: true },
+    ]) {
+      const denied = await call("PUT", "/api/cli/briefings", {
+        auth: tokens.access_token,
+        body,
+      });
+      expect(denied.status).toBe(400);
+    }
+    expect((await call("GET", "/api/cli/briefings", { auth: tokens.access_token })).body).toEqual({
+      enabled: false,
+    });
+  });
+
+  it("applies the default to the owner's sessions and nothing else", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: secondSession });
+    /* The owner's own switch on one session, to prove the bulk update leaves it alone. */
+    await call("PUT", `/api/sessions/${firstSession.id}/automation`, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingTeamAccess: true },
+    });
+
+    const saved = await call("PUT", "/api/cli/briefings", {
+      auth: tokens.access_token,
+      body: { enabled: true, apply_to_existing: true },
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.body).toEqual({ enabled: true, applied: 2 });
+
+    const detail = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(detail.body.session).toMatchObject({
+      mcpTeamAccess: true,
+      dailyBriefingEnabled: true,
+      dailyBriefingTeamAccess: true,
+    });
+  });
+
+  it("leaves a colleague's sessions and a merely-assigned session alone", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    const colleagueTokens = await login({}, "uid-2");
+    await call("POST", "/api/sessions", { auth: colleagueTokens.access_token, body: secondSession });
+    /* The owner hands one of their sessions to the colleague. */
+    await call("PUT", `/api/sessions/${firstSession.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+
+    const saved = await call("PUT", "/api/cli/briefings", {
+      auth: colleagueTokens.access_token,
+      body: { enabled: true, apply_to_existing: true },
+    });
+    expect(saved.body).toEqual({ enabled: true, applied: 1 });
+
+    /* The colleague's own session is on; the assigned one is still the owner's to switch. */
+    const theirs = await call("GET", `/api/sessions/${secondSession.id}`, { auth: colleague });
+    expect(theirs.body.session.dailyBriefingEnabled).toBe(true);
+    const assigned = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(assigned.body.session.dailyBriefingEnabled).toBe(false);
+  });
+
+  it("does not reach a session in another organization", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    const outsiderTokens = await login({}, "uid-2");
+    await call("POST", "/api/sessions", { auth: outsiderTokens.access_token, body: secondSession });
+
+    const saved = await call("PUT", "/api/cli/briefings", {
+      auth: outsiderTokens.access_token,
+      body: { enabled: true, apply_to_existing: true },
+    });
+    expect(saved.body).toEqual({ enabled: true, applied: 1 });
+
+    const detail = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+  });
+
+  it("starts a new session with the saved default, and nothing else", async () => {
+    const tokens = await login();
+    await call("PUT", "/api/cli/briefings", { auth: tokens.access_token, body: { enabled: true } });
+    const created = await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    expect(created.status).toBe(201);
+    const detail = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(true);
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+    expect(detail.body.session.dailyBriefingTeamAccess).toBe(false);
+  });
+
+  it("does not trust a registration field to grant the default", async () => {
+    const tokens = await login();
+    const created = await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { ...firstSession, daily_briefing_enabled: true, mcp_team_access: true },
+    });
+    expect(created.status).toBe(201);
+    const detail = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+  });
+
+  it("keeps an explicit opt-out when the session re-registers with the default on", async () => {
+    const tokens = await login();
+    await call("PUT", "/api/cli/briefings", { auth: tokens.access_token, body: { enabled: true } });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    await call("PUT", `/api/sessions/${firstSession.id}/automation`, {
+      auth: await idToken(),
+      body: { dailyBriefingEnabled: false },
+    });
+    /* A restart re-registers the same session; that is not a consent change. */
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: firstSession });
+    const detail = await call("GET", `/api/sessions/${firstSession.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+  });
+
+  it("keeps the default through a re-login and a credential refresh", async () => {
+    const tokens = await login();
+    await call("PUT", "/api/cli/briefings", { auth: tokens.access_token, body: { enabled: true } });
+
+    /* The browser signs in again: the membership row is rewritten. */
+    await call("GET", "/api/org", { auth: await idToken() });
+    expect(
+      (await call("GET", "/api/cli/briefings", { auth: tokens.access_token })).body,
+    ).toEqual({ enabled: true });
+
+    /* The CLI renews its token: the account is re-described. */
+    const refreshed = await call("POST", "/api/cli/refresh", {
+      body: { refresh_token: tokens.refresh_token },
+    });
+    expect(refreshed.status).toBe(200);
+    expect(
+      (await call("GET", "/api/cli/briefings", { auth: refreshed.body.access_token })).body,
+    ).toEqual({ enabled: true });
+  });
+
+  it("keeps each account's own default", async () => {
+    const tokens = await login();
+    const colleagueTokens = await login({}, "uid-2");
+    await call("PUT", "/api/cli/briefings", { auth: tokens.access_token, body: { enabled: true } });
+    expect(
+      (await call("GET", "/api/cli/briefings", { auth: colleagueTokens.access_token })).body,
+    ).toEqual({ enabled: false });
+  });
+});
+
+describe("CLI session automation settings", () => {
+  const session = {
+    id: "Cl11Au4o9m4t10nSess10nIdXyZ",
+    share_url: "https://shell.online/s/Cl11Au4o9m4t10nSess10nIdXyZ",
+    command: "claude",
+  };
+  const cliPath = `/api/cli/sessions/${session.id}/automation`;
+  const webPath = `/api/sessions/${session.id}/automation`;
+
+  /* Registers the session and returns a signed-in colleague in the same org. */
+  async function orgWithColleague() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    const colleagueTokens = await login({}, "uid-2");
+    return { colleague, colleagueTokens, tokens };
+  }
+
+  it("refuses a request without a CLI token", async () => {
+    await orgWithColleague();
+    expect((await call("GET", cliPath)).status).toBe(401);
+    expect((await call("PUT", cliPath, { body: { mcpTeamAccess: true } })).status).toBe(401);
+  });
+
+  it("reads the three switches and nothing else", async () => {
+    const { tokens } = await orgWithColleague();
+    const result = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      mcpTeamAccess: false,
+      dailyBriefingEnabled: false,
+      dailyBriefingTeamAccess: false,
+    });
+  });
+
+  it("cannot read a session that is not in the caller's organization", async () => {
+    const { tokens } = await orgWithColleague();
+    /* A different account, and therefore a different organization. */
+    const outsiderTokens = await login({}, "uid-3");
+    expect((await call("GET", cliPath, { auth: outsiderTokens.access_token })).status).toBe(404);
+    expect(
+      (await call("PUT", cliPath, { auth: outsiderTokens.access_token, body: { mcpTeamAccess: true } })).status,
+    ).toBe(404);
+    expect((await call("GET", cliPath, { auth: tokens.access_token })).status).toBe(200);
+  });
+
+  it("cannot reach a made-up session id", async () => {
+    const { tokens } = await orgWithColleague();
+    const missing = cliPath.replace(session.id, "N07Succ3ss10nIdXyZ01234567");
+    expect((await call("GET", missing, { auth: tokens.access_token })).status).toBe(404);
+  });
+
+  it("does not let a colleague who is not the owner read or change the settings", async () => {
+    const { tokens, colleagueTokens } = await orgWithColleague();
+    expect((await call("GET", cliPath, { auth: colleagueTokens.access_token })).status).toBe(403);
+    const denied = await call("PUT", cliPath, {
+      auth: colleagueTokens.access_token,
+      body: { mcpTeamAccess: true },
+    });
+    expect(denied.status).toBe(403);
+    const read = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(read.body.mcpTeamAccess).toBe(false);
+  });
+
+  it("does not let an organization admin substitute for the owner", async () => {
+    const { tokens, colleagueTokens } = await orgWithColleague();
+    const promoted = await call("PATCH", "/api/org/members/uid-2", {
+      auth: await idToken(),
+      body: { role: "admin" },
+    });
+    expect(promoted.status).toBe(200);
+    const denied = await call("PUT", cliPath, {
+      auth: colleagueTokens.access_token,
+      body: { dailyBriefingEnabled: true },
+    });
+    expect(denied.status).toBe(403);
+    const read = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(read.body.dailyBriefingEnabled).toBe(false);
+  });
+
+  it("does not let an assignee substitute for the owner", async () => {
+    const { tokens, colleagueTokens } = await orgWithColleague();
+    await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+    const denied = await call("PUT", cliPath, {
+      auth: colleagueTokens.access_token,
+      body: { mcpTeamAccess: true },
+    });
+    expect(denied.status).toBe(403);
+    const read = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(read.body.mcpTeamAccess).toBe(false);
+  });
+
+  it("updates the switches the caller names and preserves the rest", async () => {
+    const { tokens } = await orgWithColleague();
+    await call("PUT", webPath, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingEnabled: true, dailyBriefingTeamAccess: true },
+    });
+    const updated = await call("PUT", cliPath, {
+      auth: tokens.access_token,
+      body: { dailyBriefingEnabled: false },
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual({
+      mcpTeamAccess: true,
+      dailyBriefingEnabled: false,
+      dailyBriefingTeamAccess: true,
+    });
+  });
+
+  it("refuses a body that is not exactly the switches", async () => {
+    const { tokens } = await orgWithColleague();
+    for (const body of [
+      {},
+      { mcpTeamAccess: "true" },
+      { mcpTeamAccess: 1 },
+      { mcpTeamAccess: true, autoRename: true },
+      { dailyBriefingEnabled: true, enabled: true },
+    ]) {
+      const denied = await call("PUT", cliPath, { auth: tokens.access_token, body });
+      expect(denied.status).toBe(400);
+    }
+  });
+
+  it("sees a change the web app made", async () => {
+    const { tokens } = await orgWithColleague();
+    await call("PUT", webPath, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingTeamAccess: true },
+    });
+    const read = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(read.body).toEqual({
+      mcpTeamAccess: true,
+      dailyBriefingEnabled: false,
+      dailyBriefingTeamAccess: true,
+    });
+  });
+
+  it("is seen by the web app when the CLI makes a change", async () => {
+    const { tokens } = await orgWithColleague();
+    const updated = await call("PUT", cliPath, {
+      auth: tokens.access_token,
+      body: { mcpTeamAccess: true, dailyBriefingEnabled: true },
+    });
+    expect(updated.status).toBe(200);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session).toMatchObject({
+      mcpTeamAccess: true,
+      dailyBriefingEnabled: true,
+      dailyBriefingTeamAccess: false,
+    });
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0]).toMatchObject({
+      mcpTeamAccess: true,
+      dailyBriefingEnabled: true,
+    });
+  });
+
+  it("keeps a per-session opt-out through re-registration and re-login with the default on", async () => {
+    const { tokens } = await orgWithColleague();
+    await call("PUT", "/api/cli/briefings", {
+      auth: tokens.access_token,
+      body: { enabled: true, apply_to_existing: true },
+    });
+    expect(
+      (await call("GET", cliPath, { auth: tokens.access_token })).body.dailyBriefingEnabled,
+    ).toBe(true);
+    await call("PUT", cliPath, {
+      auth: tokens.access_token,
+      body: { dailyBriefingEnabled: false },
+    });
+    /* A restart re-registers the same session; the browser signs in again. */
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    await call("GET", "/api/org", { auth: await idToken() });
+    const read = await call("GET", cliPath, { auth: tokens.access_token });
+    expect(read.body.dailyBriefingEnabled).toBe(false);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+  });
+});
+
 describe("audit log", () => {
   const session = {
     id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",

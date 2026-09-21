@@ -237,6 +237,8 @@ function toMembership(row: Row): Membership {
     lastSeenAt: row.last_seen_at ?? undefined,
     publicKey: row.public_key,
     accountKey: row.account_key,
+    /* NOT NULL DEFAULT FALSE, so a row that never set it reads as off. */
+    dailyBriefingDefault: row.daily_briefing_default === true,
   }) as unknown as Membership;
 }
 
@@ -738,12 +740,23 @@ export class PostgresStore implements Store {
      *
      * A restart that names nothing keeps the name somebody gave it, in the
      * terminal or in the browser. Only a name it does send replaces it.
+     *
+     * A new session's daily-briefing switch is the one consent it may start
+     * with already set: the owner's saved default, read from the membership
+     * row inside the insert. The DO UPDATE half never touches the column, so
+     * a re-registration cannot move a choice the owner already made.
      */
     const row = await this.row(
       `INSERT INTO sessions
          (uid, id, org_id, owner_uid, assignee_uid, assignee_uids, share_url, command, origin, name,
-          read_only, encrypted, persistent, host, started_at, closed_at, exit_code)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+          read_only, encrypted, persistent, host, started_at, closed_at, exit_code,
+          daily_briefing_enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+               COALESCE(
+                 (SELECT daily_briefing_default FROM memberships
+                  WHERE org_id = $3 AND uid = COALESCE($4, $1)),
+                 FALSE
+               ))
        ON CONFLICT (uid, id) DO UPDATE SET
          org_id = EXCLUDED.org_id,
          owner_uid = EXCLUDED.owner_uid,
@@ -924,6 +937,70 @@ export class PostgresStore implements Store {
       ],
     );
     return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  async dailyBriefingDefault(orgId: string, uid: string): Promise<boolean> {
+    const row = await this.row(
+      "SELECT daily_briefing_default FROM memberships WHERE org_id = $1 AND uid = $2",
+      [orgId, uid],
+    );
+    return row?.daily_briefing_default === true;
+  }
+
+  /**
+   * One transaction: the default is saved and the owner's sessions switched
+   * together, so a failure in between cannot leave a default that was never
+   * applied or sessions that were switched without the default behind them.
+   */
+  async setDailyBriefingPreference(
+    orgId: string,
+    uid: string,
+    enabled: boolean,
+    applyToExisting: boolean,
+  ): Promise<{ enabled: boolean; applied: number } | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const saved = await client.query(
+        "UPDATE memberships SET daily_briefing_default = $3 WHERE org_id = $1 AND uid = $2",
+        [orgId, uid, enabled],
+      );
+      if ((saved.rowCount ?? 0) === 0) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      let applied = 0;
+      if (applyToExisting) {
+        /*
+         * The owner's sessions in this organization only: a legacy row's uid
+         * stands in for a missing owner, and a session somebody merely
+         * assigned to this person is not theirs to switch. Nothing but the
+         * briefing switch moves.
+         */
+        const updated = await client.query(
+          `UPDATE sessions SET daily_briefing_enabled = $3
+           WHERE org_id = $1 AND COALESCE(owner_uid, uid) = $2`,
+          [orgId, uid, enabled],
+        );
+        applied = updated.rowCount ?? 0;
+      }
+      await client.query("COMMIT");
+      return { enabled, applied };
+    } catch (error) {
+      /*
+       * A ROLLBACK on a connection that is already failing can throw too. It
+       * must not replace the failure that got us here: that error is the one
+       * that says what actually went wrong.
+       */
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /*
@@ -1283,14 +1360,25 @@ export class PostgresStore implements Store {
      * then insert, which is not atomic: two requests racing to place the same
      * person could each pass the delete and then both insert, and the one that
      * lost had already deleted the winner's row.
+     *
+     * The saved briefing default is the account's, not this row's. A re-login
+     * or a move between organizations rewrites the row, and letting that reset
+     * a choice the person made would be a consent revoked without being asked.
+     * An absent incoming value ($8 null) therefore keeps the stored one; a
+     * value the caller actually carries still stands.
      */
     await this.pool.query(
-      `INSERT INTO memberships (org_id, uid, email, name, role, joined_at, public_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO memberships
+         (org_id, uid, email, name, role, joined_at, public_key, daily_briefing_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, FALSE))
        ON CONFLICT (uid) DO UPDATE SET
          org_id = EXCLUDED.org_id, email = EXCLUDED.email, name = EXCLUDED.name,
          role = EXCLUDED.role, joined_at = EXCLUDED.joined_at,
-         public_key = EXCLUDED.public_key`,
+         public_key = EXCLUDED.public_key,
+         daily_briefing_default = CASE
+           WHEN $8 IS NULL THEN memberships.daily_briefing_default
+           ELSE $8
+         END`,
       [
         membership.orgId,
         membership.uid,
@@ -1299,6 +1387,7 @@ export class PostgresStore implements Store {
         membership.role,
         membership.joinedAt,
         membership.publicKey ?? null,
+        membership.dailyBriefingDefault ?? null,
       ],
     );
   }

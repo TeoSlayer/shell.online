@@ -14,6 +14,7 @@ import {
   cleanupCandidates as findCleanupCandidates,
   matches,
 } from "../lib/session-view";
+import { sessionSummary, sessionTitle } from "../lib/session-title";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
@@ -126,7 +127,7 @@ function RemoveSession({
       className="session-remove"
       onClick={() => setConfirming(true)}
       disabled={busy}
-      aria-label={`Remove ${session.name || session.command} from the list`}
+      aria-label={`Remove ${sessionTitle(session)} from the list`}
       title="Remove from the list. The machine is not touched."
     >
       <Trash size={15} />
@@ -414,7 +415,7 @@ export function Workspace() {
     setNotice("");
     try {
       await stopSession(target, session.id);
-      setNotice(`Stopping ${session.command}.`);
+      setNotice(`Stopping ${sessionTitle(session)}.`);
       window.setTimeout(() => void load(), AFTER_COMMAND_MS);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not stop that session.");
@@ -436,7 +437,7 @@ export function Workspace() {
       await deleteSession(session.id);
       forget(session.id);
       dispatch({ type: "close", id: session.id });
-      setNotice(`Removed ${session.name || session.command} from the list.`);
+      setNotice(`Removed ${sessionTitle(session)} from the list.`);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not remove that session.");
@@ -462,7 +463,7 @@ export function Workspace() {
         dispatch({ type: "close", id: session.id });
         removed += 1;
       } catch {
-        failed.push(session.name || session.command);
+        failed.push(sessionTitle(session));
       }
     }
     await load();
@@ -636,8 +637,8 @@ export function Workspace() {
         .map((member) => member.name || member.email);
       setNotice(
         names.length
-          ? `${session.name || session.command} is assigned to ${names.join(", ")}.`
-          : `${session.name || session.command} is unassigned.`,
+          ? `${sessionTitle(session)} is assigned to ${names.join(", ")}.`
+          : `${sessionTitle(session)} is unassigned.`,
       );
     } catch (caught) {
       if (assignmentQueue.current.get(session.id) === request) {
@@ -1159,6 +1160,12 @@ function SessionGroup({
             const online = sessionOnline(session);
             const assigned = new Set(assigneeIds(session));
             const assignees = members.filter((member) => assigned.has(member.uid));
+            /*
+             * The row shows the short title. The full command goes behind the
+             * toggle whenever it carries more than the title already says --
+             * which, for a session without a name, is now the usual case.
+             */
+            const title = sessionTitle(session);
             return (
               <tr
                 key={session.id}
@@ -1178,14 +1185,22 @@ function SessionGroup({
                       title={kindForCommand(session.command).title}
                       data-live={online}
                     />
-                    <span className="table-name">{session.name || session.command}</span>
+                    <span className="table-name" title={session.name?.trim() || session.command}>
+                      {title}
+                    </span>
                   </Link>
+                  {/*
+                    * A genuine two-line summary when the record carries one,
+                    * and the truthful empty state when it does not. The command
+                    * is not a summary; it stays behind the toggle below.
+                    */}
+                  <span className="table-summary">{sessionSummary(session) ?? "No description."}</span>
                   {/*
                     * Outside the link, because it is a button and a button
                     * inside an anchor is neither valid nor operable by
                     * keyboard.
                     */}
-                  {session.name && session.name !== session.command && (
+                  {session.command.trim() !== title && (
                     <>
                       <button
                         type="button"
@@ -1218,7 +1233,7 @@ function SessionGroup({
                     <MultiPersonPicker
                       people={members}
                       values={assigneeIds(session)}
-                      label={`Assignees for ${session.name || session.command}`}
+                      label={`Assignees for ${title}`}
                       onChange={(uids) => onAssign(session, uids)}
                     />
                   ) : (

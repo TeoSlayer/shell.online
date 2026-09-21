@@ -308,6 +308,118 @@ type AccountSession struct {
 	HostLastSeenAt *int64 `json:"hostLastSeenAt,omitempty"`
 }
 
+// The automation switch names the accounts service understands. They are the
+// only keys a consent update may carry; the service refuses anything else.
+const (
+	AutomationMcpTeamAccess      = "mcpTeamAccess"
+	AutomationDailyBriefing      = "dailyBriefingEnabled"
+	AutomationBriefingTeamAccess = "dailyBriefingTeamAccess"
+)
+
+// SessionAutomation is a session's automation consent as the account service
+// holds it. The three switches are independent, and this is the same
+// server-owned record the web app writes, so a change made in one is what the
+// other reads.
+type SessionAutomation struct {
+	McpTeamAccess      bool `json:"mcpTeamAccess"`
+	DailyBriefing      bool `json:"dailyBriefingEnabled"`
+	BriefingTeamAccess bool `json:"dailyBriefingTeamAccess"`
+}
+
+// SwitchValue reads one of the three switches by its service name, so a list
+// of switches can be walked without a type switch at every call site.
+func (automation SessionAutomation) SwitchValue(key string) bool {
+	switch key {
+	case AutomationMcpTeamAccess:
+		return automation.McpTeamAccess
+	case AutomationDailyBriefing:
+		return automation.DailyBriefing
+	case AutomationBriefingTeamAccess:
+		return automation.BriefingTeamAccess
+	default:
+		return false
+	}
+}
+
+// GetSessionAutomation reads one session's automation consent. The answer
+// carries the three switches and nothing else: no share URL, no sealed copy.
+func (client *Client) GetSessionAutomation(
+	ctx context.Context, accessToken, id string,
+) (SessionAutomation, error) {
+	contents, err := client.do(
+		ctx, http.MethodGet, "/api/cli/sessions/"+url.PathEscape(id)+"/automation", accessToken, nil)
+	if err != nil {
+		return SessionAutomation{}, err
+	}
+	var decoded SessionAutomation
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return SessionAutomation{}, fmt.Errorf("decode automation settings: %w", err)
+	}
+	return decoded, nil
+}
+
+// SetSessionAutomation updates the switches it is given and leaves the rest
+// alone: the service preserves an omitted switch rather than resetting it, so
+// a partial update cannot flip a choice the owner did not send.
+func (client *Client) SetSessionAutomation(
+	ctx context.Context, accessToken, id string, changes map[string]bool,
+) (SessionAutomation, error) {
+	contents, err := client.do(
+		ctx, http.MethodPut, "/api/cli/sessions/"+url.PathEscape(id)+"/automation", accessToken, changes)
+	if err != nil {
+		return SessionAutomation{}, err
+	}
+	var decoded SessionAutomation
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return SessionAutomation{}, fmt.Errorf("decode automation settings: %w", err)
+	}
+	return decoded, nil
+}
+
+// BriefingPreference is the owner's saved daily-briefing default and, when an
+// update applied it, how many of the owner's current sessions that touched.
+type BriefingPreference struct {
+	Enabled bool `json:"enabled"`
+	Applied int  `json:"applied"`
+}
+
+// GetBriefingPreference reads the owner's saved daily-briefing default: what
+// the owner's new sessions start with. Stored on the account, not the machine.
+func (client *Client) GetBriefingPreference(ctx context.Context, accessToken string) (bool, error) {
+	contents, err := client.do(ctx, http.MethodGet, "/api/cli/briefings", accessToken, nil)
+	if err != nil {
+		return false, err
+	}
+	var decoded struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return false, fmt.Errorf("decode briefing preference: %w", err)
+	}
+	return decoded.Enabled, nil
+}
+
+// SetBriefingPreference saves the owner's daily-briefing default and, when
+// applyToExisting is set, applies it to every session the owner has, as one
+// server-side step. Saving consent here generates nothing: the scheduler is a
+// later build.
+func (client *Client) SetBriefingPreference(
+	ctx context.Context, accessToken string, enabled, applyToExisting bool,
+) (BriefingPreference, error) {
+	contents, err := client.do(ctx, http.MethodPut, "/api/cli/briefings", accessToken, map[string]bool{
+		"enabled":           enabled,
+		"apply_to_existing": applyToExisting,
+	})
+	if err != nil {
+		return BriefingPreference{}, err
+	}
+	var decoded BriefingPreference
+	if err := json.Unmarshal(contents, &decoded); err != nil {
+		return BriefingPreference{}, fmt.Errorf("decode briefing preference: %w", err)
+	}
+	return decoded, nil
+}
+
 // ListSessions returns every session this account has published, newest first.
 func (client *Client) ListSessions(ctx context.Context, accessToken string) ([]AccountSession, error) {
 	contents, err := client.do(ctx, http.MethodGet, "/api/cli/sessions", accessToken, nil)

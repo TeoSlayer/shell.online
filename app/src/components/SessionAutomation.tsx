@@ -11,7 +11,7 @@ const switches: { key: keyof SessionAutomationConsent; label: string; help: stri
   {
     key: "dailyBriefingEnabled",
     label: "Ask this agent for a daily briefing",
-    help: "At most once a day, ask the existing running agent for a title and summary, only when its adapter can safely confirm it is idle. Unsupported or busy agents are skipped.",
+    help: "Consent for a future daily briefing: at most once a day, ask the existing running agent for a title and summary, and only when its adapter can safely confirm it is idle. Not executed in this build; unsupported or busy agents are skipped.",
   },
   {
     key: "dailyBriefingTeamAccess",
@@ -52,8 +52,10 @@ export function SessionAutomation({ session, you, onChange }: {
     <section className="session-automation" aria-label="Agent permissions">
       <h2 className="detail-heading">Agent permissions</h2>
       <p className="detail-empty">
-        Off by default. Only you, the session owner, can change these permissions.
-        Saving permission does not mean an MCP connection or a briefing is running.
+        Each session saves its own choice; new ones start from your account
+        default (set in the shell CLI), so a session can sit on either side of it.
+        Only you, the owner, can change these. Saving a choice does not start an
+        MCP connection or a briefing.
       </p>
       <fieldset disabled={busy} aria-busy={busy}>
         <legend className="visually-hidden">Owner consent</legend>

@@ -35,6 +35,7 @@ type Buffer struct {
 	// still owes. Snapshot uses it to drop exactly the incomplete head.
 	headPhase byte
 	headUtf8  int
+	terminal  *terminalState
 }
 
 func New(capacity int) *Buffer {
@@ -49,6 +50,9 @@ func (buffer *Buffer) Write(value []byte) (int, error) {
 	defer buffer.mu.Unlock()
 
 	written := len(value)
+	if buffer.terminal != nil {
+		buffer.terminal.write(value)
+	}
 	buffer.endOffset += int64(written)
 	if buffer.capacity == 0 {
 		return written, nil
@@ -84,6 +88,28 @@ type View struct {
 	End   int64
 	Bytes []byte
 	Skip  int
+	// Replay is a stateful screen snapshot when requested via SnapshotView.
+	// Bytes and its offsets remain the original PTY stream for live deltas.
+	Replay []byte
+}
+
+// SnapshotView captures both the replay state and raw stream offsets under
+// one lock. Normal output flushes use View and do not serialize a screen.
+func (buffer *Buffer) SnapshotView() View {
+	// Serializers may populate cached cell attributes while reading. Exclude
+	// other snapshot readers as well as writes for a consistent state cut.
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	data := append([]byte(nil), buffer.data...)
+	view := View{Start: buffer.endOffset - int64(len(data)), End: buffer.endOffset, Bytes: data, Skip: buffer.skipHead(data)}
+	if buffer.terminal != nil {
+		view.Replay = buffer.terminal.snapshot()
+	} else {
+		// An empty screen is a valid snapshot, distinct from a stateful
+		// snapshot that cannot yet be emitted (nil: partial-control overflow).
+		view.Replay = append([]byte{}, data[view.Skip:]...)
+	}
+	return view
 }
 
 func (buffer *Buffer) View() View {
@@ -98,17 +124,12 @@ func (buffer *Buffer) View() View {
 	}
 }
 
-// Snapshot returns the retained output trimmed to a safe replay start for a
-// terminal that has just been reset. The ring can hold a head that sits
-// mid-escape-sequence or mid-UTF-8-character; replayed from ground state that
-// fragment renders as literal text at the top-left of the screen. The tracked
-// head state says exactly which leading bytes belong to an incomplete
-// sequence or character, and only those are dropped: ground state text
-// (including text that starts with digits) is preserved. Bytes keeps the
-// generic raw semantics.
+// Snapshot returns terminal state for NewTerminal, or a parser-safe raw tail
+// for New. A nil stateful replay means an oversized unfinished control string
+// must complete before a safe snapshot can be sent. Bytes always retains its
+// generic raw semantics; serialized bytes never advance the raw stream cut.
 func (buffer *Buffer) Snapshot() []byte {
-	view := buffer.View()
-	return view.Bytes[view.Skip:]
+	return buffer.SnapshotView().Replay
 }
 
 func (buffer *Buffer) Len() int {

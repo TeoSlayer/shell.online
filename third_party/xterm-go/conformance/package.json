@@ -1,0 +1,11 @@
+{
+  "name": "xterm-conformance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.mjs"
+  },
+  "dependencies": {
+    "@xterm/headless": "6.1.0-beta.216"
+  }
+}

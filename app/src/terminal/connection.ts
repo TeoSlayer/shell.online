@@ -160,6 +160,13 @@ export class TerminalConnection {
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
 
+  /** Recover renderer backpressure with a new host snapshot, even read-only. */
+  requestSnapshot(): void {
+    if (this.socket?.readyState === 1) {
+      this.socket.send(JSON.stringify({ type: "snapshot_request" }));
+    }
+  }
+
   /** Send a non-terminal frame such as an opted-in file request. */
   sendFrame(frame: Uint8Array<ArrayBuffer>): void {
     void this.transmit(frame);

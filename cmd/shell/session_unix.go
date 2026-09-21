@@ -143,7 +143,8 @@ func runSharedProcess(
 		onConnected()
 	}
 
-	outputRing := ringbuffer.New(snapshotBytes)
+	outputRing := ringbuffer.NewTerminal(snapshotBytes, desktopTerminalCols, desktopTerminalRows)
+	defer outputRing.Close()
 	frameCipher := newSessionCipher(session.Cipher)
 	if managed, ok := control.(*managedLocalSession); ok {
 		managed.terminalMu.Lock()
@@ -387,12 +388,15 @@ func sendFinalState(
 		return
 	}
 
-	finalSnapshot, err := sealFrame(frameCipher, protocol.Frame(protocol.FinalSnapshot, output.Snapshot()))
-	if err != nil {
-		return
-	}
-	if connection.SendSyncContext(finalContext, relay.BinaryMessage, finalSnapshot) != nil {
-		return
+	snapshot := output.Snapshot()
+	if snapshot != nil {
+		finalSnapshot, err := sealFrame(frameCipher, protocol.Frame(protocol.FinalSnapshot, snapshot))
+		if err != nil {
+			return
+		}
+		if connection.SendSyncContext(finalContext, relay.BinaryMessage, finalSnapshot) != nil {
+			return
+		}
 	}
 	exitEvent, _ := json.Marshal(struct {
 		Type string `json:"type"`
@@ -480,11 +484,14 @@ func (emitter *outputEmitter) emitPending(view ringbuffer.View) {
 		return
 	}
 	if emitter.cut < view.Start {
+		if view.Replay == nil {
+			return
+		}
 		if time.Since(emitter.lastRecovery) < 250*time.Millisecond {
 			return
 		}
 		emitter.lastRecovery = time.Now()
-		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Replay)) {
 			emitter.cut = view.End
 		}
 		return
@@ -511,8 +518,11 @@ func (emitter *outputEmitter) flush() {
 	emitter.mu.Lock()
 	defer emitter.mu.Unlock()
 	if generation := emitter.connection.Generation(); generation != emitter.generation {
-		view := emitter.output.View()
-		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+		view := emitter.output.SnapshotView()
+		if view.Replay == nil {
+			return
+		}
+		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Replay)) {
 			emitter.generation = generation
 			emitter.cut = view.End
 		}
@@ -528,7 +538,11 @@ func (emitter *outputEmitter) flush() {
 		return
 	}
 	emitter.lastFlush = time.Now()
-	emitter.emitPending(emitter.output.View())
+	view := emitter.output.View()
+	if emitter.cut < view.Start {
+		view = emitter.output.SnapshotView()
+	}
+	emitter.emitPending(view)
 }
 
 // retryPendingSnapshots re-sends refused targeted snapshot replies on the
@@ -537,7 +551,7 @@ func (emitter *outputEmitter) flush() {
 // refused send so a full queue costs at most one sealed snapshot per tick.
 // Callers hold emitter.mu.
 func (emitter *outputEmitter) retryPendingSnapshots() {
-	view := emitter.output.View()
+	view := emitter.output.SnapshotView()
 	emitter.emitPending(view)
 	if emitter.cut != view.End {
 		return
@@ -554,12 +568,15 @@ func (emitter *outputEmitter) retryPendingSnapshots() {
 // flush cadence until it is enqueued; it covers every deferred target, so
 // the pending set is cleared with it. Callers hold emitter.mu.
 func (emitter *outputEmitter) retryPendingBroadcast() {
-	view := emitter.output.View()
+	view := emitter.output.SnapshotView()
+	if view.Replay == nil {
+		return
+	}
 	emitter.emitPending(view)
 	if emitter.cut != view.End {
 		return
 	}
-	if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+	if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Replay)) {
 		emitter.pendingBroadcast = false
 		emitter.pendingSnapshots = make(map[uint32]struct{})
 	}
@@ -578,9 +595,9 @@ func (emitter *outputEmitter) deferSnapshot(viewerID uint32) error {
 		emitter.pendingSnapshots[viewerID] = struct{}{}
 		return fmt.Errorf("relay did not accept the snapshot reply within %s; retrying on the output cadence", snapshotReplyTimeout)
 	}
-	view := emitter.output.View()
+	view := emitter.output.SnapshotView()
 	emitter.emitPending(view)
-	if emitter.cut == view.End && emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+	if view.Replay != nil && emitter.cut == view.End && emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Replay)) {
 		emitter.pendingSnapshots = make(map[uint32]struct{})
 		return nil
 	}
@@ -607,7 +624,7 @@ func (emitter *outputEmitter) snapshotFor(viewerID uint32) error {
 	defer emitter.mu.Unlock()
 	deadline := time.Now().Add(snapshotReplyTimeout)
 	for {
-		view := emitter.output.View()
+		view := emitter.output.SnapshotView()
 		emitter.emitPending(view)
 		if emitter.cut == view.End && emitter.sendSnapshot(viewerID, view) {
 			return nil
@@ -620,10 +637,13 @@ func (emitter *outputEmitter) snapshotFor(viewerID uint32) error {
 }
 
 func (emitter *outputEmitter) sendSnapshot(viewerID uint32, view ringbuffer.View) bool {
-	frame := make([]byte, 5+len(view.Bytes[view.Skip:]))
+	if view.Replay == nil {
+		return false
+	}
+	frame := make([]byte, 5+len(view.Replay))
 	frame[0] = protocol.Snapshot
 	binary.BigEndian.PutUint32(frame[1:5], viewerID)
-	copy(frame[5:], view.Bytes[view.Skip:])
+	copy(frame[5:], view.Replay)
 	return emitter.sendFrame(frame)
 }
 
@@ -704,6 +724,7 @@ func readRelay(
 			}
 			if event.Type == "terminal_size" {
 				if isCanonicalTerminalSize(event.Cols, event.Rows) {
+					emitter.output.ResizeTerminal(int(event.Cols), int(event.Rows))
 					_ = ptmx.Resize(int(event.Cols), int(event.Rows))
 				}
 				continue

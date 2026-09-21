@@ -56,9 +56,27 @@ the wrapped process exits.
 | Rotate a password | `shell password rotate <id>` |
 | Stop a session | `shell kill <id>` |
 | Link this machine | `shell auth` |
+| Read session automation permissions | `shell permissions <id>` |
+| Set daily-briefing consent | `shell permissions <id> --daily-briefing=true` |
+| Enable your briefing default and existing own sessions | `shell briefings on --all` |
+| Read your briefing default | `shell briefings status` |
 | Full reference | `shell help reference` |
 
 Press `Ctrl-X`, then `D`, to detach from `shell attach`.
+
+Session automation permissions share one owner-controlled record between CLI and
+app. Changes appear in the open app on its next refresh. The three switches are
+independent: `--mcp-team-access`, `--daily-briefing`, and
+`--briefing-team-access` accept explicit `true` or `false`. These switches record
+consent only; a team MCP gateway and automatic idle-agent briefing generation are
+not implemented in this release. A briefing default affects new sessions;
+`--all` additionally updates only your existing sessions, not teammates' sessions.
+
+### Updating running sessions
+
+The Go host now retains terminal screen state for reconnects, rather than only a
+tail of output bytes. Existing hosts keep using their original executable until
+they are restarted safely. Installing an update does not restart your processes.
 
 ## Included
 

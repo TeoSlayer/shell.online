@@ -4,11 +4,16 @@ module shell.online
 // Keep release builds on the supported 1.26 line until the runtime fix ships.
 go 1.26.8
 
+// Local portability patch: upstream's 2^32-1 line bound overflows int on
+// supported 32-bit release targets. See third_party/xterm-go/SHELL_PATCHES.md.
+replace github.com/gitpod-io/xterm-go => ./third_party/xterm-go
+
 require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
+	github.com/gitpod-io/xterm-go v0.0.0-20260907130418-dae5128cb6b3
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0

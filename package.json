@@ -1,6 +1,6 @@
 {
   "name": "shell-online",
-  "version": "0.21.2",
+  "version": "0.21.3",
   "description": "Turn any terminal process into a collaborative browser link.",
   "private": true,
   "license": "MIT",
@@ -27,6 +27,7 @@
     "check": "npm run typecheck && npm test",
     "test": "vitest run && sh ./scripts/test-install.sh && sh ./scripts/test-docker-entrypoint.sh && sh ./scripts/test-deploy-production.sh && sh ./scripts/test-qemu-linux.sh --check && node ./scripts/test-landing-seo.mjs && node ./scripts/test-mobile-controls.mjs && node ./scripts/check-formula.mjs",
     "test:qemu:manifest": "sh ./scripts/test-qemu-linux.sh --check",
+    "test:terminal-snapshot": "node scripts/test-terminal-snapshot.mjs",
     "typecheck": "tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p tsconfig.standalone.json --noEmit",
     "test:app": "npm --prefix app ci && npm --prefix app test",
     "verify:published": "node ./scripts/verify-published.mjs",

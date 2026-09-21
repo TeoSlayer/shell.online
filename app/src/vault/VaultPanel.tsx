@@ -11,6 +11,7 @@ import { useVault } from "./VaultProvider";
 import { useTeamKey } from "./TeamKeyProvider";
 import { VaultSetup, VaultUnlock } from "./VaultGate";
 import { sessionOnline, sessionStateLabel } from "../lib/session-liveness";
+import { sessionTitle } from "../lib/session-title";
 
 /* A revealed password goes back into hiding on its own. */
 const REVEAL_MS = 30_000;
@@ -406,8 +407,8 @@ function VaultSessionRow({
   return (
     <li className="vault-session">
       <div className="vault-session-main">
-        <Link to={`/sessions/${session.id}`} className="vault-session-name">
-          {session.name || session.command}
+        <Link to={`/sessions/${session.id}`} className="vault-session-name" title={session.name?.trim() || session.command}>
+          {sessionTitle(session)}
         </Link>
         <span className="vault-session-meta">
           {[

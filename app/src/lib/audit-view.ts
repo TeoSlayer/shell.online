@@ -1,4 +1,5 @@
 import type { AuditEvent, Member, SessionRecord } from "./api";
+import { sessionTitle } from "./session-title";
 
 /**
  * Shaping an audit log for reading.
@@ -144,7 +145,7 @@ export function sessionLabel(
   sessionId: string,
 ): string {
   const session = sessions.find((entry) => entry.id === sessionId);
-  return session?.name || session?.command || "a removed session";
+  return session ? sessionTitle(session) : "a removed session";
 }
 
 export function memberOf(members: Member[], uid: string): Member | undefined {

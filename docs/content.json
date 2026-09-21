@@ -1,5 +1,5 @@
 {
-  "version": "0.21.2",
+  "version": "0.21.3",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -567,6 +567,16 @@
           ]
         ],
         [
+          "Automation permissions",
+          "Owner-only consent stored on the account, shared by CLI and app. Unnamed switches are preserved. These settings do not start a team MCP gateway or generate briefings in this release; sharing with the team is a separate opt-in.",
+          [
+            ["shell permissions <ID>", "Read all three session automation permissions."],
+            ["shell permissions <ID> --daily-briefing=true", "Change daily-briefing consent only. Also supports --mcp-team-access=true|false and --briefing-team-access=true|false."],
+            ["shell briefings status", "Read your daily-briefing default for new sessions."],
+            ["shell briefings on --all", "Enable the default and apply it to your existing own sessions. Use off to disable; omit --all to change only the default."]
+          ]
+        ],
+        [
           "Manage passwords",
           "Retrieve an active password from its owner-only local record, or rotate credentials without restarting the wrapped process. Rotation disconnects current viewers, updates persistent state and the owner's sealed vault copy, and removes stale teammate copies until the new password is shared again.",
           [
@@ -925,7 +935,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.21.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.21.3 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

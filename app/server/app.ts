@@ -274,6 +274,33 @@ function readAutomationConsent(
 }
 
 /**
+ * The CLI's daily-briefing preference, read strictly: `enabled` is a boolean
+ * and the only other key allowed is `apply_to_existing`, also a boolean.
+ * Anything else is a different request, and guessing at it would be a consent
+ * decision made for the owner.
+ */
+function readBriefingPreference(
+  body: unknown,
+): { enabled: boolean; applyToExisting: boolean } | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  let enabled: boolean | undefined;
+  let applyToExisting: boolean | undefined;
+  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+    if (key === "enabled") {
+      if (typeof value !== "boolean") return null;
+      enabled = value;
+    } else if (key === "apply_to_existing") {
+      if (typeof value !== "boolean") return null;
+      applyToExisting = value;
+    } else {
+      return null;
+    }
+  }
+  if (enabled === undefined) return null;
+  return { enabled, applyToExisting: applyToExisting ?? false };
+}
+
+/**
  * The harnesses a polling agent claims, keeping only the recognised ones.
  *
  * Returns undefined when the agent said nothing at all, which the store reads
@@ -606,6 +633,99 @@ export function createApp(options: AppOptions) {
             ...sessionForApi(session),
             ...(session.closedAt ? {} : states.get(session.id)),
           })),
+        });
+      }
+
+      /*
+       * The owner's daily-briefing default: what their new sessions start
+       * with. Stored on the account, not the machine, so a re-login or a new
+       * machine cannot reset it, and an older daemon saving credentials.json
+       * cannot overwrite it.
+       *
+       * Saving the default and applying it to the owner's current sessions is
+       * one store step, and the count comes back so the CLI can say what it
+       * touched. Nothing here generates a briefing: this is consent, not a
+       * scheduler.
+       */
+      if (route === "GET /api/cli/briefings") {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no account for this token" });
+        return send(response, 200, {
+          enabled: await store.dailyBriefingDefault(membership.orgId, token.uid),
+        });
+      }
+
+      if (route === "PUT /api/cli/briefings") {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no account for this token" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const preference = readBriefingPreference(body);
+        if (!preference) {
+          return send(response, 400, { error: "expected { enabled: boolean, apply_to_existing?: boolean }" });
+        }
+        const result = await store.setDailyBriefingPreference(
+          membership.orgId,
+          token.uid,
+          preference.enabled,
+          preference.applyToExisting,
+        );
+        if (!result) return send(response, 404, { error: "no account for this token" });
+        return send(response, 200, { enabled: result.enabled, applied: result.applied });
+      }
+
+      /*
+       * A session's automation consent over the CLI: the same server-owned
+       * record the web app writes, so a switch moved in the terminal is what
+       * the browser sees on its next read, and a switch moved in the browser
+       * is what the terminal reads here. Owner-scoped like the web route: the
+       * token's own membership picks the organization, so a session in
+       * another organization is a 404 rather than a cross-team reach, and
+       * only the row's owner moves its switches. The answer carries the three
+       * switches and nothing else: no share URL, no sealed copies.
+       */
+      const cliAutomationRoute = url.pathname.match(
+        /^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/automation$/,
+      );
+      if ((request.method === "GET" || request.method === "PUT") && cliAutomationRoute) {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no such session" });
+        const session = await store.sessionInOrg(membership.orgId, cliAutomationRoute[1]);
+        if (!session) return send(response, 404, { error: "no such session" });
+        /*
+         * The owner alone. An organization role runs the team and an
+         * assignment grants terminal input, but neither owns the machine the
+         * session runs on, so neither moves its consent.
+         */
+        if (!ownsSession(membership, session)) {
+          return send(response, 403, { error: "only the session's owner can change its automation settings" });
+        }
+        if (request.method === "GET") {
+          return send(response, 200, {
+            mcpTeamAccess: session.mcpTeamAccess ?? false,
+            dailyBriefingEnabled: session.dailyBriefingEnabled ?? false,
+            dailyBriefingTeamAccess: session.dailyBriefingTeamAccess ?? false,
+          });
+        }
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const changes = readAutomationConsent(body);
+        if (!changes) return send(response, 400, { error: "automation settings must be booleans" });
+        const updated = await store.setSessionAutomationConsent(
+          membership.orgId,
+          cliAutomationRoute[1],
+          token.uid,
+          changes,
+        );
+        if (!updated) return send(response, 404, { error: "no such session" });
+        return send(response, 200, {
+          mcpTeamAccess: updated.mcpTeamAccess ?? false,
+          dailyBriefingEnabled: updated.dailyBriefingEnabled ?? false,
+          dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess ?? false,
         });
       }
 

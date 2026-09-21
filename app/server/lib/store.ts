@@ -147,6 +147,32 @@ export interface Store {
     consent: Partial<SessionAutomationConsent>,
   ): Promise<SessionRecord | null>;
   /**
+   * The saved daily-briefing default for one membership, keyed by the
+   * organization and the uid that membership row belongs to. Absent reads as
+   * false, which is the consent every account gave before the column existed.
+   */
+  dailyBriefingDefault(orgId: string, uid: string): Promise<boolean>;
+  /**
+   * Saves an owner's daily-briefing default and, when asked, applies it to
+   * every session that owner has in the organization, in one step.
+   *
+   * The principal is the membership row itself: both statements address
+   * (org_id, uid) as given, so a caller cannot name somebody else's default
+   * or another organization's sessions. The session update matches
+   * COALESCE(owner_uid, uid), so a legacy row whose owner column is empty is
+   * addressed by its uid, and a session the owner merely has assigned to
+   * them is not theirs to switch. No other consent field is touched.
+   *
+   * Returns the saved default and how many sessions were updated, or null
+   * when no such membership exists.
+   */
+  setDailyBriefingPreference(
+    orgId: string,
+    uid: string,
+    enabled: boolean,
+    applyToExisting: boolean,
+  ): Promise<{ enabled: boolean; applied: number } | null>;
+  /**
    * Removes a session's record from an organization.
    *
    * The row only. Whatever the session left on the machine that ran it is not

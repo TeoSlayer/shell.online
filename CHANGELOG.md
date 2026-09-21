@@ -2,6 +2,44 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.21.3] — 2026-09-21
+
+### Added
+
+- `shell permissions <id>` reads and updates the same three owner-only automation
+  permissions as the app. Updates preserve unnamed switches, and the open app
+  refreshes from the authoritative account record.
+- `shell briefings status|on|off [--all]` manages your account's daily-briefing
+  default. New sessions inherit it once; `--all` also updates your existing own
+  sessions atomically. Migration 019 adds the default, initially false.
+
+### Fixed
+
+- Late joins and reconnects retain terminal cells painted before the 512-KiB
+  output window. The Go host keeps bounded terminal state and serializes a screen
+  at the same stream cut as subsequent output. Encryption and wire opcodes remain
+  unchanged. Saved cursors, styles, character sets, tabs and partial input are
+  retained; cross-language regressions compare snapshots to xterm.js.
+- App and MCP screen resets are ordered behind pending terminal writes, preventing
+  old bytes from painting over a fresh snapshot. App renderer backpressure now
+  requests a fresh snapshot.
+- Reverse-video text remains readable: the app uses its actual theme background
+  instead of transparent black. Safari and Chrome pixel regressions cover this,
+  retained screen content, tiny fonts, multiple viewers and reconnects.
+- Session detail, list and terminal tabs use compact titles instead of repeating
+  full executable paths and flags; descriptions remain separate and absent data
+  is not presented as a generated briefing.
+- The terminal dependency has a documented local portability patch for supported
+  32-bit targets, including MIPS; its source, license and tests are included.
+
+### Upgrading
+
+- Existing host processes must be restarted when safe to use the Go snapshot fix;
+  installing the new CLI does not interrupt running sessions.
+- Automation switches remain consent only. No automatic briefing generator or
+  team MCP gateway is enabled by this release. Team-wide sharing remains a separate
+  opt-in; enabling daily briefings does not broaden the audience.
+
 ## [0.21.2] — 2026-09-21
 
 ### Added

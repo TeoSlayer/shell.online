@@ -40,6 +40,12 @@ export interface Membership {
    * unlock can open them. Read from the vault, never written through here.
    */
   accountKey?: string;
+  /**
+   * Their default for daily-briefing consent on sessions they start, set
+   * through the CLI and stored here rather than on the machine. Absent reads
+   * as false, which is the consent every account gave before it existed.
+   */
+  dailyBriefingDefault?: boolean;
 }
 
 export interface Invite {

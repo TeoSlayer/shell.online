@@ -1,0 +1,7 @@
+{
+	"name": "xterm-go",
+	"image": "mcr.microsoft.com/devcontainers/go:1.25",
+	"features": {
+		"ghcr.io/devcontainers/features/node:1": {}
+	}
+}

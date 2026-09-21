@@ -1,9 +1,10 @@
 import type { SessionRecord } from "../lib/api";
 import { sessionEnded } from "../lib/session-liveness";
+import { sessionTitle } from "../lib/session-title";
 
 export interface Tab {
   id: string;
-  /** What to show on the tab: the operator's name, else the command. */
+  /** What to show on the tab: the operator's name, else a short label from the command. */
   label: string;
   command: string;
   shareUrl: string;
@@ -48,7 +49,7 @@ export type TabAction =
 export function tabFor(session: SessionRecord, canType: boolean): Tab {
   return {
     id: session.id,
-    label: session.name?.trim() || session.command,
+    label: sessionTitle(session),
     command: session.command,
     shareUrl: session.shareUrl,
     readOnly: session.readOnly,
@@ -78,7 +79,7 @@ export function reduce(state: TabState, action: TabAction): TabState {
       if (existing) {
         const refreshed: Tab = {
           ...existing,
-          label: session.name?.trim() || session.command,
+          label: sessionTitle(session),
           command: session.command,
           shareUrl: session.shareUrl,
           readOnly: session.readOnly,

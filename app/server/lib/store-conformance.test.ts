@@ -635,6 +635,121 @@ for (const implementation of implementations) {
         expect(stored?.dailyBriefingEnabled).toBe(true);
         expect(stored?.dailyBriefingTeamAccess).toBe(true);
       });
+
+      /* ---- daily briefing default ---- */
+
+      it("reads the briefing default as off until it is set", async () => {
+        await store.putMembership(membership());
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(false);
+      });
+
+      it("has no default to read for a membership that does not exist", async () => {
+        expect(await store.dailyBriefingDefault("org_1", "uid-9")).toBe(false);
+      });
+
+      it("saves the default and applies it to the owner's sessions in the organization", async () => {
+        await store.putMembership(membership());
+        await store.upsertSession(session());
+        await store.upsertSession(session({ id: "s2", startedAt: 2000 }));
+        await store.upsertSession(session({ id: "s3", uid: "uid-2", ownerUid: "uid-2", startedAt: 3000 }));
+        const result = await store.setDailyBriefingPreference("org_1", "uid-1", true, true);
+        expect(result).toEqual({ enabled: true, applied: 2 });
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(true);
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(true);
+        expect((await store.sessionInOrg("org_1", "s2"))?.dailyBriefingEnabled).toBe(true);
+        /* A colleague's session is not the owner's to switch. */
+        expect((await store.sessionInOrg("org_1", "s3"))?.dailyBriefingEnabled).toBe(false);
+      });
+
+      it("saves the default without touching sessions when not asked", async () => {
+        await store.putMembership(membership());
+        await store.upsertSession(session());
+        const result = await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        expect(result).toEqual({ enabled: true, applied: 0 });
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(false);
+      });
+
+      it("applies the default to a legacy row whose owner column is empty", async () => {
+        await store.putMembership(membership());
+        await store.upsertSession(session({ ownerUid: undefined }));
+        const result = await store.setDailyBriefingPreference("org_1", "uid-1", true, true);
+        expect(result).toEqual({ enabled: true, applied: 1 });
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(true);
+      });
+
+      it("does not switch a session the owner merely has assigned", async () => {
+        await store.putMembership(membership());
+        await store.upsertSession(
+          session({ uid: "uid-2", ownerUid: "uid-2", assigneeUid: "uid-1", assigneeUids: ["uid-1"] }),
+        );
+        const result = await store.setDailyBriefingPreference("org_1", "uid-1", true, true);
+        expect(result).toEqual({ enabled: true, applied: 0 });
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(false);
+      });
+
+      it("does not reach a session in another organization", async () => {
+        await store.putOrganization(organization({ id: "org_2", name: "Elsewhere" }));
+        await store.putMembership(membership());
+        await store.upsertSession(session({ orgId: "org_2", uid: "uid-2", ownerUid: "uid-2" }));
+        const result = await store.setDailyBriefingPreference("org_1", "uid-1", true, true);
+        expect(result).toEqual({ enabled: true, applied: 0 });
+        expect((await store.sessionInOrg("org_2", "s1"))?.dailyBriefingEnabled).toBe(false);
+      });
+
+      it("refuses to save a default for a membership that does not exist", async () => {
+        expect(await store.setDailyBriefingPreference("org_1", "uid-9", true, true)).toBeNull();
+      });
+
+      it("starts a new session with the owner's saved default", async () => {
+        await store.putMembership(membership());
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        await store.upsertSession(session());
+        const stored = await store.sessionInOrg("org_1", "s1");
+        expect(stored?.dailyBriefingEnabled).toBe(true);
+        /* The default is one switch, not the whole consent. */
+        expect(stored?.mcpTeamAccess).toBe(false);
+        expect(stored?.dailyBriefingTeamAccess).toBe(false);
+      });
+
+      it("keeps an explicit opt-out when a session re-registers with the default on", async () => {
+        await store.putMembership(membership());
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        await store.upsertSession(session());
+        await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ dailyBriefingEnabled: false }),
+        );
+        await store.upsertSession(session());
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(false);
+      });
+
+      it("keeps an explicit opt-in when a session re-registers with the default off", async () => {
+        await store.putMembership(membership());
+        await store.upsertSession(session());
+        await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ dailyBriefingEnabled: true }),
+        );
+        await store.upsertSession(session());
+        expect((await store.sessionInOrg("org_1", "s1"))?.dailyBriefingEnabled).toBe(true);
+      });
+
+      it("keeps the stored default when an explicit null arrives", async () => {
+        await store.putMembership(membership());
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        /*
+         * The field is optional, so no typed caller sends null; null is the
+         * wire shape of "no opinion", though, and both stores must read it
+         * that way rather than resetting a choice the person made.
+         */
+        const rewrite = { ...membership(), dailyBriefingDefault: null } as unknown as Membership;
+        await store.putMembership(rewrite);
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(true);
+      });
     });
 
     describe("session vault", () => {
@@ -995,6 +1110,27 @@ for (const implementation of implementations) {
         await store.putMembership(membership({ orgId: "org_2", role: "member" }));
         expect((await store.membershipOf("uid-1"))?.orgId).toBe("org_2");
         expect(await store.members("org_1")).toEqual([]);
+      });
+
+      it("keeps the saved briefing default when a re-login rewrites the membership", async () => {
+        await store.putMembership(membership());
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        await store.putMembership(membership({ name: "Ana R." }));
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(true);
+      });
+
+      it("keeps the saved briefing default when a person moves organizations", async () => {
+        await store.putOrganization(organization({ id: "org_2", name: "Other" }));
+        await store.putMembership(membership());
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, false);
+        await store.putMembership(membership({ orgId: "org_2", role: "member" }));
+        expect(await store.dailyBriefingDefault("org_2", "uid-1")).toBe(true);
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(false);
+      });
+
+      it("lets a membership carry a default it was given", async () => {
+        await store.putMembership(membership({ dailyBriefingDefault: true }));
+        expect(await store.dailyBriefingDefault("org_1", "uid-1")).toBe(true);
       });
 
       it("stores a published browser key against the membership", async () => {

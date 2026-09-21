@@ -266,6 +266,14 @@ export interface SessionRecord {
   shareUrl: string;
   command: string;
   name?: string;
+  /**
+   * A genuine summary or description, when the record carries one.
+   *
+   * There is no generated-briefing pipeline yet, so this is not populated
+   * today; the UI shows a compact empty state for it rather than dressing the
+   * command up as a summary.
+   */
+  description?: string;
   origin?: string;
   orgId?: string;
   ownerUid?: string;

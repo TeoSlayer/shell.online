@@ -1,0 +1,5029 @@
+[
+  {
+    "name": "plain_ascii",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "Hello, World!",
+    "expected": {
+      "cursor": {
+        "x": 13,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "Hello, World!",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "e",
+              "width": 1
+            },
+            {
+              "chars": "l",
+              "width": 1
+            },
+            {
+              "chars": "l",
+              "width": 1
+            },
+            {
+              "chars": "o",
+              "width": 1
+            },
+            {
+              "chars": ",",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "W",
+              "width": 1
+            },
+            {
+              "chars": "o",
+              "width": 1
+            },
+            {
+              "chars": "r",
+              "width": 1
+            },
+            {
+              "chars": "l",
+              "width": 1
+            },
+            {
+              "chars": "d",
+              "width": 1
+            },
+            {
+              "chars": "!",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "multiline",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "Line 1\r\nLine 2\r\nLine 3",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 2
+      },
+      "lines": [
+        {
+          "text": "Line 1",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "i",
+              "width": 1
+            },
+            {
+              "chars": "n",
+              "width": 1
+            },
+            {
+              "chars": "e",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "1",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "Line 2",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "i",
+              "width": 1
+            },
+            {
+              "chars": "n",
+              "width": 1
+            },
+            {
+              "chars": "e",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "Line 3",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "i",
+              "width": 1
+            },
+            {
+              "chars": "n",
+              "width": 1
+            },
+            {
+              "chars": "e",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "tab_stops",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "A\tB\tC\tD",
+    "expected": {
+      "cursor": {
+        "x": 25,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "A       B       C       D",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "backspace",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "ABCD\b\bXY",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABXY",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "X",
+              "width": 1
+            },
+            {
+              "chars": "Y",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "carriage_return",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "ABCDEF\rXY",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "XYCDEF",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "X",
+              "width": 1
+            },
+            {
+              "chars": "Y",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "line_wrap_exact",
+    "cols": 10,
+    "rows": 5,
+    "initialCols": 10,
+    "initialRows": 5,
+    "input": "1234567890ABCDE",
+    "expected": {
+      "cursor": {
+        "x": 5,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "1234567890",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "ABCDE",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "line_wrap_long",
+    "cols": 10,
+    "rows": 5,
+    "initialCols": 10,
+    "initialRows": 5,
+    "input": "12345678901234567890123456789012345",
+    "expected": {
+      "cursor": {
+        "x": 5,
+        "y": 3
+      },
+      "lines": [
+        {
+          "text": "1234567890",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "1234567890",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "1234567890",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "12345",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cup_move_to",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[5;10Hx",
+    "expected": {
+      "cursor": {
+        "x": 10,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "         x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cup_home",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "ABCDEF\u001b[Hx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "xBCDEF",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "x",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cuu_cud_cuf_cub",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[10;10H*\u001b[3A^\u001b[3Bv\u001b[3C>\u001b[6D<",
+    "expected": {
+      "cursor": {
+        "x": 11,
+        "y": 9
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "          ^",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "^",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "         *<v   >",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "*",
+              "width": 1
+            },
+            {
+              "chars": "<",
+              "width": 1
+            },
+            {
+              "chars": "v",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": ">",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cursor_clamp_top_left",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[5;5H\u001b[999A\u001b[999Dx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cursor_clamp_bottom_right",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[999;999Hx",
+    "expected": {
+      "cursor": {
+        "x": 80,
+        "y": 23
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "                                                                               x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cha_column_absolute",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "ABCDEFGHIJ\u001b[5Gx",
+    "expected": {
+      "cursor": {
+        "x": 5,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABCDxFGHIJ",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "x",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            },
+            {
+              "chars": "G",
+              "width": 1
+            },
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "I",
+              "width": 1
+            },
+            {
+              "chars": "J",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "vpa_line_absolute",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[1;1HAAAA\u001b[5dx",
+    "expected": {
+      "cursor": {
+        "x": 5,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "AAAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "    x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cnl_cpl",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[5;10H\u001b[2EA\u001b[2FB",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "B",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "A",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "ed_erase_below",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAAA\r\nBBBB\r\nCCCC\r\nDDDD\r\nEEEE\u001b[3;3H\u001b[0J",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 2
+      },
+      "lines": [
+        {
+          "text": "AAAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "BBBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "ed_erase_above",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAAA\r\nBBBB\r\nCCCC\r\nDDDD\r\nEEEE\u001b[3;3H\u001b[1J",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 2
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "   C",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "ed_erase_all",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAAA\r\nBBBB\r\nCCCC\u001b[2J",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 2
+      },
+      "lines": [],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "el_erase_right",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;5H\u001b[0K",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABCD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "el_erase_left",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;5H\u001b[1K",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "     FGHIJ",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            },
+            {
+              "chars": "G",
+              "width": 1
+            },
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "I",
+              "width": 1
+            },
+            {
+              "chars": "J",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "el_erase_entire",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;5H\u001b[2K",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "ech_erase_chars",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;4H\u001b[3X",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABC   GHIJ",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "G",
+              "width": 1
+            },
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "I",
+              "width": 1
+            },
+            {
+              "chars": "J",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "ich_insert_chars",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;4H\u001b[3@",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABC   DEFGHIJ",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            },
+            {
+              "chars": "G",
+              "width": 1
+            },
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "I",
+              "width": 1
+            },
+            {
+              "chars": "J",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "dch_delete_chars",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEFGHIJ\u001b[1;4H\u001b[3P",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABCGHIJ",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "G",
+              "width": 1
+            },
+            {
+              "chars": "H",
+              "width": 1
+            },
+            {
+              "chars": "I",
+              "width": 1
+            },
+            {
+              "chars": "J",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "il_insert_lines",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2;1H\u001b[2L",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "BBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "dl_delete_lines",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2;1H\u001b[2M",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "su_scroll_up",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2S",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sd_scroll_down",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2T",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "BBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "scroll_region",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2;4r\u001b[2;1H\u001b[1S",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "EEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_bold",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[1mBOLD\u001b[0m normal",
+    "expected": {
+      "cursor": {
+        "x": 11,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "BOLD normal",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1,
+              "bold": 1
+            },
+            {
+              "chars": "O",
+              "width": 1,
+              "bold": 1
+            },
+            {
+              "chars": "L",
+              "width": 1,
+              "bold": 1
+            },
+            {
+              "chars": "D",
+              "width": 1,
+              "bold": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "n",
+              "width": 1
+            },
+            {
+              "chars": "o",
+              "width": 1
+            },
+            {
+              "chars": "r",
+              "width": 1
+            },
+            {
+              "chars": "m",
+              "width": 1
+            },
+            {
+              "chars": "a",
+              "width": 1
+            },
+            {
+              "chars": "l",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_italic_underline",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[3;4mitalic+underline\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 16,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "italic+underline",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "i",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "a",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "c",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "+",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "u",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "italic": 1,
+              "underline": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_fg_16",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[31mred\u001b[32mgreen\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 8,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "redgreen",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 2
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 2
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 2
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 2
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 2
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_fg_256",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[38;5;196mcolor196\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 8,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "color196",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "c",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "1",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "9",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            },
+            {
+              "chars": "6",
+              "width": 1,
+              "fgMode": 33554432,
+              "fg": 196
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_fg_rgb",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[38;2;100;150;200mrgb\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "rgb",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 50331648,
+              "fg": 6592200
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 50331648,
+              "fg": 6592200
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "fgMode": 50331648,
+              "fg": 6592200
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_bg_16",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[41mred_bg\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "red_bg",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "r",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "bgMode": 16777216,
+              "bg": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_bg_256",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[48;5;82mbg82\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "bg82",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "b",
+              "width": 1,
+              "bgMode": 33554432,
+              "bg": 82
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "bgMode": 33554432,
+              "bg": 82
+            },
+            {
+              "chars": "8",
+              "width": 1,
+              "bgMode": 33554432,
+              "bg": 82
+            },
+            {
+              "chars": "2",
+              "width": 1,
+              "bgMode": 33554432,
+              "bg": 82
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_bg_rgb",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[48;2;50;100;150mrgb_bg\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "rgb_bg",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "r",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "bgMode": 50331648,
+              "bg": 3302550
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_bright_colors",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[91mbright_red\u001b[102mbright_green_bg\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 25,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "bright_redbright_green_bg",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "b",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "h",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "h",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 9,
+              "bgMode": 16777216,
+              "bg": 10
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_combined",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[1;3;4;31;42mfancy\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 5,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "fancy",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "f",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1,
+              "bgMode": 16777216,
+              "bg": 2,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "a",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1,
+              "bgMode": 16777216,
+              "bg": 2,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1,
+              "bgMode": 16777216,
+              "bg": 2,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "c",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1,
+              "bgMode": 16777216,
+              "bg": 2,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1
+            },
+            {
+              "chars": "y",
+              "width": 1,
+              "fgMode": 16777216,
+              "fg": 1,
+              "bgMode": 16777216,
+              "bg": 2,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_reset_individual",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[1;3;4;9mALL\u001b[22mno_bold\u001b[23mno_italic\u001b[24mno_underline\u001b[29mno_strike\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 40,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ALLno_boldno_italicno_underlineno_strike",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "L",
+              "width": 1,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "L",
+              "width": 1,
+              "bold": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "italic": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "a",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "c",
+              "width": 1,
+              "underline": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "_",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "u",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "strikethrough": 1
+            },
+            {
+              "chars": "n",
+              "width": 1
+            },
+            {
+              "chars": "o",
+              "width": 1
+            },
+            {
+              "chars": "_",
+              "width": 1
+            },
+            {
+              "chars": "s",
+              "width": 1
+            },
+            {
+              "chars": "t",
+              "width": 1
+            },
+            {
+              "chars": "r",
+              "width": 1
+            },
+            {
+              "chars": "i",
+              "width": 1
+            },
+            {
+              "chars": "k",
+              "width": 1
+            },
+            {
+              "chars": "e",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "sgr_underline_styles",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[4:1msingle\u001b[4:2mdouble\u001b[4:3mcurly\u001b[4:4mdotted\u001b[4:5mdashed\u001b[0m",
+    "expected": {
+      "cursor": {
+        "x": 29,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "singledoublecurlydotteddashed",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "s",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "i",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "n",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "g",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "u",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "b",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "c",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "u",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "r",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "l",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "y",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "o",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "t",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "a",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "s",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "h",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "e",
+              "width": 1,
+              "underline": 1
+            },
+            {
+              "chars": "d",
+              "width": 1,
+              "underline": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "decsc_decrc",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[5;10H\u001b7MOVED\u001b[1;1H\u001b8x",
+    "expected": {
+      "cursor": {
+        "x": 10,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "         xOVED",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "x",
+              "width": 1
+            },
+            {
+              "chars": "O",
+              "width": 1
+            },
+            {
+              "chars": "V",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "alt_screen_1049",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "NORMAL\u001b[?1049hALT\u001b[?1049l",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "NORMAL",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "N",
+              "width": 1
+            },
+            {
+              "chars": "O",
+              "width": 1
+            },
+            {
+              "chars": "R",
+              "width": 1
+            },
+            {
+              "chars": "M",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "L",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "reverse_index",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\u001b[1;1H\u001bMx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "BBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "index_ind",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[5;1H\u001bDx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "BBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "scrollback": [
+        {
+          "text": "AAA",
+          "isWrapped": false
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "full_reset",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "HELLO\u001b[1;3;31m\u001bcx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "x",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "x",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "soft_reset",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "\u001b[2;4r\u001b[?6h\u001b[4h\u001b[!p",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 1
+      },
+      "lines": [],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "scrollback",
+    "cols": 20,
+    "rows": 3,
+    "initialCols": 20,
+    "initialRows": 3,
+    "input": "L1\r\nL2\r\nL3\r\nL4\r\nL5\r\nL6",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 2
+      },
+      "lines": [
+        {
+          "text": "L1",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "1",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "L2",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "L3",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "L",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "scrollback": [
+        {
+          "text": "L1",
+          "isWrapped": false
+        },
+        {
+          "text": "L2",
+          "isWrapped": false
+        },
+        {
+          "text": "L3",
+          "isWrapped": false
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "resize_wider",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 10,
+    "initialRows": 5,
+    "input": "1234567890AB",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "1234567890",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "AB",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    },
+    "resize": {
+      "cols": 20,
+      "rows": 5
+    }
+  },
+  {
+    "name": "resize_narrower",
+    "cols": 10,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "12345678901234567890AB",
+    "expected": {
+      "cursor": {
+        "x": 2,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "1234567890",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "1",
+              "width": 1
+            },
+            {
+              "chars": "2",
+              "width": 1
+            },
+            {
+              "chars": "3",
+              "width": 1
+            },
+            {
+              "chars": "4",
+              "width": 1
+            },
+            {
+              "chars": "5",
+              "width": 1
+            },
+            {
+              "chars": "6",
+              "width": 1
+            },
+            {
+              "chars": "7",
+              "width": 1
+            },
+            {
+              "chars": "8",
+              "width": 1
+            },
+            {
+              "chars": "9",
+              "width": 1
+            },
+            {
+              "chars": "0",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "AB",
+          "isWrapped": true,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    },
+    "resize": {
+      "cols": 10,
+      "rows": 5
+    }
+  },
+  {
+    "name": "tab_set_clear",
+    "cols": 40,
+    "rows": 5,
+    "initialCols": 40,
+    "initialRows": 5,
+    "input": "\u001b[3g\u001b[5G\u001bH\u001b[15G\u001bH\u001b[1GA\tB\tC",
+    "expected": {
+      "cursor": {
+        "x": 15,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "A   B         C",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "insert_mode",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "ABCDEF\u001b[1;3H\u001b[4hXY\u001b[4l",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABXYCDEF",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "X",
+              "width": 1
+            },
+            {
+              "chars": "Y",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "F",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "origin_mode",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2;4r\u001b[?6h\u001b[1;1Hx",
+    "expected": {
+      "cursor": {
+        "x": 1,
+        "y": 1
+      },
+      "lines": [
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "xBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "x",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "DDD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "decaln",
+    "cols": 5,
+    "rows": 3,
+    "initialCols": 5,
+    "initialRows": 3,
+    "input": "\u001b#8",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "EEEEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEEEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "EEEEE",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            },
+            {
+              "chars": "E",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "da1_response",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[c",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 0
+      },
+      "lines": [],
+      "bufferType": "normal"
+    },
+    "expectedResponse": "\u001b[?1;2c"
+  },
+  {
+    "name": "dsr_cursor_position",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[5;10H\u001b[6n",
+    "expected": {
+      "cursor": {
+        "x": 9,
+        "y": 4
+      },
+      "lines": [],
+      "bufferType": "normal"
+    },
+    "expectedResponse": "\u001b[5;10R"
+  },
+  {
+    "name": "rep_repeat_char",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "A\u001b[5b",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "AAAAAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "dec_special_graphics",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "\u001b(0lqqqqk\r\nx    x\r\nmqqqqj\u001b(B",
+    "expected": {
+      "cursor": {
+        "x": 6,
+        "y": 2
+      },
+      "lines": [
+        {
+          "text": "┌────┐",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "┌",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "┐",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "│    │",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "│",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": " ",
+              "width": 1
+            },
+            {
+              "chars": "│",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "└────┘",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "└",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "─",
+              "width": 1
+            },
+            {
+              "chars": "┘",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "csi_caret_scroll_down",
+    "cols": 20,
+    "rows": 5,
+    "initialCols": 20,
+    "initialRows": 5,
+    "input": "AAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\u001b[2^",
+    "expected": {
+      "cursor": {
+        "x": 3,
+        "y": 4
+      },
+      "lines": [
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "",
+          "isWrapped": false
+        },
+        {
+          "text": "AAA",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "A",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "BBB",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            }
+          ]
+        },
+        {
+          "text": "CCC",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "xtversion_response",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "\u001b[>q",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 0
+      },
+      "lines": [],
+      "bufferType": "normal"
+    },
+    "expectedResponse": "\u001bP>|xterm.js(6.0.0)\u001b\\"
+  },
+  {
+    "name": "soft_hyphen_ignored",
+    "cols": 80,
+    "rows": 24,
+    "initialCols": 80,
+    "initialRows": 24,
+    "input": "AB­CD",
+    "expected": {
+      "cursor": {
+        "x": 4,
+        "y": 0
+      },
+      "lines": [
+        {
+          "text": "ABCD",
+          "isWrapped": false,
+          "cells": [
+            {
+              "chars": "A",
+              "width": 1
+            },
+            {
+              "chars": "B",
+              "width": 1
+            },
+            {
+              "chars": "C",
+              "width": 1
+            },
+            {
+              "chars": "D",
+              "width": 1
+            }
+          ]
+        }
+      ],
+      "bufferType": "normal"
+    }
+  },
+  {
+    "name": "cursor_clamp_resize_shrink",
+    "cols": 20,
+    "rows": 3,
+    "initialCols": 20,
+    "initialRows": 10,
+    "input": "\u001b[9;1H",
+    "expected": {
+      "cursor": {
+        "x": 0,
+        "y": 2
+      },
+      "lines": [],
+      "bufferType": "normal"
+    },
+    "resize": {
+      "cols": 20,
+      "rows": 3
+    }
+  }
+]

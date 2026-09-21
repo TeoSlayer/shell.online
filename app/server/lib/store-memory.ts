@@ -485,12 +485,34 @@ export class MemoryStore implements Store {
         assigneeUids: session.assigneeUids ?? (session.assigneeUid ? [session.assigneeUid] : []),
         /* A session that has never been consented to starts with everything off. */
         mcpTeamAccess: false,
-        dailyBriefingEnabled: false,
+        /*
+         * The one switch a new session may start with already set: the owner's
+         * saved default, supplied by the store rather than trusted from the
+         * registration. Everything else stays off until asked.
+         */
+        dailyBriefingEnabled: this.briefingDefaultFor(session),
         dailyBriefingTeamAccess: false,
       });
     }
     this.flush();
     return index < 0;
+  }
+
+  /*
+   * The saved default for the owner of a session being inserted, read from
+   * the membership row the store itself holds. A session outside an
+   * organization, or one whose owner has no membership here, gets the
+   * default every account has had: off.
+   */
+  private briefingDefaultFor(session: SessionRecord): boolean {
+    if (!session.orgId) return false;
+    const ownerUid = session.ownerUid ?? session.uid;
+    return this.data.memberships.some(
+      (entry) =>
+        entry.orgId === session.orgId &&
+        entry.uid === ownerUid &&
+        entry.dailyBriefingDefault === true,
+    );
   }
 
   async patchSession(uid: string, id: string, patch: Partial<SessionRecord>): Promise<SessionRecord | null> {
@@ -557,6 +579,43 @@ export class MemoryStore implements Store {
     if (consent.dailyBriefingTeamAccess !== undefined) session.dailyBriefingTeamAccess = consent.dailyBriefingTeamAccess;
     this.flush();
     return session;
+  }
+
+  async dailyBriefingDefault(orgId: string, uid: string): Promise<boolean> {
+    const membership = this.data.memberships.find(
+      (entry) => entry.orgId === orgId && entry.uid === uid,
+    );
+    return membership?.dailyBriefingDefault === true;
+  }
+
+  async setDailyBriefingPreference(
+    orgId: string,
+    uid: string,
+    enabled: boolean,
+    applyToExisting: boolean,
+  ): Promise<{ enabled: boolean; applied: number } | null> {
+    const membership = this.data.memberships.find(
+      (entry) => entry.orgId === orgId && entry.uid === uid,
+    );
+    if (!membership) return null;
+    membership.dailyBriefingDefault = enabled;
+    let applied = 0;
+    if (applyToExisting) {
+      /*
+       * The owner's sessions in this organization only: a legacy row's uid
+       * stands in for a missing owner, and a session somebody merely assigned
+       * to this person is not theirs to switch. Nothing but the briefing
+       * switch moves.
+       */
+      for (const session of this.data.sessions) {
+        if (session.orgId === orgId && (session.ownerUid ?? session.uid) === uid) {
+          session.dailyBriefingEnabled = enabled;
+          applied += 1;
+        }
+      }
+    }
+    this.flush();
+    return { enabled, applied };
   }
 
   async deleteSession(orgId: string, id: string): Promise<boolean> {
@@ -656,10 +715,24 @@ export class MemoryStore implements Store {
      * uid alone -- so leaving the old row behind would let a stale membership
      * win the lookup after someone moved.
      */
+    const existing = this.data.memberships.find((entry) => entry.uid === membership.uid);
     this.data.memberships = this.data.memberships.filter(
       (entry) => entry.uid !== membership.uid,
     );
-    this.data.memberships.push(membership);
+    /*
+     * The saved briefing default is the account's, not this row's. A
+     * re-login or a move between organizations rewrites the row, and letting
+     * that reset a choice the person made would be a consent revoked without
+     * being asked. A value the caller actually carries still stands. Absent
+     * and an explicit null are the same "no opinion", the way the SQL store
+     * reads them.
+     */
+    const incoming: boolean | null | undefined = membership.dailyBriefingDefault;
+    const stored =
+      (incoming === undefined || incoming === null) && existing?.dailyBriefingDefault !== undefined
+        ? { ...membership, dailyBriefingDefault: existing.dailyBriefingDefault }
+        : membership;
+    this.data.memberships.push(stored);
     this.flush();
   }
 

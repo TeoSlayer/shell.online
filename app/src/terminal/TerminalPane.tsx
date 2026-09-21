@@ -19,6 +19,7 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
+import { TerminalWriteQueue } from "../../../web/terminal-writes";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
 import { RelayFileClient } from "../../../web/relay-files";
 import { mountRelayFileBrowser } from "../../../web/relay-files-ui";
@@ -55,10 +56,11 @@ interface Attempt {
 /*
  * The terminal is drawn on the page itself, so its palette is the app's: ink
  * on paper in the light theme, and shell.online's terminal colors in the dark.
- * The canvas stays clear either way and the page shows through.
+ * Use the page's actual background colour: reverse video swaps it into the
+ * foreground, so transparent black would make text disappear on dark bars.
  */
 const DARK_THEME = {
-  background: "#00000000",
+  background: "#161914",
   foreground: "#dfe2d6",
   cursor: "#c8ff4d",
   cursorAccent: "#161914",
@@ -71,7 +73,7 @@ const DARK_THEME = {
  * weights so programs that pick colors themselves stay legible.
  */
 const LIGHT_THEME = {
-  background: "#00000000",
+  background: "#f3f1e9",
   foreground: "#191b18",
   cursor: "#191b18",
   cursorAccent: "#f3f1e9",
@@ -95,15 +97,10 @@ const LIGHT_THEME = {
 };
 
 /*
- * Refstream paints its own surface, so it needs an opaque theme rather than
- * xterm's clear canvas. Chat needs one for a different reason: it uses the
- * theme as a palette, and a transparent "background" is not a colour it can
- * paint a line of reverse-video output with.
+ * All renderers need a real background colour for reverse-video output.
  */
-function terminalTheme(renderer: TerminalRenderer, dark: boolean) {
-  const base = dark ? DARK_THEME : LIGHT_THEME;
-  if (renderer === "xterm") return base;
-  return { ...base, background: dark ? "#161914" : "#f3f1e9" };
+function terminalTheme(_renderer: TerminalRenderer, dark: boolean) {
+  return dark ? DARK_THEME : LIGHT_THEME;
 }
 
 /* Mirrors tokens.css: an explicit data-theme wins, otherwise the system's. */
@@ -345,6 +342,8 @@ export function TerminalPane({
 
     let snapshotGeneration = 0;
     let rendererInputSuppressed = false;
+    const terminalWrites = new TerminalWriteQueue(term, 64 * 1024);
+    let snapshotRequestPending = false;
     connected = new TerminalConnection({
       url: target.url,
       fragment: encryptionFragment(shareUrl),
@@ -399,13 +398,18 @@ export function TerminalPane({
         onData: (bytes, reset) => {
           if (bytes.byteLength > 0) setHasScreen(true);
           if (!reset) {
-            term.write(bytes);
+            if (!terminalWrites.enqueue(bytes) && !snapshotRequestPending) {
+              snapshotRequestPending = true;
+              connected.requestSnapshot();
+            }
             return;
           }
           const generation = ++snapshotGeneration;
           rendererInputSuppressed = true;
-          term.reset();
-          term.write(bytes, () => {
+          snapshotRequestPending = false;
+          // reset() is synchronous but write() is not. Serialize the reset
+          // behind any in-progress write, as the standalone viewer does.
+          terminalWrites.enqueue(bytes, true, () => {
             if (generation === snapshotGeneration) rendererInputSuppressed = false;
           });
         },

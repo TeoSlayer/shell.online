@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PeopleChip } from "./Avatar";
 import { kindForCommand } from "../lib/session-kinds";
 import { assigneeIds, canHandOff, canRemove, canStop } from "../lib/session-view";
+import { sessionSummary, sessionTitle } from "../lib/session-title";
 import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
@@ -51,6 +52,7 @@ function Card({
   const kind = kindForCommand(session.command);
   const selected = new Set(assigneeIds(session));
   const assignees = members.filter((member) => selected.has(member.uid));
+  const title = sessionTitle(session);
 
   return (
     <li
@@ -69,11 +71,18 @@ function Card({
          * the copy menu and the Open button inside an anchor would be
          * invalid markup as well as unusable.
          */}
-        <Link className="board-card-name" to={`/sessions/${session.id}`}>
-          {session.name || session.command}
+        <Link className="board-card-name" to={`/sessions/${session.id}`} title={session.name?.trim() || session.command}>
+          {title}
         </Link>
         <SessionClipboard session={session} you={you} />
       </div>
+
+      {/*
+        * A genuine two-line summary when the record carries one, and the
+        * truthful empty state when it does not: there is no briefing
+        * pipeline yet, so the command is not dressed up as a description.
+        */}
+      <p className="board-card-summary">{sessionSummary(session) ?? "No description."}</p>
 
       <p className="board-card-meta">
         {session.host}
@@ -93,7 +102,7 @@ function Card({
           <MultiPersonPicker
             people={members}
             values={assigneeIds(session)}
-            label={`Assignees for ${session.name || session.command}`}
+            label={`Assignees for ${title}`}
             onChange={(uids) => onAssign(session, uids)}
           />
         ) : (

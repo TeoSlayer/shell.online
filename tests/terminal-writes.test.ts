@@ -67,6 +67,9 @@ describe("mobile terminal write queue", () => {
     queue.enqueue(new Uint8Array([1]));
     queue.enqueue(new Uint8Array([2]));
     queue.enqueue(new Uint8Array([9, 9]), true);
+    // xterm writes asynchronously. Resetting before this callback would let
+    // stale bytes paint over the new snapshot after the reset.
+    expect(terminal.resets).toBe(0);
     terminal.completeNext();
 
     expect(terminal.resets).toBe(1);
