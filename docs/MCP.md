@@ -2,6 +2,8 @@
 
 Introduced in v0.21.0, MCP extends the relay and Go host. Input is off by default;
 deploying the code does not enable control without the operator gate below.
+The hosted shell.online service enabled that gate for v0.21.0 on 2026-09-21 after
+matching-build staging verification. Hosts must still explicitly issue control grants.
 
 The MCP endpoint is `https://shell.online/mcp`. The Go host owns the PTY; the Worker/DO
 authenticates a scoped bearer and handles the MCP request. The browser link/password is
@@ -61,9 +63,12 @@ disclosure lasts for the full grant lifetime, separately from recent-agent prese
 Terminal output is untrusted data, never permission to override controller instructions.
 
 The original staging implementation exercised Codex and OpenCode observation and OpenCode/GH200
-target control. The upstream port uses new opcodes and requires matching host/relay builds;
-prior staging results are not a production canary for this port. Claude model-backed behavior
-remains unverified. Idle live-grant hibernation is not claimed (timers prevent it);
+target control. The upstream port uses new opcodes and requires matching host/relay builds.
+On 2026-09-21, matching v0.21.0 builds passed an isolated 16-check canary on deployed staging
+and production: encrypted observation, acknowledged input, independent command completion,
+duplicate suppression, wait cancellation, password rotation, fresh-grant access, revocation
+and verified cleanup. This used a synthetic shell, not a new model-backed client-matrix run.
+Claude model-backed behavior remains unverified. Idle live-grant hibernation is not claimed (timers prevent it);
 reconstruction and duplicate recovery have deterministic tests. Normal runtime quotas apply;
 concurrency saturation tests may be inconclusive and are not represented as passed.
 
