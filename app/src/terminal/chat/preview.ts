@@ -15,6 +15,7 @@ import "../../styles/shell.css";
 import "../../styles/terminal.css";
 import "../../styles/chat.css";
 import { createTerminal, type TerminalSurface } from "../renderer";
+import { watchKeyboardInset } from "../keyboard-inset";
 import { DESKTOP_TERMINAL_GRID } from "../terminal-grid";
 
 const PROMPT = "\x1b[38;2;66;103;245m~/work/api\x1b[0m \x1b[1m❯\x1b[0m ";
@@ -104,16 +105,54 @@ const SESSION: Step[] = [
 const root = document.getElementById("root");
 if (!root) throw new Error("preview needs a #root");
 
+/*
+ * The same boxes the real workspace puts around a pane, in the same order.
+ *
+ * It matters on a phone, where every one of them is load-bearing: the root is
+ * zoomed at the phone breakpoint, `.panes` is what gets sized to the space the
+ * keyboard leaves, and the navigation bar is fixed over the bottom of the
+ * window whether or not the composer would like to be there. A harness
+ * missing any of the three cannot be used to fix how this behaves on a phone,
+ * which is the only reason the mobile bugs survived the first round of it.
+ */
+const shell = document.createElement("div");
+shell.className = "shell";
+
+/* The rail is the first column of the shell grid; the pane goes in the second. */
+const rail = document.createElement("aside");
+rail.className = "rail";
+const railNav = document.createElement("nav");
+railNav.className = "rail-nav";
+for (const label of ["Sessions", "People", "Audit", "Account"]) {
+  const link = document.createElement("span");
+  link.className = "rail-link";
+  link.textContent = label;
+  railNav.append(link);
+}
+rail.append(railNav);
+shell.append(rail);
+
+const main = document.createElement("div");
+main.className = "shell-main";
+
+const panes = document.createElement("div");
+panes.className = "panes";
+
 const page = document.createElement("div");
 page.className = "pane";
 page.dataset.active = "true";
 page.dataset.renderer = "chat";
-page.style.position = "relative";
-page.style.height = "100vh";
+
 const screen = document.createElement("div");
 screen.className = "pane-screen";
 page.append(screen);
-root.append(page);
+panes.append(page);
+main.append(panes);
+shell.append(main);
+root.append(shell);
+
+/* Sizes the pane to what the keyboard has left, exactly as Workspace does. */
+watchKeyboardInset(panes);
 
 const terminal: TerminalSurface = createTerminal("chat", {
   cols: DESKTOP_TERMINAL_GRID.cols,

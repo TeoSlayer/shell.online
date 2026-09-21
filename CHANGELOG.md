@@ -2,6 +2,31 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- The chat renderer is usable on a phone. The thread was laid out to its own
+  desktop line length inside a pane a third that wide, so most of every
+  message sat off the right edge and a tap landed nowhere near what it
+  appeared to hit.
+- The on-screen keyboard no longer zooms the session in. Safari zooms the page
+  when a field smaller than 16px is focused and leaves it zoomed, and the
+  composer was 13px.
+- The bottom navigation bar gets out of the way while the keyboard is up. It
+  is fixed to the window, so it stayed underneath the keyboard holding space
+  the composer needed, and the composer now settles onto the foot of the pane
+  as the bar slides out.
+- Send works under a finger. Pressing it moved focus out of the box, which
+  closed the keyboard and resized the page mid-tap, so the press often landed
+  on nothing; the send button and the key chips were also below the touch
+  target size every other control in the app uses.
+- A predicted word accepted with Return no longer sends half a command.
+- The newest message stays in view when the keyboard opens.
+- Pages no longer scroll 15% further than the screen on a phone: `100dvh` does
+  not follow the root zoom the phone breakpoint applies, so every page was
+  taller than the window it was measured against.
+
 ## [0.22.0] — 2026-09-21
 
 ### Added

@@ -103,6 +103,37 @@ in the conversation afterwards.
 The mirror is read from the same parse everything else is read from, so it
 cannot fall out of step with the session, and there is no second emulator.
 
+## Phones
+
+Four things are different below the phone breakpoint, and all four were bugs
+before they were rules.
+
+**The surface is the pane's screen element**, not a box of its own: the
+renderer is handed that element to open into and marks it. So it inherits
+`.pane-screen`, which aligns to `flex-start` because a terminal grid is
+exactly as wide as its columns and must not be stretched. A conversation is
+the opposite. Left on `flex-start` every child was shrink-to-fit and the
+thread took its own 940px max line length as a width — fine by coincidence on
+a desktop, two thirds off the right edge of a phone.
+
+**The composer clears one thing at a time.** The bottom navigation bar when
+the keyboard is down, the keyboard when it is up, never both. `--chat-dock`
+holds the distance and transitions between them.
+
+**The bar leaves when the keyboard arrives.** It is fixed to the window, so
+it does not move for a keyboard: it stays underneath it, holding space the
+thing being typed into cannot have. `keyboard-inset.ts` publishes
+`--keyboard-inset` and `data-keyboard="open"` on the root, and `shell.css`
+slides the bar out on that.
+
+**The composer is 16px.** Safari on iOS zooms the whole page in when a
+smaller field is focused and then leaves it zoomed, so a session became a
+magnified corner of itself on every tap into the box.
+
+Viewport units do not follow the root zoom the phone breakpoint applies, so
+anything measured in `vh`/`dvh` down here divides by `--zoom`. `scripts/
+test-mobile-controls.mjs` guards the touch targets, the 16px and the bar.
+
 ## The files
 
 | File | What it does |

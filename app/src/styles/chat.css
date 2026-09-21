@@ -11,23 +11,38 @@
    uses outside the dark terminal panel.
    --------------------------------------------------------------- */
 
-.pane-screen > .chat-surface {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
+/*
+ * The chat surface IS the pane's screen element: the renderer is handed that
+ * element to open into and marks it, rather than being given a box of its own.
+ * So it inherits the rules meant for an emulator's canvas, and one of them is
+ * load-bearing here.
+ *
+ * .pane-screen aligns to flex-start, which is right for a terminal: a grid is
+ * exactly as wide as its columns and must not be stretched. A conversation is
+ * the opposite -- it fills the pane -- and left on flex-start every child was
+ * shrink-to-fit, so the thread took its own max line length of 940px as an
+ * actual width. On a desktop that looked correct by coincidence. On a phone it
+ * laid a 940px thread out inside a 339px pane, two thirds of it off the right
+ * edge and clipped by the pane's overflow, which is what made bubbles run past
+ * the screen and taps land nowhere near what they appeared to hit.
+ */
 .chat-surface {
   position: relative;
+  /* How far the composer floats above the foot of the pane; see the phone rules. */
+  --chat-dock: 14px;
   display: flex;
   width: 100%;
   height: 100%;
+  min-width: 0;
   min-height: 0;
+  align-items: stretch;
   flex-direction: column;
   font-family: var(--sans);
 }
 
 .chat-scroll {
   display: flex;
+  min-width: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   flex-direction: column;
@@ -48,6 +63,8 @@
  */
 .chat-thread {
   display: flex;
+  /* A comfortable line length on a wide pane, never a width to lay out to. */
+  min-width: 0;
   max-width: 940px;
   flex-direction: column;
   margin-top: auto;
@@ -296,7 +313,7 @@
    * every message before it off the top of the page, so the card keeps a
    * screenful and scrolls the rest.
    */
-  max-height: 58vh;
+  max-height: calc(58vh / var(--zoom, 1));
   overflow: auto;
   padding: 10px 13px 12px;
   color: var(--terminal-ink);
@@ -322,7 +339,7 @@
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: 14px;
+  bottom: var(--chat-dock);
   left: 0;
   display: flex;
   max-width: 720px;
@@ -456,16 +473,158 @@
 
 /* --- phones ------------------------------------------------------ */
 
-@media (max-width: 640px) {
-  .chat-scroll { padding: 2px 0 124px; }
-
-  .chat-bubble { font-size: 12px; }
-
-  .chat-composer {
-    right: 6px;
-    bottom: 8px;
-    left: 6px;
+/*
+ * The phone breakpoint matches the one that moves the navigation to a fixed
+ * bottom bar and zooms the root (shell.css). Below it the composer has two
+ * things to stay clear of, and only ever one at a time: the bottom bar when
+ * the keyboard is down, the keyboard when it is up.
+ */
+@media (max-width: 760px) {
+  .chat-surface {
+    /*
+     * How far the composer floats above the foot of the pane. The bar is
+     * roughly a finger tall and is only there while the keyboard is not, so
+     * the two never have to be cleared at once.
+     */
+    --chat-dock: calc(58px + env(safe-area-inset-bottom));
   }
 
-  .chat-jump { bottom: 90px; }
+  /*
+   * Keyboard up: the bar has gone, and the pane has already been resized to
+   * the space above the keyboard (see keyboard-inset), so the composer only
+   * has to settle back down onto the foot of it.
+   */
+  :root[data-keyboard="open"] .chat-surface {
+    --chat-dock: 8px;
+  }
+
+  .chat-composer {
+    right: 8px;
+    bottom: var(--chat-dock);
+    left: 8px;
+    padding: 8px 8px 8px 12px;
+    border-radius: 24px;
+    transition:
+      bottom 200ms var(--ease),
+      border-color 160ms var(--ease),
+      box-shadow 160ms var(--ease);
+  }
+
+  .chat-scroll {
+    /*
+     * A gutter down both sides. Without it a bubble ends exactly at the edge
+     * of the glass, where its rounded corner is cut off and the text runs
+     * into the bezel, and on a phone that reads as the layout being broken
+     * rather than as a deliberately full-width message.
+     *
+     * The foot clears the composer and whatever the composer is clearing.
+     */
+    padding: 2px 10px calc(var(--chat-dock) + 86px);
+    transition: padding-bottom 200ms var(--ease);
+  }
+
+  .chat-jump {
+    bottom: calc(var(--chat-dock) + 78px);
+    transition: bottom 200ms var(--ease);
+  }
+
+  /*
+   * 16px, and not a pixel less.
+   *
+   * Safari on iOS zooms the whole page in when a text field smaller than this
+   * is focused, and then leaves it zoomed: the session went from readable to a
+   * magnified corner of itself on every tap into the box, and the only way
+   * back was to pinch out. The size of this one field is what decides that, so
+   * it is set here rather than inherited.
+   */
+  .chat-input {
+    padding: 8px 2px 8px 4px;
+    font-size: 16px;
+  }
+
+  /*
+   * A finger, not a pointer. 44px is the size every other control in this
+   * product takes on a touch screen, and the chips and the send button were
+   * built at pointer sizes: 36px and 21px, both of which are a miss as often
+   * as a hit.
+   */
+  .chat-send {
+    width: 44px;
+    height: 44px;
+  }
+
+  .chat-key {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 12px;
+  }
+
+  .chat-keys {
+    gap: 7px;
+    /* Room for the chips to be swiped without catching the thread behind them. */
+    padding: 2px 2px 1px;
+  }
+
+  .chat-bubble {
+    font-size: 12.5px;
+  }
+
+  /* A phone is narrow; a bubble that stops short of the edge wastes it. */
+  .chat-thread {
+    gap: 9px;
+  }
+
+  .chat-sent .chat-bubble,
+  .chat-received .chat-bubble {
+    max-width: 94%;
+  }
+
+  .chat-screen-host {
+    /* A viewport measurement, so divided by the zoom; see shell.css. */
+    max-height: calc(46vh / var(--zoom));
+    font-size: 11px;
+  }
+
+  /*
+   * There is no pointer to reveal the meta row with, so on a phone it is
+   * always there -- and something always there must not sit on top of the
+   * output. Overlaid in the corner it covered the first line of every answer
+   * short enough to reach it. It becomes a foot to the bubble instead.
+   */
+  .chat-meta {
+    position: static;
+    margin-top: 5px;
+    opacity: 1;
+    justify-content: flex-end;
+  }
+
+  .chat-copy {
+    min-height: 30px;
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-composer,
+    .chat-scroll,
+    .chat-jump {
+      transition: none;
+    }
+  }
+}
+
+/*
+ * Nothing in the composer should wait for a double-tap that is never coming,
+ * and nothing in it should be selected by a long press either: these are
+ * controls, and a phone treating them as text is what makes a chat feel
+ * unreliable to type in.
+ */
+.chat-send,
+.chat-key,
+.chat-copy,
+.chat-more,
+.chat-jump {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }

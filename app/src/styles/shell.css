@@ -481,6 +481,14 @@
 
 @media (max-width: 900px) {
   .shell {
+    /*
+     * 100dvh is a viewport measurement, and viewport units do not follow the
+     * zoom above: 100dvh resolves against the undivided viewport and is then
+     * drawn in this scaled space, so the page was 15% taller than the screen
+     * on every phone. That bought nothing and cost a page that scrolled
+     * underneath a fixed bottom bar and anything docked above it.
+     */
+    min-height: calc(100dvh / var(--zoom));
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -601,6 +609,14 @@
   }
 
   .shell {
+    /*
+     * 100dvh is a viewport measurement, and viewport units do not follow the
+     * zoom above: 100dvh resolves against the undivided viewport and is then
+     * drawn in this scaled space, so the page was 15% taller than the screen
+     * on every phone. That bought nothing and cost a page that scrolled
+     * underneath a fixed bottom bar and anything docked above it.
+     */
+    min-height: calc(100dvh / var(--zoom));
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -623,6 +639,34 @@
     background: color-mix(in srgb, var(--paper) 94%, transparent);
     backdrop-filter: blur(12px);
     flex-direction: row;
+  }
+
+  /*
+   * The keyboard takes the bar with it.
+   *
+   * The bar is fixed to the window, so an on-screen keyboard opening does not
+   * move it: it stays where it was, under the keyboard, and the space it
+   * occupies is space the thing being typed into cannot have. Nobody
+   * navigates to another page in the middle of typing, so while the keyboard
+   * is up the bar leaves, and it comes back when the keyboard does.
+   *
+   * It slides rather than vanishing, so the room it gives up reads as the
+   * keyboard arriving rather than as the page flickering.
+   */
+  .rail {
+    transition: transform 200ms var(--ease), opacity 160ms var(--ease);
+  }
+
+  :root[data-keyboard="open"] .rail {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rail {
+      transition: none;
+    }
   }
 
   /* The wordmark, the copy-command hint and the account row all live in the

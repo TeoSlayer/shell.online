@@ -4,6 +4,7 @@ const stylesheet = readFileSync(new URL("../web/style.css", import.meta.url), "u
 const landingStylesheet = readFileSync(new URL("../web/landing.css", import.meta.url), "utf8");
 const appBaseStylesheet = readFileSync(new URL("../app/src/styles/base.css", import.meta.url), "utf8");
 const appPeopleStylesheet = readFileSync(new URL("../app/src/styles/people.css", import.meta.url), "utf8");
+const appChatStylesheet = readFileSync(new URL("../app/src/styles/chat.css", import.meta.url), "utf8");
 const buttonRules = Array.from(
   stylesheet.matchAll(/\.mobile-terminal-keys button\s*\{([^}]*)\}/g),
   (match) => match[1],
@@ -41,6 +42,33 @@ if (!appBaseStylesheet.includes("button[aria-label]") || !appBaseStylesheet.incl
 }
 if (!appPeopleStylesheet.includes("@media (max-width: 1500px)") || !appPeopleStylesheet.includes(".table-optional")) {
   throw new Error("Session actions must retain their width before the app rail crowds the table");
+}
+
+/*
+ * The chat renderer draws its own controls rather than using the app's
+ * buttons, so the rules that give every other control a finger-sized target
+ * do not reach it. These were built at pointer sizes and shipped that way:
+ * a 31px send button and 21px key chips, both a miss as often as a hit.
+ */
+if (!appChatStylesheet.includes(".chat-key {\n    min-height: 44px;")) {
+  throw new Error("Chat key chips need a coarse-pointer touch target");
+}
+if (!appChatStylesheet.includes(".chat-send {\n    width: 44px;\n    height: 44px;")) {
+  throw new Error("The chat send button needs a coarse-pointer touch target");
+}
+/*
+ * Safari on iOS zooms the page in when a field smaller than 16px is focused,
+ * and leaves it zoomed. The composer is the only field in a session, so this
+ * one declaration is the difference between typing a command and pinching
+ * back out afterwards.
+ */
+if (!appChatStylesheet.includes(".chat-input {\n    padding: 8px 2px 8px 4px;\n    font-size: 16px;")) {
+  throw new Error("The chat composer must be 16px on a phone, or iOS zooms the session in");
+}
+/* The bottom bar is fixed over the window, so it has to be told to leave. */
+if (!readFileSync(new URL("../app/src/styles/shell.css", import.meta.url), "utf8")
+  .includes(':root[data-keyboard="open"] .rail')) {
+  throw new Error("The bottom navigation bar must give way to the on-screen keyboard");
 }
 
 console.log("Mobile terminal navigation, compact badges, and touch targets passed.");

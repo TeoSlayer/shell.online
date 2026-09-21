@@ -23,6 +23,12 @@ export interface ChatViewOptions {
   onKeys(bytes: string): void;
 }
 
+/*
+ * The keyCode a browser reports while an input method is composing. Safari
+ * does not set `isComposing` on keydown, so this is the only signal there.
+ */
+const COMPOSING = 229;
+
 /** Rows a finished answer shows before it is folded. */
 const COLLAPSE_AFTER = 40;
 
@@ -63,6 +69,21 @@ export class ChatView {
   private historyAt = -1;
   private draft = "";
   private disposed = false;
+  private readonly resizes: ResizeObserver | null;
+
+  /**
+   * Stops a control in the composer taking focus off the text box.
+   *
+   * On a phone, focus leaving the box closes the keyboard, which resizes the
+   * page under the finger that is still coming down. The tap then lands
+   * somewhere else, or on nothing, and the message is not sent -- and even
+   * when it did work, the keyboard closed and reopened around every chip.
+   * Refusing the default on mousedown keeps the focus, and with it the
+   * keyboard and the layout, exactly where they were.
+   */
+  private static keepsFocus(button: HTMLElement): void {
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+  }
 
   constructor(root: HTMLElement, options: ChatViewOptions) {
     this.root = root;
@@ -81,6 +102,7 @@ export class ChatView {
     this.jump.type = "button";
     this.jump.textContent = "Jump to latest";
     this.jump.hidden = true;
+    ChatView.keepsFocus(this.jump);
     this.jump.addEventListener("click", () => {
       this.sticking = true;
       this.jump.hidden = true;
@@ -98,15 +120,39 @@ export class ChatView {
     this.input.spellcheck = false;
     this.input.autocapitalize = "off";
     this.input.setAttribute("autocomplete", "off");
+    this.input.setAttribute("autocorrect", "off");
+    /*
+     * Labels the phone's return key "send" rather than "return", and stops a
+     * shell command being autocorrected into English on the way to a machine.
+     */
+    this.input.setAttribute("enterkeyhint", "send");
     this.input.setAttribute("aria-label", "Send to the session");
     this.send = el("button", "chat-send") as HTMLButtonElement;
     this.send.type = "submit";
     this.send.setAttribute("aria-label", "Send");
     this.send.innerHTML = arrowSvg();
+    ChatView.keepsFocus(this.send);
     row.append(this.input, this.send);
     this.composer.append(this.chips, row);
 
     root.append(this.scroller, this.jump, this.composer);
+
+    /*
+     * A phone's keyboard opening does not add a message; it takes away most
+     * of the room the thread had. Nothing re-renders, so the scroll position
+     * stays where it was and the newest message -- the one somebody is
+     * replying to -- ends up above the fold at the exact moment they started
+     * typing. Following the bottom through the resize is what makes the
+     * keyboard arriving feel like the composer rising rather than the
+     * conversation falling out from under it.
+     */
+    this.resizes =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            if (this.sticking) this.scroller.scrollTop = this.scroller.scrollHeight;
+          });
+    this.resizes?.observe(this.scroller);
 
     this.scroller.addEventListener("scroll", this.onScroll);
     this.composer.addEventListener("submit", this.onSubmit);
@@ -192,6 +238,7 @@ export class ChatView {
 
   dispose(): void {
     this.disposed = true;
+    this.resizes?.disconnect();
     this.scroller.removeEventListener("scroll", this.onScroll);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
@@ -212,6 +259,7 @@ export class ChatView {
       button.type = "button";
       button.textContent = chip.label;
       button.title = chip.title;
+      ChatView.keepsFocus(button);
       button.addEventListener("click", () => {
         if (this.disabled) return;
         this.options.onKeys(chip.bytes);
@@ -257,6 +305,7 @@ export class ChatView {
       copy.type = "button";
       copy.className = "chat-copy";
       copy.textContent = "Copy";
+      ChatView.keepsFocus(copy);
       copy.addEventListener("click", () => {
         /*
          * Copied from the lines, not from the element. The rows are separate
@@ -408,6 +457,12 @@ export class ChatView {
   private readonly onSubmit = (event: Event): void => {
     event.preventDefault();
     this.submit();
+    /*
+     * Inside the gesture that pressed Send, so a phone keeps the keyboard up
+     * rather than closing it and reopening it for the next command. Nothing
+     * to do when the box already has focus, which is the keyboard case.
+     */
+    this.input.focus();
   };
 
   private submit(): void {
@@ -450,6 +505,13 @@ export class ChatView {
       this.options.onKeys(bytes);
       return;
     }
+
+    /*
+     * A phone keyboard predicting a word, and every language that composes
+     * one, send Enter to accept the suggestion rather than to submit. Acting
+     * on it sends half a command and leaves the rest in the box.
+     */
+    if (event.isComposing || event.keyCode === COMPOSING) return;
 
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();

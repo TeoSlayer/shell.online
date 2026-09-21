@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { paneHeight } from "./keyboard-inset";
+import { keyboardInset, keyboardIsOpen, paneHeight } from "./keyboard-inset";
 
 /*
  * A phone covers the bottom of the page with its keyboard rather than making
@@ -54,5 +54,48 @@ describe("sizing the terminal to what the keyboard has left", () => {
       .toBe(plain);
     expect(paneHeight({ viewportHeight: 800, offsetTop: 0, paneTop: 140, gap: 16, zoom: Number.NaN }))
       .toBe(plain);
+  });
+});
+
+describe("how much of the page the keyboard is covering", () => {
+  it("is nothing when it is closed", () => {
+    expect(keyboardInset({ layoutHeight: 844, viewportHeight: 844, offsetTop: 0 })).toBe(0);
+  });
+
+  it("is the part of the layout viewport the visual one no longer reaches", () => {
+    expect(keyboardInset({ layoutHeight: 844, viewportHeight: 508, offsetTop: 0 })).toBe(336);
+  });
+
+  /*
+   * Measured in viewport pixels, read inside a subtree the phone breakpoint
+   * zooms. Without dividing it back out, the composer is told to sit 336
+   * zoomed pixels up, which is 386 real ones, and it floats above the
+   * keyboard with a strip of nothing under it.
+   */
+  it("is reported in the zoomed space the answer is read in", () => {
+    expect(keyboardInset({ layoutHeight: 844, viewportHeight: 508, offsetTop: 0, zoom: 1.15 })).toBe(292);
+  });
+
+  it("counts the page being scrolled inside the visual viewport", () => {
+    expect(keyboardInset({ layoutHeight: 844, viewportHeight: 508, offsetTop: 120 })).toBe(216);
+  });
+
+  it("never reports less than nothing", () => {
+    expect(keyboardInset({ layoutHeight: 500, viewportHeight: 844, offsetTop: 0 })).toBe(0);
+  });
+});
+
+describe("telling a keyboard from a toolbar", () => {
+  /*
+   * A browser's own toolbar sliding back in shrinks the visual viewport too.
+   * Treating that as a keyboard would take the navigation bar away from
+   * somebody who was only scrolling a list.
+   */
+  it("does not call a browser toolbar a keyboard", () => {
+    expect(keyboardIsOpen(60)).toBe(false);
+  });
+
+  it("calls a keyboard a keyboard", () => {
+    expect(keyboardIsOpen(292)).toBe(true);
   });
 });
