@@ -1,5 +1,5 @@
 {
-  "version": "0.21.1",
+  "version": "0.21.2",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -535,8 +535,8 @@
               "Revoke the agent invitation or active connection without closing the share or local task."
             ],
             [
-              "Reload recovery",
-              "Refstream state is saved only in the current tab for up to four hours. A reload can recover task records when the underlying shell process is still running. The relay stores no terminal output, and closing the tab forgets the browser snapshot."
+              "Reload behavior",
+              "Refstream no longer persists terminal state to browser storage; startup purges the legacy shell-online-refstream-session: caches (exact prefix only) from session and local storage. A reload re-syncs from the live relay snapshot while the local shell process is still running. The relay stores no terminal output."
             ]
           ]
         ],
@@ -925,7 +925,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.21.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.21.2 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

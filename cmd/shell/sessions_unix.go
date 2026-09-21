@@ -384,7 +384,7 @@ func (session *managedLocalSession) handleAttach(connection net.Conn) {
 	input := session.terminalInput
 	onInput := session.onLocalInput
 	onAttachChange := session.onAttachChange
-	snapshot := session.terminalOutput.Bytes()
+	snapshot := session.terminalOutput.Snapshot()
 	_ = connection.SetWriteDeadline(time.Now().Add(2 * time.Second))
 	response := localControlResponse{OK: true, ID: session.record.ID, PID: session.record.PID}
 	if err := json.NewEncoder(connection).Encode(response); err != nil {

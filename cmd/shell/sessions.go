@@ -69,6 +69,10 @@ type localSessionControl interface {
 type localTerminalOutput interface {
 	Write([]byte) (int, error)
 	Bytes() []byte
+	// Snapshot is the retained output trimmed to a safe replay start for a
+	// reset terminal (see ringbuffer.Snapshot); the raw Bytes may begin
+	// mid-escape-sequence after a ring wrap.
+	Snapshot() []byte
 }
 
 type listedSession struct {

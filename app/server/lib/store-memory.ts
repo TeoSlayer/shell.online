@@ -27,6 +27,7 @@ import type {
   GameCollectionRun,
   GameProfile,
   Notification,
+  SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
   TeamKey,
@@ -126,6 +127,19 @@ export class MemoryStore implements Store {
     for (const session of this.data.sessions) {
       if (!session.assigneeUids) {
         session.assigneeUids = session.assigneeUid ? [session.assigneeUid] : [];
+        changed = true;
+      }
+      /* A row from before the automation consent reads as "everything off". */
+      if (typeof session.mcpTeamAccess !== "boolean") {
+        session.mcpTeamAccess = false;
+        changed = true;
+      }
+      if (typeof session.dailyBriefingEnabled !== "boolean") {
+        session.dailyBriefingEnabled = false;
+        changed = true;
+      }
+      if (typeof session.dailyBriefingTeamAccess !== "boolean") {
+        session.dailyBriefingTeamAccess = false;
         changed = true;
       }
     }
@@ -456,11 +470,23 @@ export class MemoryStore implements Store {
               : session.assigneeUid
                 ? [session.assigneeUid]
                 : [],
+        /*
+         * Consent is the owner's alone to give. A re-register carries no
+         * opinion on it, and letting one through would flip a switch the
+         * owner set on purpose, so the stored value stands either way.
+         */
+        mcpTeamAccess: existing.mcpTeamAccess ?? false,
+        dailyBriefingEnabled: existing.dailyBriefingEnabled ?? false,
+        dailyBriefingTeamAccess: existing.dailyBriefingTeamAccess ?? false,
       };
     } else {
       this.data.sessions.push({
         ...session,
         assigneeUids: session.assigneeUids ?? (session.assigneeUid ? [session.assigneeUid] : []),
+        /* A session that has never been consented to starts with everything off. */
+        mcpTeamAccess: false,
+        dailyBriefingEnabled: false,
+        dailyBriefingTeamAccess: false,
       });
     }
     this.flush();
@@ -509,6 +535,26 @@ export class MemoryStore implements Store {
     if (!session) return null;
     if (name === undefined) delete session.name;
     else session.name = name;
+    this.flush();
+    return session;
+  }
+
+  async setSessionAutomationConsent(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    consent: Partial<SessionAutomationConsent>,
+  ): Promise<SessionRecord | null> {
+    const session = this.data.sessions.find(
+      (entry) =>
+        entry.id === sessionId &&
+        entry.orgId === orgId &&
+        (entry.ownerUid ?? entry.uid) === ownerUid,
+    );
+    if (!session) return null;
+    if (consent.mcpTeamAccess !== undefined) session.mcpTeamAccess = consent.mcpTeamAccess;
+    if (consent.dailyBriefingEnabled !== undefined) session.dailyBriefingEnabled = consent.dailyBriefingEnabled;
+    if (consent.dailyBriefingTeamAccess !== undefined) session.dailyBriefingTeamAccess = consent.dailyBriefingTeamAccess;
     this.flush();
     return session;
   }

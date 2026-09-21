@@ -2,6 +2,57 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.21.2] — 2026-09-21
+
+### Added
+
+- An owner-only "Agent permissions" section in the web app's session detail with three
+  independent switches: team-wide MCP access, a daily agent briefing, and sharing
+  briefings with the team. All default off, only the session owner sees and changes
+  them, and the API accepts strictly boolean values. This records consent only: no
+  team MCP gateway and no automatic briefings run in this build, and saving a
+  permission does not open a connection or start a briefing.
+
+### Changed
+
+- The browser no longer writes new plaintext session passwords to localStorage. The
+  cache is memory-only, scoped to the signed-in account, and dropped on account
+  switch. The legacy v3 localStorage blob is still read once per signed-in account
+  as a read-only recovery input; it is never rewritten and remains in localStorage
+  until a separately proven lossless vault migration removes it (account deletion
+  removes it at once). Not all localStorage secrets are gone.
+- The Refstream tab-local snapshot persistence was removed. Every app and standalone
+  startup now purges the legacy `shell-online-refstream-session:` caches from session
+  and local storage, matching the exact owned prefix only. Those caches held terminal
+  output, command history and task state, which may include sensitive or
+  credential-like text; the removal is namespace-only and does not delete separate
+  password, vault, or auth records. The live relay snapshot is the only source of
+  terminal state.
+
+### Fixed
+
+- Host terminal snapshots are cut from one ordered position in the replay ring:
+  every output delta, recovery broadcast, and targeted snapshot reply derives from a
+  single captured cut, so a viewer receives each byte either in its last snapshot or
+  in the output after that snapshot, never both. Refused snapshot replies are retried
+  on the output cadence, with a bounded broadcast recovery that covers every waiting
+  viewer.
+- Replay snapshots are trimmed to a safe start. The ring tracks the parser phase and
+  the UTF-8 state of the retained head, so a wrapped buffer no longer replays a
+  fragment of an incomplete ANSI escape sequence or a split UTF-8 character as
+  literal text at the top-left of the screen. The fix is generic for any terminal
+  content, not specific to one application, and it handles the incomplete head
+  rather than reconstructing full VT state.
+- Narrow viewports: the terminal font fit may now shrink to 4px instead of 6px, so a
+  very narrow pane fits the grid without clipping.
+
+### Upgrading
+
+- The snapshot fixes run in the Go host process. Updating the shell binary does not
+  update an already-running host: start new sessions with the new binary and restart
+  existing host processes only when safe. shell.online never restarts user processes
+  automatically.
+
 ## [0.21.1] — 2026-09-21
 
 ### Fixed

@@ -36,9 +36,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.21.1 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.21.2 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.21.1" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.21.2" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
@@ -93,10 +93,11 @@ creates a revocable invitation scoped to this one session. Read access permits
 terminal read, search, and wait; control additionally permits text, commands,
 and key signals such as Ctrl-C. Keep the returned connector session open and
 reuse its task IDs for follow-ups; status, partial output, and collected answers
-survive panel changes and reconnects. The browser saves a reload snapshot only
-inside the current tab for at most four hours. Recovery still requires the local
-shell process to be running, and the relay stores no terminal output. File access
-remains a separate host opt-in.
+survive panel changes and reconnects. Refstream no longer persists terminal
+state to browser storage; startup purges the legacy shell-online-refstream-session:
+caches (exact prefix only) from session and local storage, and a reload re-syncs
+from the live relay snapshot while the local shell process is running. The relay
+stores no terminal output. File access remains a separate host opt-in.
 
 Refstream is currently v0.1.0-alpha.5. It owns only the browser terminal model
 and renderer; shell.online continues to own the PTY, E2EE transport, read-only

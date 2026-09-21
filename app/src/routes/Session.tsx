@@ -17,6 +17,7 @@ import { FeedbackLink } from "../feedback/FeedbackLink";
 import { Booting } from "../components/Booting";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SessionAudience } from "../components/SessionAudience";
+import { SessionAutomation } from "../components/SessionAutomation";
 import {
   assignSession,
   deleteSession,
@@ -24,6 +25,7 @@ import {
   postComment,
   renameSession,
   stopSession,
+  updateSessionAutomation,
   type Comment,
   type Member,
   type SessionDetail,
@@ -85,13 +87,20 @@ export function Session() {
   const navigate = useNavigate();
   const assignmentRevision = useRef(0);
   const assignmentQueue = useRef<Promise<void>>(Promise.resolve());
+  const detailGeneration = useRef(0);
+  const automationSaving = useRef(false);
   const vault = useVault();
 
   const load = useCallback(async () => {
+    if (automationSaving.current) return;
+    const generation = ++detailGeneration.current;
     try {
-      setDetail(await fetchSession(sessionId));
+      const next = await fetchSession(sessionId);
+      if (generation !== detailGeneration.current) return;
+      setDetail(next);
       setError("");
     } catch (caught) {
+      if (generation !== detailGeneration.current) return;
       setError(caught instanceof Error ? caught.message : "Could not load that session.");
     }
   }, [sessionId]);
@@ -367,6 +376,26 @@ export function Session() {
           </div>
 
           <SessionAudience session={session} members={members} you={you} />
+
+          <SessionAutomation key={session.id} session={session} you={you} onChange={async (changes) => {
+            automationSaving.current = true;
+            ++detailGeneration.current;
+            try {
+              const { session: updated } = await updateSessionAutomation(session.id, changes);
+              setDetail((current) => current?.session.id === updated.id ? {
+                ...current,
+                session: {
+                  ...current.session,
+                  mcpTeamAccess: updated.mcpTeamAccess,
+                  dailyBriefingEnabled: updated.dailyBriefingEnabled,
+                  dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess,
+                },
+              } : current);
+            } finally {
+              automationSaving.current = false;
+              ++detailGeneration.current;
+            }
+          }} />
 
           <h2 className="detail-heading">Comments</h2>
 

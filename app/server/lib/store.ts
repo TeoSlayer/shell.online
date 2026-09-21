@@ -14,6 +14,7 @@ import type {
   Feedback,
   GameProfile,
   Notification,
+  SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
   TeamKey,
@@ -129,6 +130,22 @@ export interface Store {
   assignSession(orgId: string, id: string, assigneeUids: string[]): Promise<SessionRecord | null>;
   /** Sets the label a session is shown by. Undefined clears it, so the command shows instead. */
   renameSession(orgId: string, id: string, name: string | undefined): Promise<SessionRecord | null>;
+  /**
+   * Patches a session's automation consent as one owner-scoped update.
+   * Omitted switches are preserved atomically, not filled from an earlier read.
+   *
+   * The row is addressed by organization and id, and is only updated when the
+   * caller is the row's owner (a legacy row's uid stands in for a missing
+   * owner), so a foreign organization or a caller who does not own the row
+   * cannot move a switch. Returns the updated session, or null when no row in
+   * that organization is owned by that uid.
+   */
+  setSessionAutomationConsent(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    consent: Partial<SessionAutomationConsent>,
+  ): Promise<SessionRecord | null>;
   /**
    * Removes a session's record from an organization.
    *

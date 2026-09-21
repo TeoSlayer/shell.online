@@ -1607,6 +1607,209 @@ describe("session ownership and handoff", () => {
   });
 });
 
+describe("session automation settings", () => {
+  it("does not re-enable team access when an unrelated stale save finishes later", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const auth = await idToken();
+    const route = `/api/sessions/${session.id}/automation`;
+    await call("PUT", route, { auth, body: { mcpTeamAccess: true } });
+    const persist = store.setSessionAutomationConsent.bind(store);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let entered!: () => void;
+    const registered = new Promise<void>((resolve) => { entered = resolve; });
+    const spy = vi.spyOn(store, "setSessionAutomationConsent").mockImplementation(async (...args) => {
+      if (args[3].dailyBriefingEnabled === true) {
+        entered();
+        await held;
+      }
+      return persist(...args);
+    });
+    const briefing = call("PUT", route, { auth, body: { dailyBriefingEnabled: true } });
+    try {
+      await registered;
+      expect((await call("PUT", route, { auth, body: { mcpTeamAccess: false } })).status).toBe(200);
+    } finally {
+      release();
+    }
+    expect((await briefing).status).toBe(200);
+    spy.mockRestore();
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth });
+    expect(detail.body.session).toMatchObject({ mcpTeamAccess: false, dailyBriefingEnabled: true });
+  });
+
+  const session = {
+    id: "aUto9m4t10nSess10nIdXyZ012345",
+    share_url: "https://shell.online/s/aUto9m4t10nSess10nIdXyZ012345",
+    command: "claude",
+  };
+  const path = `/api/sessions/${session.id}/automation`;
+
+  /* Registers the session and returns a signed-in colleague in the same org. */
+  async function orgWithColleague() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", {
+      auth: await idToken(),
+      body: { role: "member" },
+    });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    return { colleague, tokens };
+  }
+
+  it("starts a session with every automation switch off", async () => {
+    await orgWithColleague();
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+    expect(detail.body.session.dailyBriefingTeamAccess).toBe(false);
+  });
+
+  it("lets the owner turn a switch on, and back off again", async () => {
+    await orgWithColleague();
+    const on = await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true },
+    });
+    expect(on.status).toBe(200);
+    expect(on.body.session.mcpTeamAccess).toBe(true);
+    expect(on.body.session.dailyBriefingEnabled).toBe(false);
+
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(true);
+
+    const off = await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: false, dailyBriefingTeamAccess: true },
+    });
+    expect(off.status).toBe(200);
+    expect(off.body.session.mcpTeamAccess).toBe(false);
+    expect(off.body.session.dailyBriefingTeamAccess).toBe(true);
+  });
+
+  it("sets all three switches in one update", async () => {
+    await orgWithColleague();
+    const all = await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingEnabled: true, dailyBriefingTeamAccess: true },
+    });
+    expect(all.status).toBe(200);
+    expect(all.body.session.mcpTeamAccess).toBe(true);
+    expect(all.body.session.dailyBriefingEnabled).toBe(true);
+    expect(all.body.session.dailyBriefingTeamAccess).toBe(true);
+  });
+
+  it("does not let a colleague who is not the owner change the settings", async () => {
+    const { colleague } = await orgWithColleague();
+    const denied = await call("PUT", path, {
+      auth: colleague,
+      body: { mcpTeamAccess: true },
+    });
+    expect(denied.status).toBe(403);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+  });
+
+  it("does not let an organization admin substitute for the owner", async () => {
+    const { colleague } = await orgWithColleague();
+    const promoted = await call("PATCH", "/api/org/members/uid-2", {
+      auth: await idToken(),
+      body: { role: "admin" },
+    });
+    expect(promoted.status).toBe(200);
+    const denied = await call("PUT", path, {
+      auth: colleague,
+      body: { dailyBriefingEnabled: true },
+    });
+    expect(denied.status).toBe(403);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.dailyBriefingEnabled).toBe(false);
+  });
+
+  it("does not let an assignee substitute for the owner", async () => {
+    const { colleague } = await orgWithColleague();
+    await call("PUT", `/api/sessions/${session.id}/assignee`, {
+      auth: await idToken(),
+      body: { uid: "uid-2" },
+    });
+    const denied = await call("PUT", path, {
+      auth: colleague,
+      body: { mcpTeamAccess: true },
+    });
+    expect(denied.status).toBe(403);
+  });
+
+  it("cannot reach a session that is not in the caller's organization", async () => {
+    await orgWithColleague();
+    /* A different account, and therefore a different organization. */
+    const outsider = await idToken({ sub: "uid-3", email: "outsider@example.com" });
+    const denied = await call("PUT", path, {
+      auth: outsider,
+      body: { mcpTeamAccess: true },
+    });
+    expect(denied.status).toBe(404);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+  });
+
+  it("refuses a field that is not one of the three switches", async () => {
+    await orgWithColleague();
+    const denied = await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, autoRename: true },
+    });
+    expect(denied.status).toBe(400);
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+  });
+
+  it("refuses a switch that is not a strict boolean", async () => {
+    await orgWithColleague();
+    for (const value of ["true", 1, null, { on: true }]) {
+      const denied = await call("PUT", path, {
+        auth: await idToken(),
+        body: { mcpTeamAccess: value },
+      });
+      expect(denied.status).toBe(400);
+    }
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(false);
+  });
+
+  it("refuses an update that changes nothing", async () => {
+    await orgWithColleague();
+    const denied = await call("PUT", path, { auth: await idToken(), body: {} });
+    expect(denied.status).toBe(400);
+  });
+
+  it("reports the switches in the list and detail the owner polls", async () => {
+    await orgWithColleague();
+    await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingEnabled: true },
+    });
+    const listed = await call("GET", "/api/sessions", { auth: await idToken() });
+    expect(listed.body.sessions[0].mcpTeamAccess).toBe(true);
+    expect(listed.body.sessions[0].dailyBriefingEnabled).toBe(true);
+    expect(listed.body.sessions[0].dailyBriefingTeamAccess).toBe(false);
+  });
+
+  it("keeps the owner's consent when the machine re-registers", async () => {
+    const { tokens } = await orgWithColleague();
+    await call("PUT", path, {
+      auth: await idToken(),
+      body: { mcpTeamAccess: true, dailyBriefingTeamAccess: true },
+    });
+    /* A restart re-registers the same session; that is not a consent change. */
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const detail = await call("GET", `/api/sessions/${session.id}`, { auth: await idToken() });
+    expect(detail.body.session.mcpTeamAccess).toBe(true);
+    expect(detail.body.session.dailyBriefingTeamAccess).toBe(true);
+  });
+});
+
 describe("audit log", () => {
   const session = {
     id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",

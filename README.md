@@ -83,6 +83,12 @@ Press `Ctrl-X`, then `D`, to detach from `shell attach`.
 | Password recovery | Local session or optional personal vault; no service backdoor |
 | Plain transport mode | Explicit `--no-e2ee` only |
 
+In v0.21.2 the browser's session-password cache is memory-only: after a reload a
+session recovers from the account's encrypted vault, or requires the share
+password (or host-side recovery with `shell password`). The legacy v3
+localStorage blob is not wiped; it remains a read-only recovery input until a
+lossless vault migration removes it.
+
 Use `--read-only` for viewers who should not type. See the
 [security model](https://shell.online/security/) and
 [security policy](.github/SECURITY.md).

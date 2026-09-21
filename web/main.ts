@@ -29,6 +29,7 @@ import {
   type TerminalRenderer,
 } from "./terminal-renderer";
 import { attachRefstreamTools } from "./refstream-tools";
+import { purgeLegacyRefstreamSessionCaches } from "./refstream-session";
 import { RelayFileClient } from "./relay-files";
 import { mountRelayFileBrowser } from "./relay-files-ui";
 import { TerminalInputQueue } from "./terminal-input";
@@ -137,6 +138,8 @@ const terminalThemes: Record<TerminalColorMode, ITheme> = {
     brightWhite: "#ffffff",
   },
 };
+
+purgeLegacyRefstreamSessionCaches();
 
 const sessionMatch = window.location.pathname.match(/^\/s\/([A-Za-z0-9_-]{32})\/?$/);
 const documentationRoute = resolveCurrentDocumentationRoute(window.location.pathname);
@@ -1948,7 +1951,6 @@ function renderTerminal(sessionId: string): void {
   let refstreamToolsDisposed = false;
   void attachRefstreamTools(terminalRenderer, {
     terminal,
-    sessionKey: sessionId,
     toolbar: refstreamToolbar,
     overlay: terminalWrap,
     frame: terminalWrap,

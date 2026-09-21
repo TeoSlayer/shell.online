@@ -249,6 +249,30 @@ function readTeamShares(value: unknown): { uid: string; sealed: string }[] | nul
   return shares.map((share) => ({ uid: share.uid as string, sealed: share.sealed as string }));
 }
 
+/*
+ * The automation switches a session owner may set, and nothing else.
+ *
+ * Read strictly: a key outside this set, or a value that is not a boolean,
+ * refuses the whole update. Consent is a yes or a no, and a "maybe" stored as
+ * a truthy string would be read as a yes by whoever checks it next.
+ */
+const AUTOMATION_CONSENT_FIELDS = ["mcpTeamAccess", "dailyBriefingEnabled", "dailyBriefingTeamAccess"] as const;
+
+function readAutomationConsent(
+  body: unknown,
+): Partial<Record<(typeof AUTOMATION_CONSENT_FIELDS)[number], boolean>> | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const changes: Partial<Record<(typeof AUTOMATION_CONSENT_FIELDS)[number], boolean>> = {};
+  let any = false;
+  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+    if (!(AUTOMATION_CONSENT_FIELDS as readonly string[]).includes(key)) return null;
+    if (typeof value !== "boolean") return null;
+    changes[key as (typeof AUTOMATION_CONSENT_FIELDS)[number]] = value;
+    any = true;
+  }
+  return any ? changes : null;
+}
+
 /**
  * The harnesses a polling agent claims, keeping only the recognised ones.
  *
@@ -1464,6 +1488,40 @@ export function createApp(options: AppOptions) {
         const result = await renameSession(store, membership, nameRoute[1], body.name);
         if (!result.ok) return send(response, result.status, { error: result.error });
         return send(response, 200, { session: sessionForMember(membership, result.session) });
+      }
+
+      /*
+       * A session's automation consent: the owner's switches for the features
+       * that will act on this session. Recorded here and nowhere else; nothing
+       * reads them into behaviour yet, so a switch being on is consent, not a
+       * capability.
+       */
+      const automationRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/automation$/);
+      if (request.method === "PUT" && automationRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const sessionId = automationRoute[1];
+        const session = await store.sessionInOrg(membership.orgId, sessionId);
+        if (!session) return send(response, 404, { error: "no such session" });
+        /*
+         * The owner alone. An organization role runs the team and an
+         * assignment grants terminal input, but neither owns the machine the
+         * session runs on, so neither may move its consent.
+         */
+        if (!ownsSession(membership, session)) {
+          return send(response, 403, { error: "only the session's owner can change its automation settings" });
+        }
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const changes = readAutomationConsent(body);
+        if (!changes) return send(response, 400, { error: "automation settings must be booleans" });
+        const updated = await store.setSessionAutomationConsent(
+          membership.orgId,
+          sessionId,
+          membership.uid,
+          changes,
+        );
+        if (!updated) return send(response, 404, { error: "no such session" });
+        return send(response, 200, { session: sessionForMember(membership, updated) });
       }
 
       /* ---- Driving a machine from the browser ---- */

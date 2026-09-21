@@ -535,6 +535,106 @@ for (const implementation of implementations) {
         expect(await store.putKeyShares("org_2", "s1", [])).toBe(false);
         expect(await store.assignSession("org_2", "s1", ["uid-2"])).toBeNull();
       });
+
+      /* ---- automation consent ---- */
+
+      const consent = (overrides: Partial<{
+        mcpTeamAccess: boolean;
+        dailyBriefingEnabled: boolean;
+        dailyBriefingTeamAccess: boolean;
+      }> = {}) => ({
+        mcpTeamAccess: false,
+        dailyBriefingEnabled: false,
+        dailyBriefingTeamAccess: false,
+        ...overrides,
+      });
+
+      it("starts a session with every automation switch off", async () => {
+        await store.upsertSession(session());
+        const stored = await store.sessionInOrg("org_1", "s1");
+        expect(stored?.mcpTeamAccess).toBe(false);
+        expect(stored?.dailyBriefingEnabled).toBe(false);
+        expect(stored?.dailyBriefingTeamAccess).toBe(false);
+      });
+
+      it("atomically preserves switches omitted from concurrent consent updates", async () => {
+        await store.upsertSession(session());
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: true });
+        await Promise.all([
+          store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: false }),
+          store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: true }),
+        ]);
+        expect(await store.sessionInOrg("org_1", "s1")).toMatchObject({
+          mcpTeamAccess: false, dailyBriefingEnabled: true, dailyBriefingTeamAccess: false,
+        });
+      });
+
+      it("sets a session's automation consent as one owner-scoped update", async () => {
+        await store.upsertSession(session());
+        const updated = await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ mcpTeamAccess: true, dailyBriefingEnabled: true }),
+        );
+        expect(updated?.mcpTeamAccess).toBe(true);
+        expect(updated?.dailyBriefingEnabled).toBe(true);
+        expect(updated?.dailyBriefingTeamAccess).toBe(false);
+        /* The method sets all three to what it is given, as one update. */
+        const again = await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ mcpTeamAccess: false, dailyBriefingEnabled: true, dailyBriefingTeamAccess: true }),
+        );
+        expect(again?.mcpTeamAccess).toBe(false);
+        expect(again?.dailyBriefingEnabled).toBe(true);
+        expect(again?.dailyBriefingTeamAccess).toBe(true);
+      });
+
+      it("lets a legacy row's uid stand in for a missing owner", async () => {
+        await store.upsertSession(session({ ownerUid: undefined }));
+        const updated = await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ mcpTeamAccess: true }),
+        );
+        expect(updated?.mcpTeamAccess).toBe(true);
+      });
+
+      it("refuses to set consent for a session the caller does not own", async () => {
+        await store.upsertSession(session());
+        expect(
+          await store.setSessionAutomationConsent("org_1", "s1", "uid-2", consent({ mcpTeamAccess: true })),
+        ).toBeNull();
+        expect((await store.sessionInOrg("org_1", "s1"))?.mcpTeamAccess).toBe(false);
+      });
+
+      it("refuses to set consent across organizations", async () => {
+        await store.putOrganization(organization({ id: "org_2", name: "Elsewhere" }));
+        await store.upsertSession(session());
+        expect(
+          await store.setSessionAutomationConsent("org_2", "s1", "uid-1", consent({ mcpTeamAccess: true })),
+        ).toBeNull();
+        expect((await store.sessionInOrg("org_1", "s1"))?.mcpTeamAccess).toBe(false);
+      });
+
+      it("keeps a session's consent when it re-registers", async () => {
+        await store.upsertSession(session());
+        await store.setSessionAutomationConsent(
+          "org_1",
+          "s1",
+          "uid-1",
+          consent({ mcpTeamAccess: true, dailyBriefingEnabled: true, dailyBriefingTeamAccess: true }),
+        );
+        /* A persistent session re-registering carries no opinion on consent. */
+        await store.upsertSession(session());
+        const stored = await store.sessionInOrg("org_1", "s1");
+        expect(stored?.mcpTeamAccess).toBe(true);
+        expect(stored?.dailyBriefingEnabled).toBe(true);
+        expect(stored?.dailyBriefingTeamAccess).toBe(true);
+      });
     });
 
     describe("session vault", () => {

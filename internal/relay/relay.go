@@ -42,9 +42,17 @@ type Connection struct {
 	stateChanged chan struct{}
 	done         chan struct{}
 	active       atomic.Bool
-	close        sync.Once
-	socketMu     sync.Mutex
-	socket       *websocket.Conn
+	// generation counts successful dials: each new socket is a fresh
+	// delivery path, so host-side producers can detect a reconnect.
+	generation atomic.Uint64
+	close      sync.Once
+	socketMu   sync.Mutex
+	socket     *websocket.Conn
+}
+
+// Generation reports how many times the connection has established a socket.
+func (connection *Connection) Generation() uint64 {
+	return connection.generation.Load()
 }
 
 func Dial(parent context.Context, endpoint, hostToken string) (*Connection, error) {
@@ -103,6 +111,7 @@ func (connection *Connection) run(firstResult chan<- error) {
 		backoff = 500 * time.Millisecond
 		connection.setSocket(socket)
 		connection.active.Store(true)
+		connection.generation.Add(1)
 		connection.notifyStateChange()
 
 		connection.serve(socket)

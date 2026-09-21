@@ -319,6 +319,46 @@
   gap: 10px;
 }
 
+.session-automation {
+  margin-block: 24px;
+}
+
+.session-automation fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.session-automation-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding-block: 8px;
+  cursor: pointer;
+}
+
+.session-automation-switch input {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.session-automation-help {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.session-automation-status {
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .detail-heading {
   margin: 0 0 14px;
   color: var(--faint);

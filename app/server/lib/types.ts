@@ -262,6 +262,23 @@ export interface SessionRecord {
   startedAt: number;
   closedAt?: number;
   exitCode?: number;
+  /**
+   * The owner's automation consent, recorded but not yet acted on.
+   *
+   * Each switch is separate and defaults to off: agreeing to one is not
+   * agreeing to the others. Registration and re-registration never set them;
+   * only the owner's explicit update does.
+   */
+  mcpTeamAccess?: boolean;
+  dailyBriefingEnabled?: boolean;
+  dailyBriefingTeamAccess?: boolean;
+}
+
+/** The three independent automation switches a session owner may set. */
+export interface SessionAutomationConsent {
+  mcpTeamAccess: boolean;
+  dailyBriefingEnabled: boolean;
+  dailyBriefingTeamAccess: boolean;
 }
 
 /**

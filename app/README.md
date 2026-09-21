@@ -113,8 +113,11 @@ The full relay and app setup is documented in [the self-hosting guide](../docs/s
   rendering; xterm.js is the default, while Refstream (unstable alpha) adds backed file
   references and revocable read/control agent invitations alongside its local
   find, command, export, theme, sizing, and back-to-live tools. Its agent
-  connection and retained task state survive panel changes and reconnects; a
-  tab-local snapshot supports reload recovery while the shell process remains live
+  connection and retained task state survive panel changes and reconnects in
+  memory; the former tab-local snapshot persistence was removed, and startup
+  purges the legacy `shell-online-refstream-session:` caches (exact prefix only)
+  from session and local storage, so the live relay snapshot is the only source
+  of terminal state
 - `scripts/` — build and deployment checks
 
 `npm run check:protocol` verifies that the app's terminal protocol files match

@@ -181,6 +181,20 @@ export function renameSession(sessionId: string, name: string) {
   );
 }
 
+export interface SessionAutomationConsent {
+  mcpTeamAccess: boolean;
+  dailyBriefingEnabled: boolean;
+  dailyBriefingTeamAccess: boolean;
+}
+
+/** Send only the changed switches so a stale page cannot overwrite another tab. */
+export function updateSessionAutomation(sessionId: string, changes: Partial<SessionAutomationConsent>) {
+  return request<{ session: SessionRecord }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/automation`,
+    { method: "PUT", body: JSON.stringify(changes) },
+  );
+}
+
 export interface Comment {
   id: string;
   sessionId: string;
@@ -247,6 +261,8 @@ export function sendFeedback(input: FeedbackPayload) {
 
 export interface SessionRecord {
   id: string;
+  /** Legacy ownership fallback; never an organization role or an assignee. */
+  uid?: string;
   shareUrl: string;
   command: string;
   name?: string;
@@ -278,6 +294,10 @@ export interface SessionRecord {
   relayCheckedAt?: number;
   /** When the relay last held this session's host socket. See session-liveness. */
   hostLastSeenAt?: number;
+  /** Saved owner consent, not proof of a host capability or a live grant. */
+  mcpTeamAccess?: boolean;
+  dailyBriefingEnabled?: boolean;
+  dailyBriefingTeamAccess?: boolean;
 }
 
 class ApiError extends Error {}

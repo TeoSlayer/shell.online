@@ -261,10 +261,10 @@ func runSharedProcess(
 		})
 	}
 
-	outputChunks := make(chan []byte, 64)
-	var outputDirty atomic.Bool
+	outputKicks := make(chan struct{}, 64)
+	outputEmitter := newOutputEmitter(connection, outputRing, frameCipher)
 	batchDone := make(chan struct{})
-	go batchOutput(relayContext, connection, outputChunks, outputRing, frameCipher, &outputDirty, batchDone)
+	go batchOutput(relayContext, outputKicks, outputEmitter, batchDone)
 
 	readDone := make(chan struct{})
 	go func() {
@@ -281,10 +281,9 @@ func runSharedProcess(
 					_, _ = outputRing.Write(chunk)
 				}
 				select {
-				case outputChunks <- chunk:
+				case outputKicks <- struct{}{}:
 				default:
 					// The replay ring remains authoritative when the relay is slower than the PTY.
-					outputDirty.Store(true)
 				}
 			}
 			if readError != nil {
@@ -301,7 +300,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, arbiter, outputRing, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
+		err := readRelay(connection, ptmx, arbiter, outputEmitter, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
 		select {
 		case <-sharingFinished:
 			return
@@ -329,7 +328,7 @@ func runSharedProcess(
 	}
 	_ = ptmx.Finish()
 	<-readDone
-	close(outputChunks)
+	close(outputKicks)
 	<-batchDone
 	close(sharingFinished)
 
@@ -388,7 +387,7 @@ func sendFinalState(
 		return
 	}
 
-	finalSnapshot, err := sealFrame(frameCipher, protocol.Frame(protocol.FinalSnapshot, output.Bytes()))
+	finalSnapshot, err := sealFrame(frameCipher, protocol.Frame(protocol.FinalSnapshot, output.Snapshot()))
 	if err != nil {
 		return
 	}
@@ -412,80 +411,238 @@ func sendFinalState(
 	}
 }
 
-func batchOutput(
-	ctx context.Context,
-	connection *relay.Connection,
-	chunks <-chan []byte,
-	output *ringbuffer.Buffer,
-	frameCipher *sessionCipher,
-	dirty *atomic.Bool,
-	done chan<- struct{},
-) {
+const (
+	snapshotReplyTimeout = time.Second
+	snapshotRetryDelay   = 5 * time.Millisecond
+	// pendingSnapshotLimit bounds deferred snapshot replies; at the limit a
+	// broadcast recovery covers every waiting viewer instead of growing the
+	// set.
+	pendingSnapshotLimit = 16
+)
+
+// outputEmitter is the single host-side producer of terminal output frames.
+// Every Output delta, recovery BroadcastSnapshot, and targeted Snapshot is
+// enqueued under one lock, derived from one captured cut of the replay ring:
+// emitter.cut is the ring offset through which every byte has been enqueued.
+// A viewer therefore receives each byte either in its last snapshot or in
+// output after that snapshot, never both. The ring stays the authoritative
+// store; the emitter lock is separate from the ring lock, which is held only
+// long enough to copy a view.
+type outputEmitter struct {
+	mu           sync.Mutex
+	connection   *relay.Connection
+	output       *ringbuffer.Buffer
+	frameCipher  *sessionCipher
+	cut          int64
+	generation   uint64
+	lastFlush    time.Time
+	lastRecovery time.Time
+	// pendingSnapshots holds viewer IDs whose targeted snapshot reply the
+	// relay refused; the flush cadence retries them with a fresh ordered cut.
+	pendingSnapshots map[uint32]struct{}
+	// pendingBroadcast is set when deferred replies overflowed the bound and
+	// the immediate recovery broadcast was refused; the flush cadence retries
+	// that single broadcast until it is enqueued.
+	pendingBroadcast bool
+	// sendFrame is the relay hand-off; tests replace it to simulate
+	// backpressure deterministically.
+	sendFrame func([]byte) bool
+}
+
+func newOutputEmitter(connection *relay.Connection, output *ringbuffer.Buffer, frameCipher *sessionCipher) *outputEmitter {
+	emitter := &outputEmitter{
+		connection:       connection,
+		output:           output,
+		frameCipher:      frameCipher,
+		generation:       connection.Generation(),
+		pendingSnapshots: make(map[uint32]struct{}),
+	}
+	emitter.sendFrame = emitter.enqueueFrame
+	return emitter
+}
+
+func (emitter *outputEmitter) enqueueFrame(frame []byte) bool {
+	if !emitter.connection.Active() {
+		return false
+	}
+	sealed, err := sealFrame(emitter.frameCipher, frame)
+	if err != nil {
+		return false
+	}
+	return emitter.connection.TrySend(relay.BinaryMessage, sealed)
+}
+
+// emitPending enqueues every retained byte not yet covered by emitter.cut:
+// as Output frames from the cut, or as one recovery BroadcastSnapshot when
+// the ring evicted bytes before they were emitted. Callers hold emitter.mu.
+func (emitter *outputEmitter) emitPending(view ringbuffer.View) {
+	if view.End == emitter.cut {
+		return
+	}
+	if emitter.cut < view.Start {
+		if time.Since(emitter.lastRecovery) < 250*time.Millisecond {
+			return
+		}
+		emitter.lastRecovery = time.Now()
+		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+			emitter.cut = view.End
+		}
+		return
+	}
+	delta := view.Bytes[emitter.cut-view.Start:]
+	for len(delta) > 0 {
+		piece := delta
+		if len(piece) > outputBatchBytes {
+			piece = piece[:outputBatchBytes]
+		}
+		if !emitter.sendFrame(protocol.Frame(protocol.Output, piece)) {
+			return
+		}
+		emitter.cut += int64(len(piece))
+		delta = delta[len(piece):]
+	}
+}
+
+// flush emits pending output on the batch cadence. A relay reconnect (a new
+// connection generation) re-broadcasts the ring state even when no new output
+// arrived, because frames enqueued across the dead window may never have
+// reached viewers.
+func (emitter *outputEmitter) flush() {
+	emitter.mu.Lock()
+	defer emitter.mu.Unlock()
+	if generation := emitter.connection.Generation(); generation != emitter.generation {
+		view := emitter.output.View()
+		if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+			emitter.generation = generation
+			emitter.cut = view.End
+		}
+		return
+	}
+	if emitter.pendingBroadcast {
+		emitter.retryPendingBroadcast()
+	}
+	if len(emitter.pendingSnapshots) > 0 {
+		emitter.retryPendingSnapshots()
+	}
+	if emitter.output.End() == emitter.cut {
+		return
+	}
+	emitter.lastFlush = time.Now()
+	emitter.emitPending(emitter.output.View())
+}
+
+// retryPendingSnapshots re-sends refused targeted snapshot replies on the
+// flush cadence, one fresh ordered cut for all waiting viewers; a reply is
+// removed only after its frame is actually enqueued. It stops at the first
+// refused send so a full queue costs at most one sealed snapshot per tick.
+// Callers hold emitter.mu.
+func (emitter *outputEmitter) retryPendingSnapshots() {
+	view := emitter.output.View()
+	emitter.emitPending(view)
+	if emitter.cut != view.End {
+		return
+	}
+	for viewerID := range emitter.pendingSnapshots {
+		if !emitter.sendSnapshot(viewerID, view) {
+			return
+		}
+		delete(emitter.pendingSnapshots, viewerID)
+	}
+}
+
+// retryPendingBroadcast re-sends the overflow recovery broadcast on the
+// flush cadence until it is enqueued; it covers every deferred target, so
+// the pending set is cleared with it. Callers hold emitter.mu.
+func (emitter *outputEmitter) retryPendingBroadcast() {
+	view := emitter.output.View()
+	emitter.emitPending(view)
+	if emitter.cut != view.End {
+		return
+	}
+	if emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+		emitter.pendingBroadcast = false
+		emitter.pendingSnapshots = make(map[uint32]struct{})
+	}
+}
+
+// deferSnapshot records a refused targeted reply for the flush cadence. A
+// duplicate ID is not new capacity. At the bound, a broadcast recovery
+// covers every waiting viewer (browsers reset on broadcasts); a refused
+// broadcast is retried on the flush cadence until enqueued, so no target is
+// dropped. Callers hold emitter.mu.
+func (emitter *outputEmitter) deferSnapshot(viewerID uint32) error {
+	if _, pending := emitter.pendingSnapshots[viewerID]; pending {
+		return fmt.Errorf("relay did not accept the snapshot reply within %s; retrying on the output cadence", snapshotReplyTimeout)
+	}
+	if len(emitter.pendingSnapshots) < pendingSnapshotLimit {
+		emitter.pendingSnapshots[viewerID] = struct{}{}
+		return fmt.Errorf("relay did not accept the snapshot reply within %s; retrying on the output cadence", snapshotReplyTimeout)
+	}
+	view := emitter.output.View()
+	emitter.emitPending(view)
+	if emitter.cut == view.End && emitter.sendFrame(protocol.Frame(protocol.BroadcastSnapshot, view.Bytes[view.Skip:])) {
+		emitter.pendingSnapshots = make(map[uint32]struct{})
+		return nil
+	}
+	emitter.pendingBroadcast = true
+	return fmt.Errorf("relay did not accept the snapshot reply or its broadcast recovery within %s", snapshotReplyTimeout)
+}
+
+// due reports whether a kick should flush immediately: the first output after
+// an idle interval goes out at once, while a burst coalesces until the tick.
+func (emitter *outputEmitter) due() bool {
+	emitter.mu.Lock()
+	defer emitter.mu.Unlock()
+	return time.Since(emitter.lastFlush) >= outputBatchInterval
+}
+
+// snapshotFor answers one viewer's snapshot request. Pending output is
+// enqueued first, through the same captured cut, and the reply is published
+// only once that cut is committed and retained. The targeted frame is
+// retried within the same bounded window; if the relay still cannot accept
+// it, the reply is deferred to the flush cadence (deferSnapshot) instead of
+// publishing a partial or empty snapshot.
+func (emitter *outputEmitter) snapshotFor(viewerID uint32) error {
+	emitter.mu.Lock()
+	defer emitter.mu.Unlock()
+	deadline := time.Now().Add(snapshotReplyTimeout)
+	for {
+		view := emitter.output.View()
+		emitter.emitPending(view)
+		if emitter.cut == view.End && emitter.sendSnapshot(viewerID, view) {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return emitter.deferSnapshot(viewerID)
+		}
+		time.Sleep(snapshotRetryDelay)
+	}
+}
+
+func (emitter *outputEmitter) sendSnapshot(viewerID uint32, view ringbuffer.View) bool {
+	frame := make([]byte, 5+len(view.Bytes[view.Skip:]))
+	frame[0] = protocol.Snapshot
+	binary.BigEndian.PutUint32(frame[1:5], viewerID)
+	copy(frame[5:], view.Bytes[view.Skip:])
+	return emitter.sendFrame(frame)
+}
+
+func batchOutput(ctx context.Context, kicks <-chan struct{}, emitter *outputEmitter, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(outputBatchInterval)
 	defer ticker.Stop()
-	buffer := make([]byte, 0, outputBatchBytes)
-	lastFlush := time.Time{}
-	lastRecoveryAttempt := time.Time{}
-
-	flush := func() {
-		if len(buffer) == 0 {
-			return
-		}
-		if !connection.Active() {
-			dirty.Store(true)
-			buffer = buffer[:0]
-			return
-		}
-		lastFlush = time.Now()
-		frame, err := sealFrame(frameCipher, protocol.Frame(protocol.Output, buffer))
-		if err != nil {
-			dirty.Store(true)
-			buffer = buffer[:0]
-			return
-		}
-		if !connection.TrySend(relay.BinaryMessage, frame) {
-			dirty.Store(true)
-		}
-		buffer = buffer[:0]
-	}
-	recoverSnapshot := func() {
-		if !dirty.Load() || !connection.Active() || time.Since(lastRecoveryAttempt) < 250*time.Millisecond {
-			return
-		}
-		lastRecoveryAttempt = time.Now()
-		frame, err := sealFrame(frameCipher, protocol.Frame(protocol.BroadcastSnapshot, output.Bytes()))
-		if err != nil {
-			return
-		}
-		if connection.TrySend(relay.BinaryMessage, frame) {
-			dirty.Store(false)
-		}
-	}
-
 	for {
 		select {
-		case chunk, open := <-chunks:
+		case _, open := <-kicks:
 			if !open {
-				flush()
+				emitter.flush()
 				return
 			}
-			flushAfterFirstAppend := len(buffer) == 0 && time.Since(lastFlush) >= outputBatchInterval
-			for len(chunk) > 0 {
-				remaining := outputBatchBytes - len(buffer)
-				if remaining > len(chunk) {
-					remaining = len(chunk)
-				}
-				buffer = append(buffer, chunk[:remaining]...)
-				chunk = chunk[remaining:]
-				if flushAfterFirstAppend || len(buffer) == outputBatchBytes {
-					flush()
-					flushAfterFirstAppend = false
-				}
+			if emitter.due() {
+				emitter.flush()
 			}
 		case <-ticker.C:
-			flush()
-			recoverSnapshot()
+			emitter.flush()
 		case <-ctx.Done():
 			return
 		}
@@ -496,7 +653,7 @@ func readRelay(
 	connection *relay.Connection,
 	ptmx sharedTerminalProcess,
 	arbiter *inputArbiter,
-	output *ringbuffer.Buffer,
+	emitter *outputEmitter,
 	frameCipher *sessionCipher,
 	readOnly bool,
 	exitAcknowledged chan<- struct{},
@@ -539,15 +696,11 @@ func readRelay(
 				continue
 			}
 			if event.Type == "snapshot_request" {
-				snapshot := output.Bytes()
-				frame := make([]byte, 5+len(snapshot))
-				frame[0] = protocol.Snapshot
-				binary.BigEndian.PutUint32(frame[1:5], event.ViewerID)
-				copy(frame[5:], snapshot)
-				sealed, sealError := sealFrame(frameCipher, frame)
-				if sealError == nil {
-					_ = connection.Send(relay.BinaryMessage, sealed)
-				}
+				// Viewers do not re-request a missing snapshot, so a refused
+				// reply is deferred and retried by the emitter's flush
+				// cadence; the error only reports that the frame was not
+				// enqueued now.
+				_ = emitter.snapshotFor(event.ViewerID)
 			}
 			if event.Type == "terminal_size" {
 				if isCanonicalTerminalSize(event.Cols, event.Rows) {

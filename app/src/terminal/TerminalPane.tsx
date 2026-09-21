@@ -246,7 +246,8 @@ export function TerminalPane({
         maxLineHeight: BASE_LINE_HEIGHT,
       });
       fittedFontSize.current = fitted.fontSize;
-      const scaledFontSize = Math.max(6, Math.min(32, fitted.fontSize * fontScale.current));
+      /* The shared fit may go to 4 for a narrow pane; clamping higher clips the grid. */
+      const scaledFontSize = Math.max(4, Math.min(32, fitted.fontSize * fontScale.current));
       if (term.options.fontSize !== scaledFontSize) term.options.fontSize = scaledFontSize;
       if (term.options.lineHeight !== fitted.lineHeight) {
         term.options.lineHeight = fitted.lineHeight;
@@ -327,7 +328,6 @@ export function TerminalPane({
     if (pane) {
       void attachRefstreamTools(renderer, {
         terminal: term,
-        sessionKey: sessionId ?? shareUrl,
         toolbar: toolsNode,
         overlay: pane,
         frame: pane,

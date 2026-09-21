@@ -77,6 +77,24 @@ async function waitFor(condition: () => boolean, ms: number, what: string): Prom
   }
 }
 
+// Force a GC when the process was started with `--expose-gc` (the explicit P01 retention
+// regression command: `node --expose-gc node_modules/vitest/vitest.mjs run ... --pool=threads`).
+// `--pool=threads` is required: worker_threads inherit `process.execArgv` (so `--expose-gc`
+// reaches the worker and global.gc exists), whereas the forks pool filters `process.execArgv`
+// down to profiling flags and drops `--expose-gc`, leaving global.gc undefined. Bounded: drain one
+// tick, collect twice, drain again — no artificial wait. Returns true when a GC was actually
+// forced, false when global.gc is unavailable (the normal `npm run check` run, where the strict
+// test still applies and this path is simply skipped). Narrow cast: no new global typings.
+async function forceGcIfAvailable(): Promise<boolean> {
+  const gc = (globalThis as { gc?: () => void }).gc;
+  if (typeof gc !== "function") return false;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  gc();
+  gc();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return true;
+}
+
 function initBody(hostTokenHash: string, opts: { encrypted?: boolean; persistent?: boolean } = {}): Record<string, unknown> {
   const now = Date.now();
   return {
@@ -1306,16 +1324,31 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     const pendingWaitsSize = () => (model as unknown as { pendingWaits: Set<unknown> }).pendingWaits.size;
 
     // Start a long-poll wait (5s) through the request handler, carrying a client abort signal.
+    // RETAIN this harness's source Request until the response is consumed: Node's built-in undici
+    // holds the abort-propagation link (this Request's signal -> the DO's forwarded signal) via a
+    // strong reference on the Request and a WEAK reference to its internal AbortController. Once the
+    // Worker returns the streamed response headers (before the wait settles), an inline Request
+    // becomes collectable; if it is GC'd the internal abort controller is collected and
+    // controller.abort() no longer reaches the DO, so the wait runs to its own timeout instead of
+    // settling as cancelled. This retention is a property of the Node unit harness, not a claim
+    // about every client's lifecycle.
     const controller = new AbortController();
-    const responsePromise = workerFetch(
-      routeKey, do_,
-      workerMcpRequest(bearer, call("shell_wait", 2, { pattern: "NEVER", timeout_ms: 5000 }), {}, controller.signal),
-    );
+    const clientRequest = workerMcpRequest(bearer, call("shell_wait", 2, { pattern: "NEVER", timeout_ms: 5000 }), {}, controller.signal);
+    const responsePromise = workerFetch(routeKey, do_, clientRequest);
 
     // Synchronize on the ACTUAL wait registration: the spy captured the real promise AND the model
     // holds a live pending waiter (not merely request accounting).
     await waitFor(() => captured !== null && pendingWaitsSize() === 1, 1000, "real wait registered");
     expect(doAny.mcpWaitCount).toBe(1);
+
+    // Optional forced-GC path (explicit regression command only): now that the waiter is registered
+    // and the Worker has returned the streamed headers, the retained clientRequest is the ONLY thing
+    // keeping the abort-propagation link alive. Force a GC (no-op unless run with `node
+    // --expose-gc ... --pool=threads`) to prove the retention holds under collection pressure: if
+    // the source Request were collected here, the link would break and the wait would run to timeout
+    // instead of settling as cancelled. This validates our Worker/DO cancellation path, not every
+    // client's lifecycle.
+    await forceGcIfAvailable();
 
     // Abort the CLIENT request (the Worker's request.signal), not the model's signal directly.
     controller.abort();
@@ -1336,6 +1369,12 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     // The HTTP response also reflects the cancellation (the tool's finally released the slot).
     const result = await toolResult(await withTimeout(responsePromise, 4000));
     expect(result.reason).toBe("cancelled");
+
+    // The retained client Request's signal must reflect the abort even after settlement and full
+    // body consumption: the propagation source stayed live for the entire pending call. If the
+    // Request had been collected, this signal would not have aborted and the wait above would have
+    // settled as "timeout" instead of "cancelled".
+    expect(clientRequest.signal.aborted).toBe(true);
   }, 10000);
 });
 

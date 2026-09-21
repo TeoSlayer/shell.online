@@ -29,6 +29,7 @@ import type {
   GameCollectionRun,
   GameProfile,
   Notification,
+  SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
   TeamKey,
@@ -193,6 +194,9 @@ function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
     startedAt: row.started_at,
     closedAt: row.closed_at,
     exitCode: row.exit_code,
+    mcpTeamAccess: row.mcp_team_access,
+    dailyBriefingEnabled: row.daily_briefing_enabled,
+    dailyBriefingTeamAccess: row.daily_briefing_team_access,
   }) as unknown as SessionRecord;
   /*
    * An empty list and an absent one mean different things to the browser: the
@@ -887,6 +891,37 @@ export class PostgresStore implements Store {
     const row = await this.row(
       `UPDATE sessions SET name = $3 WHERE org_id = $1 AND id = $2 RETURNING *`,
       [orgId, id, name ?? null],
+    );
+    return row ? (await this.hydrate([row]))[0] : null;
+  }
+
+  /**
+   * One statement, one row: the three switches move together, and the owner
+   * clause in the WHERE means a caller who is not the row's owner (a legacy
+   * row's uid standing in for a missing owner) updates nothing and learns it
+   * from the null rather than from a second, racy read.
+   */
+  async setSessionAutomationConsent(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    consent: Partial<SessionAutomationConsent>,
+  ): Promise<SessionRecord | null> {
+    const row = await this.row(
+      `UPDATE sessions
+       SET mcp_team_access = COALESCE($4::boolean, mcp_team_access),
+           daily_briefing_enabled = COALESCE($5::boolean, daily_briefing_enabled),
+           daily_briefing_team_access = COALESCE($6::boolean, daily_briefing_team_access)
+       WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3
+       RETURNING *`,
+      [
+        orgId,
+        sessionId,
+        ownerUid,
+        consent.mcpTeamAccess,
+        consent.dailyBriefingEnabled,
+        consent.dailyBriefingTeamAccess,
+      ],
     );
     return row ? (await this.hydrate([row]))[0] : null;
   }
