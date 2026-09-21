@@ -1,8 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
 import { MemoryStore } from "./store-memory";
 import { PostgresStore } from "./store-postgres";
 import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./store";
 import { MCP_FLOW_TTL, type McpFlowEvent } from "./mcp-flows";
+import { JEV_ASSESSMENT_TTL_MS, JEV_BUDGET } from "./jev/limits";
+import type { AssessmentSnapshot } from "./jev/integration";
 import type { AgentCommand, AuditEvent, CliToken, Feedback, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
@@ -189,6 +192,9 @@ const TABLES = [
   "organizations",
   "cli_tokens",
   "auth_codes",
+  "external_analysis_consents",
+  "jev_assessments",
+  "jev_budget",
 ];
 
 const implementations: Implementation[] = [
@@ -472,6 +478,212 @@ for (const implementation of implementations) {
         } finally {
           if (peer !== store) await peer.close();
         }
+      });
+    });
+
+    describe("external analysis (Jev)", () => {
+      const snapshot = (sessionId: string, observedAt = 1000): AssessmentSnapshot => ({
+        sessionId,
+        generation: 1,
+        observedAt,
+        expiresAt: observedAt + JEV_ASSESSMENT_TTL_MS,
+        model: { kind: "unknown", reason: "no_signal" },
+        observed: {},
+        disclaimer: "",
+      });
+
+      async function setup() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.upsertSession(session());
+        return (await store.putJevConsent("org_1", "uid-1", true, "uid-1", null, 1000))!;
+      }
+
+      it("keeps consent absent by default and refuses a stale compare-and-swap", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        expect(await store.jevConsent("org_1", "uid-1")).toBeNull();
+        const first = await store.putJevConsent("org_1", "uid-1", true, "uid-1", null, 1000);
+        expect(first).toEqual({ externalAnalysis: true, updatedAt: 1000, updatedBy: "uid-1" });
+        /* An enable still holding the "no consent" version loses to the one on record. */
+        expect(await store.putJevConsent("org_1", "uid-1", false, "uid-1", null, 1001)).toBeNull();
+        /* A revoke on a stale clock still moves the version forward. */
+        const revoked = await store.putJevConsent("org_1", "uid-1", false, "uid-1", first!.updatedAt, 1000);
+        expect(revoked).toEqual({ externalAnalysis: false, updatedAt: 1001, updatedBy: "uid-1" });
+        /* Consent is per owner: another account has its own record. */
+        expect(await store.putJevConsent("org_1", "uid-2", true, "uid-2", null, 1000)).not.toBeNull();
+      });
+
+      it("writes a snapshot only while consent still matches and the session is open and owned", async () => {
+        const consent = await setup();
+        expect(await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt)).toBe(true);
+        expect(await store.putJevAssessment("org_1", "uid-1", snapshot("missing"), consent.updatedAt)).toBe(false);
+        expect(await store.putJevAssessment("org_2", "uid-1", snapshot("s1"), consent.updatedAt)).toBe(false);
+        expect(await store.putJevAssessment("org_1", "uid-2", snapshot("s1"), consent.updatedAt)).toBe(false);
+        const revoked = await store.putJevConsent("org_1", "uid-1", false, "uid-1", consent.updatedAt, 1500);
+        expect(await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), revoked!.updatedAt)).toBe(false);
+        expect(await store.listJevAssessments("org_1", "uid-1", 1500)).toEqual([]);
+      });
+
+      it("serves unexpired rows to their owner only, and drops what lost its session", async () => {
+        const consent = await setup();
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        const live = await store.listJevAssessments("org_1", "uid-1", 1000);
+        expect(live).toHaveLength(1);
+        expect(live[0].sessionId).toBe("s1");
+        expect(await store.listJevAssessments("org_1", "uid-2", 1000)).toEqual([]);
+        /* TTL is a service boundary: unservable the moment it passes. */
+        expect(await store.listJevAssessments("org_1", "uid-1", 1000 + JEV_ASSESSMENT_TTL_MS + 1)).toEqual([]);
+        /* A closed session cannot serve a row that predates the closure. */
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.patchSession("uid-1", "s1", { closedAt: 2000 });
+        expect(await store.listJevAssessments("org_1", "uid-1", 2000)).toEqual([]);
+      });
+
+      it("cannot store a snapshot a concurrent revoke overtakes", async () => {
+        const consent = await setup();
+        const peer = await implementation.openPeer(store);
+        /*
+         * The provider answer is in hand and the write races a revoke. The
+         * two orders must agree: either the write lands first and the revoke
+         * purges it in the same step, or the revoke lands first and the
+         * write's predicate refuses. A revoked account serves nothing.
+         */
+        const write = store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        const revoke = peer.putJevConsent("org_1", "uid-1", false, "uid-1", consent.updatedAt, 1500);
+        await Promise.all([write, revoke]);
+        expect(await store.listJevAssessments("org_1", "uid-1", 1500)).toEqual([]);
+        /* The list read alone could hide a persisted row; the physical count
+           cannot. */
+        if (implementation.name === "PostgresStore") {
+          const pool = (store as unknown as { pool: { query: (text: string) => Promise<{ rows: { count: number }[] }> } }).pool;
+          const { rows } = await pool.query("SELECT count(*)::int AS count FROM jev_assessments WHERE org_id = 'org_1' AND owner_uid = 'uid-1'");
+          expect(rows[0].count).toBe(0);
+        }
+      });
+
+      it("invalidates a snapshot when the session closes, with no interim read", async () => {
+        const consent = await setup();
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.patchSession("uid-1", "s1", { closedAt: 2000 });
+        expect(await store.listJevAssessments("org_1", "uid-1", 2000)).toEqual([]);
+        /* Clearing the close does not resurrect it. */
+        await store.patchSession("uid-1", "s1", { closedAt: undefined });
+        expect(await store.listJevAssessments("org_1", "uid-1", 2000)).toEqual([]);
+      });
+
+      it("invalidates a snapshot when a deleted session id is recreated under a new incarnation", async () => {
+        const consent = await setup();
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.deleteSession("org_1", "s1");
+        await store.upsertSession(session({ startedAt: 5000 }));
+        expect(await store.listJevAssessments("org_1", "uid-1", 5000)).toEqual([]);
+      });
+
+      it("invalidates a snapshot when ownership leaves and returns", async () => {
+        const consent = await setup();
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.patchSession("uid-1", "s1", { ownerUid: "uid-2" });
+        await store.patchSession("uid-1", "s1", { ownerUid: "uid-1" });
+        expect(await store.listJevAssessments("org_1", "uid-1", 1000)).toEqual([]);
+      });
+
+      it("deletes Jev state with the account and with a dissolved organization", async () => {
+        const consent = await setup();
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.consumeJevBudget("org_1", "uid-1", 10, 1000);
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: true });
+        expect(await store.jevConsent("org_1", "uid-1")).toBeNull();
+        expect(await store.listJevAssessments("org_1", "uid-1", 1000)).toEqual([]);
+        /* A fresh account in the same window is not paying for deleted rows. */
+        expect(await store.consumeJevBudget("org_1", "uid-2", 10, 1000)).toBe(true);
+      });
+
+      it("keeps an account deletion's Jev cleanup scoped to that account", async () => {
+        const consent = await setup();
+        await store.upsertSession(session({ id: "s2", uid: "uid-2", ownerUid: "uid-2", startedAt: 2000 }));
+        await store.putJevConsent("org_1", "uid-2", true, "uid-2", null, 1000);
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+        await store.putJevAssessment("org_1", "uid-2", snapshot("s2", 2000), 1000);
+        await store.deleteAccount("uid-1", { orgId: "org_1", dissolve: false });
+        expect(await store.jevConsent("org_1", "uid-1")).toBeNull();
+        expect(await store.listJevAssessments("org_1", "uid-1", 2000)).toEqual([]);
+        /* The colleague's consent and snapshot survive the deletion. */
+        expect(await store.jevConsent("org_1", "uid-2")).not.toBeNull();
+        expect(await store.listJevAssessments("org_1", "uid-2", 2000)).toHaveLength(1);
+      });
+
+      it("serializes concurrent first consent writers into one save and one conflict", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        const peer = await implementation.openPeer(store);
+        const [first, second] = await Promise.all([
+          store.putJevConsent("org_1", "uid-1", true, "uid-1", null, 1000),
+          peer.putJevConsent("org_1", "uid-1", false, "uid-1", null, 1000),
+        ]);
+        const saved = [first, second].filter((entry) => entry !== null);
+        expect(saved).toHaveLength(1);
+        expect((await store.jevConsent("org_1", "uid-1"))?.updatedAt).toBe(saved[0]!.updatedAt);
+      });
+
+      it("serializes a revoke and a final write under the same lock (Postgres barrier)", async () => {
+        if (implementation.name !== "PostgresStore") return;
+        const consent = await setup();
+        const pool = (store as unknown as {
+          pool: {
+            connect: () => Promise<{ query: (text: string, values?: unknown[]) => Promise<unknown>; release: () => void }>;
+            query: (text: string) => Promise<{ rows: { count: number }[] }>;
+          };
+        }).pool;
+        const holder = await pool.connect();
+        try {
+          await holder.query("BEGIN");
+          await holder.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["jev_consent:org_1:uid-1"]);
+          /*
+           * Queue a write and a revoke behind the held lock, then release it.
+           * Whichever serial order the lock grants, a revoked account must
+           * serve and keep nothing: the physical row count is the assertion
+           * a list-only race test could hide behind.
+           */
+          const write = store.putJevAssessment("org_1", "uid-1", snapshot("s1"), consent.updatedAt);
+          const revoke = store.putJevConsent("org_1", "uid-1", false, "uid-1", consent.updatedAt, 1500);
+          await delay(50);
+          await holder.query("COMMIT");
+          await Promise.all([write, revoke]);
+          expect(await store.listJevAssessments("org_1", "uid-1", 1500)).toEqual([]);
+          const { rows } = await pool.query("SELECT count(*)::int AS count FROM jev_assessments WHERE org_id = 'org_1' AND owner_uid = 'uid-1'");
+          expect(rows[0].count).toBe(0);
+        } finally {
+          holder.release();
+        }
+      });
+
+      it("replaces one session's snapshot and clears every row on revocation", async () => {
+        const consent = await setup();
+        await store.upsertSession(session({ id: "s2", startedAt: 2000 }));
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1", 1000), consent.updatedAt);
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s2", 1001), consent.updatedAt);
+        await store.putJevAssessment("org_1", "uid-1", snapshot("s1", 1002), consent.updatedAt);
+        const rows = await store.listJevAssessments("org_1", "uid-1", 1002);
+        expect(rows.map((row) => row.sessionId).sort()).toEqual(["s1", "s2"]);
+        expect(rows[0].observedAt).toBe(1002);
+        expect(await store.clearJevAssessments("org_1", "uid-1")).toBe(2);
+        expect(await store.dropJevAssessments("org_1", "uid-1", ["s1"])).toBe(0);
+      });
+
+      it("enforces the shared budget across connections, in requests and characters", async () => {
+        const peer = await implementation.openPeer(store);
+        let allowed = 0;
+        for (let i = 0; i < JEV_BUDGET.maxRequests + 2; i += 1) {
+          const target = i % 2 === 0 ? store : peer;
+          if (await target.consumeJevBudget("org_1", "uid-1", 10, 1000)) allowed += 1;
+        }
+        expect(allowed).toBe(JEV_BUDGET.maxRequests);
+        /* Characters are the second bound: near the cap, one more spend refuses. */
+        expect(await store.consumeJevBudget("org_1", "uid-2", JEV_BUDGET.maxInputChars - 5, 1000)).toBe(true);
+        expect(await peer.consumeJevBudget("org_1", "uid-2", 10, 1000)).toBe(false);
+        /* The window slides: past it, the earlier spend is forgotten. */
+        expect(await store.consumeJevBudget("org_1", "uid-1", 10, 1000 + JEV_BUDGET.windowMs + 1)).toBe(true);
       });
     });
 

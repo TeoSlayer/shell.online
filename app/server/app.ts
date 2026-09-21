@@ -60,6 +60,9 @@ import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
 import { readSessionContent } from "./lib/session-content";
 import { readMcpFlows } from "./lib/mcp-flows";
+import { createJevIntegration } from "./lib/jev/integration";
+import { readJevAssessRequest } from "./lib/jev/request";
+import { jevStoreHooks } from "./lib/jev/store-adapter";
 
 export interface AppOptions {
   store: Store;
@@ -95,6 +98,12 @@ export interface AppOptions {
    * exist. At least 32 characters; see readConfig.
    */
   statsToken?: string;
+  /**
+   * The server-only external-analysis credential. Absent means the optional
+   * Jev assessment is unavailable; it is never read from a client, never
+   * returned to one, and never part of a browser bundle.
+   */
+  jevApiKey?: string | null;
   /**
    * Accounts the statistics dashboard leaves out of every figure: ours, not
    * customers'. Addresses and domains; see internal-accounts.ts.
@@ -404,6 +413,28 @@ export function createApp(options: AppOptions) {
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
   const feedbackLimit = rateLimiter(FEEDBACK_BUCKET);
+  /*
+   * Advisory external analysis, inert without a deployment secret and the
+   * owner's separate consent. The stores own every predicate; this object
+   * only sequences them.
+   */
+  const jev = createJevIntegration({
+    env: { JEV_API_KEY: options.jevApiKey ?? null },
+    store: jevStoreHooks(store),
+  });
+
+  /* How each refusal from the external-analysis path is reported. Never the
+     upstream body, never a distinguishing detail beyond the reason code. */
+  const JEV_STATUS: Record<string, number> = {
+    not_configured: 409, unavailable: 409, budget_unavailable: 409,
+    consent_required: 403, access_denied: 404,
+    consent_revoked: 409, access_revoked: 409,
+    budget_exceeded: 429, rate_capped: 429, rate_limited: 429, busy: 409, overloaded: 503,
+    timeout: 504,
+    provider_error: 502, redirect_refused: 502, unauthorized: 502,
+    invalid_request: 502, malformed: 502,
+    state_out_of_bounds: 400, questions_out_of_bounds: 400,
+  };
 
   async function sessionsForMember(membership: Membership, sessions: SessionRecord[]) {
     const states = options.sessionLiveness
@@ -717,6 +748,71 @@ export function createApp(options: AppOptions) {
         const devices = await store.listDevices(membership.uid);
         const activeDevices = new Set(devices.filter((device) => device.revokedAt === undefined).map((device) => device.id));
         return send(response, 200, { flows: await store.listMcpFlows(membership.orgId, membership.uid, activeDevices) });
+      }
+
+      /*
+       * External analysis: the owner's separate consent (off by default and
+       * distinct from every other consent) and the advisory assessments
+       * stored from it. Responses carry the snapshot shape only: inferred
+       * labels with their source age, never a completion claim, never an
+       * action a client could take.
+       */
+      if (route === "GET /api/game/assessments") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const consent = await jev.getConsent(membership.orgId, membership.uid);
+        return send(response, 200, {
+          configured: jev.configured,
+          consent: { externalAnalysis: consent.externalAnalysis, updatedAt: consent.updatedAt },
+          assessments: await jev.list(membership.orgId, membership.uid),
+        });
+      }
+
+      if (route === "PUT /api/game/assessments/consent") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const body = (await readBody(request)) as Record<string, unknown>;
+        if (typeof body.enabled !== "boolean") {
+          return send(response, 400, { error: "expected { enabled: boolean }" });
+        }
+        const saved = await jev.putConsent(membership.orgId, membership.uid, body.enabled, membership.uid);
+        if (!saved.ok) return send(response, 409, { error: saved.reason });
+        return send(response, 200, {
+          externalAnalysis: saved.consent.externalAnalysis,
+          updatedAt: saved.consent.updatedAt,
+        });
+      }
+
+      /*
+       * A user-initiated assessment for one session the caller owns. The
+       * excerpt is disclosed from a pane the owner already has open and
+       * decrypted in their own browser; the service decrypts nothing itself
+       * and stores no excerpt. The integration rechecks consent and
+       * ownership before the outbound request and the store's predicate
+       * rechecks them again before anything is written.
+       */
+      const jevAssessRoute = url.pathname.match(/^\/api\/game\/sessions\/([A-Za-z0-9_-]{6,64})\/assess$/);
+      if (request.method === "POST" && jevAssessRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const session = await store.sessionInOrg(membership.orgId, jevAssessRoute[1]);
+        /* Owner only: the consent is the owner's and so is the pane. */
+        if (!session || !ownsSession(membership, session)) {
+          return send(response, 404, { error: "no such session" });
+        }
+        const parsed = readJevAssessRequest(await readBody(request));
+        if (!parsed) return send(response, 400, { error: "invalid assessment request" });
+        const result = await jev.assess({
+          orgId: membership.orgId,
+          ownerUid: membership.uid,
+          sessionId: session.id,
+          generation: parsed.generation,
+          excerpt: parsed.excerpt,
+          repeatCount: parsed.repeatCount,
+          observed: parsed.observed,
+        });
+        if (!result.ok) return send(response, JEV_STATUS[result.reason] ?? 502, { error: result.reason });
+        return send(response, 200, { assessment: result.snapshot });
       }
 
       const cliContentRoute = url.pathname.match(/^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/(content-policy|content)$/);

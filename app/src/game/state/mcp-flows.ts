@@ -97,6 +97,81 @@ export function expiringMcpFlows(flows: readonly McpFlow[], now: number, ttl = F
   return flows.filter((flow) => now - flow.at < ttl && flow.at <= now + 5_000);
 }
 
+/** What the observed requests add up to right now, in code, from observed rows only. */
+export interface McpFlowSummary {
+  total: number;
+  /**
+   * Started with no settled row for the same target and id. This means the
+   * settlement was not observed — best-effort telemetry can drop one — so it
+   * is worded as pending confirmation, never as proof the request is running.
+   */
+  pending: number;
+  /** Age of the oldest pending row, or null when nothing is pending. */
+  pendingAgeMs: number | null;
+  /** Settled rows per allowlisted outcome. Every known outcome is named. */
+  outcomes: Record<string, number>;
+  /** Settled rows whose outcome this build does not recognize. */
+  unrecognized: number;
+  /** Milliseconds since the newest settled row, or null when nothing has settled. */
+  newestAgeMs: number | null;
+}
+
+/** Short, accurate chip wording. None of these mean the agent finished. */
+export function flowOutcomeChip(outcome: string): string {
+  const chips: Record<string, string> = {
+    ok: "request ok",
+    matched: "wait matched",
+    timeout: "wait timed out",
+    cancelled: "cancelled",
+    reset: "session reset",
+    busy: "busy",
+    denied: "denied",
+    too_large: "too large",
+    revoked: "access revoked",
+    error: "request failed",
+    limit: "limit reached",
+    disconnected: "host disconnected",
+    delivered: "input delivered",
+    delivery_uncertain: "delivery uncertain",
+    in_flight: "input in flight",
+    conflict: "conflict",
+  };
+  return chips[outcome] ?? "unrecognized outcome";
+}
+
+export function flowSummary(flows: readonly McpFlow[], now: number): McpFlowSummary {
+  const settled = new Set<string>();
+  for (const flow of flows) {
+    if (flow.phase === "settled") settled.add(`${flow.targetSessionId}:${flow.id}`);
+  }
+  let pending = 0;
+  let pendingOldest: number | null = null;
+  let newest: number | null = null;
+  let unrecognized = 0;
+  const outcomes: Record<string, number> = {};
+  for (const flow of flows) {
+    if (flow.phase === "started") {
+      if (!settled.has(`${flow.targetSessionId}:${flow.id}`)) {
+        pending += 1;
+        if (pendingOldest === null || flow.at < pendingOldest) pendingOldest = flow.at;
+      }
+      continue;
+    }
+    const outcome = flow.outcome ?? "";
+    if (outcomeSet.has(outcome)) outcomes[outcome] = (outcomes[outcome] ?? 0) + 1;
+    else unrecognized += 1;
+    if (newest === null || flow.at > newest) newest = flow.at;
+  }
+  return {
+    total: flows.length,
+    pending,
+    pendingAgeMs: pendingOldest === null ? null : Math.max(0, now - pendingOldest),
+    outcomes,
+    unrecognized,
+    newestAgeMs: newest === null ? null : Math.max(0, now - newest),
+  };
+}
+
 /**
  * Re-renders while anything is on screen, so the panel empties on time even if
  * no fetch ever answers again. One second is the panel's whole resolution.

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { fetchSessions, request, type SessionRecord } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
 import { readMcpFlows, type McpFlow } from "./mcp-flows";
+import { ASSESSMENT_OFF, readAssessments, type AssessmentFeed } from "./assessments";
 import { keepKnownLiveness, sessionEnded } from "../../lib/session-liveness";
 import { rosterFrom, type Roster } from "./sessions";
 import { setRoster, type Sim } from "../world/sim";
@@ -20,6 +21,8 @@ export interface GarrisonState {
   /** The account this answer belongs to. A view for another account carries no flows. */
   uid: string;
   flows: McpFlow[];
+  /** The optional external-analysis layer; off/empty unless the account consented. */
+  assessments: AssessmentFeed;
   /** True until the first answer arrives, so nothing flashes. */
   loading: boolean;
   /** Set when the service could not be reached, shown plainly rather than hidden. */
@@ -85,6 +88,7 @@ export function useGarrison(
     heroes: 0,
     soldiers: 0,
     flows: [],
+    assessments: ASSESSMENT_OFF,
   }));
   /* Read by the poll without restarting it when the stand-in is rebuilt. */
   const fallback = useRef(standIn);
@@ -119,7 +123,7 @@ export function useGarrison(
     let unsettled = 0;
     const abort = new AbortController();
     seen.current = null;
-    setState(current => ({ ...current, uid, flows: [], loading: true }));
+    setState(current => ({ ...current, uid, flows: [], assessments: ASSESSMENT_OFF, loading: true }));
 
     const load = async () => {
       if (pending || unsettled > 0) return;
@@ -129,10 +133,16 @@ export function useGarrison(
       const sessionsPromise = fetchSessions();
       const flowsPromise = request<{ flows: unknown }>("/api/game/mcp-flows", { signal: controller.signal })
         .catch(() => null);
-      unsettled = 2;
+      /* The assessment read rides the same poll: no extra timer. With consent
+         off the route answers empty, and it never makes an external provider
+         call without consent. */
+      const assessmentsPromise = request<unknown>("/api/game/assessments", { signal: controller.signal })
+        .catch(() => null);
+      unsettled = 3;
       const settle = () => { unsettled = Math.max(0, unsettled - 1); };
       void sessionsPromise.then(settle, settle);
       void flowsPromise.then(settle, settle);
+      void assessmentsPromise.then(settle, settle);
       try {
         const timedOut = new Promise<never>((_, reject) => {
           timer = window.setTimeout(() => {
@@ -141,8 +151,8 @@ export function useGarrison(
           }, timeoutMs);
         });
         /* The flow request takes the abort signal; the session list is raced, so the wait is bounded. */
-        const [result, flowResult] = await Promise.race([
-          Promise.all([sessionsPromise, flowsPromise]),
+        const [result, flowResult, assessmentResult] = await Promise.race([
+          Promise.all([sessionsPromise, flowsPromise, assessmentsPromise]),
           timedOut,
         ]);
         if (!live) return;
@@ -168,6 +178,7 @@ export function useGarrison(
           error: "",
           demo,
           flows: demo ? [] : readMcpFlows(flowResult?.flows, allowed, Date.now()),
+          assessments: demo ? ASSESSMENT_OFF : readAssessments(assessmentResult, allowed, Date.now()) ?? ASSESSMENT_OFF,
           team: { heroes: roster.heroTotal, soldiers: roster.soldierTotal },
           /*
            * The totals, not the number of figures drawn. The field is capped so
@@ -190,6 +201,7 @@ export function useGarrison(
           error: caught instanceof Error ? caught.message : "The service did not answer.",
           demo: true,
           flows: [],
+          assessments: ASSESSMENT_OFF,
           /* Unreachable is not "you have nothing standing". */
           team: undefined,
           heroes: fallback.current.heroTotal,
@@ -220,6 +232,6 @@ export function useGarrison(
    * Reading another account's observations, even for a frame, would be a leak;
    * so a view whose uid does not match this render's account has none.
    */
-  if (state.uid !== uid) return { ...state, uid, loading: true, flows: [] };
+  if (state.uid !== uid) return { ...state, uid, loading: true, flows: [], assessments: ASSESSMENT_OFF };
   return state;
 }

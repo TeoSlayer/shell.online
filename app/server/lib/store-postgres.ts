@@ -13,6 +13,8 @@ import {
   type McpFlow,
   type McpFlowEvent,
 } from "./mcp-flows";
+import { JEV_BUDGET, JEV_MAX_SNAPSHOTS } from "./jev/limits";
+import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import {
   ACCOUNT_ACTIVITY_MEMORY_MS,
@@ -235,6 +237,26 @@ function toMcpFlow(row: Row): McpFlow {
     at: row.at as number,
     ...(row.outcome ? { outcome: row.outcome as McpFlow["outcome"] } : {}),
     targetSessionId: row.target_session_id as string,
+  };
+}
+
+function toJevConsent(row: Row): JevConsent {
+  return {
+    externalAnalysis: row.enabled as boolean,
+    updatedAt: Number(row.updated_at),
+    updatedBy: row.updated_by as string,
+  };
+}
+
+function toJevAssessment(row: Row): AssessmentSnapshot {
+  return {
+    sessionId: row.session_id as string,
+    generation: Number(row.generation ?? 0),
+    observedAt: Number(row.observed_at),
+    expiresAt: Number(row.expires_at),
+    model: row.model as AssessmentSnapshot["model"],
+    observed: (row.observed ?? {}) as Record<string, unknown>,
+    disclaimer: row.disclaimer as string,
   };
 }
 
@@ -1006,6 +1028,273 @@ export class PostgresStore implements Store {
     }
   }
 
+  /* ---- External analysis (Jev) ---- */
+
+  async jevConsent(orgId: string, ownerUid: string): Promise<JevConsent | null> {
+    const result = await this.pool.query<Row>(
+      `SELECT * FROM external_analysis_consents WHERE org_id = $1 AND owner_uid = $2`,
+      [orgId, ownerUid],
+    );
+    return result.rows[0] ? toJevConsent(result.rows[0]) : null;
+  }
+
+  async putJevConsent(
+    orgId: string,
+    ownerUid: string,
+    enabled: boolean,
+    updatedBy: string,
+    expectedUpdatedAt: number | null,
+    now = Date.now(),
+  ): Promise<JevConsent | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /*
+       * One per-owner advisory lock, shared with the assessment write and the
+       * revocation purge. The row lock below cannot serialize two *initial*
+       * writers, because absence has no row to lock: without this, both would
+       * read absence and one would raise a uniqueness error instead of the
+       * documented null conflict.
+       */
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`jev_consent:${orgId}:${ownerUid}`]);
+      /* The row lock makes the compare-and-swap exact: two writers serialize
+         here, and only the one holding the stored version can move it. */
+      const found = await client.query<Row>(
+        `SELECT * FROM external_analysis_consents WHERE org_id = $1 AND owner_uid = $2 FOR UPDATE`,
+        [orgId, ownerUid],
+      );
+      const existing = found.rows[0];
+      if ((existing ? Number(existing.updated_at) : null) !== expectedUpdatedAt) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      /* Strictly newer than whatever was stored, even within a millisecond. */
+      const updatedAt = Math.max(now, (existing ? Number(existing.updated_at) : 0) + 1);
+      const saved = existing
+        ? await client.query<Row>(
+            `UPDATE external_analysis_consents SET enabled = $3, updated_at = $4, updated_by = $5
+             WHERE org_id = $1 AND owner_uid = $2 RETURNING *`,
+            [orgId, ownerUid, enabled, updatedAt, updatedBy],
+          )
+        : await client.query<Row>(
+            `INSERT INTO external_analysis_consents (org_id, owner_uid, enabled, updated_at, updated_by)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [orgId, ownerUid, enabled, updatedAt, updatedBy],
+          );
+      /* Revocation deletes every cached result in the same transaction, so
+         no reader depends on remembering to purge afterwards. */
+      if (!enabled) {
+        await client.query(`DELETE FROM jev_assessments WHERE org_id = $1 AND owner_uid = $2`, [
+          orgId,
+          ownerUid,
+        ]);
+      }
+      await client.query("COMMIT");
+      return toJevConsent(saved.rows[0]);
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async consumeJevBudget(orgId: string, ownerUid: string, chars: number, now = Date.now()): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /*
+       * One advisory lock per owner serializes every worker's spend, so the
+       * window is enforced across service instances and not per process.
+       */
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`jev_budget:${orgId}:${ownerUid}`]);
+      await client.query(`DELETE FROM jev_budget WHERE org_id = $1 AND owner_uid = $2 AND at <= $3`, [
+        orgId,
+        ownerUid,
+        now - JEV_BUDGET.windowMs,
+      ]);
+      const spent = await client.query<Row>(
+        `SELECT COUNT(*) AS hits, COALESCE(SUM(chars), 0) AS chars FROM jev_budget WHERE org_id = $1 AND owner_uid = $2`,
+        [orgId, ownerUid],
+      );
+      const hits = Number(spent.rows[0]?.hits ?? 0);
+      const charsSpent = Number(spent.rows[0]?.chars ?? 0);
+      const cost = Math.max(0, Math.floor(chars));
+      if (hits >= JEV_BUDGET.maxRequests || charsSpent + cost > JEV_BUDGET.maxInputChars) {
+        await client.query("COMMIT");
+        return false;
+      }
+      await client.query(`INSERT INTO jev_budget (org_id, owner_uid, at, chars) VALUES ($1, $2, $3, $4)`, [
+        orgId,
+        ownerUid,
+        now,
+        cost,
+      ]);
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async putJevAssessment(
+    orgId: string,
+    ownerUid: string,
+    snapshot: AssessmentSnapshot,
+    expectedUpdatedAt: number,
+  ): Promise<boolean> {
+    /*
+     * One predicate, one statement: the SELECT yields a row only while the
+     * consent is enabled at exactly the version the model call started under
+     * and the session is still open and owned. The conflict path replaces the
+     * previous snapshot for the same session, so the table stays one row per
+     * owner and session, and a revoke that lands mid-call leaves nothing.
+     */
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /*
+       * The same per-owner lock the consent CAS and the revocation purge take.
+       * Under READ COMMITTED a bare INSERT..SELECT could retain a predicate
+       * snapshot taken before a revoke, then commit after the purge and leave
+       * a row behind. Serialized, the two orders are the only ones: either the
+       * write lands first and the revoke purges it in the same step, or the
+       * revoke lands first and the locked predicate below sees it and refuses.
+       */
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`jev_consent:${orgId}:${ownerUid}`]);
+      const consent = await client.query<Row>(
+        `SELECT * FROM external_analysis_consents WHERE org_id = $1 AND owner_uid = $2 FOR UPDATE`,
+        [orgId, ownerUid],
+      );
+      const consentRow = consent.rows[0];
+      if (!consentRow || !consentRow.enabled || Number(consentRow.updated_at) !== expectedUpdatedAt) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      /*
+       * The session row is locked too: a close or ownership change that lands
+       * first makes the predicate false, and one that lands second waits and
+       * then leaves the row unservable (the list rechecks this same binding).
+       */
+      const session = await client.query<Row>(
+        `SELECT * FROM sessions
+         WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 AND closed_at IS NULL
+         FOR UPDATE`,
+        [orgId, snapshot.sessionId, ownerUid],
+      );
+      const sessionRow = session.rows[0];
+      if (!sessionRow) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      const inserted = await client.query<Row>(
+        `INSERT INTO jev_assessments
+           (org_id, owner_uid, session_id, started_at, generation, observed_at, expires_at, model, observed, disclaimer)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)
+         ON CONFLICT (org_id, owner_uid, session_id) DO UPDATE
+           SET started_at = EXCLUDED.started_at,
+               generation = EXCLUDED.generation,
+               observed_at = EXCLUDED.observed_at,
+               expires_at = EXCLUDED.expires_at,
+               model = EXCLUDED.model,
+               observed = EXCLUDED.observed,
+               disclaimer = EXCLUDED.disclaimer
+         RETURNING session_id`,
+        [
+          orgId,
+          ownerUid,
+          snapshot.sessionId,
+          Number(sessionRow.started_at),
+          snapshot.generation,
+          snapshot.observedAt,
+          snapshot.expiresAt,
+          JSON.stringify(snapshot.model),
+          JSON.stringify(snapshot.observed),
+          snapshot.disclaimer,
+        ],
+      );
+      await client.query("COMMIT");
+      return inserted.rows.length > 0;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listJevAssessments(orgId: string, ownerUid: string, now = Date.now()): Promise<AssessmentSnapshot[]> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /* Purge what lost its session or its life, so a reactivated session id
+         cannot resurrect an old snapshot. */
+      await client.query(
+        `DELETE FROM jev_assessments
+         WHERE org_id = $1 AND owner_uid = $2
+           AND (expires_at <= $3
+             OR NOT EXISTS (
+               SELECT 1 FROM sessions s
+               WHERE s.org_id = $1 AND s.id = jev_assessments.session_id
+                 AND COALESCE(s.owner_uid, s.uid) = $2
+                 AND s.started_at = jev_assessments.started_at
+                 AND s.closed_at IS NULL
+             ))`,
+        [orgId, ownerUid, now],
+      );
+      const rows = await client.query<Row>(
+        `SELECT * FROM jev_assessments
+         WHERE org_id = $1 AND owner_uid = $2 AND expires_at > $3
+         ORDER BY observed_at DESC, session_id COLLATE "C" DESC
+         LIMIT $4`,
+        [orgId, ownerUid, now, JEV_MAX_SNAPSHOTS],
+      );
+      await client.query("COMMIT");
+      return rows.rows.map(toJevAssessment);
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async dropJevAssessments(orgId: string, ownerUid: string, sessionIds: string[]): Promise<number> {
+    if (sessionIds.length === 0) return 0;
+    const result = await this.pool.query(
+      `DELETE FROM jev_assessments WHERE org_id = $1 AND owner_uid = $2 AND session_id = ANY($3)`,
+      [orgId, ownerUid, sessionIds],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async clearJevAssessments(orgId: string, ownerUid: string): Promise<number> {
+    const result = await this.pool.query(
+      `DELETE FROM jev_assessments WHERE org_id = $1 AND owner_uid = $2`,
+      [orgId, ownerUid],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async upsertSession(session: SessionRecord): Promise<boolean> {
     /*
      * `xmax = 0` distinguishes an insert from an update on the conflicting
@@ -1075,6 +1364,23 @@ export class PostgresStore implements Store {
     if (session.keyShares?.length) {
       await this.writeShares(session.uid, session.id, session.keyShares);
     }
+    /*
+     * A snapshot is bound to one incarnation under one owner. Clean anything
+     * the current row no longer matches, so a restart or a handoff invalidates
+     * the old run's snapshot in the same call, with no intervening read.
+     */
+    await this.pool.query(
+      `DELETE FROM jev_assessments ja
+       WHERE ja.session_id = $1 AND ja.org_id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM sessions s
+           WHERE s.id = ja.session_id AND s.org_id = ja.org_id
+             AND COALESCE(s.owner_uid, s.uid) = ja.owner_uid
+             AND s.started_at = ja.started_at
+             AND s.closed_at IS NULL
+         )`,
+      [session.id, session.orgId ?? null],
+    );
     return row?.inserted === true;
   }
 
@@ -1134,6 +1440,18 @@ export class PostgresStore implements Store {
         id,
         ...set.values,
       ]);
+    }
+    if (["closedAt", "ownerUid", "startedAt"].some((key) => key in columns)) {
+      /*
+       * A close, a handoff or a new incarnation invalidates the snapshot in
+       * the same call, so a later reopen or handback cannot resurrect it.
+       */
+      await this.pool.query(
+        `DELETE FROM jev_assessments
+         WHERE session_id = $2
+           AND org_id = COALESCE((SELECT org_id FROM sessions WHERE uid = $1 AND id = $2), '')`,
+        [uid, id],
+      );
     }
     if (keyShares?.length) await this.writeShares(uid, id, keyShares);
     const row = await this.row("SELECT * FROM sessions WHERE uid = $1 AND id = $2", [uid, id]);
@@ -1287,6 +1605,8 @@ export class PostgresStore implements Store {
    * is an audited act and the record of it outlives the subject.
    */
   async deleteSession(orgId: string, id: string): Promise<boolean> {
+    /* A snapshot does not outlive the session row it was bound to. */
+    await this.pool.query("DELETE FROM jev_assessments WHERE org_id = $1 AND session_id = $2", [orgId, id]);
     const result = await this.pool.query("DELETE FROM sessions WHERE org_id = $1 AND id = $2", [
       orgId,
       id,
@@ -1407,7 +1727,17 @@ export class PostgresStore implements Store {
       await client.query("BEGIN");
       if (plan.orgId && plan.dissolve) {
         /* Key shares go with their sessions, through the foreign key's cascade. */
-        for (const table of ["sessions", "audit_events", "comments", "notifications", "invites", "memberships"]) {
+        for (const table of [
+          "sessions",
+          "audit_events",
+          "comments",
+          "notifications",
+          "invites",
+          "memberships",
+          "external_analysis_consents",
+          "jev_assessments",
+          "jev_budget",
+        ]) {
           await client.query(`DELETE FROM ${table} WHERE org_id = $1`, [plan.orgId]);
         }
         await client.query("DELETE FROM organizations WHERE id = $1", [plan.orgId]);
@@ -1429,6 +1759,10 @@ export class PostgresStore implements Store {
         "DELETE FROM account_activity WHERE uid = $1",
         /* The keep goes with the account. It is nobody else's progress. */
         "DELETE FROM game_profiles WHERE uid = $1",
+        /* Jev state is account-scoped: it goes with the account. */
+        "DELETE FROM external_analysis_consents WHERE owner_uid = $1",
+        "DELETE FROM jev_assessments WHERE owner_uid = $1",
+        "DELETE FROM jev_budget WHERE owner_uid = $1",
         "DELETE FROM comments WHERE author_uid = $1",
         "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
         /* The address an invite was sent to is theirs once they accepted it. */
@@ -1443,6 +1777,17 @@ export class PostgresStore implements Store {
       ]) {
         await client.query(statement, [uid]);
       }
+      /* A session that just lost its owner must not keep the old run's rows,
+         even outside the dissolve path. */
+      await client.query(
+        `DELETE FROM jev_assessments ja
+         WHERE NOT EXISTS (
+           SELECT 1 FROM sessions s
+           WHERE s.id = ja.session_id AND s.org_id = ja.org_id
+             AND COALESCE(s.owner_uid, s.uid) = ja.owner_uid
+             AND s.closed_at IS NULL
+         )`,
+      );
       await client.query("UPDATE audit_events SET actor_email = $2 WHERE actor_uid = $1", [
         uid,
         DELETED_ACTOR_EMAIL,
@@ -2229,6 +2574,10 @@ export class PostgresStore implements Store {
     ]);
     /* Flow rows are a live feed: the purge is what keeps the table a feed. */
     await this.pool.query("DELETE FROM mcp_flows WHERE expires_at <= $1", [now]);
+    /* Assessment rows are short-lived the same way; budget rows age out of
+       the sliding window. */
+    await this.pool.query("DELETE FROM jev_assessments WHERE expires_at <= $1", [now]);
+    await this.pool.query("DELETE FROM jev_budget WHERE at <= $1", [now - JEV_BUDGET.windowMs]);
   }
 
   async close(): Promise<void> {

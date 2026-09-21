@@ -47,6 +47,8 @@ export interface Env {
   MAIL_FROM?: string;
   /** Secret, set with `wrangler secret put`. */
   MAIL_API_KEY?: string;
+  /** Server-only external-analysis secret; absent leaves Jev unavailable. */
+  JEV_API_KEY?: string;
   /** Where in-app feedback is forwarded. Absent keeps it in the database only. */
   FEEDBACK_TO?: string;
   /** Secret: what the relay's statistics dashboard presents for account figures. */
@@ -151,6 +153,7 @@ function routerFor(env: Env): NodeHandler {
     }),
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     statsToken: env.STATS_TOKEN && env.STATS_TOKEN.length >= 32 ? env.STATS_TOKEN : undefined,
+    jevApiKey: env.JEV_API_KEY?.trim() || undefined,
     excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
     log: (message, error) => console.error(message, error),
     sessionLiveness: liveness,

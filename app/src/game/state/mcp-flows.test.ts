@@ -3,7 +3,10 @@ import {
   expiringMcpFlows,
   flowColor,
   flowStatus,
+  flowOutcomeChip,
+  flowSummary,
   isUuidV4,
+  MCP_FLOW_OUTCOMES,
   readMcpFlows,
   type McpFlow,
 } from "./mcp-flows";
@@ -125,5 +128,37 @@ describe("flow presentation", () => {
     expect(flowColor(flow({ phase: "started", outcome: undefined }))).toBe(0x89dceb);
     expect(flowColor(flow({ outcome: "delivered" }))).toBe(0xa6e3a1);
     expect(flowColor(flow({ outcome: "timeout" }))).toBe(0xf9c27a);
+  });
+});
+
+describe("observed request summary", () => {
+  const idN = (suffix: string) => id(suffix);
+
+  it("summarizes rows exactly as the production parser normalizes them", () => {
+    const rows = [
+      row({ id: idN("1e2f"), phase: "settled", at: NOW - 5_000, outcome: "ok" }),
+      row({ id: idN("2e3f"), phase: "settled", at: NOW - 4_000, outcome: "delivered" }),
+      row({ id: idN("3e4f"), phase: "settled", at: NOW - 3_000, outcome: "delivery_uncertain" }),
+      row({ id: idN("4e5f"), phase: "settled", at: NOW - 2_000, outcome: "timeout" }),
+      row({ id: idN("5e6f"), phase: "started", at: NOW - 1_000 }),
+      /* A matched pair is settled, so it is not pending. */
+      row({ id: idN("6e7f"), phase: "started", at: NOW - 1_500 }),
+      row({ id: idN("6e7f"), phase: "settled", at: NOW - 1_200, outcome: "cancelled" }),
+    ];
+    const parsed = readMcpFlows(rows, allowed, NOW);
+    const summary = flowSummary(parsed, NOW);
+    expect(summary.pending).toBe(1);
+    expect(summary.pendingAgeMs).toBe(1_000);
+    expect(summary.outcomes).toEqual({ ok: 1, delivered: 1, delivery_uncertain: 1, timeout: 1, cancelled: 1 });
+    expect(summary.unrecognized).toBe(0);
+    expect(summary.newestAgeMs).toBe(1_200);
+  });
+
+  it("names every allowlisted outcome, and only calls unrecognized what is not", () => {
+    const chips = MCP_FLOW_OUTCOMES.map(flowOutcomeChip);
+    expect(chips).not.toContain("unrecognized outcome");
+    expect(new Set(chips).size).toBe(MCP_FLOW_OUTCOMES.length);
+    expect(flowOutcomeChip("something_else")).toBe("unrecognized outcome");
+    expect(flowSummary([], NOW)).toMatchObject({ total: 0, pending: 0, pendingAgeMs: null, newestAgeMs: null, unrecognized: 0 });
   });
 });

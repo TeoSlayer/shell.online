@@ -249,6 +249,68 @@
   line-height: 1.35;
 }
 
+/*
+ * The at-a-glance strip: how many requests are still in flight, and what the
+ * settled ones actually did. Counted from observed rows in code; none of it
+ * says a request succeeded. Static, so there is no motion to turn off.
+ */
+.keep-mcp-flows-active {
+  display: inline-flex;
+  margin-left: auto;
+  align-items: center;
+  color: var(--keep-arcane);
+  font-size: var(--keep-text-sm);
+  gap: calc(6px * var(--keep-scale));
+}
+
+.keep-mcp-flows-dot {
+  width: calc(10px * var(--keep-scale));
+  height: calc(10px * var(--keep-scale));
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.keep-mcp-flows[data-pending="true"] > summary {
+  color: var(--keep-arcane);
+}
+
+.keep-mcp-flows-chips {
+  display: flex;
+  flex-wrap: wrap;
+  margin: var(--keep-space) 0 0;
+  padding: 0;
+  gap: calc(6px * var(--keep-scale));
+  list-style: none;
+}
+
+.keep-mcp-flows-chips li {
+  padding: calc(2px * var(--keep-scale)) calc(9px * var(--keep-scale));
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 999px;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-mcp-flows-chips li[data-outcome="pending"],
+.keep-mcp-flows-chips li[data-outcome="in_flight"],
+.keep-mcp-flows-chips li[data-outcome="delivery_uncertain"] {
+  color: var(--keep-arcane);
+}
+
+.keep-mcp-flows-chips li[data-outcome="delivered"] {
+  color: var(--keep-heal);
+}
+
+.keep-mcp-flows-chips li[data-outcome="cancelled"],
+.keep-mcp-flows-chips li[data-outcome="error"],
+.keep-mcp-flows-chips li[data-outcome="timeout"],
+.keep-mcp-flows-chips li[data-outcome="denied"],
+.keep-mcp-flows-chips li[data-outcome="revoked"] {
+  color: var(--keep-gold);
+}
+
+
 .keep-mcp-flows-list {
   display: grid;
   gap: calc(4px * var(--keep-scale));
@@ -2524,3 +2586,38 @@
   align-items: stretch;
   gap: var(--keep-space);
 }
+
+/* External analysis: the optional inferred layer. Deliberately quieter than
+   the observed MCP panel so an inference never reads as a fact. */
+.keep-assess {
+  position: absolute;
+  bottom: var(--keep-safe-top);
+  left: var(--keep-safe-left);
+  z-index: var(--keep-z-hud);
+  width: min(360px, calc(100vw - var(--keep-space-4)));
+  padding: var(--keep-space) var(--keep-space-2);
+  border: 1px dashed color-mix(in srgb, var(--keep-arcane) 40%, transparent);
+  border-radius: calc(6px * var(--keep-scale));
+  background: color-mix(in srgb, var(--keep-ink) 78%, transparent);
+  color: var(--keep-elixir);
+  font-size: var(--keep-text-sm);
+  line-height: 1.4;
+  pointer-events: auto;
+}
+.keep-assess[data-configured="false"] { opacity: 0.8; }
+.keep-assess > summary { cursor: pointer; display: flex; gap: var(--keep-space); align-items: baseline; }
+.keep-assess-state { font-size: var(--keep-text-sm); opacity: 0.85; }
+.keep-assess-consent { display: flex; gap: var(--keep-space); align-items: flex-start; margin-top: var(--keep-space); }
+.keep-assess-target { display: flex; gap: var(--keep-space); margin-top: var(--keep-space); }
+.keep-assess-target select { max-width: 140px; }
+.keep-assess-note, .keep-assess-unavailable, .keep-assess-error {
+  margin: var(--keep-space) 0 0;
+  font-size: var(--keep-text-sm);
+  opacity: 0.85;
+}
+.keep-assess-error { color: var(--keep-blood); }
+.keep-assess-list { list-style: none; margin: var(--keep-space) 0 0; padding: 0; }
+.keep-assess-list li { display: flex; flex-wrap: wrap; gap: var(--keep-space); align-items: baseline; margin-top: var(--keep-space); }
+.keep-assess-session { font-family: monospace; font-size: var(--keep-text-sm); opacity: 0.8; }
+.keep-assess-chip { border: 1px solid color-mix(in srgb, var(--keep-arcane) 55%, transparent); border-radius: 999px; padding: 0 6px; font-size: var(--keep-text-sm); }
+.keep-assess-age, .keep-assess-inferred { font-size: var(--keep-text-sm); opacity: 0.8; }

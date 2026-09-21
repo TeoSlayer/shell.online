@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { usePageTitle } from "../lib/page-title";
+import { request } from "../lib/api";
+import { useAuth } from "../auth/AuthProvider";
 import { PixiStage } from "./pixi/PixiStage";
 import { buildKeepScene, createSim, type KeepHandle } from "./pixi/keepScene";
 import { WrightPanel } from "./ui/WrightPanel";
@@ -21,7 +23,10 @@ import { ChooseCharacter } from "./ui/ChooseCharacter";
 import { BloodVeil } from "./ui/BloodVeil";
 import { Hud } from "./ui/Hud";
 import { McpFlows } from "./ui/McpFlows";
+import { AssessPanel } from "./ui/AssessPanel";
 import { useExpiringMcpFlows } from "./state/mcp-flows";
+import { assessmentsForAccount, observedTargets, withLocalConsent } from "./state/assessments";
+import { ASSESS_ACTIONS_IDLE, assessStateForAccount, createAssessActions, type AssessActionsState } from "./state/assess-actions";
 import { ZoomControls } from "./ui/ZoomControls";
 import { useLayout } from "./state/use-layout";
 import { isCompact } from "./state/layout";
@@ -258,6 +263,54 @@ export default function GameRoute() {
    * leave stale arrows on the field or stale rows in the panel.
    */
   const mcpFlows = useExpiringMcpFlows(garrison.demo ? [] : garrison.flows);
+  const assessTargets = observedTargets(mcpFlows);
+  const authUid = useAuth().user?.uid ?? "";
+  /*
+   * The feed is only ever the signed-in account's, and a withdrawal clears it
+   * immediately rather than at the next poll. Both guards are pure and tested;
+   * the panel cannot render another account's rows or a revoked feed.
+   *
+   * The action callbacks cross an await, so they are owned by an
+   * account-scoped controller: a switch bumps its generation, clears the
+   * transient state and discards any response that belonged to the account
+   * that just left.
+   */
+  const [assessActionsState, setAssessActionsState] = useState<AssessActionsState>(ASSESS_ACTIONS_IDLE);
+  const assessActions = useMemo(
+    () => createAssessActions({ request: (path, init) => request(path, init), onChange: setAssessActionsState }),
+    [],
+  );
+  /* The ref is the current account at event time; the effect below moves the
+     controller to it. Until then, neither the rendered state nor a click may
+     borrow the new account's auth. */
+  const authUidRef = useRef(authUid);
+  useEffect(() => {
+    authUidRef.current = authUid;
+    assessActions.setAccount(authUid);
+  }, [assessActions, authUid]);
+  /* Render gate: before the effect reset, a uid mismatch serves idle state. */
+  const assessView = assessStateForAccount(assessActionsState, authUid);
+  const localConsent = assessView.localConsent;
+  const assessmentFeed = useMemo(() => {
+    const base = assessmentsForAccount(garrison.assessments, garrison.uid, authUid);
+    if (!localConsent || base.consentUpdatedAt >= localConsent.updatedAt) return base;
+    return withLocalConsent(base, localConsent.enabled, localConsent.updatedAt);
+  }, [garrison.assessments, garrison.uid, authUid, localConsent]);
+  /* Consent and assessment requests go through the same authenticated client
+     as everything else. The feed refreshes on the existing garrison poll. */
+  const onAssessConsent = useCallback((enabled: boolean) => {
+    /* A callback rendered for a previous account is dropped rather than
+       dispatched under the new account's auth; an equal uid is synchronized
+       before dispatch so results land in the generation that is current. */
+    if (authUid === "" || authUid !== authUidRef.current) return;
+    assessActions.setAccount(authUid);
+    void assessActions.consent(enabled);
+  }, [assessActions, authUid]);
+  const onAssess = useCallback((sessionId: string, observed: { flows: number }) => {
+    if (authUid === "" || authUid !== authUidRef.current) return;
+    assessActions.setAccount(authUid);
+    void assessActions.assess(sessionId, observed);
+  }, [assessActions, authUid]);
   handle.current.mcpFlows = () => mcpFlows;
 
   /*
@@ -386,6 +439,17 @@ export default function GameRoute() {
           */}
         <div className="keep-safe">
           {!paused && <McpFlows flows={mcpFlows} actors={tally.wrights} />}
+          {!paused && (
+            <AssessPanel
+              feed={assessmentFeed}
+              targets={assessTargets}
+              busy={assessView.busy}
+              error={assessView.error}
+              now={Date.now()}
+              onConsent={onAssessConsent}
+              onAssess={onAssess}
+            />
+          )}
           <Hud
             standing={rank}
             marks={purse.marks}

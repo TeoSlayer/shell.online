@@ -66,6 +66,8 @@ export interface Config {
    * figures. Absent means that route does not exist.
    */
   statsToken?: string;
+  /** Server-only credential for the optional external-analysis provider. */
+  jevApiKey?: string;
   /**
    * Accounts the statistics dashboard leaves out of every figure: ours, not
    * customers'. Addresses and domains, read from STATS_EXCLUDE; see
@@ -218,6 +220,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   const statsToken = env.STATS_TOKEN?.trim() || undefined;
+  const jevApiKey = env.JEV_API_KEY?.trim() || undefined;
   /* A short token is a guessable one, and this one opens business figures. */
   if (statsToken !== undefined && statsToken.length < 32) {
     throw new ConfigError("STATS_TOKEN must be at least 32 characters");
@@ -267,6 +270,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     statsToken,
+    jevApiKey,
     excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
   };
 }

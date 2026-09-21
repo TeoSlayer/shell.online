@@ -1,6 +1,7 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type { ContentWriteResult, SessionContent, SessionContentPolicy } from "./session-content";
 import type { McpFlow, McpFlowEvent } from "./mcp-flows";
+import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
 import type {
   AccountActivity,
   AppEvent,
@@ -165,6 +166,59 @@ export interface Store {
    * the MCP_FLOW_LIMIT most recent rows, oldest first.
    */
   listMcpFlows(orgId: string, ownerUid: string, activeDevices: Set<string>, now?: number): Promise<McpFlow[]>;
+  /* ---- External analysis (Jev) ---- */
+  /**
+   * The owner's separate external-analysis consent, or null when none was
+   * ever given. Absent reads as off; there is no implied consent.
+   */
+  jevConsent(orgId: string, ownerUid: string): Promise<JevConsent | null>;
+  /**
+   * Saves the consent as one compare-and-swap step.
+   *
+   * `expectedUpdatedAt` must equal what is stored (null meaning none exists)
+   * or nothing changes, so a writer holding an older version loses instead of
+   * resurrecting consent. The stored version is strictly newer than the one
+   * it replaces, even within a millisecond, so an in-flight assessment can
+   * name the exact version it started under. Returns the stored record, or
+   * null when the condition failed.
+   */
+  putJevConsent(
+    orgId: string,
+    ownerUid: string,
+    enabled: boolean,
+    updatedBy: string,
+    expectedUpdatedAt: number | null,
+    now?: number,
+  ): Promise<JevConsent | null>;
+  /**
+   * Spends one assessment against the owner's shared sliding window,
+   * atomically across service instances. False means the window is full; a
+   * store that cannot answer must refuse rather than allow.
+   */
+  consumeJevBudget(orgId: string, ownerUid: string, chars: number, now?: number): Promise<boolean>;
+  /**
+   * Stores a snapshot only while the consent is still enabled at exactly
+   * `expectedUpdatedAt` and the session is still open and owned by the
+   * caller, all as one predicate: a revoke that lands between the model call
+   * and this write leaves no row. One snapshot per owner and session; a new
+   * assessment replaces the previous one.
+   */
+  putJevAssessment(
+    orgId: string,
+    ownerUid: string,
+    snapshot: AssessmentSnapshot,
+    expectedUpdatedAt: number,
+  ): Promise<boolean>;
+  /**
+   * The owner's live assessment rows, unexpired and rechecked against the
+   * sessions as they are now: a session that closed or changed owner loses
+   * its snapshot on the way. Newest first, bounded.
+   */
+  listJevAssessments(orgId: string, ownerUid: string, now?: number): Promise<AssessmentSnapshot[]>;
+  /** Deletes the named sessions' snapshots. Returns how many rows went. */
+  dropJevAssessments(orgId: string, ownerUid: string, sessionIds: string[]): Promise<number>;
+  /** Revocation: every snapshot for the owner, in one step. Returns the count. */
+  clearJevAssessments(orgId: string, ownerUid: string): Promise<number>;
   upsertSession(session: SessionRecord): Promise<boolean>;
   patchSession(uid: string, id: string, patch: Partial<SessionRecord>): Promise<SessionRecord | null>;
   listSessions(uid: string): Promise<SessionRecord[]>;
