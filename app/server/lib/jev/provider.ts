@@ -219,7 +219,9 @@ export function createJevProvider(options: JevProviderOptions = {}) {
           try {
             const response = await fetchImpl(JEV_ENDPOINT, {
               method: "POST",
-              redirect: "error",
+              // Workers supports manual/follow, not redirect: "error". Refuse
+              // every 3xx below without forwarding the provider credential.
+              redirect: "manual",
               headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
               body: JSON.stringify({ state, model: JEV_MODEL, questions }),
               signal: abort.signal,

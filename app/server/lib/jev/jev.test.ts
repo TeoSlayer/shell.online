@@ -81,7 +81,7 @@ test("fixed destination, redirect refused, server-side bearer only", async () =>
   assert.deepEqual(await jev.assess(input()), { ok: false, reason: "redirect_refused" });
   const call = fetchImpl.calls[0];
   assert.equal(call.url, JEV_ENDPOINT);
-  assert.equal(call.init.redirect, "error");
+  assert.equal(call.init.redirect, "manual");
   assert.equal(call.init.headers.Authorization, "Bearer test-key");
   assert.equal(JSON.parse(call.init.body).model, "jev-1.13.0");
 });
