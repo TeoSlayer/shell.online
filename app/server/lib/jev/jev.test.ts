@@ -108,6 +108,25 @@ test("provider statuses map to distinct reasons", async () => {
   }
 });
 
+test("an error response closes its unread body and aborts the transport", async () => {
+  let cancelled = false;
+  let signal: AbortSignal | undefined;
+  const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+  const provider = createJevProvider({
+    apiKey: "test-key",
+    fetchImpl: async (_url, init) => {
+      signal = init.signal as AbortSignal;
+      return { status: 429, body, json: async () => assert.fail("must not parse error body") };
+    },
+  });
+  const result = await provider.assess({ state: "short state", questions: {
+    attention: choiceQuestion("Needs attention?", { yes: "Yes", no: "No", unknown: "Unknown" }),
+  } });
+  assert.deepEqual(result, { ok: false, reason: "rate_limited" });
+  assert.equal(cancelled, true);
+  assert.equal(signal?.aborted, true);
+});
+
 test("consent is off by default, strict, and required before any request", async () => {
   const fetchImpl = fakeFetch(() => ({ status: 200, body: okBody({}) }));
   const { store } = fakeStore();

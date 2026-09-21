@@ -200,8 +200,9 @@ export function createJevProvider(options: JevProviderOptions = {}) {
     inFlight += 1;
     usage.push({ at, chars: state.length });
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const abort = new AbortController();
+    const transport: { body: ReadableStream<Uint8Array> | null } = { body: null };
     try {
-      const abort = new AbortController();
       const timeout = new Promise<{ kind: "timedOut" }>((resolve) => {
         timer = setTimeoutImpl(() => {
           abort.abort();
@@ -223,6 +224,7 @@ export function createJevProvider(options: JevProviderOptions = {}) {
               body: JSON.stringify({ state, model: JEV_MODEL, questions }),
               signal: abort.signal,
             });
+            transport.body = response.body ?? null;
             const status = response.status;
             if (status >= 300 && status < 400) return { kind: "reason" as const, reason: "redirect_refused" };
             if (status === 401) return { kind: "reason" as const, reason: "unauthorized" };
@@ -265,6 +267,10 @@ export function createJevProvider(options: JevProviderOptions = {}) {
       return { ok: true, model: payload.model, answers, usage: measured };
     } finally {
       if (timer !== null) clearTimeoutImpl(timer);
+      abort.abort();
+      // Error statuses do not need parsing, but their bodies still need closing.
+      // Do not await an uncooperative upstream cancellation after our deadline.
+      if (transport.body) void transport.body.cancel().catch(() => undefined);
       inFlight -= 1;
     }
   }
