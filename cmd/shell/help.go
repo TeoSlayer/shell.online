@@ -101,6 +101,10 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
 Endpoint: https://shell.online/mcp (or your configured service URL plus /mcp).
 Issuance prints a secret bearer once. Use the MCP client's secret/environment support;
 never put credentials in URLs, command arguments, repositories, or logs.
+Quote labels with spaces (e.g. "My Agent"). Labels are limited to 256 UTF-8 bytes;
+control characters are rejected. TTL is a non-negative whole number; 0 uses the default.
+Safe grant requests require an updated running host. If unsupported, update and restart
+that session's shell host when safe; there is no unsafe legacy-format fallback.
 Observe tools: shell_status, shell_screen, shell_output, shell_wait.
 Control adds shell_send on compatible hosts when enabled; read-only always blocks writes.
 shell_key and shell_interrupt are not available in this release.

@@ -2,6 +2,16 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.21.1] — 2026-09-21
+
+### Fixed
+
+- MCP grant labels no longer alter the requested scopes or lifetime through the local control
+  protocol. Quoted labels, Unicode and empty labels are encoded as data; malformed lifetimes,
+  control characters and extra arguments are rejected before issuance. New grant requests fail
+  closed on older running hosts, which must be updated and restarted when safe. Existing grant
+  listing and revocation remain compatible.
+
 ## [0.21.0] — 2026-09-21
 
 ### Added

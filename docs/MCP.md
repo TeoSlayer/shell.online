@@ -18,6 +18,19 @@ not the MCP credential. A host-authorized issuance returns a separate opaque bea
 5. `shell mcp revoke-all <session-id>` removes MCP access without removing browser access.
    `shell kill -- <session-id>` stops that target; never use `kill --all` for a test cleanup.
 
+Quote labels containing spaces, for example `shell mcp grant <session-id> "My Agent" observe 900`.
+Labels are data, not permission fields: the local command encodes the label, scope and lifetime
+separately. Labels may be empty or contain Unicode; control characters and labels over 256 UTF-8
+bytes are rejected. The service still bounds the displayed label. A lifetime must be a non-negative
+whole number of seconds; omitted or `0` selects the preset default. Server-side lifetime caps still apply.
+
+The v0.21.1 CLI uses a versioned local grant request and deliberately does not downgrade it.
+A host process started with v0.21.0 does not understand this request: update and restart that
+session's shell host when safe before issuing a new grant. Updating the CLI binary alone does
+not replace a running host. Listing and revoking existing grants remain available; no target
+is automatically stopped or restarted. New hosts still accept well-formed legacy simple-label
+requests, but reject extra arguments and malformed lifetimes.
+
 Treat share links, browser passwords, bearer files and raw request/tail logs as credentials.
 Store any necessary local credential file owner-only, outside the repository. Grants expire
 at a fixed time and do not renew on use. Create a new grant deliberately when needed.

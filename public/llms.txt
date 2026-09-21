@@ -8,6 +8,9 @@ shell_send requires a UUID-v4 operation_id; reuse it on retries. delivered confi
 write, not agent completion. No shell_key or shell_interrupt in this release. Read-only blocks
 writes. Revoke with shell mcp revoke-all <session-id>. MCP explicitly authorizes server-side
 in-memory decryption using a host-supplied frame key; the agent receives plaintext results.
+Quote grant labels containing spaces. v0.21.1 validates labels, scopes and lifetimes separately.
+New grants require an updated running host: restart older hosts only when the operator says it is safe.
+Updating the binary does not update an already-running host. Existing grant listing/revocation still work.
 
 shell.online wraps a local terminal process and produces an unguessable browser link. The process remains on the local machine. Links can be interactive or server-enforced read-only.
 
@@ -33,9 +36,9 @@ The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged sou
 
 The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
 
-git clone --depth 1 --branch v0.21.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.21.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -trimpath -ldflags="-X main.version=0.21.0" -o ./shell ./cmd/shell
+go build -trimpath -ldflags="-X main.version=0.21.1" -o ./shell ./cmd/shell
 ./shell --version
 
 The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.

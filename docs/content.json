@@ -1,5 +1,5 @@
 {
-  "version": "0.21.0",
+  "version": "0.21.1",
   "pages": {
     "docs": {
       "eyebrow": "Documentation",
@@ -13,7 +13,7 @@
       "cards": [
         [
           "Scoped MCP access",
-          "shell mcp grant <ID> <label> observe 900 issues a short-lived bearer for status, screen, output and waits at /mcp. The control preset adds shell_send when the operator enables it. The host supplies its frame key for server-side decryption; agents receive plaintext. Revoke with shell mcp revoke-all <ID>. This native channel is separate from Refstream Connect agent."
+          "shell mcp grant <ID> <label> observe 900 issues a short-lived bearer for status, screen, output and waits at /mcp. Quote labels containing spaces. v0.21.1 keeps labels separate from permissions and lifetime; new grants require an updated running host, so restart older hosts when safe after upgrading. Listing and revocation remain compatible. The control preset adds shell_send when the operator enables it. The host supplies its frame key for server-side decryption; agents receive plaintext. Revoke with shell mcp revoke-all <ID>. This native channel is separate from Refstream Connect agent."
         ],
         [
           "Install",
@@ -925,7 +925,7 @@
       "cards": [
         [
           "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.21.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
+          "Pull ghcr.io/teoslayer/shell.online:0.21.1 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
         ],
         [
           "Two durable volumes",

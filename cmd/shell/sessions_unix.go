@@ -11,10 +11,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"shell.online/internal/api"
 	"shell.online/internal/e2ee"
@@ -306,20 +306,19 @@ func (session *managedLocalSession) handleMcp(connection net.Conn, args []string
 			break
 		}
 		response.Grants = grants
-	case len(args) >= 3 && args[0] == "grant":
-		// mcp grant <label> <scopes> [ttl]
+	case len(args) > 0 && (args[0] == "grant" || args[0] == "grant-v2"):
+		request, err := parseMcpGrantCommand(args)
+		if err != nil {
+			response.OK = false
+			response.Error = err.Error()
+			break
+		}
 		if session.mcpGrant == nil {
 			response.OK = false
 			response.Error = "mcp control is not available"
 			break
 		}
-		label := args[1]
-		scopes := mcpGrantScopes(args[2])
-		ttl := 0
-		if len(args) >= 4 {
-			ttl, _ = strconv.Atoi(args[3])
-		}
-		created, err := session.mcpGrant(label, scopes, ttl)
+		created, err := session.mcpGrant(request.Label, mcpGrantScopes(request.Scopes), request.TTL)
 		if err != nil {
 			response.OK = false
 			response.Error = err.Error()
@@ -618,6 +617,42 @@ func runSessionMcp(arguments []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	action := arguments[0]
+	var grantCommand string
+	switch action {
+	case "grant":
+		if len(arguments) != 4 && len(arguments) != 5 {
+			fmt.Fprintln(stderr, "Usage: shell mcp grant <session-id> <label> <scopes> [ttl-seconds]")
+			return 2
+		}
+		request := mcpGrantRequest{Label: arguments[2], Scopes: arguments[3]}
+		if len(arguments) == 5 {
+			var err error
+			request.TTL, err = parseMcpGrantTTL(arguments[4])
+			if err != nil {
+				fmt.Fprintf(stderr, "shell: %v\n", err)
+				return 2
+			}
+		}
+		var err error
+		grantCommand, err = encodeMcpGrantCommand(request)
+		if err != nil {
+			fmt.Fprintf(stderr, "shell: %v\n", err)
+			return 2
+		}
+	case "list", "revoke-all":
+		if len(arguments) != 2 {
+			fmt.Fprintf(stderr, "Usage: shell mcp %s <session-id>\n", action)
+			return 2
+		}
+	case "revoke":
+		if len(arguments) != 3 || arguments[2] == "" || strings.IndexFunc(arguments[2], func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) >= 0 {
+			fmt.Fprintln(stderr, "Usage: shell mcp revoke <session-id> <grant-id>")
+			return 2
+		}
+	default:
+		fmt.Fprintf(stderr, "shell: unknown mcp action %q\n", action)
+		return 2
+	}
 	record, err := findLocalSession(arguments[1])
 	sessionID := record.ID
 	if err != nil {
@@ -626,26 +661,16 @@ func runSessionMcp(arguments []string, stdout, stderr io.Writer) int {
 	}
 	switch action {
 	case "grant":
-		if len(arguments) < 4 {
-			fmt.Fprintln(stderr, "Usage: shell mcp grant <session-id> <label> <scopes> [ttl-seconds]")
-			return 2
-		}
-		label := arguments[2]
-		scopes := arguments[3]
-		ttl := 0
-		if len(arguments) >= 5 {
-			ttl, err = strconv.Atoi(arguments[4])
-			if err != nil {
-				fmt.Fprintln(stderr, "shell: ttl must be a number of seconds")
-				return 2
-			}
-		}
-		response, err := sendLocalControlMcp(sessionID, fmt.Sprintf("mcp grant %s %s %d", label, scopes, ttl))
+		response, err := sendLocalControlMcp(sessionID, grantCommand)
 		if err != nil {
 			fmt.Fprintf(stderr, "shell: mcp grant: %v\n", err)
 			return 1
 		}
 		if !response.OK {
+			if response.Error == "unknown mcp command" {
+				fmt.Fprintln(stderr, "shell: host does not support safe MCP grant requests; update and restart this session's shell host")
+				return 1
+			}
 			fmt.Fprintf(stderr, "shell: mcp grant: %s\n", response.Error)
 			return 1
 		}
