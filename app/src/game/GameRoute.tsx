@@ -20,6 +20,8 @@ import { loadSave, reconcile, storeSave } from "./state/remote";
 import { ChooseCharacter } from "./ui/ChooseCharacter";
 import { BloodVeil } from "./ui/BloodVeil";
 import { Hud } from "./ui/Hud";
+import { McpFlows } from "./ui/McpFlows";
+import { useExpiringMcpFlows } from "./state/mcp-flows";
 import { ZoomControls } from "./ui/ZoomControls";
 import { useLayout } from "./state/use-layout";
 import { isCompact } from "./state/layout";
@@ -251,6 +253,12 @@ export default function GameRoute() {
    * stand-in garrison when there are none or the service cannot be reached.
    */
   const garrison = useGarrison(sim.current, DEMO_ROSTER, save.characterClass);
+  /*
+   * The panel empties on its own clock. A fetch that never returns must not
+   * leave stale arrows on the field or stale rows in the panel.
+   */
+  const mcpFlows = useExpiringMcpFlows(garrison.demo ? [] : garrison.flows);
+  handle.current.mcpFlows = () => mcpFlows;
 
   /*
    * Whether the kingdom has the sessions to meet what is coming for it.
@@ -377,6 +385,7 @@ export default function GameRoute() {
           * the crop; the things you need to read may not.
           */}
         <div className="keep-safe">
+          {!paused && <McpFlows flows={mcpFlows} actors={tally.wrights} />}
           <Hud
             standing={rank}
             marks={purse.marks}

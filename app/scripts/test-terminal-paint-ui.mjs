@@ -51,7 +51,7 @@ const testEntryPlugin = {
 const server = await createServer({
   root: fileURLToPath(new URL('..', import.meta.url)),
   plugins: [testEntryPlugin],
-  server: { host: '127.0.0.1', port: 0 }, logLevel: 'silent',
+  server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'silent',
 });
 let transport;
 const waitFor = async (check, label) => {
@@ -71,7 +71,7 @@ const evaluate = (expression) => transport.evaluate(expression);
 const SETUP = `
   const {React, createRoot, BrowserRouter, TerminalPane, AuthContext, VaultProvider, TeamKeyProvider, FeedbackProvider, Terminal} = await import('/@id/__x00__${TEST_ENTRY_ID}.js');
   document.getElementById('root').style.display = 'none';
-  globalThis.paintTest = { terms: {}, sockets: [], roots: {} };
+  globalThis.paintTest = { terms: {}, sockets: [], roots: {}, pulses: {}, pulseEvents: [] };
   class FakeSocket extends EventTarget {
     readyState = 0;
     binaryType = '';
@@ -106,18 +106,23 @@ const SETUP = `
   stage.id = 'paint-stage';
   stage.style.cssText = 'position: fixed; top: 8px; left: 8px; z-index: 2147483647; width: 560px; height: 420px;';
   document.body.append(stage);
-  globalThis.paintTest.mount = (key, active) => {
+  globalThis.paintTest.mount = (key, active, fragment = '') => {
     const box = document.createElement('div');
     box.dataset.paintRoot = key;
     box.style.cssText = 'position: absolute; inset: 0;';
     stage.append(box);
-    const shareUrl = location.origin + '/s/' + key.repeat(32);
+    const shareUrl = location.origin + '/s/' + key.repeat(32) + fragment;
     const tree = (on) => React.createElement(AuthContext.Provider, { value: auth },
       React.createElement(BrowserRouter, null,
         React.createElement(VaultProvider, null,
           React.createElement(TeamKeyProvider, null,
             React.createElement(FeedbackProvider, null,
-              React.createElement(TerminalPane, { shareUrl, active: on, renderer: 'xterm' })
+              React.createElement(TerminalPane, { shareUrl, active: on, renderer: 'xterm',
+                onPulseChange: (value) => {
+                  paintTest.pulses[key] = value;
+                  paintTest.pulseEvents.push({ key, value });
+                },
+              })
             )
           )
         )
@@ -538,6 +543,56 @@ try {
     await delay(400);
     await audit('a', { ...common, label: `${browser}-${theme}-live` });
   }
+  // Exercise passive pulse metadata through the real pane and AES-GCM viewer.
+  // The only socket is the existing terminal viewer; all frames are synthetic.
+  await transport.navigate(`http://127.0.0.1:${port}/qa.html?pulse=${Date.now()}`);
+  await waitFor(() => evaluate(`document.readyState === 'complete'`), 'pulse page load');
+  await evaluate(`(async () => { ${SETUP}
+    const { BrowserFrameCipher } = await import('/src/terminal/e2ee.ts');
+    const key = new Uint8Array(32).fill(7);
+    paintTest.hostCipher = await BrowserFrameCipher.fromKey(key);
+    paintTest.emitEncrypted = async (opcode, text) => {
+      const payload = new TextEncoder().encode(text);
+      const frame = new Uint8Array(payload.length + 1);
+      frame[0] = opcode; frame.set(payload, 1);
+      const sealed = await paintTest.hostCipher.seal(frame);
+      paintTest.sockets[0].emitBinary(sealed.buffer);
+    };
+    paintTest.intervals = new Set();
+    const nativeSetInterval = window.setInterval.bind(window);
+    const nativeClearInterval = window.clearInterval.bind(window);
+    window.setInterval = (...args) => {
+      const id = nativeSetInterval(...args); paintTest.intervals.add(id); return id;
+    };
+    window.clearInterval = (id) => { paintTest.intervals.delete(id); nativeClearInterval(id); };
+    const fragment = '#key=' + btoa(String.fromCharCode(...key)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+    paintTest.mount('c', false, fragment);
+  })()`);
+  await waitFor(() => evaluate(`paintTest.sockets.length === 1 && !!paintTest.terms.c`), 'encrypted viewer open');
+  // Let the existing file-service probe finish before measuring outbound traffic.
+  await delay(150);
+  const sendsBeforePulse = await evaluate(`paintTest.sockets[0].sent.length`);
+  await evaluate(`paintTest.emitEncrypted(0x03, 'Synthetic saved screen')`);
+  await waitFor(() => evaluate(`paintTest.pulses.c?.activity === 'unobserved'`), 'snapshot pulse');
+  assert.equal(await evaluate(`paintTest.pulses.c.bytesSinceViewed`), 0, 'snapshot does not create unread output');
+  assert.equal(await evaluate(`paintTest.pulses.c.lastOutputAt`), null, 'snapshot does not imply live activity');
+  await evaluate(`paintTest.emitEncrypted(0x01, '\\r\\nApproval required')`);
+  await waitFor(() => evaluate(`paintTest.pulses.c?.bytesSinceViewed > 0 && paintTest.pulses.c?.hint?.label === 'Input may be needed'`), 'decrypted hidden output pulse');
+  assert.equal(await evaluate(`!!document.querySelector('[data-paint-root="c"] .session-pulse')`), true, 'pulse badge rendered');
+  await evaluate(`(() => { paintTest.setActive('c', true); return true; })()`);
+  await waitFor(() => evaluate(`paintTest.pulses.c?.bytesSinceViewed === 0`), 'visible pane acknowledges output');
+  assert.equal(await evaluate(`paintTest.sockets.length`), 1, 'pulse keeps the same viewer socket');
+  assert.equal(await evaluate(`paintTest.sockets[0].sent.length`), sendsBeforePulse, 'pulse sends no requests');
+  await evaluate(`(() => { paintTest.sockets[0].close(4000); return true; })()`);
+  await waitFor(() => evaluate(`paintTest.pulses.c === null && !document.querySelector('[data-paint-root="c"] .session-pulse')`), 'disconnect purges pulse');
+  await evaluate(`(() => { paintTest.roots.c.root.unmount(); return true; })()`);
+  assert.equal(await evaluate(`paintTest.intervals.size`), 0, 'pane intervals cleaned up');
+  const eventsAfterUnmount = await evaluate(`paintTest.pulseEvents.length`);
+  await evaluate(`paintTest.emitEncrypted(0x01, 'Approval required')`);
+  await delay(1100);
+  assert.equal(await evaluate(`paintTest.pulseEvents.length`), eventsAfterUnmount, 'disposed pane does not publish pulse');
+  assert.equal(await evaluate(`paintTest.sockets.length`), 1, 'unmount creates no socket');
+  console.log('PASS passive pulse: encrypted output, snapshots, hidden unread, visible acknowledgement, no network traffic, disconnect and timer cleanup');
   if (failures.length > 0) throw new Error(`paint audit failures (${failures.length}):\n- ${failures.join('\n- ')}`);
   console.log(`screenshots in ${shots}`);
 } finally {

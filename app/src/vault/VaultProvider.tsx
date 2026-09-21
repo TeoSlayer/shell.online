@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useAuth } from "../auth/AuthProvider";
+import { openSessionContent, type SessionContent } from "../lib/session-content-crypto";
 import { fetchSessions, fetchVault, saveVault, shareSessionKeys, updateVaultUnlocks, type VaultRecord } from "../lib/api";
 import {
   addVaultPassword,
@@ -75,6 +76,7 @@ interface VaultValue {
   retry(): void;
   /** Opens a password sealed to this person: to their vault, or to this browser's old key. */
   openShare(sessionId: string, share: SealedShare | undefined): Promise<string | null>;
+  openContent(sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}): Promise<SessionContent | null>;
   /** Seals a password to a colleague's vault. Null when they have none. */
   sealTo(
     recipient: { uid: string; accountKey?: string },
@@ -313,6 +315,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [uid],
   );
 
+  const openContent = useCallback(async (sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}) => {
+    const key = opened.current;
+    if (!key) return null;
+    const value = await openSessionContent(key.privateKey, sessionId, uid,
+      envelope.generation, envelope.observedAt, envelope);
+    return opened.current === key ? value : null;
+  }, [uid]);
+
   const sealTo = useCallback(
     async (recipient: { uid: string; accountKey?: string }, sessionId: string, password: string) => {
       if (!recipient.accountKey) return null;
@@ -397,6 +407,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       unlockMethods: remote ? vaultUnlockMethods(remote) : { password: false, passkeys: [] },
       retry,
       openShare,
+      openContent,
       sealTo,
       keep,
       uid,
@@ -408,7 +419,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [
       status, error, publicKey, print, remembered, remote, prepare, commit, unlock,
       unlockWithPassword, unlockWithPasskey, setPassword, addPasskey, retry,
-      openShare, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
+      openShare, openContent, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
     ],
   );
 

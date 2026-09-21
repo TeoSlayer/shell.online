@@ -1,0 +1,59 @@
+.session-pulse {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.session-pulse__dot {
+  flex: 0 0 5px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+
+.session-pulse[data-activity="output"] .session-pulse__dot {
+  color: var(--blue);
+  background: currentColor;
+}
+
+.session-pulse[data-activity="quiet"] .session-pulse__dot {
+  background: currentColor;
+}
+
+.session-pulse__label,
+.session-pulse__hint,
+.session-pulse__unread {
+  white-space: nowrap;
+}
+
+.session-pulse__hint {
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-chip);
+  color: var(--ink-soft);
+}
+
+.session-pulse__unread {
+  color: var(--blue-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-pulse--compact {
+  gap: 4px;
+  font-size: 10px;
+}
+
+.session-pulse--compact .session-pulse__hint {
+  padding: 0;
+  border: 0;
+}

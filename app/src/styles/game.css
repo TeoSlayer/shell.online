@@ -203,6 +203,97 @@
 }
 
 /*
+ * The MCP request log.
+ *
+ * Compact by intent: a disclosure in the top corner that says how many calls
+ * are in flight and, when opened, four lines of what happened. It names a
+ * caller as an external client because that is all the service can attest to,
+ * and it points at the figure the request actually landed on. It never moves
+ * on its own: nothing here animates, so there is nothing for a player who
+ * asked for less motion to have to switch off.
+ */
+.keep-mcp-flows {
+  position: absolute;
+  top: var(--keep-safe-top);
+  left: var(--keep-safe-left);
+  z-index: var(--keep-z-hud);
+  width: min(340px, calc(100vw - var(--keep-space-4)));
+  padding: var(--keep-space) var(--keep-space-2);
+  border: 1px dashed color-mix(in srgb, var(--keep-arcane) 55%, transparent);
+  border-radius: calc(6px * var(--keep-scale));
+  background: color-mix(in srgb, var(--keep-ink) 78%, transparent);
+  color: var(--keep-elixir);
+  pointer-events: auto;
+}
+
+.keep-mcp-flows > summary {
+  display: flex;
+  align-items: center;
+  /* A disclosure is a thing a thumb hits; the 44px floor is the check's, not the game's. */
+  min-height: calc(44px * var(--keep-scale));
+  font-size: var(--keep-text);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.keep-mcp-flows > summary:focus-visible {
+  outline: 2px solid var(--keep-elixir);
+  outline-offset: 3px;
+}
+
+.keep-mcp-flows-note {
+  margin: var(--keep-space) 0 0;
+  color: var(--keep-mist);
+  font-size: var(--keep-text-sm);
+  line-height: 1.35;
+}
+
+.keep-mcp-flows-list {
+  display: grid;
+  gap: calc(4px * var(--keep-scale));
+  margin: var(--keep-space) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keep-mcp-flows-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--keep-space);
+  font-size: var(--keep-text-sm);
+}
+
+.keep-mcp-flows-target {
+  overflow: hidden;
+  color: var(--keep-elixir);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.keep-mcp-flows-tool {
+  color: var(--keep-mist);
+}
+
+.keep-mcp-flows-status {
+  color: var(--keep-gold);
+}
+
+/* In flight reads as arcane; a tool that did its job reads as healed. */
+.keep-mcp-flows-list li[data-phase="started"] .keep-mcp-flows-status,
+.keep-mcp-flows-list li[data-outcome="in_flight"] .keep-mcp-flows-status {
+  color: var(--keep-arcane);
+}
+
+.keep-mcp-flows-list li[data-outcome="ok"] .keep-mcp-flows-status,
+.keep-mcp-flows-list li[data-outcome="delivered"] .keep-mcp-flows-status,
+.keep-mcp-flows-list li[data-outcome="matched"] .keep-mcp-flows-status {
+  color: var(--keep-heal);
+}
+
+
+/*
  * Headings are lettered like the signposts; everything else is not.
  *
  * The interface was monospace throughout, in capitals, widely letterspaced --

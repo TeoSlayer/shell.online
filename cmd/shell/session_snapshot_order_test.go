@@ -88,7 +88,7 @@ func startSnapshotOrderHarness(t *testing.T, ringCapacity int) *snapshotOrderHar
 	var supportsRotation atomic.Bool
 	relayDone := make(chan error, 1)
 	go func() {
-		relayDone <- readRelay(connection, nil, nil, harness.emitter, newSessionCipher(nil), false, exitAcknowledged, rotationAcknowledged, &supportsRotation, nil)
+		relayDone <- readRelay(connection, nil, nil, harness.emitter, newSessionCipher(nil), false, exitAcknowledged, rotationAcknowledged, &supportsRotation, nil, nil)
 	}()
 	return harness
 }

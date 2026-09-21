@@ -160,6 +160,16 @@ export class TerminalConnection {
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
 
+  /**
+   * Raw-byte input: legacy mouse reports and device queries carry bytes that
+   * are not valid UTF-8, so they must not pass through TextEncoder.
+   */
+  sendBinary(data: string): void {
+    if (this.readOnly) return;
+    const bytes = Uint8Array.from(data, (character) => character.charCodeAt(0) & 0xff);
+    void this.transmit(encodeFrame(Opcode.Input, bytes));
+  }
+
   /** Recover renderer backpressure with a new host snapshot, even read-only. */
   requestSnapshot(): void {
     if (this.socket?.readyState === 1) {
@@ -206,6 +216,7 @@ export class TerminalConnection {
     this.socket = socket;
 
     socket.addEventListener("open", () => {
+      if (this.stopped || this.socket !== socket) return;
       // A deliberately rejected capacity socket still reaches "open" before
       // its 4005 close. Keep the honest waiting state until the relay sends a
       // real session message proving this retry was admitted.
@@ -216,21 +227,23 @@ export class TerminalConnection {
     });
 
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
+      if (this.stopped || this.socket !== socket) return;
       this.markAdmitted();
       if (typeof event.data === "string") {
         this.handleControl(event.data);
         return;
       }
       const received = new Uint8Array(event.data);
+      const cipher = this.cipher;
       /* Frames are decrypted in order; AES-GCM opens are async. */
       this.queue = this.queue
-        .then(() => this.handleFrame(received))
+        .then(() => this.handleFrame(received, socket, cipher))
         .catch(() => undefined);
     });
 
     socket.addEventListener("close", (event: CloseEvent) => {
-      if (this.socket === socket) this.socket = null;
-      if (this.stopped) return;
+      if (this.stopped || this.socket !== socket) return;
+      this.socket = null;
       if (event.code === CLOSE_MISSING) {
         this.options.events.onStatus("missing");
         return;
@@ -261,17 +274,27 @@ export class TerminalConnection {
     this.options.events.onStatus("connected");
   }
 
-  private async handleFrame(received: Uint8Array): Promise<void> {
+  private async handleFrame(
+    received: Uint8Array,
+    socket: WebSocket,
+    cipher: BrowserFrameCipher | null,
+  ): Promise<void> {
+    // A queued decrypt can finish after closure, reconnect, or key replacement.
+    // Neither its output nor its failure belongs to the new viewer connection.
+    const isCurrent = () => !this.stopped && this.socket === socket && this.cipher === cipher;
+    if (!isCurrent()) return;
     let frame = received;
     if (this.descriptor) {
-      if (!this.cipher) return;
+      if (!cipher) return;
       try {
-        frame = await this.cipher.open(received);
+        frame = await cipher.open(received);
+        if (!isCurrent()) return;
         if (!this.proven) {
           this.proven = true;
           this.options.events.onUnlocked?.();
         }
       } catch (error) {
+        if (!isCurrent()) return;
         if (error instanceof E2EEReplayError) return;
         /*
          * A frame that will not open means the derived key is wrong. Drop it,
@@ -280,7 +303,7 @@ export class TerminalConnection {
         this.cipher = null;
         this.awaitingPassword = true;
         try {
-          this.socket?.close(CLOSE_DECRYPT_FAILED, "decryption failed");
+          socket.close(CLOSE_DECRYPT_FAILED, "decryption failed");
         } catch {
           /* already closing */
         }
@@ -292,6 +315,7 @@ export class TerminalConnection {
         return;
       }
     }
+    if (!isCurrent()) return;
     if (frame.byteLength === 0) return;
 
     const opcode = frame[0];

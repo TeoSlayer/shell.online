@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -377,5 +381,118 @@ func TestRequestedCommandIsTrimmed(t *testing.T) {
 	t.Setenv(sessionCommandEnvironment, "  claude  ")
 	if got := sessionCommandFromEnvironment(); got != "claude" {
 		t.Fatalf("requested command = %q", got)
+	}
+}
+
+// The reporter renews under the link's lock. Copies taken outside it let two
+// renewals refresh at once, race one fixed credentials.json.tmp file, and let a
+// stale copy overwrite a newer token (or a pinned vault key). One expired
+// credential and eight concurrent callers must produce exactly one refresh and
+// one stored token.
+func TestReportCredentialSerializesRefreshAndSave(t *testing.T) {
+	var mu sync.Mutex
+	refreshes := 0
+	service := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/api/cli/refresh" {
+			t.Errorf("unexpected path %s", request.URL.Path)
+			return
+		}
+		mu.Lock()
+		refreshes += 1
+		issued := refreshes
+		mu.Unlock()
+		/* Widen the window in which an unserialized refresh would overlap. */
+		time.Sleep(30 * time.Millisecond)
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(writer, `{"access_token":"fresh-%d","refresh_token":"old-refresh","expires_in":3600,"account":{"uid":"uid-1","email":"a@b.c","name":"A"}}`, issued)
+	}))
+	defer service.Close()
+
+	path := filepath.Join(t.TempDir(), "credentials.json")
+	link := &sessionLink{
+		client:      account.NewClient(service.URL, "test/1"),
+		accessToken: "stale-token",
+		sessionID:   "session-1",
+		warn:        io.Discard,
+		path:        path,
+		credentials: account.Credentials{
+			Server: service.URL, AccessToken: "stale-token", RefreshToken: "old-refresh",
+			ExpiresAt: time.Now().Add(-time.Minute), UID: "uid-1",
+		},
+	}
+
+	const workers = 8
+	tokens := make([]string, workers)
+	var wg sync.WaitGroup
+	for index := 0; index < workers; index++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			tokens[index], _ = link.reportCredential(context.Background(), false)
+		}(index)
+	}
+	wg.Wait()
+
+	mu.Lock()
+	count := refreshes
+	mu.Unlock()
+	if count != 1 {
+		t.Fatalf("refresh calls = %d, want 1: refresh and save must be serialized", count)
+	}
+	for index, token := range tokens {
+		if token != "fresh-1" {
+			t.Fatalf("caller %d saw token %q, want the one renewed token", index, token)
+		}
+	}
+	saved, err := account.Load(path)
+	if err != nil {
+		t.Fatalf("load saved credentials: %v", err)
+	}
+	if saved.AccessToken != "fresh-1" {
+		t.Fatalf("saved token = %q, want fresh-1", saved.AccessToken)
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Fatalf("a credentials temp file was left behind: %v", err)
+	}
+}
+
+// After Close there is no session to report for, and the link is the thing that
+// knows it. The reporter must drop the batch rather than refresh and send late.
+func TestMcpFlowReporterDropsAfterClose(t *testing.T) {
+	var posts int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/cli/refresh", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"access_token":"fresh","refresh_token":"refresh","expires_in":3600,"account":{"uid":"uid-1"}}`))
+	})
+	mux.HandleFunc("/api/cli/sessions/session-1/mcp-flows", func(writer http.ResponseWriter, request *http.Request) {
+		atomic.AddInt32(&posts, 1)
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"accepted":true}`))
+	})
+	mux.HandleFunc("/api/sessions/session-1", func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{}`))
+	})
+	service := httptest.NewServer(mux)
+	defer service.Close()
+
+	link := &sessionLink{
+		client:      account.NewClient(service.URL, "test/1"),
+		accessToken: "token",
+		sessionID:   "session-1",
+		warn:        io.Discard,
+		credentials: account.Credentials{
+			Server: service.URL, AccessToken: "token", RefreshToken: "refresh",
+			ExpiresAt: time.Now().Add(time.Hour), UID: "uid-1",
+		},
+	}
+	link.Close(nil)
+
+	reporter := newMcpFlowReporter(link)
+	reporter.enqueue(account.McpFlowEvent{ID: flowID, Tool: "shell_status", Phase: "started", At: time.Now().UnixMilli()})
+	reporter.flush()
+	if got := atomic.LoadInt32(&posts); got != 0 {
+		t.Fatalf("reporter sent %d batches after Close", got)
 	}
 }

@@ -59,8 +59,11 @@ type sessionLink struct {
 	warn        io.Writer
 	// credentials and path are kept so a vault key seen for the first time
 	// can be pinned into the file it came from.
-	credentials account.Credentials
-	path        string
+	credentials        account.Credentials
+	path               string
+	contentClosed      bool
+	contentGeneration  string
+	contentFingerprint [32]byte
 }
 
 const (
@@ -213,6 +216,57 @@ func (link *sessionLink) vaultShare(ctx context.Context, sessionID, password str
 	return &account.KeyShare{SenderPublicKey: sender, Sealed: sealed}, vaultSaved
 }
 
+// reportCredential returns a usable token and the published session id for the
+// flow reporter, renewing the token itself when it has expired or the service
+// refused it. Generic hosts have no other renewal during a session, so this
+// cannot depend on any content publisher running. A failure is silent: the
+// batch it was needed for is dropped, and nothing about the account is logged.
+//
+// The whole renew-and-save sequence runs under the link's lock, as the content
+// publisher's does. Copying credentials out, refreshing, and saving after
+// unlocking would let two renewals race the one fixed credentials.json.tmp
+// path, and let a stale copy overwrite a newer token or a pinned vault key.
+// The reporter runs off the PTY's thread, so holding the lock across the
+// bounded call is what keeps the file and the link's fields consistent.
+func (link *sessionLink) reportCredential(ctx context.Context, refused bool) (token, sessionID string) {
+	if link == nil {
+		return "", ""
+	}
+	link.mu.Lock()
+	defer link.mu.Unlock()
+	if ctx.Err() != nil || link.contentClosed {
+		/* Closed or stopping: the batch is dropped rather than sent late. */
+		return "", ""
+	}
+	credentials := link.credentials
+	token, sessionID = link.accessToken, link.sessionID
+	if !refused && token != "" && !credentials.Expired(time.Now()) {
+		return token, sessionID
+	}
+	if credentials.RefreshToken == "" {
+		return token, sessionID
+	}
+	refreshContext, cancel := context.WithTimeout(ctx, linkTimeout)
+	defer cancel()
+	refreshed, err := link.client.Refresh(refreshContext, credentials)
+	if err != nil {
+		/* Renewal is best effort; the caller drops the batch. */
+		return token, sessionID
+	}
+	if link.path != "" {
+		if saveErr := account.Save(link.path, refreshed); saveErr != nil {
+			/*
+			 * A token that was not stored is not adopted: the next attempt
+			 * would otherwise present a token no other process can see.
+			 */
+			return token, sessionID
+		}
+	}
+	link.credentials = refreshed
+	link.accessToken = refreshed.AccessToken
+	return link.accessToken, link.sessionID
+}
+
 // Close marks the session finished in the account.
 //
 // It deliberately uses a fresh background context: the process context is
@@ -224,6 +278,7 @@ func (link *sessionLink) Close(exitCode *int) {
 	}
 	link.mu.Lock()
 	defer link.mu.Unlock()
+	link.contentClosed = true
 	if link.sessionID == "" {
 		return
 	}

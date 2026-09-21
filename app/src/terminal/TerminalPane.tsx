@@ -20,6 +20,9 @@ import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
 import { TerminalWriteQueue } from "../../../web/terminal-writes";
+import { PulseObserver } from "./pulse-observer";
+import type { SessionPulse } from "./session-pulse";
+import { SessionPulseBadge } from "./SessionPulse";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
 import { RelayFileClient } from "../../../web/relay-files";
 import { mountRelayFileBrowser } from "../../../web/relay-files-ui";
@@ -41,6 +44,9 @@ export interface TerminalPaneProps {
   host?: string;
   /** Browser renderer selected for every open session in this workspace. */
   renderer: TerminalRenderer;
+  /** Passive, memory-only metadata from this viewer's existing decrypted stream. */
+  onPulseChange?: (pulse: SessionPulse | null) => void;
+  pulseAllowed?: boolean;
 }
 
 /*
@@ -130,7 +136,15 @@ export function TerminalPane({
   canType = true,
   host,
   renderer,
+  onPulseChange,
+  pulseAllowed = true,
 }: TerminalPaneProps) {
+  const [pulse, setPulse] = useState<SessionPulse | null>(null);
+  const pulseObserver = useRef<PulseObserver | null>(null);
+  const pulseCallback = useRef(onPulseChange);
+  pulseCallback.current = onPulseChange;
+  const pulseAllowedRef = useRef(pulseAllowed);
+  pulseAllowedRef.current = pulseAllowed;
   /*
    * Read through a ref inside the effect that builds the terminal, so the
    * vault changing state never tears down an open session.
@@ -207,6 +221,15 @@ export function TerminalPane({
    */
   const activeRef = useRef(active);
   activeRef.current = active;
+
+  useEffect(() => {
+    pulseObserver.current?.visibility(active && !document.hidden);
+    pulseObserver.current?.tick(Date.now());
+  }, [active]);
+
+  useEffect(() => {
+    pulseObserver.current?.authorization(pulseAllowed);
+  }, [pulseAllowed]);
 
   /*
    * The grid the process is running at, not the grid this pane could fit. The
@@ -344,11 +367,25 @@ export function TerminalPane({
     let rendererInputSuppressed = false;
     const terminalWrites = new TerminalWriteQueue(term, 64 * 1024);
     let snapshotRequestPending = false;
+    const observerPulse = new PulseObserver((value) => {
+      setPulse(value);
+      pulseCallback.current?.(value);
+    });
+    pulseObserver.current = observerPulse;
+    const updatePulse = () => {
+      observerPulse.authorization(pulseAllowedRef.current);
+      observerPulse.visibility(activeRef.current && !document.hidden);
+      observerPulse.tick(Date.now());
+    };
+    updatePulse();
+    const pulseTimer = window.setInterval(updatePulse, 1000);
+    document.addEventListener("visibilitychange", updatePulse);
     connected = new TerminalConnection({
       url: target.url,
       fragment: encryptionFragment(shareUrl),
       events: {
         onStatus: (next, message) => {
+          observerPulse.connection(next === "connected");
           let shown = message;
           if (next === "needs-password" && message) {
             /*
@@ -393,9 +430,13 @@ export function TerminalPane({
            */
           if (worked.source !== "vault") void keepIfMissing(sessionId, worked.password);
         },
-        onHostState: (next) => { setHostState(next); },
+        onHostState: (next) => {
+          setHostState(next);
+          observerPulse.host(next.presence === "connected");
+        },
         onMcpAuthorization: setMcpAuthorized,
         onData: (bytes, reset) => {
+          if (pulseAllowedRef.current) observerPulse.feed(bytes, reset, Date.now());
           if (bytes.byteLength > 0) setHasScreen(true);
           if (!reset) {
             if (!terminalWrites.enqueue(bytes) && !snapshotRequestPending) {
@@ -460,6 +501,17 @@ export function TerminalPane({
       connected.send(data);
       sink?.observe(data);
     });
+    /*
+     * Legacy mouse protocols (X10/VT200 without SGR) and a few device query
+     * responses emit raw bytes via onBinary, not onData. Without this an
+     * alt-screen TUI's wheel/pointer reports are silently dropped. The same
+     * access gate as onData applies; raw bytes are not observed (they are not
+     * user text) and must not pass through UTF-8 encoding.
+     */
+    const binary = term.onBinary?.((data) => {
+      if (!canTypeRef.current || rendererInputSuppressed) return;
+      connected.sendBinary(data);
+    });
     term.options.disableStdin = !canTypeRef.current;
 
     attempt.current = null;
@@ -518,11 +570,16 @@ export function TerminalPane({
     const frame = requestAnimationFrame(refit);
 
     return () => {
+      window.clearInterval(pulseTimer);
+      document.removeEventListener("visibilitychange", updatePulse);
+      observerPulse.dispose();
+      pulseObserver.current = null;
       rendererToolsDisposed = true;
       rendererTools?.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       typed.dispose();
+      binary?.dispose();
       sink?.close();
       connected.close();
       fileClient.dispose();
@@ -608,6 +665,7 @@ export function TerminalPane({
   return (
     <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
       <div className="pane-tools">
+        {pulseAllowed && pulse && <SessionPulseBadge pulse={pulse} />}
         {mcpAuthorized && <span className="pane-mcp-disclosure" role="status"
           title="The host authorizes the server to decrypt terminal frames and send plaintext to MCP agents for the grant lifetime.">
           MCP · server-side decryption authorized

@@ -40,6 +40,7 @@ async function call(
   method: string,
   path: string,
   options: { body?: unknown; auth?: string; origin?: string; address?: string } = {},
+  target: typeof handle = handle,
 ) {
   const chunks: Buffer[] = [];
   if (options.body !== undefined) chunks.push(Buffer.from(JSON.stringify(options.body)));
@@ -78,7 +79,7 @@ async function call(
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await handle(request as any, response as any);
+  await target(request as any, response as any);
   return { status, headers, body: payload ? JSON.parse(payload) : null };
 }
 
@@ -224,6 +225,96 @@ describe("GET /api/cli/me", () => {
   });
 });
 
+describe("owner MCP flow feed", () => {
+  const id = "flow_session_123";
+  const path = `/api/cli/sessions/${id}/mcp-flows`;
+  const event = () => ({ id: "00000000-0000-4000-8000-000000000001", tool: "shell_wait", phase: "settled", outcome: "timeout", at: Date.now() });
+  async function setup() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: { id, share_url: `https://shell.online/s/${id}`, command: "private command", encrypted: true } });
+    return tokens;
+  }
+
+  it("requires authentication and originating machine, then returns no-store metadata only", async () => {
+    const tokens = await setup();
+    const report = { events: [event()] };
+    expect((await call("POST", path, { body: report })).status).toBe(401);
+    expect((await call("GET", "/api/game/mcp-flows")).status).toBe(401);
+    expect((await call("POST", path, { auth: await idToken(), body: report })).status).toBe(401);
+    const second = await login({ label: "other machine" });
+    expect((await call("POST", path, { auth: second.access_token, body: report })).status).toBe(404);
+    expect((await call("POST", path, { auth: tokens.access_token, body: report })).status).toBe(200);
+    const result = await call("GET", "/api/game/mcp-flows", { auth: await idToken() });
+    expect(result.headers["Cache-Control"]).toBe("no-store");
+    expect(result.body).toEqual({ flows: [{ ...report.events[0], targetSessionId: id }] });
+    expect(JSON.stringify(result.body)).not.toContain("private command");
+    expect((await call("GET", "/api/game/mcp-flows", { auth: await idToken({ sub: "uid-2" }) })).body).toEqual({ flows: [] });
+  });
+
+  it("rejects plaintext, extra fields, stale clocks and oversized batches", async () => {
+    const tokens = await setup();
+    for (const body of [
+      { events: [{ ...event(), content: "private" }] },
+      { events: [event()], source: "fake" },
+      { events: [{ ...event(), at: Date.now() + 60_000 }] },
+      { events: [{ ...event(), at: Date.now() - 120_001 }] },
+      { events: Array(33).fill(event()) },
+      { events: [{ ...event(), outcome: undefined }] },
+      { events: [event(), event()] },
+    ]) expect((await call("POST", path, { auth: tokens.access_token, body })).status).toBe(400);
+    expect((await call("GET", "/api/game/mcp-flows", { auth: await idToken() })).body).toEqual({ flows: [] });
+  });
+
+  it("pairs started and settled under one id and dedupes a retried batch", async () => {
+    const tokens = await setup();
+    const started = { id: "00000000-0000-4000-8000-000000000002", tool: "shell_send", phase: "started", at: Date.now() - 1000 };
+    const settled = { ...started, phase: "settled", outcome: "delivered" };
+    const batch = { events: [started, settled] };
+    expect((await call("POST", path, { auth: tokens.access_token, body: batch })).status).toBe(200);
+    expect((await call("POST", path, { auth: tokens.access_token, body: batch })).status).toBe(200);
+    const result = await call("GET", "/api/game/mcp-flows", { auth: await idToken() });
+    expect(result.body).toEqual({ flows: [{ ...started, targetSessionId: id }, { ...settled, targetSessionId: id }] });
+  });
+
+  it("serves a flow reported to one instance from another instance on the same store", async () => {
+    const tokens = await setup();
+    const report = { events: [event()] };
+    expect((await call("POST", path, { auth: tokens.access_token, body: report })).status).toBe(200);
+    /*
+     * The production shape: the Worker builds one router per isolate, and the
+     * host's report and the game's read land on different isolates. A
+     * per-instance buffer loses the flow; the store is what the instances
+     * share, so the second one must serve what the first was told.
+     */
+    const otherInstance = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
+    const result = await call("GET", "/api/game/mcp-flows", { auth: await idToken() }, otherInstance);
+    expect(result.body).toEqual({ flows: [{ ...report.events[0], targetSessionId: id }] });
+    /* And the reverse direction: reported to the other instance, read here. */
+    const second = { events: [{ id: "00000000-0000-4000-8000-000000000099", tool: "shell_wait", phase: "settled", outcome: "timeout", at: Date.now() }] };
+    expect((await call("POST", path, { auth: tokens.access_token, body: second }, otherInstance)).status).toBe(200);
+    expect((await call("GET", "/api/game/mcp-flows", { auth: await idToken() })).body.flows).toHaveLength(2);
+  });
+
+  it("rechecks closing, deletion and device revocation before serving flows", async () => {
+    const tokens = await setup();
+    const owner = await idToken();
+    await call("POST", path, { auth: tokens.access_token, body: { events: [event()] } });
+    await call("PATCH", `/api/sessions/${id}`, { auth: tokens.access_token, body: { exit_code: 0 } });
+    expect((await call("GET", "/api/game/mcp-flows", { auth: owner })).body).toEqual({ flows: [] });
+    expect((await call("POST", path, { auth: tokens.access_token, body: { events: [event()] } })).status).toBe(404);
+    await store.patchSession("uid-1", id, { closedAt: undefined });
+    await call("POST", path, { auth: tokens.access_token, body: { events: [event()] } });
+    const membership = (await store.membershipOf("uid-1"))!;
+    await store.deleteSession(membership.orgId, id);
+    expect((await call("GET", "/api/game/mcp-flows", { auth: owner })).body).toEqual({ flows: [] });
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: { id, share_url: `https://shell.online/s/${id}`, command: "private", encrypted: true } });
+    await call("POST", path, { auth: tokens.access_token, body: { events: [event()] } });
+    const machine = (await devices())[0];
+    await store.revokeDevice("uid-1", machine.id);
+    expect((await call("GET", "/api/game/mcp-flows", { auth: owner })).body).toEqual({ flows: [] });
+  });
+});
+
 describe("session registry", () => {
   const session = {
     id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",
@@ -231,6 +322,32 @@ describe("session registry", () => {
     command: "claude",
     encrypted: true,
   };
+
+  it("publishes bounded owner-only content without exposing it in session lists", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const path = `/api/cli/sessions/${session.id}`;
+    const disabled = await call("GET", `${path}/content-policy`, { auth: tokens.access_token });
+    expect(disabled.status).toBe(200);
+    expect(disabled.body.enabled).toBe(false);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { dailyBriefingEnabled: true } });
+    const policy = await call("GET", `${path}/content-policy`, { auth: tokens.access_token });
+    const body = { generation: policy.body.generation, observedAt: 1000, senderPublicKey: P256_PUBLIC_KEY_A, sealed: `sc1.${SESSION_SHARE_A}` };
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body })).status).toBe(200);
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body })).status).toBe(200);
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body: { ...body, observedAt: 1001 } })).status).toBe(429);
+    expect((await call("GET", `/api/sessions/${session.id}/content`, { auth: await idToken() })).body).toEqual(body);
+    expect(JSON.stringify((await call("GET", "/api/sessions", { auth: await idToken() })).body)).not.toContain(body.sealed);
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body: { ...body, sealed: `sc1.${base64url(Buffer.alloc(16 * 1024 + 1))}` } })).status).toBe(400);
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body: { ...body, sealed: `v2.${SESSION_SHARE_A}` } })).status).toBe(400);
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body: { ...body, title: "plaintext" } })).status).toBe(400);
+    const otherMachine = await login({ label: "another machine" });
+    expect((await call("GET", `${path}/content-policy`, { auth: otherMachine.access_token })).status).toBe(404);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { dailyBriefingEnabled: false } });
+    expect((await call("GET", `/api/sessions/${session.id}/content`, { auth: await idToken() })).status).toBe(404);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { dailyBriefingEnabled: true } });
+    expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body })).status).toBe(409);
+  });
 
   it("registers from the CLI and lists in the web app", async () => {
     const tokens = await login();

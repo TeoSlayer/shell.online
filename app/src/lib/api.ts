@@ -269,11 +269,14 @@ export interface SessionRecord {
   /**
    * A genuine summary or description, when the record carries one.
    *
-   * There is no generated-briefing pipeline yet, so this is not populated
-   * today; the UI shows a compact empty state for it rather than dressing the
-   * command up as a summary.
+   * The owner-only content hook fills this only in browser memory after vault
+   * decryption. Ordinary session records do not contain extracted content.
    */
   description?: string;
+  /** Decrypted viewer-memory-only content; never part of registration or naming. */
+  suggestedTitle?: string;
+  contentObservedAt?: number;
+  contentSource?: string;
   origin?: string;
   orgId?: string;
   ownerUid?: string;

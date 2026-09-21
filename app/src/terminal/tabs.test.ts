@@ -18,6 +18,13 @@ function session(id: string, command = "top"): SessionRecord {
 const open = (state: TabState, id: string) => reduce(state, { type: "open", session: session(id) });
 
 describe("open", () => {
+  it("never retains decrypted titles or excerpts in tab state, including reopen", () => {
+    const privateSession = {...session("a", "opencode"), suggestedTitle:"PRIVATE_TITLE", description:"PRIVATE_TEXT"};
+    let state=reduce(EMPTY,{type:"open",session:privateSession});
+    state=reduce(state,{type:"open",session:privateSession});
+    expect(state.tabs[0].label).toBe("opencode");
+    expect(JSON.stringify(state)).not.toContain("PRIVATE_");
+  });
   it("adds a tab and makes it active", () => {
     const state = open(EMPTY, "a");
     expect(state.tabs.map((t) => t.id)).toEqual(["a"]);

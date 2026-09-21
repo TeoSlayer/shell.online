@@ -262,6 +262,13 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	// Publish to the linked account, if this machine has one. Nothing below is
 	// fatal: sharing a terminal must not depend on the accounts service.
 	link := openSessionLink(signalContext, stderr)
+	/*
+	 * Observations of MCP tool calls reach the linked account through this
+	 * reporter. It is optional in both directions: no linked account or no
+	 * live session means nothing is reported, never a blocked launch.
+	 */
+	flowReporter := startMcpFlowReporter(link)
+	defer flowReporter.stop()
 	publishedSession := account.SessionInput{
 		ID:         session.ID,
 		ShareURL:   session.ShareURL,
@@ -336,6 +343,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		}, false)
 	}
 	var onConnected, onStarted func()
+	contentContext, cancelContent := context.WithCancel(processContext)
+	defer cancelContent()
+	link.StartContent(contentContext, command)
 	if isBackgroundChild() {
 		onStarted = announceSession
 	} else {
@@ -363,8 +373,10 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			_ = link.Register(context.Background(), rotated, rotatedPassword)
 		},
 		fileService,
+		flowReporter.enqueue,
 	)
 	// The share is over once the process is; mark it closed in the account.
+	cancelContent()
 	link.Close(&exitCode)
 
 	if readyFile != nil {

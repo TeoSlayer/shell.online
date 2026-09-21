@@ -1,6 +1,17 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
+import { CONTENT_INTERVAL_MS, contentPublisher, type SessionContent, type SessionContentPolicy, type ContentWriteResult } from "./session-content";
+import {
+  MCP_FLOW_LIMIT,
+  mcpFlowAllowedBindings,
+  mcpFlowBinding,
+  mcpFlowExpiry,
+  trimMcpFlowRows,
+  type McpFlow,
+  type McpFlowEvent,
+  type McpFlowRow,
+} from "./mcp-flows";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import {
   ACCOUNT_ACTIVITY_MEMORY_MS,
@@ -64,6 +75,8 @@ function isSealed(text: string): boolean {
 }
 
 interface Shape {
+  sessionContent: { sessionUid: string; sessionId: string; generation: string; content?: SessionContent; publishedAt?: number }[];
+  mcpFlows: McpFlowRow[];
   codes: AuthorizationCode[];
   tokens: CliToken[];
   sessions: SessionRecord[];
@@ -86,6 +99,8 @@ interface Shape {
 }
 
 const EMPTY: Shape = {
+  sessionContent: [],
+  mcpFlows: [],
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
@@ -158,6 +173,8 @@ export class MemoryStore implements Store {
         codes: parsed.codes ?? [],
         tokens: parsed.tokens ?? [],
         sessions: parsed.sessions ?? [],
+        sessionContent: parsed.sessionContent ?? [],
+        mcpFlows: parsed.mcpFlows ?? [],
         commands: parsed.commands ?? [],
         organizations: parsed.organizations ?? [],
         memberships: parsed.memberships ?? [],
@@ -294,6 +311,7 @@ export class MemoryStore implements Store {
     const session = await this.sessionInOrg(orgId, sessionId);
     if (!session || (session.ownerUid ?? session.uid) !== ownerUid || !session.encrypted) return null;
     session.shareUrl = shareUrl;
+    this.invalidateContent(session);
     session.keyShares = [...shares];
     this.flush();
     return session;
@@ -311,6 +329,12 @@ export class MemoryStore implements Store {
       this.data.accountKeys.push({ ...key });
     } else {
       if (index < 0 || this.data.accountKeys[index].version !== expectedVersion) return false;
+      const previous = this.data.accountKeys[index];
+      if (previous.version !== key.version || previous.publicKey !== key.publicKey) {
+        for (const session of this.data.sessions) {
+          if ((session.ownerUid ?? session.uid) === key.uid) this.invalidateContent(session);
+        }
+      }
       this.data.accountKeys[index] = { ...key };
     }
     this.flush();
@@ -350,6 +374,7 @@ export class MemoryStore implements Store {
     data.tokens = data.tokens.filter((entry) => entry.uid !== uid);
     data.commands = data.commands.filter((entry) => entry.uid !== uid);
     data.sessions = data.sessions.filter((entry) => entry.uid !== uid);
+    data.sessionContent = data.sessionContent.filter((entry) => data.sessions.some((session) => session.uid === entry.sessionUid && session.id === entry.sessionId));
     for (const session of data.sessions) {
       if (session.keyShares) {
         session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
@@ -359,7 +384,10 @@ export class MemoryStore implements Store {
         session.assigneeUids = assignees.filter((entry) => entry !== uid);
         if (session.assigneeUid === uid) session.assigneeUid = session.assigneeUids[0];
       }
-      if (session.ownerUid === uid) session.ownerUid = session.uid;
+      if (session.ownerUid === uid) {
+        this.invalidateContent(session);
+        session.ownerUid = session.uid;
+      }
     }
     for (const invite of data.invites) {
       /* The address an invite was sent to is theirs once they accepted it. */
@@ -439,16 +467,136 @@ export class MemoryStore implements Store {
   }
 
   /** Returns true when this session had not been seen before. */
+  private invalidateContent(session: SessionRecord): void {
+    const entry = this.data.sessionContent.find((item) => item.sessionUid === session.uid && item.sessionId === session.id);
+    if (entry) {
+      entry.generation = randomBytes(16).toString("hex");
+      delete entry.content;
+      delete entry.publishedAt;
+    }
+  }
+
+  private contentState(session: SessionRecord) {
+    let entry = this.data.sessionContent.find((item) => item.sessionUid === session.uid && item.sessionId === session.id);
+    if (!entry) {
+      entry = { sessionUid: session.uid, sessionId: session.id, generation: randomBytes(16).toString("hex") };
+      this.data.sessionContent.push(entry);
+      this.flush();
+    }
+    return entry;
+  }
+
+  async sessionContentPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionContentPolicy | null> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && contentPublisher(item, orgId, ownerUid, deviceId));
+    if (!session) return null;
+    const state = this.contentState(session);
+    return { enabled: session.dailyBriefingEnabled === true, ownerUid, generation: state.generation,
+      nextPublishAt: state.publishedAt === undefined ? 0 : state.publishedAt + CONTENT_INTERVAL_MS };
+  }
+
+  async putSessionContent(orgId: string, sessionId: string, ownerUid: string, deviceId: string, content: SessionContent, now = Date.now()): Promise<ContentWriteResult> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && contentPublisher(item, orgId, ownerUid, deviceId));
+    if (!session) return "missing";
+    if (!session.dailyBriefingEnabled) return "disabled";
+    const state = this.contentState(session);
+    if (content.generation !== state.generation) return "stale";
+    if (state.content && state.content.observedAt === content.observedAt && state.content.senderPublicKey === content.senderPublicKey && state.content.sealed === content.sealed) return "stored";
+    if (state.publishedAt !== undefined && now < state.publishedAt + CONTENT_INTERVAL_MS) return "limited";
+    state.content = { ...content };
+    state.publishedAt = now;
+    this.flush();
+    return "stored";
+  }
+
+  async getSessionContent(orgId: string, sessionId: string, ownerUid: string): Promise<SessionContent | null> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && item.orgId === orgId && (item.ownerUid ?? item.uid) === ownerUid && item.dailyBriefingEnabled);
+    if (!session) return null;
+    const content = this.data.sessionContent.find((item) => item.sessionUid === session.uid && item.sessionId === session.id)?.content;
+    return content ? { ...content } : null;
+  }
+
+  /* ---- MCP flow feed ---- */
+
+  /*
+   * Single-threaded, so the session check and the write cannot be interleaved
+   * the way they can against a database. The check is still the same one the
+   * SQL store makes under its row lock, because the contract is the same for
+   * both stores and the conformance tests hold them to it.
+   */
+  async putMcpFlows(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    events: McpFlowEvent[],
+    now = Date.now(),
+  ): Promise<boolean> {
+    const session = this.data.sessions.find(
+      (entry) =>
+        entry.id === sessionId &&
+        entry.orgId === orgId &&
+        (entry.ownerUid ?? entry.uid) === ownerUid &&
+        entry.closedAt === undefined,
+    );
+    if (!session || !contentPublisher(session, orgId, ownerUid, deviceId)) return false;
+    const binding = mcpFlowBinding(session);
+    for (const event of events) {
+      /* A retry cannot replace metadata or move the expiry. */
+      if (this.data.mcpFlows.some((row) => row.binding === binding && row.eventId === event.id && row.phase === event.phase)) continue;
+      this.data.mcpFlows.push({
+        ownerUid,
+        orgId,
+        binding,
+        eventId: event.id,
+        phase: event.phase,
+        tool: event.tool,
+        at: event.at,
+        ...(event.outcome === undefined ? {} : { outcome: event.outcome }),
+        targetSessionId: session.id,
+        expiresAt: mcpFlowExpiry(event.at, now),
+      });
+    }
+    this.data.mcpFlows = trimMcpFlowRows(this.data.mcpFlows, now);
+    this.flush();
+    return true;
+  }
+
+  async listMcpFlows(orgId: string, ownerUid: string, activeDevices: Set<string>, now = Date.now()): Promise<McpFlow[]> {
+    const allowed = mcpFlowAllowedBindings(this.data.sessions, orgId, ownerUid, activeDevices);
+    const before = this.data.mcpFlows.length;
+    /* Purge lost access so restoring it cannot resurrect these rows. */
+    this.data.mcpFlows = this.data.mcpFlows.filter(
+      (row) => row.orgId !== orgId || row.ownerUid !== ownerUid || allowed.has(row.binding),
+    );
+    this.data.mcpFlows = trimMcpFlowRows(this.data.mcpFlows, now);
+    if (this.data.mcpFlows.length !== before) this.flush();
+    return this.data.mcpFlows
+      .filter((row) => row.orgId === orgId && row.ownerUid === ownerUid && allowed.has(row.binding) && row.expiresAt > now)
+      .sort(byTime((row) => row.at, (row) => row.eventId))
+      .slice(-MCP_FLOW_LIMIT)
+      .map((row) => ({
+        id: row.eventId,
+        tool: row.tool,
+        phase: row.phase,
+        at: row.at,
+        ...(row.outcome === undefined ? {} : { outcome: row.outcome }),
+        targetSessionId: row.targetSessionId,
+      }));
+  }
+
   async upsertSession(session: SessionRecord): Promise<boolean> {
     const index = this.data.sessions.findIndex(
       (entry) => entry.id === session.id && entry.uid === session.uid,
     );
     if (index >= 0) {
       const existing = this.data.sessions[index];
+      if (existing.shareUrl !== session.shareUrl || existing.origin !== session.origin || existing.orgId !== session.orgId || existing.ownerUid !== session.ownerUid) this.invalidateContent(existing);
       const hadAssignment = existing.assigneeUids !== undefined;
       this.data.sessions[index] = {
         ...existing,
         ...session,
+        // Match PostgreSQL: absent provenance on registration clears it.
+        origin: session.origin,
         /*
          * A restart that names nothing keeps the name somebody gave it, in
          * the terminal or in the browser. Only a name it does send replaces it.
@@ -518,6 +666,7 @@ export class MemoryStore implements Store {
   async patchSession(uid: string, id: string, patch: Partial<SessionRecord>): Promise<SessionRecord | null> {
     const session = this.data.sessions.find((entry) => entry.id === id && entry.uid === uid);
     if (!session) return null;
+    if ((["dailyBriefingEnabled", "shareUrl", "origin", "ownerUid", "orgId"] as const).some((key) => key in patch && patch[key] !== session[key])) this.invalidateContent(session);
     Object.assign(session, patch);
     this.flush();
     return session;
@@ -575,7 +724,10 @@ export class MemoryStore implements Store {
     );
     if (!session) return null;
     if (consent.mcpTeamAccess !== undefined) session.mcpTeamAccess = consent.mcpTeamAccess;
-    if (consent.dailyBriefingEnabled !== undefined) session.dailyBriefingEnabled = consent.dailyBriefingEnabled;
+    if (consent.dailyBriefingEnabled !== undefined) {
+      if (!!session.dailyBriefingEnabled !== consent.dailyBriefingEnabled) this.invalidateContent(session);
+      session.dailyBriefingEnabled = consent.dailyBriefingEnabled;
+    }
     if (consent.dailyBriefingTeamAccess !== undefined) session.dailyBriefingTeamAccess = consent.dailyBriefingTeamAccess;
     this.flush();
     return session;
@@ -609,6 +761,7 @@ export class MemoryStore implements Store {
        */
       for (const session of this.data.sessions) {
         if (session.orgId === orgId && (session.ownerUid ?? session.uid) === uid) {
+          if (!!session.dailyBriefingEnabled !== enabled) this.invalidateContent(session);
           session.dailyBriefingEnabled = enabled;
           applied += 1;
         }
@@ -619,6 +772,8 @@ export class MemoryStore implements Store {
   }
 
   async deleteSession(orgId: string, id: string): Promise<boolean> {
+    const deleted = this.data.sessions.find((item) => item.orgId === orgId && item.id === id);
+    if (deleted) this.data.sessionContent = this.data.sessionContent.filter((item) => item.sessionUid !== deleted.uid || item.sessionId !== id);
     const before = this.data.sessions.length;
     this.data.sessions = this.data.sessions.filter(
       (entry) => !(entry.id === id && entry.orgId === orgId),
@@ -1052,10 +1207,14 @@ export class MemoryStore implements Store {
     this.data.deletedAccounts = this.data.deletedAccounts.filter(
       (entry) => now - entry.deletedAt < DELETED_ACCOUNT_MEMORY_MS,
     );
+    /* Flow rows are a live feed: the purge is what keeps the table a feed. */
+    const flowsBefore = this.data.mcpFlows.length;
+    this.data.mcpFlows = trimMcpFlowRows(this.data.mcpFlows, now);
     if (
       this.data.codes.length !== before ||
       this.data.commands.length !== commandsBefore ||
-      this.data.deletedAccounts.length !== deletedBefore
+      this.data.deletedAccounts.length !== deletedBefore ||
+      this.data.mcpFlows.length !== flowsBefore
     ) {
       this.flush();
     }

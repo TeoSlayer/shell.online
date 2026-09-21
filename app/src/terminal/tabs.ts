@@ -49,7 +49,8 @@ export type TabAction =
 export function tabFor(session: SessionRecord, canType: boolean): Tab {
   return {
     id: session.id,
-    label: sessionTitle(session),
+    // Decrypted content is projected live by Workspace, never retained in tabs.
+    label: sessionTitle({name:session.name,command:session.command}),
     command: session.command,
     shareUrl: session.shareUrl,
     readOnly: session.readOnly,
@@ -79,7 +80,7 @@ export function reduce(state: TabState, action: TabAction): TabState {
       if (existing) {
         const refreshed: Tab = {
           ...existing,
-          label: sessionTitle(session),
+          label: sessionTitle({name:session.name,command:session.command}),
           command: session.command,
           shareUrl: session.shareUrl,
           readOnly: session.readOnly,

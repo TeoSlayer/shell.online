@@ -102,6 +102,41 @@ first, which was wrong twice over: it is pure arithmetic about the shape of the
 map with no Pixi in it, and once the border and the camps needed it, `world/`
 was importing upwards out of the renderer while this file claimed it did not.
 
+## MCP request flows
+
+The keep shows what external MCP clients are asking this garrison to do, from
+the game's own authenticated endpoint: `GET /api/game/mcp-flows` answers with
+owner-scoped, short-lived lifecycle metadata — an opaque request id, the target
+session, an allowlisted tool, `started` or `settled`, a timestamp, and on
+`settled` a real outcome. The service has already filtered it to the signed-in
+person and to sessions its own live devices are running; the game re-validates
+every row strictly in `state/mcp-flows.ts` and drops anything malformed (a
+non-v4 id, an unknown field, a tool or outcome outside the shared allowlists, a
+`settled` row with no outcome, a `started` row that claims one), anything older
+than the short TTL, and any target that is not a live session this account owns.
+One call has one id: rows sharing a target and an id collapse to the most
+settled, latest one.
+
+What it deliberately does not claim is a source. The service cannot attest
+which agent, if any, made a request, so the panel and the canvas show a neutral
+"External MCP client" marker and arrows only to figures actually standing on
+this field. There is no invented agent-to-agent edge, and an observation whose
+target is not drawn draws nothing at all.
+
+`Input delivered` means the terminal accepted the write, never that the agent
+finished; cancellation, timeout, failure and uncertain delivery each read
+differently. The panel empties on its own clock (`useExpiringMcpFlows`), so a
+hung fetch can neither leave stale arrows nor wedge the field; the poll is
+bounded, never stacks requests, and clears its observations on failure, on the
+stand-in garrison, and the moment the signed-in account changes. Demo activity
+is never shown as evidence of a real request.
+
+Files: `state/mcp-flows.ts` (parser, expiry, labels), `state/use-garrison.ts`
+(the poll and ownership scoping), `ui/McpFlows.tsx` (the panel),
+`pixi/mcp-flows.ts` (the canvas layer). Covered by `state/mcp-flows.test.ts` and
+`scripts/test-game-mcp-flows-ui.mjs`, which mounts the real panel, parser, poll
+and pixi layer over a stubbed API in a real browser (Chrome and Safari).
+
 ## Running it
 
 ```sh

@@ -65,17 +65,16 @@ function basename(token: string): string {
  * What a page shows for a session: the operator's name when there is one,
  * else the label the command derives to.
  */
-export function sessionTitle(session: Pick<SessionRecord, "name" | "command">): string {
+export function sessionTitle(session: Pick<SessionRecord, "name" | "command" | "suggestedTitle">): string {
   const name = (session.name ?? "").trim();
-  return cap(name || commandLabel(session.command));
+  return cap(name || session.suggestedTitle?.trim() || commandLabel(session.command));
 }
 
 /**
  * A session's genuine summary, when the record carries one.
  *
- * There is no generated-briefing pipeline yet, so this is usually null. The
- * caller then shows a compact, truthful empty state instead of treating the
- * command as a summary -- the command is what runs, not what the session is.
+ * Owner-encrypted excerpts arrive as a transient view projection after vault
+ * decryption. Missing content remains empty; a command is not a summary.
  */
 export function sessionSummary(session: Pick<SessionRecord, "description">): string | null {
   const value = (session.description ?? "").trim();

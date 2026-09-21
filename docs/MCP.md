@@ -67,6 +67,14 @@ Obtain the cursor before the event you want to wait for, and inspect reset/epoch
 
 ## Trust boundary and limits
 
+The v0.22.0 app pulse and owner-encrypted response excerpts are separate from
+MCP observation and control. Pulse inspects output already received by an open
+authorized browser pane. The excerpt publisher reads existing metadata for an
+explicitly resumed OpenCode conversation and seals it to the owner's vault; it
+does not use an MCP grant, send terminal input, or call a model. Neither feature
+proves agent completion or gives a teammate access. See
+[session content and pulse](session-content.md) for consent and delivery limits.
+
 MCP explicitly authorizes server-side, in-memory decryption using the host-supplied frame key.
 Controllers receive plaintext. MCP stores no plaintext terminal content, key or bearer;
 its durable records contain grant metadata, bearer hashes and operation fingerprints/outcomes.
@@ -84,6 +92,28 @@ and verified cleanup. This used a synthetic shell, not a new model-backed client
 Claude model-backed behavior remains unverified. Idle live-grant hibernation is not claimed (timers prevent it);
 reconstruction and duplicate recovery have deterministic tests. Normal runtime quotas apply;
 concurrency saturation tests may be inconclusive and are not represented as passed.
+
+## Game request feed (v0.22.0+)
+
+The game can show recent tool requests into your own sessions. A matching relay
+and updated running Go host report only a random request ID, allowlisted tool,
+start/settlement time and outcome. Reports travel over the host connection and
+its linked-account authentication, not plaintext viewer presence. The account
+service checks the originating device and current session ownership. The game
+uses an authenticated, owner-only endpoint; being a teammate or seeing a session
+listing does not grant access to this feed.
+
+Migration `021_mcp_flows.sql` supplies shared storage across account-service
+instances. Events are served for at most two minutes, with bounded per-owner and
+global capacity; expiry cleanup also runs through the existing scheduled purge.
+The host queue is bounded and best-effort: failures drop observations, so the feed
+is not a durable audit log and a missing completion is not evidence of success.
+
+Sources currently appear as **External MCP client**. Neither a bearer label nor
+an input acknowledgement verifies which agent called, or that its requested task
+finished. Verified agent-to-agent attribution and team-wide delivery are not
+implemented. The feed contains no tool arguments, prompts, terminal output,
+response content, credentials or grant labels.
 
 ## Deployment and compatibility
 

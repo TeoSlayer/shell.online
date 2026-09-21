@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { PeopleChip } from "./Avatar";
 import { kindForCommand } from "../lib/session-kinds";
 import { assigneeIds, canHandOff, canRemove, canStop } from "../lib/session-view";
-import { sessionSummary, sessionTitle } from "../lib/session-title";
+import { sessionTitle } from "../lib/session-title";
+import {SessionSummaryText} from "./SessionSummaryText";
 import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
@@ -79,10 +80,9 @@ function Card({
 
       {/*
         * A genuine two-line summary when the record carries one, and the
-        * truthful empty state when it does not: there is no briefing
-        * pipeline yet, so the command is not dressed up as a description.
+        * truthful empty state when it does not; commands are not descriptions.
         */}
-      <p className="board-card-summary">{sessionSummary(session) ?? "No description."}</p>
+      <p className="board-card-summary"><SessionSummaryText session={session} /></p>
 
       <p className="board-card-meta">
         {session.host}

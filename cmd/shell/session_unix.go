@@ -105,6 +105,7 @@ func runSharedProcess(
 	persistentStatePath string,
 	onPasswordRotated func(string, string),
 	fileService *sharedFileService,
+	flowSink mcpFlowSink,
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
@@ -301,7 +302,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, arbiter, outputEmitter, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService)
+		err := readRelay(connection, ptmx, arbiter, outputEmitter, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService, flowSink)
 		select {
 		case <-sharingFinished:
 			return
@@ -680,6 +681,7 @@ func readRelay(
 	rotationAcknowledged chan<- struct{},
 	supportsRotation *atomic.Bool,
 	fileService *sharedFileService,
+	flowSink mcpFlowSink,
 ) error {
 	for {
 		messageType, message, err := connection.Read()
@@ -688,6 +690,17 @@ func readRelay(
 		}
 
 		if messageType == relay.TextMessage {
+			/*
+			 * MCP flow observations are host-only telemetry. They are parsed
+			 * strictly, validated against the shared allowlists, and handed to
+			 * the bounded reporter; nothing else reads or forwards them.
+			 */
+			if event, ok := parseMcpFlowMessage(message); ok {
+				if flowSink != nil {
+					flowSink(event)
+				}
+				continue
+			}
 			var event struct {
 				Type               string `json:"type"`
 				ViewerID           uint32 `json:"viewerId"`

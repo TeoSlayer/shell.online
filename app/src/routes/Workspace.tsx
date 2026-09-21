@@ -15,6 +15,8 @@ import {
   matches,
 } from "../lib/session-view";
 import { sessionSummary, sessionTitle } from "../lib/session-title";
+import {useSessionContents, withSessionContent} from "../lib/use-session-contents";
+import {SessionSummaryText} from "../components/SessionSummaryText";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
@@ -24,6 +26,8 @@ import { useAuth } from "../auth/AuthProvider";
 import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { TerminalPane } from "../terminal/TerminalPane";
+import type { SessionPulse } from "../terminal/session-pulse";
+import { SessionPulseBadge } from "../terminal/SessionPulse";
 import { EMPTY, reduce, sessionToOpen, tabFor } from "../terminal/tabs";
 import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
 import {
@@ -170,7 +174,9 @@ export function Workspace() {
     vaultRef.current = vault;
   }, [vault]);
   const [state, dispatch] = useReducer(reduce, EMPTY);
-  const [sessions, setSessions] = useState<SessionRecord[] | null>(null);
+  const [rawSessions, setSessions] = useState<SessionRecord[] | null>(null);
+  const sessionContents = useSessionContents(rawSessions);
+  const sessions = rawSessions?.map(session => withSessionContent(session, sessionContents[session.id])) ?? null;
   const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -184,6 +190,16 @@ export function Workspace() {
   const [scope, setScope] = useState("all");
   const [view, setView] = useState<ViewMode>(readViewMode);
   const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(readTerminalRenderer);
+  /* Never persisted or sent to an API: only already-open viewers contribute. */
+  const [pulses, setPulses] = useState<Record<string, SessionPulse>>({});
+  const receivePulse = useCallback((id: string, value: SessionPulse | null) => {
+    setPulses((old) => {
+      if (!value && !old[id]) return old;
+      const next = { ...old };
+      if (value) next[id] = value; else delete next[id];
+      return next;
+    });
+  }, []);
   const [removing, setRemoving] = useState("");
   const [cleaning, setCleaning] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
@@ -415,7 +431,7 @@ export function Workspace() {
     setNotice("");
     try {
       await stopSession(target, session.id);
-      setNotice(`Stopping ${sessionTitle(session)}.`);
+      setNotice(`Stopping ${sessionTitle({name:session.name,command:session.command})}.`);
       window.setTimeout(() => void load(), AFTER_COMMAND_MS);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not stop that session.");
@@ -437,7 +453,7 @@ export function Workspace() {
       await deleteSession(session.id);
       forget(session.id);
       dispatch({ type: "close", id: session.id });
-      setNotice(`Removed ${sessionTitle(session)} from the list.`);
+      setNotice(`Removed ${sessionTitle({name:session.name,command:session.command})} from the list.`);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not remove that session.");
@@ -463,7 +479,7 @@ export function Workspace() {
         dispatch({ type: "close", id: session.id });
         removed += 1;
       } catch {
-        failed.push(sessionTitle(session));
+        failed.push(sessionTitle({name:session.name,command:session.command}));
       }
     }
     await load();
@@ -602,9 +618,9 @@ export function Workspace() {
     setError("");
     setNotice("");
     const previous = assigneeIds(session);
-    const optimistic = { ...session, assigneeUid: uids[0], assigneeUids: uids };
     setSessions((current) =>
-      current?.map((entry) => entry.id === session.id ? optimistic : entry) ?? null,
+      // Update the raw record, not the view projection containing decrypted content.
+      current?.map((entry) => entry.id === session.id ? { ...entry, assigneeUid: uids[0], assigneeUids: uids } : entry) ?? null,
     );
 
     const earlier = assignmentQueue.current.get(session.id);
@@ -637,8 +653,8 @@ export function Workspace() {
         .map((member) => member.name || member.email);
       setNotice(
         names.length
-          ? `${sessionTitle(session)} is assigned to ${names.join(", ")}.`
-          : `${sessionTitle(session)} is unassigned.`,
+          ? `${sessionTitle({name:session.name,command:session.command})} is assigned to ${names.join(", ")}.`
+          : `${sessionTitle({name:session.name,command:session.command})} is unassigned.`,
       );
     } catch (caught) {
       if (assignmentQueue.current.get(session.id) === request) {
@@ -736,7 +752,10 @@ export function Workspace() {
                     alt=""
                     title={kindForCommand(tab.command).title}
                   />
-                  {tab.label}
+                  {sessionTitle(sessions?.find(session => session.id === tab.id) ?? {name:tab.label,command:tab.command})}
+                  {pulses[tab.id] && sessions?.some((session) => session.id === tab.id) && (
+                    <SessionPulseBadge pulse={pulses[tab.id]} compact />
+                  )}
                 </button>
                 <button
                   type="button"
@@ -774,6 +793,10 @@ export function Workspace() {
           </label>
           )}
         </div>
+      )}
+
+      {!showingList && sessions?.find(s => s.id === state.activeId && sessionSummary(s)) && (
+        <p className="session-panel-summary"><SessionSummaryText session={sessions.find(s => s.id === state.activeId)!} /></p>
       )}
 
       {state.tabs.length > 0 && terminalRenderer === "refstream" && (
@@ -824,6 +847,8 @@ export function Workspace() {
                 host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
                 renderer={terminalRenderer}
+                pulseAllowed={!!current}
+                onPulseChange={(value) => receivePulse(tab.id, value)}
               />
             );
           })}
@@ -1194,7 +1219,7 @@ function SessionGroup({
                     * and the truthful empty state when it does not. The command
                     * is not a summary; it stays behind the toggle below.
                     */}
-                  <span className="table-summary">{sessionSummary(session) ?? "No description."}</span>
+                  <span className="table-summary"><SessionSummaryText session={session} /></span>
                   {/*
                     * Outside the link, because it is a button and a button
                     * inside an anchor is neither valid nor operable by

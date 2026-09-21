@@ -3,6 +3,16 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { CONTENT_INTERVAL_MS, contentPublisher, type SessionContent, type SessionContentPolicy, type ContentWriteResult } from "./session-content";
+import {
+  MCP_FLOW_GLOBAL_LIMIT,
+  MCP_FLOW_LIMIT,
+  mcpFlowAllowedBindings,
+  mcpFlowBinding,
+  mcpFlowExpiry,
+  type McpFlow,
+  type McpFlowEvent,
+} from "./mcp-flows";
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import {
   ACCOUNT_ACTIVITY_MEMORY_MS,
@@ -59,6 +69,15 @@ function migrationsDir(): string {
 
 /* An arbitrary constant; only this application takes this advisory lock. */
 const MIGRATION_LOCK = 731_099_431;
+
+/*
+ * The one lock that spans every owner's flow rows. The global cap is the only
+ * bound a per-owner lock cannot enforce: two owners reporting at once each
+ * see the other's rows as not-yet-committed and each trims too little. So
+ * every flow transaction takes this lock first, which is what makes the count
+ * and the trim it triggers see the table as one writer would leave it.
+ */
+const MCP_FLOWS_GLOBAL_LOCK = 731_099_432;
 
 /** Drops keys whose value is null, so an absent column reads as `undefined`. */
 function defined<T extends object>(record: T): T {
@@ -206,6 +225,17 @@ function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
    */
   if (shares.length > 0) session.keyShares = shares;
   return session;
+}
+
+function toMcpFlow(row: Row): McpFlow {
+  return {
+    id: row.event_id as string,
+    tool: row.tool as McpFlow["tool"],
+    phase: row.phase as McpFlow["phase"],
+    at: row.at as number,
+    ...(row.outcome ? { outcome: row.outcome as McpFlow["outcome"] } : {}),
+    targetSessionId: row.target_session_id as string,
+  };
 }
 
 function toCommand(row: Row): AgentCommand {
@@ -728,6 +758,254 @@ export class PostgresStore implements Store {
   /* ---- Sessions ---- */
 
   /** Returns true when this session had not been seen before. */
+  private async withContentSession<T>(orgId: string, sessionId: string, ownerUid: string, deviceId: string, missing: T, action: (client: pg.PoolClient, session: SessionRecord, state: Row) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query<Row>("SELECT * FROM sessions WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 FOR UPDATE", [orgId, sessionId, ownerUid]);
+      const session = found.rows[0] ? toSession(found.rows[0], []) : null;
+      if (!session || !contentPublisher(session, orgId, ownerUid, deviceId)) {
+        await client.query("ROLLBACK");
+        return missing;
+      }
+      await client.query("INSERT INTO session_content (session_uid, session_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [session.uid, sessionId]);
+      const state = await client.query<Row>("SELECT * FROM session_content WHERE session_uid = $1 AND session_id = $2", [session.uid, sessionId]);
+      const result = await action(client, session, state.rows[0]);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* Preserve original error. */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async sessionContentPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionContentPolicy | null> {
+    return this.withContentSession<SessionContentPolicy | null>(orgId, sessionId, ownerUid, deviceId, null, async (_client, session, state) => ({
+      enabled: session.dailyBriefingEnabled === true, ownerUid, generation: state.generation as string,
+      nextPublishAt: state.published_at === null ? 0 : Number(state.published_at) + CONTENT_INTERVAL_MS,
+    }));
+  }
+
+  async putSessionContent(orgId: string, sessionId: string, ownerUid: string, deviceId: string, content: SessionContent, now = Date.now()): Promise<ContentWriteResult> {
+    return this.withContentSession<ContentWriteResult>(orgId, sessionId, ownerUid, deviceId, "missing", async (client, session, state) => {
+      if (!session.dailyBriefingEnabled) return "disabled";
+      if (content.generation !== state.generation) return "stale";
+      if (state.observed_at === content.observedAt && state.sender_public_key === content.senderPublicKey && state.sealed === content.sealed) return "stored";
+      if (state.published_at !== null && now < Number(state.published_at) + CONTENT_INTERVAL_MS) return "limited";
+      await client.query("UPDATE session_content SET observed_at=$3, sender_public_key=$4, sealed=$5, published_at=$6 WHERE session_uid=$1 AND session_id=$2", [session.uid, sessionId, content.observedAt, content.senderPublicKey, content.sealed, now]);
+      return "stored";
+    });
+  }
+
+  async getSessionContent(orgId: string, sessionId: string, ownerUid: string): Promise<SessionContent | null> {
+    const row = await this.row(`SELECT c.* FROM session_content c JOIN sessions s ON s.uid=c.session_uid AND s.id=c.session_id
+      WHERE s.org_id=$1 AND s.id=$2 AND COALESCE(s.owner_uid,s.uid)=$3 AND s.daily_briefing_enabled=true AND c.sealed IS NOT NULL`, [orgId, sessionId, ownerUid]);
+    return row ? { generation: row.generation as string, observedAt: row.observed_at as number, senderPublicKey: row.sender_public_key as string, sealed: row.sealed as string } : null;
+  }
+
+  /* ---- MCP flow feed ---- */
+
+  /**
+   * The flow table's locks, in the one order every flow transaction uses:
+   * global, then owner, then (for a write) the session row.
+   *
+   * The global lock is what makes the global cap honest -- see
+   * MCP_FLOWS_GLOBAL_LOCK -- and the owner lock keeps the per-owner cap
+   * honest the same way. Taking the global lock first also means the ordering
+   * cannot deadlock against the session lifecycle: a flow transaction waits
+   * on a session row only while holding locks that no non-flow transaction
+   * ever asks for, so a lifecycle transaction holding that row can never be
+   * waiting on a flow transaction in turn.
+   */
+  private async lockFlows(client: pg.PoolClient, orgId: string, ownerUid: string): Promise<void> {
+    await client.query("SELECT pg_advisory_xact_lock($1)", [MCP_FLOWS_GLOBAL_LOCK]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`mcp_flows:${orgId}:${ownerUid}`]);
+  }
+
+  /**
+   * Keeps the table at its bounds, in the caller's transaction, which must
+   * already hold the flow table locks (global, then owner): one owner's share
+   * at most MCP_FLOW_LIMIT rows, the table at most MCP_FLOW_GLOBAL_LIMIT
+   * rows, and an opportunistic sweep of whatever has expired.
+   *
+   * Expiry is a service boundary, not a janitor: the instant a row passes
+   * expires_at it is unservable, because every read filters expires_at. The
+   * physical delete happens on the operations around it (writes, reads, the
+   * scheduled purge), so a row can outlive its TTL in the table by a little
+   * without ever being shown. The sweep is capped so a quiet table costs one
+   * index scan and a busy one sheds a little on each call rather than one big
+   * delete.
+   */
+  private async trimMcpFlows(client: pg.PoolClient, orgId: string, ownerUid: string, now: number): Promise<void> {
+    await client.query(
+      `WITH kept AS (
+         SELECT ctid FROM mcp_flows WHERE org_id = $1 AND owner_uid = $2
+         ORDER BY at DESC, event_id COLLATE "C" DESC LIMIT $3
+       )
+       DELETE FROM mcp_flows
+       WHERE org_id = $1 AND owner_uid = $2 AND ctid NOT IN (SELECT ctid FROM kept)`,
+      [orgId, ownerUid, MCP_FLOW_LIMIT],
+    );
+    /*
+     * The total backstop: the per-owner caps already bound a healthy table,
+     * so this only runs when a burst of many owners has pushed it past the
+     * limit, and it sheds the oldest rows back to it.
+     */
+    const total = await client.query<{ total: number }>("SELECT count(*)::int AS total FROM mcp_flows");
+    if ((total.rows[0]?.total ?? 0) > MCP_FLOW_GLOBAL_LIMIT) {
+      await client.query(
+        `WITH ranked AS (
+           SELECT ctid, row_number() OVER (ORDER BY at DESC, event_id COLLATE "C" DESC) AS rank
+           FROM mcp_flows
+         )
+         DELETE FROM mcp_flows WHERE ctid IN (SELECT ctid FROM ranked WHERE rank > $1)`,
+        [MCP_FLOW_GLOBAL_LIMIT],
+      );
+    }
+    await client.query(
+      `WITH expired AS (SELECT ctid FROM mcp_flows WHERE expires_at <= $1 LIMIT 1000)
+       DELETE FROM mcp_flows WHERE ctid IN (SELECT ctid FROM expired)`,
+      [now],
+    );
+  }
+
+  async putMcpFlows(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    events: McpFlowEvent[],
+    now = Date.now(),
+  ): Promise<boolean> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /*
+       * The table locks first, so the caps below see every other flow report
+       * as committed or pending, never half-applied.
+       */
+      await this.lockFlows(client, orgId, ownerUid);
+      /*
+       * The session row is the bound, locked so a report cannot race the
+       * session closing, being deleted, or changing provenance: whichever
+       * happens first wins, and a report that loses the race writes nothing
+       * rather than a row that outlives the session it describes.
+       */
+      const found = await client.query<Row>(
+        `SELECT * FROM sessions
+         WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 AND closed_at IS NULL
+         FOR UPDATE`,
+        [orgId, sessionId, ownerUid],
+      );
+      const row = found.rows[0];
+      if (!row || !contentPublisher(toSession(row, []), orgId, ownerUid, deviceId)) {
+        await client.query("ROLLBACK");
+        return false;
+      }
+      const binding = mcpFlowBinding(toSession(row, []));
+      for (const event of events) {
+        /*
+         * A conflict is a retry: the first write's row stands, metadata and
+         * expiry included. DO NOTHING is the whole dedup, which is what keeps
+         * a retry from extending the row's lifetime.
+         */
+        await client.query(
+          `INSERT INTO mcp_flows
+             (owner_uid, org_id, binding, event_id, phase, tool, at, outcome, target_session_id, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (binding, event_id, phase) DO NOTHING`,
+          [
+            ownerUid,
+            orgId,
+            binding,
+            event.id,
+            event.phase,
+            event.tool,
+            event.at,
+            event.outcome ?? null,
+            sessionId,
+            mcpFlowExpiry(event.at, now),
+          ],
+        );
+      }
+      await this.trimMcpFlows(client, orgId, ownerUid, now);
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listMcpFlows(orgId: string, ownerUid: string, activeDevices: Set<string>, now = Date.now()): Promise<McpFlow[]> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      /*
+       * The same table locks as the writers: this transaction purges and
+       * trims as well as reads, and a writer mid-flight must not be trimmed
+       * out from under its own caps.
+       */
+      await this.lockFlows(client, orgId, ownerUid);
+      const sessions = await client.query<Row>(
+        `SELECT * FROM sessions WHERE org_id = $1 AND COALESCE(owner_uid, uid) = $2 AND closed_at IS NULL`,
+        [orgId, ownerUid],
+      );
+      const allowed = mcpFlowAllowedBindings(
+        sessions.rows.map((row) => toSession(row, [])),
+        orgId,
+        ownerUid,
+        activeDevices,
+      );
+      /*
+       * Purge lost access so restoring it cannot resurrect these rows. The
+       * purge is housekeeping; the read below rechecks the binding itself, so
+       * a row that lands between the two cannot be served either.
+       */
+      if (allowed.size > 0) {
+        await client.query(
+          `DELETE FROM mcp_flows WHERE org_id = $1 AND owner_uid = $2 AND binding <> ALL($3)`,
+          [orgId, ownerUid, [...allowed]],
+        );
+      } else {
+        await client.query(`DELETE FROM mcp_flows WHERE org_id = $1 AND owner_uid = $2`, [orgId, ownerUid]);
+      }
+      await this.trimMcpFlows(client, orgId, ownerUid, now);
+      /*
+       * A session can only serve flows while its provenance is one of the
+       * allowed bindings, so the read intersects them: an empty set matches
+       * nothing, and a rebind that changes any provenance field changes the
+       * binding, which is what keeps a stale row from passing for a new
+       * session that happens to reuse the id.
+       */
+      const result = await client.query<Row>(
+        `SELECT * FROM (
+           SELECT * FROM mcp_flows
+           WHERE org_id = $1 AND owner_uid = $2 AND expires_at > $3 AND binding = ANY($4)
+           ORDER BY at DESC, event_id COLLATE "C" DESC LIMIT $5
+         ) recent ORDER BY at ASC, event_id COLLATE "C" ASC`,
+        [orgId, ownerUid, now, [...allowed], MCP_FLOW_LIMIT],
+      );
+      await client.query("COMMIT");
+      return result.rows.map(toMcpFlow);
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* The original failure stands. */
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async upsertSession(session: SessionRecord): Promise<boolean> {
     /*
      * `xmax = 0` distinguishes an insert from an update on the conflicting
@@ -1949,6 +2227,8 @@ export class PostgresStore implements Store {
     await this.pool.query("DELETE FROM deleted_accounts WHERE deleted_at <= $1", [
       now - DELETED_ACCOUNT_MEMORY_MS,
     ]);
+    /* Flow rows are a live feed: the purge is what keeps the table a feed. */
+    await this.pool.query("DELETE FROM mcp_flows WHERE expires_at <= $1", [now]);
   }
 
   async close(): Promise<void> {

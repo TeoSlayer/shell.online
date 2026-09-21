@@ -2,9 +2,10 @@
 // Run after npm run build:web. Output contains fixed check names, never credentials or raw logs.
 import { spawn } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { generateKeyPair, exportJWK } from "jose";
 import { parseJsonc } from "./wrangler-config-contract.mjs";
@@ -22,6 +23,9 @@ await new Promise((r) => reservation.close(r));
 process.env.SHELL_STAGING_URL = "http://127.0.0.1:" + port;
 const h = await import("./staging-harness/lib.mjs");
 let runtime, session, bearer, failed = false;
+let accountServer, credentialPath;
+const flowEvents = [];
+const accountToken = randomUUID();
 let stage = "runtime setup";
 try {
   const config = parseJsonc(readFileSync(join(root, "wrangler.example.jsonc"), "utf8"));
@@ -47,6 +51,27 @@ try {
     await pause(200);
   }
   check(ready, "local runtime ready");
+  // A synthetic account collector verifies real Worker→Go→HTTP delivery without
+  // linking to the operator's account. Authorization/store semantics are covered
+  // separately by app route + PostgreSQL conformance tests.
+  accountServer = createHttpServer(async (req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    if (req.headers.authorization !== `Bearer ${accountToken}`) {
+      res.writeHead(401).end('{}'); return;
+    }
+    if (req.url === '/api/account/key') { res.writeHead(404).end('{}'); return; }
+    let raw = '';
+    for await (const chunk of req) { raw += chunk; if (raw.length > 32768) { res.writeHead(413).end('{}'); return; } }
+    if (req.method === 'POST' && /^\/api\/cli\/sessions\/[^/]+\/mcp-flows$/.test(req.url ?? '')) {
+      try { flowEvents.push(...JSON.parse(raw).events); } catch { res.writeHead(400).end('{}'); return; }
+    }
+    res.end('{}');
+  });
+  await new Promise((resolve) => accountServer.listen(0, '127.0.0.1', resolve));
+  credentialPath = join(dirname(h.buildCli()), 'unlinked-account.json');
+  writeFileSync(credentialPath, JSON.stringify({server: `http://127.0.0.1:${accountServer.address().port}`,
+    access_token: accountToken, refresh_token: randomUUID(), uid: 'synthetic-flow-owner',
+    expires_at: new Date(Date.now() + 3600000).toISOString(), remote_start_asked: true}), {mode: 0o600});
   stage = "create synthetic session";
   session = await h.createSession(["sh"]);
   check(!!session.session_id, "synthetic session created");
@@ -66,6 +91,12 @@ try {
   const replay = await h.mcpCall(bearer, "shell_send", args);
   await pause(100);
   check(replay.toolResult?.delivered === true && readFileSync(artifact, "utf8") === "mcp-port-ok", "no duplicate PTY write");
+  stage = 'host flow reporting';
+  for (let i = 0; i < 40 && !flowEvents.some(e => e.tool === 'shell_send' && e.outcome === 'delivered'); i++) await pause(100);
+  const completed = flowEvents.find(e => e.tool === 'shell_send' && e.phase === 'settled' && e.outcome === 'delivered');
+  check(!!completed && flowEvents.some(e => e.id === completed.id && e.phase === 'started'), 'real host reports correlated start and delivered outcome');
+  check(flowEvents.every(e => Object.keys(e).every(k => ['id','tool','phase','at','outcome'].includes(k))) &&
+    !JSON.stringify(flowEvents).includes(args.text) && !JSON.stringify(flowEvents).includes(bearer), 'flow reports contain no input or bearer');
   const rotation = await h.cli(["password", "rotate", session.session_id]);
   check(rotation.code === 0, "live password rotation");
   check((await h.mcpCall(bearer, "shell_status", {})).status === 401, "old MCP bearer revoked by rotation");
@@ -95,6 +126,8 @@ try {
     try { process.kill(-runtime.pid, "SIGTERM"); } catch {}
     await pause(300);
   }
+  if (accountServer) await new Promise(resolve => accountServer.close(resolve));
+  if (credentialPath) rmSync(credentialPath, { force: true });
   rmSync(temp, { recursive: true, force: true });
 }
 process.exitCode = failed ? 1 : 0;

@@ -17,7 +17,7 @@ const briefingsTimeout = 15 * time.Second
 // briefingNotAvailableNote is printed after a saved change. The consent is
 // real and stored on the account, but nothing in this build generates a
 // briefing yet, and the output should not imply otherwise.
-const briefingNotAvailableNote = "Permission saved; automatic briefing generation is not available in this build yet."
+const briefingNotAvailableNote = "Permission saved; an updated compatible host can publish owner-encrypted existing conversation titles and response excerpts, at most once daily. No new prompt or model call; team delivery is not available yet."
 
 func briefingsUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "Usage: shell briefings status")

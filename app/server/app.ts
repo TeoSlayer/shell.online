@@ -58,6 +58,8 @@ import { accountStats, dayStart, isStatsRange, rangeStart } from "./routes/stats
 import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
+import { readSessionContent } from "./lib/session-content";
+import { readMcpFlows } from "./lib/mcp-flows";
 
 export interface AppOptions {
   store: Store;
@@ -687,6 +689,62 @@ export function createApp(options: AppOptions) {
        * only the row's owner moves its switches. The answer carries the three
        * switches and nothing else: no share URL, no sealed copies.
        */
+      /*
+       * Flow metadata a session's own machine reports about its MCP tool
+       * calls. The store is the whole bound: it rechecks, as one step, that
+       * the session is open in this organization, that the token's device is
+       * the one it started from, and that the caller is its owner, and it
+       * keeps the rows short-lived. A per-isolate buffer would not do, because
+       * the Worker builds one router per isolate and the report and the read
+       * land on different ones.
+       */
+      const cliFlowRoute = url.pathname.match(/^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/mcp-flows$/);
+      if (request.method === "POST" && cliFlowRoute) {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no such session" });
+        const events = readMcpFlows(await readBody(request));
+        if (!events) return send(response, 400, { error: "invalid MCP flow metadata" });
+        const accepted = await store.putMcpFlows(membership.orgId, cliFlowRoute[1], token.uid, token.id, events);
+        if (!accepted) return send(response, 404, { error: "no such session" });
+        return send(response, 200, { accepted: true });
+      }
+
+      if (route === "GET /api/game/mcp-flows") {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const devices = await store.listDevices(membership.uid);
+        const activeDevices = new Set(devices.filter((device) => device.revokedAt === undefined).map((device) => device.id));
+        return send(response, 200, { flows: await store.listMcpFlows(membership.orgId, membership.uid, activeDevices) });
+      }
+
+      const cliContentRoute = url.pathname.match(/^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/(content-policy|content)$/);
+      if (cliContentRoute && ((request.method === "GET" && cliContentRoute[2] === "content-policy") || (request.method === "PUT" && cliContentRoute[2] === "content"))) {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no such session" });
+        if (request.method === "GET") {
+          const policy = await store.sessionContentPolicy(membership.orgId, cliContentRoute[1], token.uid, token.id);
+          return policy ? send(response, 200, policy) : send(response, 404, { error: "no such session" });
+        }
+        const content = await readSessionContent(await readBody(request));
+        if (!content) return send(response, 400, { error: "invalid sealed session content" });
+        const result = await store.putSessionContent(membership.orgId, cliContentRoute[1], token.uid, token.id, content);
+        if (result === "stored") return send(response, 200, { stored: true });
+        const status = { missing: 404, disabled: 403, stale: 409, limited: 429 }[result];
+        return send(response, status, { error: result === "limited" ? "session content may be published once per day" : `session content ${result}` });
+      }
+
+      const browserContentRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/content$/);
+      if (request.method === "GET" && browserContentRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const content = await store.getSessionContent(membership.orgId, browserContentRoute[1], membership.uid);
+        return content ? send(response, 200, content) : send(response, 404, { error: "no session content" });
+      }
+
       const cliAutomationRoute = url.pathname.match(
         /^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/automation$/,
       );

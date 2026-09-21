@@ -81,6 +81,7 @@ import {
   type McpAuditItem,
   type McpAuditOutcome,
 } from "../shared/mcp-audit";
+import { hostMcpFlowSink, trackMcpFlow, type McpFlowTool } from "../shared/mcp-flow";
 import { z } from "zod";
 import {
   McpServer,
@@ -2194,9 +2195,20 @@ export class TerminalSession extends DurableObject<Env> {
     grant: McpGrantRecord,
     wrappedFrameKey: string | null,
     controller: AbortController,
-    onOutcome: (outcome: McpAuditOutcome) => void,
+    recordOutcome: (outcome: McpAuditOutcome) => void,
   ): McpServer {
     const server = new McpServer({ name: "shell.online", version: RELEASE_VERSION });
+    const flowGeneration = this.mcpRunGeneration;
+    const emitFlow = hostMcpFlowSink(
+      this.state.getWebSockets("host").find(socket => socket.readyState === 1),
+      () => this.mcpRunGeneration === flowGeneration,
+    );
+    let flowOutcome: McpAuditOutcome | null = null;
+    const onOutcome = (outcome: McpAuditOutcome) => { flowOutcome = outcome; recordOutcome(outcome); };
+    const runFlow = <T>(tool: McpFlowTool, handler: () => Promise<T>) => trackMcpFlow(
+      tool, emitFlow, handler,
+      failed => flowOutcome ?? (controller.signal.aborted ? "cancelled" : failed ? "error" : "ok"),
+    );
     const revalidate = (): boolean => {
       const now = Math.floor(Date.now() / 1000);
       const current = this.mcpGrants.find((g) => g.grantId === grant.grantId);
@@ -2222,12 +2234,12 @@ export class TerminalSession extends DurableObject<Env> {
         inputSchema: {},
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
-      async () => {
+      async () => runFlow("shell_status", async () => {
         // Revalidate immediately before producing the result (execution-time recheck).
         requireLive();
         onOutcome("ok");
         return text(this.statusPayload(grant));
-      },
+      }),
     );
 
     server.registerTool(
@@ -2238,7 +2250,7 @@ export class TerminalSession extends DurableObject<Env> {
         inputSchema: {},
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
-      async () => {
+      async () => runFlow("shell_screen", async () => {
         requireLive();
         const model = await this.mcpEnsureModelSeeded(wrappedFrameKey);
         if (!model) {
@@ -2249,7 +2261,7 @@ export class TerminalSession extends DurableObject<Env> {
         requireLive();
         onOutcome("ok");
         return text({ status: status(), ...screen, fresh: true });
-      },
+      }),
     );
 
     server.registerTool(
@@ -2264,7 +2276,7 @@ export class TerminalSession extends DurableObject<Env> {
         },
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
-      async ({ cursor }) => {
+      async ({ cursor }) => runFlow("shell_output", async () => {
         requireLive();
         const model = await this.mcpEnsureModelSeeded(wrappedFrameKey);
         if (!model) {
@@ -2275,7 +2287,7 @@ export class TerminalSession extends DurableObject<Env> {
         requireLive();
         onOutcome("ok");
         return text({ status: status(), ...result, fresh: true });
-      },
+      }),
     );
 
     server.registerTool(
@@ -2290,7 +2302,7 @@ export class TerminalSession extends DurableObject<Env> {
         },
         annotations: { readOnlyHint: true, openWorldHint: false },
       },
-      async ({ pattern, cursor, timeout_ms }) => {
+      async ({ pattern, cursor, timeout_ms }) => runFlow("shell_wait", async () => {
         requireLive();
         // Wait limits: one in flight per grant, a bounded total per session. A limit is a normal
         // (non-error) result so the agent can back off and retry rather than treat it as a failure.
@@ -2328,7 +2340,7 @@ export class TerminalSession extends DurableObject<Env> {
             this.mcpWaitCount -= 1;
           }
         }
-      },
+      }),
     );
 
     // shell_send (control): registered ONLY when ALL of (a) the disabled-by-default gate is on,
@@ -2364,7 +2376,7 @@ export class TerminalSession extends DurableObject<Env> {
             .strict(),
           annotations: { readOnlyHint: false, openWorldHint: false },
         },
-        async ({ text: sendText, enter, operation_id }) => {
+        async ({ text: sendText, enter, operation_id }) => runFlow("shell_send", async () => {
           const doEnter = enter === true;
           const operationId = operation_id;
           // Execution-time recheck (before any work): a revoked/expired grant is audited "revoked".
@@ -2471,7 +2483,7 @@ export class TerminalSession extends DurableObject<Env> {
             delivered: outcome === "delivered",
             reason: outcome === "delivered" ? "delivered" : "delivery_uncertain",
           });
-        },
+        }),
       );
     }
 

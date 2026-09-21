@@ -16,3 +16,5 @@ Repository guides that are not tied to a release live here too:
 
 - `self-hosting.md`
 - `third-party-notices.md`
+- `MCP.md`
+- `session-content.md` (passive pulse and owner-encrypted excerpts, v0.22.0+)

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { MemoryStore } from "./store-memory";
 import { PostgresStore } from "./store-postgres";
 import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./store";
+import { MCP_FLOW_TTL, type McpFlowEvent } from "./mcp-flows";
 import type { AgentCommand, AuditEvent, CliToken, Feedback, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
@@ -125,7 +126,13 @@ function notification(overrides: Partial<Notification> = {}): Notification {
   };
 }
 
-type Implementation = { name: string; open: () => Promise<Store>; reset: (store: Store) => Promise<void> };
+type Implementation = {
+  name: string;
+  open: () => Promise<Store>;
+  reset: (store: Store) => Promise<void>;
+  /** A second handle to the same backing store, for tests of shared state. */
+  openPeer: (store: Store) => Promise<Store>;
+};
 
 function feedback(overrides: Partial<Feedback> = {}): Feedback {
   return {
@@ -163,6 +170,7 @@ const TABLES = [
    */
   "game_collection_runs",
   "game_profiles",
+  "mcp_flows",
   "feedback",
   "account_activity",
   "app_events",
@@ -188,6 +196,8 @@ const implementations: Implementation[] = [
     name: "MemoryStore",
     open: async () => new MemoryStore(null),
     reset: async () => {},
+    /* The heap is the backing store; a second handle is the same store. */
+    openPeer: async (store) => store,
   },
 ];
 
@@ -204,6 +214,11 @@ if (DATABASE_URL) {
       const pool = (store as unknown as { pool: { query: (text: string) => Promise<unknown> } }).pool;
       await pool.query(`TRUNCATE ${TABLES.join(", ")} CASCADE`);
     },
+    /*
+     * A fresh connection to the same database: what a second service instance
+     * is in production, where two connections to one Postgres must agree.
+     */
+    openPeer: async () => PostgresStore.connect(DATABASE_URL, { migrate: false }),
   });
   afterAll(async () => {
     await shared?.close();
@@ -223,6 +238,241 @@ for (const implementation of implementations) {
     beforeEach(async () => {
       store = await implementation.open();
       await implementation.reset(store);
+    });
+
+    describe("owner-only sealed session content", () => {
+      const origin = 'shell-online-source:{"version":1,"deviceId":"dev_1"}';
+      async function setup() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.upsertSession(session({ origin }));
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: true });
+        const policy = await store.sessionContentPolicy("org_1", "s1", "uid-1", "dev_1");
+        return { generation: policy!.generation, observedAt: 1, senderPublicKey: "opaque-key", sealed: "sc1.opaque" };
+      }
+
+      it("enforces provenance, owner, generation and atomic daily quota with exact retries", async () => {
+        const content = await setup();
+        expect(await store.sessionContentPolicy("org_1", "s1", "uid-1", "other")).toBeNull();
+        expect(await store.putSessionContent("org_1", "s1", "uid-2", "dev_1", content, 100)).toBe("missing");
+        expect(await store.putSessionContent("org_2", "s1", "uid-1", "dev_1", content, 100)).toBe("missing");
+        const writes = await Promise.all([
+          store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 100),
+          store.putSessionContent("org_1", "s1", "uid-1", "dev_1", { ...content, sealed: "sc1.other" }, 100),
+        ]);
+        expect(writes.sort()).toEqual(["limited", "stored"]);
+        const stored = (await store.getSessionContent("org_1", "s1", "uid-1"))!;
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", stored, 101)).toBe("stored");
+        expect(await store.getSessionContent("org_1", "s1", "uid-2")).toBeNull();
+        expect(await store.sessionContentPolicy("org_1", "s1", "uid-1", "dev_1")).toMatchObject({ nextPublishAt: 86_400_100 });
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", { ...content, observedAt: 2 }, 86_400_100)).toBe("stored");
+        expect(JSON.stringify(await store.listOrgSessions("org_1"))).not.toContain("sc1.");
+      });
+
+      it("purges on consent changes including bulk changes and rejects old generations", async () => {
+        const content = await setup();
+        await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 100);
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: false });
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toBeNull();
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 101)).toBe("disabled");
+        await store.setDailyBriefingPreference("org_1", "uid-1", true, true);
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 102)).toBe("stale");
+        const next = (await store.sessionContentPolicy("org_1", "s1", "uid-1", "dev_1"))!;
+        expect(next.nextPublishAt).toBe(0);
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", { ...content, generation: next.generation }, 103)).toBe("stored");
+        await store.setDailyBriefingPreference("org_1", "uid-1", false, true);
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toBeNull();
+      });
+
+      it("preserves same registration but invalidates rotation and rejects legacy publishers", async () => {
+        const content = await setup();
+        await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 100);
+        await store.upsertSession(session({ origin }));
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toEqual(content);
+        await store.rotateSessionCredentials("org_1", "s1", "uid-1", "https://shell.online/s/s1#salt=new", []);
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toBeNull();
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 101)).toBe("stale");
+        await store.upsertSession(session({ id: "legacy" }));
+        expect(await store.sessionContentPolicy("org_1", "legacy", "uid-1", "dev_1")).toBeNull();
+      });
+
+      it.each(["version", "publicKey"] as const)("purges content and rotates generation on vault %s changes", async (field) => {
+        const content = await setup();
+        const key = { uid: "uid-1", publicKey: "old", encryptedPrivateKey: "opaque", recoveryWrap: "wrapped", version: 1, createdAt: 1, updatedAt: 1 };
+        await store.putAccountKey(key);
+        await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 100);
+        // Rewrapping the same key is not a reset and retains readable content.
+        expect(await store.updateAccountKeyWrap("uid-1", 1, "new wrap", 2)).toBe(true);
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toEqual(content);
+        const next = { ...key, ...(field === "version" ? { version: 2 } : { publicKey: "new" }), updatedAt: 3 };
+        expect(await store.putAccountKey(next, 99)).toBe(false);
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toEqual(content);
+        expect(await store.putAccountKey(next, 1)).toBe(true);
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toBeNull();
+        const policy = await store.sessionContentPolicy("org_1", "s1", "uid-1", "dev_1");
+        expect(policy?.generation).not.toBe(content.generation);
+        expect(policy?.nextPublishAt).toBe(0);
+        expect(await store.putSessionContent("org_1", "s1", "uid-1", "dev_1", content, 101)).toBe("stale");
+      });
+    });
+
+    describe("MCP flow feed", () => {
+      const origin = 'shell-online-source:{"version":1,"deviceId":"dev_1"}';
+      const devices = new Set(["dev_1"]);
+      const flow = (overrides: Partial<McpFlowEvent> = {}): McpFlowEvent => ({
+        id: "00000000-0000-4000-8000-000000000001",
+        tool: "shell_wait",
+        phase: "started",
+        at: 1000,
+        ...overrides,
+      });
+      const flowId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+
+      async function setup() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.upsertSession(session({ origin }));
+      }
+
+      it("stores only for the session's open owner and originating device", async () => {
+        await setup();
+        expect(await store.putMcpFlows("org_2", "s1", "uid-1", "dev_1", [flow()])).toBe(false);
+        expect(await store.putMcpFlows("org_1", "s2", "uid-1", "dev_1", [flow()])).toBe(false);
+        expect(await store.putMcpFlows("org_1", "s1", "uid-2", "dev_1", [flow()])).toBe(false);
+        expect(await store.putMcpFlows("org_1", "s1", "uid-1", "dev_2", [flow()])).toBe(false);
+        expect(await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000)).toBe(true);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toEqual([{ ...flow(), targetSessionId: "s1" }]);
+        /* The feed is the owner's: a colleague in the organization reads their own (empty) one. */
+        expect(await store.listMcpFlows("org_1", "uid-2", devices, 1000)).toEqual([]);
+      });
+
+      it("refuses a report for a closed session and serves nothing after closure", async () => {
+        await setup();
+        expect(await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000)).toBe(true);
+        await store.patchSession("uid-1", "s1", { closedAt: 2000 });
+        expect(await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ at: 2000 })], 2000)).toBe(false);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 2000)).toEqual([]);
+      });
+
+      it("lets a retry stand without replacing metadata or extending the expiry", async () => {
+        await setup();
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000);
+        /* Same event id and phase, later clock, different tool: all of it must lose. */
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ tool: "shell_send" })], 110_000);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000 + MCP_FLOW_TTL - 1)).toEqual([
+          { ...flow(), targetSessionId: "s1" },
+        ]);
+        /* If the retry had moved the expiry, the row would still be here. */
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000 + MCP_FLOW_TTL + 1)).toEqual([]);
+      });
+
+      it("is unservable the moment the TTL passes, whatever the cleanup has done", async () => {
+        await setup();
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000 + MCP_FLOW_TTL - 1)).toHaveLength(1);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000 + MCP_FLOW_TTL + 1)).toEqual([]);
+      });
+
+      it("bounds one owner's feed to the newest 128", async () => {
+        await setup();
+        for (let i = 0; i < 140; i += 1) {
+          await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ id: flowId(i), at: 1000 + i })], 1000 + i);
+        }
+        const flows = await store.listMcpFlows("org_1", "uid-1", devices, 2400);
+        expect(flows).toHaveLength(128);
+        expect(flows[0].at).toBe(1012);
+        expect(flows[flows.length - 1].at).toBe(1139);
+      });
+
+      it("keeps concurrent uploads from distinct sessions within the owner bound", async () => {
+        await setup();
+        await store.upsertSession(session({ id: "s2", origin, startedAt: 2000 }));
+        const baseline = Array.from({ length: 128 }, (_, i) => flow({ id: flowId(i), at: 1000 + i }));
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", baseline, 1127);
+        const freshA = Array.from({ length: 20 }, (_, i) => flow({ id: flowId(1000 + i), at: 2000 + i }));
+        const freshB = Array.from({ length: 20 }, (_, i) => flow({ id: flowId(2000 + i), at: 2000 + i }));
+        await Promise.all([
+          store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", freshA, 2019),
+          store.putMcpFlows("org_1", "s2", "uid-1", "dev_1", freshB, 2019),
+        ]);
+        /*
+         * The physical count before any further read: without the owner lock,
+         * each transaction trims against a snapshot that lacks the other's
+         * rows and the table ends up with more than the cap.
+         */
+        if (implementation.name === "PostgresStore") {
+          const pool = (store as unknown as { pool: { query: (text: string) => Promise<{ rows: { count: number }[] }> } }).pool;
+          const { rows } = await pool.query("SELECT count(*)::int AS count FROM mcp_flows");
+          expect(rows[0].count).toBeLessThanOrEqual(128);
+        }
+        const flows = await store.listMcpFlows("org_1", "uid-1", devices, 2019);
+        expect(flows.length).toBeLessThanOrEqual(128);
+        expect(flows.filter((entry) => entry.at >= 2000)).toHaveLength(40);
+      });
+
+      it("keeps concurrent distinct-owner uploads within the global bound", async () => {
+        /*
+         * Sixteen owners at the per-owner cap is exactly the global bound:
+         * 16 x 128 = 2048 rows. Eight more owners then upload at once. The
+         * per-owner lock alone cannot keep this honest -- each transaction
+         * trims against a snapshot that lacks the others' rows -- so the
+         * count is taken before any further read or write can trim again.
+         */
+        const fixture = async (n: number) => {
+          await store.putOrganization(organization({ id: `org_${n}`, createdBy: `uid-${n}` }));
+          await store.putMembership(membership({ orgId: `org_${n}`, uid: `uid-${n}`, email: `owner${n}@example.com` }));
+          await store.upsertSession(session({ id: `s${n}`, uid: `uid-${n}`, orgId: `org_${n}`, ownerUid: `uid-${n}`, origin, startedAt: 1000 + n }));
+        };
+        const batch = (n: number) => Array.from({ length: 128 }, (_, i) => flow({ id: flowId(n * 1000 + i), at: 1000 + i }));
+        for (let n = 1; n <= 16; n += 1) {
+          await fixture(n);
+          await store.putMcpFlows(`org_${n}`, `s${n}`, `uid-${n}`, "dev_1", batch(n), 1127);
+        }
+        for (let n = 17; n <= 24; n += 1) await fixture(n);
+        await Promise.all(
+          Array.from({ length: 8 }, (_, k) => {
+            const n = 17 + k;
+            return store.putMcpFlows(`org_${n}`, `s${n}`, `uid-${n}`, "dev_1", batch(n), 1127);
+          }),
+        );
+        if (implementation.name === "PostgresStore") {
+          const pool = (store as unknown as { pool: { query: (text: string) => Promise<{ rows: { count: number }[] }> } }).pool;
+          const { rows } = await pool.query("SELECT count(*)::int AS count FROM mcp_flows");
+          expect(rows[0].count).toBeLessThanOrEqual(2048);
+        }
+      });
+
+      it("purges on provenance change, deletion and device loss, and does not resurrect", async () => {
+        await setup();
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000);
+        await store.patchSession("uid-1", "s1", { shareUrl: "https://shell.online/s/s1#new" });
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toEqual([]);
+        /* Restoring the old shape cannot bring the rows back. */
+        await store.patchSession("uid-1", "s1", { shareUrl: "https://shell.online/s/s1" });
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toEqual([]);
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ id: flowId(2) })], 1000);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toHaveLength(1);
+        /* The device the session started from is gone from the active set. */
+        expect(await store.listMcpFlows("org_1", "uid-1", new Set(), 1000)).toEqual([]);
+        await store.revokeDevice("uid-1", "dev_1");
+        expect(await store.listMcpFlows("org_1", "uid-1", new Set(), 1000)).toEqual([]);
+        await store.deleteSession("org_1", "s1");
+        expect(await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ id: flowId(3) })], 1000)).toBe(false);
+        expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toEqual([]);
+      });
+
+      it("is visible to a second connection on the same database, both ways", async () => {
+        await setup();
+        await store.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow()], 1000);
+        const peer = await implementation.openPeer(store);
+        try {
+          expect(await peer.listMcpFlows("org_1", "uid-1", devices, 1000)).toEqual([{ ...flow(), targetSessionId: "s1" }]);
+          await peer.putMcpFlows("org_1", "s1", "uid-1", "dev_1", [flow({ id: flowId(2) })], 1000);
+          expect(await store.listMcpFlows("org_1", "uid-1", devices, 1000)).toHaveLength(2);
+        } finally {
+          if (peer !== store) await peer.close();
+        }
+      });
     });
 
     describe("authorization codes", () => {

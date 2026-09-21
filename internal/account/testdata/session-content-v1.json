@@ -1,0 +1,18 @@
+{
+  "recipientPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE",
+  "senderPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI",
+  "nonce": "AAECAwQFBgcICQoL",
+  "accountPublicKey": "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+  "sessionId": "synthetic<&> session",
+  "recipientUid": "synthetic-owner",
+  "generation": "synthetic-generation-1",
+  "content": {
+    "version": 1,
+    "suggestedTitle": "Synthetic café 🔒",
+    "description": "Synthetic completed response excerpt.",
+    "source": "opencode-launch",
+    "observedAt": 1800000000123
+  },
+  "senderPublicKey": "BHzyexiNA09-ilI4AwS1GsPAiWnid_IbNaYLSPxHZpl4B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+  "sealed": "sc1.AAECAwQFBgcICQoLKo_dt4E6--Vk0cQGmu0sSxrl7fGE67YegQyEZIDWA9zOoUJVxqGFV1SgNTUiPooxtoyNFSh-oTwMtRZ2DQWVh3Y7Z3n2UQaVU_dYj_76gxejTsKVHL4TbEAgYkaEzU3DwsAaL72ogH2vZ5LkW0QYOt5hL40XY-wcy0wHdD9CltqRpF5OY2ObgArT9jC0O-KlBm5pSnugDxOP2khULfRLUiLvK4ledmWR6Bxw1_49-9TE"
+}

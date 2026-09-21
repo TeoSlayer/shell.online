@@ -640,6 +640,39 @@ describe("Phase 2 regressions: model lifecycle + waits + audit", () => {
     }
   });
 
+  it("reports MCP flow observations to the host only: one id, started then settled, real outcome", async () => {
+    const hostSocket = makeHostSocket();
+    const viewerSocket = makeViewerSocket();
+    const { do: do_, routeKey } = await makeDoWithHostAndViewer("OBS_FLOW_HOST_ONLY", hostSocket, viewerSocket);
+    const hostToken = "host-token-flow";
+    await do_.fetch(postJson("https://shell.online/internal/init", initBody(await sha256Hex(hostToken))));
+    const grantRes = await do_.fetch(
+      postJson("https://shell.online/internal/mcp/grant", { scopes: ["observe"], lifetime: 60, label: "flow" }, { Authorization: `Bearer ${hostToken}` }),
+    );
+    expect(grantRes.status).toBe(201);
+    const { bearer } = (await grantRes.json()) as { bearer: string };
+
+    const before = hostSocket.sent.length;
+    const result = await toolResult(await workerFetch(routeKey, do_, workerMcpRequest(bearer, call("shell_status", 1, {}))));
+    expect(result.status).toBeDefined();
+
+    const flows = hostSocket.sent
+      .slice(before)
+      .map((message) => JSON.parse(message) as { type?: string; event?: Record<string, unknown> })
+      .filter((message) => message.type === "mcp_flow");
+    expect(flows).toHaveLength(2);
+    const started = flows[0].event!;
+    const settled = flows[1].event!;
+    expect(started.phase).toBe("started");
+    expect(started.tool).toBe("shell_status");
+    expect(typeof started.id).toBe("string");
+    expect(settled).toMatchObject({ id: started.id, phase: "settled", outcome: "ok" });
+    /* Metadata only: no content, credentials or grant material in the frame. */
+    expect(JSON.stringify(flows)).not.toMatch(/bearer|password|share|grant/i);
+    /* Viewers never see a flow observation. */
+    expect(viewerSocket.sent.some((message) => message.includes("mcp_flow"))).toBe(false);
+  });
+
   it("request-concurrency caps: 4/grant and 16/session return 429 (Retry-After 1), separate from wait limits", async () => {
     const { do: do_, routeKey, bearer, grant_id: grantId } = await makeGrantDo("CC_CAPS", 60, "cc");
     const doAny = do_ as unknown as DoInternals;

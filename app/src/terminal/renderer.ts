@@ -30,6 +30,11 @@ export interface TerminalSurface {
   focus(): void;
   dispose(): void;
   onData(listener: (data: string) => void): { dispose(): void };
+  /**
+   * Raw-byte input (legacy mouse reports, device queries). Only the xterm
+   * surface implements it; the others have no binary input path.
+   */
+  onBinary?(listener: (data: string) => void): { dispose(): void };
 }
 
 const STORAGE_KEY = "shell-online-terminal-renderer";

@@ -63,6 +63,10 @@ describe("commandLabel", () => {
 });
 
 describe("sessionTitle", () => {
+  it("uses an existing conversation title only behind the manual name", () => {
+    expect(sessionTitle(session({suggestedTitle:"Fix terminal replay"}))).toBe("Fix terminal replay");
+    expect(sessionTitle(session({name:"My name",suggestedTitle:"Automatic"}))).toBe("My name");
+  });
   it("prefers the name somebody gave the session", () => {
     expect(sessionTitle(session({ name: "nightly build", command: "/opt/bin/thing --x" })))
       .toBe("nightly build");

@@ -18,7 +18,7 @@ const permissionsTimeout = 15 * time.Second
 // permissionsNotActiveNote is printed after a saved change. The switches are
 // consent, stored on the account's session record, and this build does not
 // act on them yet, so the output should not imply it does.
-const permissionsNotActiveNote = "Permission saved; these switches are consent and are not acted on in this build yet."
+const permissionsNotActiveNote = "Permission saved; passive briefings require an updated compatible host and your vault. Team MCP access and team briefing delivery are not enabled by these switches yet."
 
 // The switch flags, in the order they are shown.
 var permissionFlags = []struct {

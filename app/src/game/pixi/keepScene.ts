@@ -6,6 +6,8 @@ import { TILE_H, TILE_W, toScreen, toTile } from "../world/iso";
 import { ActorLayer } from "./actors";
 import { Birds, Blows, Dust, loadEffects, Smoke } from "./ambience";
 import { Banners, OrderMark } from "./banners";
+import { McpFlowLayer } from "./mcp-flows";
+import type { McpFlow } from "../state/mcp-flows";
 import { loadSigils } from "./sigils";
 import type { Scene } from "./PixiStage";
 import { GARRISONS, MAP } from "../world/marches";
@@ -34,6 +36,7 @@ const ZOOM_MS = 180;
 
 export interface KeepHandle {
   sim: Sim;
+  mcpFlows?: () => readonly McpFlow[];
   /** Called when a hero or a soldier is clicked. */
   onPick?: (actor: Actor | undefined) => void;
   /** Called when the ground is clicked and the player's hero was sent there. */
@@ -119,6 +122,7 @@ export async function buildKeepScene(
   world.addChild(root);
 
   const sim = handle.sim;
+  const mcpFlows = new McpFlowLayer(world);
   garrisonSoldiers(sim);
 
   /*
@@ -449,6 +453,7 @@ export async function buildKeepScene(
       companies.sync(sim);
       orderMark.tick(deltaMs);
       actors.sync(sim, selected);
+      mcpFlows.sync(handle.mcpFlows?.() ?? [], sim.actors, Date.now());
       blows.sync(sim);
       lanterns.tick(deltaMs);
       birds.tick(deltaMs);
@@ -463,6 +468,7 @@ export async function buildKeepScene(
       companies.destroy();
       orderMark.destroy();
       actors.destroy();
+      mcpFlows.destroy();
       birds.destroy();
       smoke.destroy();
       dust.destroy();

@@ -10,13 +10,13 @@ const switches: { key: keyof SessionAutomationConsent; label: string; help: stri
   },
   {
     key: "dailyBriefingEnabled",
-    label: "Ask this agent for a daily briefing",
-    help: "Consent for a future daily briefing: at most once a day, ask the existing running agent for a title and summary, and only when its adapter can safely confirm it is idle. Not executed in this build; unsupported or busy agents are skipped.",
+    label: "Use existing responses for a daily briefing",
+    help: "At most once a day, a supported host can save an encrypted title and excerpt from its explicitly resumed launch conversation. No new prompt or model call. This version delivers only to your unlocked vault; unsupported sessions are skipped.",
   },
   {
     key: "dailyBriefingTeamAccess",
     label: "Share briefings with the whole team",
-    help: "A separate opt-in to broaden the briefing audience. Leaving this off keeps briefings within the approved session content audience, not everyone who can see its listing.",
+    help: "A separate opt-in for future team delivery. This version keeps extracted titles and responses owner-only, even when this preference is saved.",
   },
 ];
 
@@ -54,8 +54,8 @@ export function SessionAutomation({ session, you, onChange }: {
       <p className="detail-empty">
         Each session saves its own choice; new ones start from your account
         default (set in the shell CLI), so a session can sit on either side of it.
-        Only you, the owner, can change these. Saving a choice does not start an
-        MCP connection or a briefing.
+        Only you, the owner, can change these. Enabling passive briefings lets a
+        compatible host publish existing material; it never starts an MCP connection or wakes an agent.
       </p>
       <fieldset disabled={busy} aria-busy={busy}>
         <legend className="visually-hidden">Owner consent</legend>
@@ -68,7 +68,7 @@ export function SessionAutomation({ session, you, onChange }: {
         ))}
       </fieldset>
       <p className="session-automation-status" role="status">
-        {busy ? "Saving permission…" : saved ? "Permission saved. Connection and agent readiness are checked separately." : "Connection and briefing execution are not available in this build yet."}
+        {busy ? "Saving permission…" : saved ? "Permission saved. A compatible running host and an unlocked vault are needed to display content." : "Passive briefings require an updated compatible host. Team MCP connection and team briefing delivery are not enabled by saving these preferences."}
       </p>
       {error && <p className="audience-error" role="alert">{error}</p>}
     </section>

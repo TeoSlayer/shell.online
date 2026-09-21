@@ -18,7 +18,9 @@ describe("session automation controls", () => {
     const { html, onChange } = render("owner");
     expect(html.match(/type="checkbox"/g)).toHaveLength(3);
     expect(html).not.toContain("checked=");
-    expect(html).toContain("not available in this build yet");
+    expect(html).toContain("No new prompt or model call");
+    expect(html).toContain("owner-only");
+    expect(html).toContain("updated compatible host");
     expect(onChange).not.toHaveBeenCalled();
   });
   it("does not turn team MCP permission into briefing permission", () => {

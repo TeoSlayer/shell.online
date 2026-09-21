@@ -67,9 +67,10 @@ Press `Ctrl-X`, then `D`, to detach from `shell attach`.
 Session automation permissions share one owner-controlled record between CLI and
 app. Changes appear in the open app on its next refresh. The three switches are
 independent: `--mcp-team-access`, `--daily-briefing`, and
-`--briefing-team-access` accept explicit `true` or `false`. These switches record
-consent only; a team MCP gateway and automatic idle-agent briefing generation are
-not implemented in this release. A briefing default affects new sessions;
+`--briefing-team-access` accept explicit `true` or `false`. Daily-briefing consent
+allows passive owner-encrypted excerpts on compatible updated hosts; a team MCP
+gateway, team delivery, and new idle-agent summary generation remain unimplemented.
+A briefing default affects new sessions;
 `--all` additionally updates only your existing sessions, not teammates' sessions.
 
 ### Updating running sessions
@@ -89,6 +90,44 @@ they are restarted safely. Installing an update does not restart your processes.
 - Optional account, machine linking, personal password vault, and web app
 - Refstream renderer and agent connection path *(alpha)*
 - Persistent Docker session and self-hosted deployment
+
+### Passive session pulse
+
+The pulse and encrypted excerpts below require v0.22.0 or later. Encrypted
+publication also requires an updated running host; upgrading does not restart it.
+
+Already-open app terminal panes show recent output activity, unseen output in
+background tabs, and fixed hints for recognized context-limit, approval, or test
+result messages. These are observations, not proof that a process is idle,
+finished, or successful. Replayed snapshots do not count as new activity.
+
+Pulse uses only bytes the authorized viewer already decrypts. It adds no model
+calls, prompts, network requests, or unopened-session subscriptions. Parsing is
+bounded and pulse metadata stays in browser memory; it is cleared on disconnect,
+loss of access, or closing the pane. This is not an automatic daily briefing.
+
+### Owner-encrypted titles and response excerpts
+
+With daily-briefing consent enabled, an updated host can reuse an explicitly
+resumed OpenCode launch conversation's existing title and latest completed
+assistant response. It never prompts the agent, reads reasoning/tool output,
+or invokes a model. Forks, implicit/latest conversations, unavailable SQLite,
+and unsupported processes keep the generic fallback. Switching conversations
+inside the TUI does not change this explicitly labeled launch-conversation binding.
+
+Content is capped, encrypted to the owner's pinned vault key, and published at
+most once per rolling 24 hours. Manual names win; excerpts are labeled with their
+source date. The app decrypts in memory for the owner and clears content on vault
+lock or consent/access changes. The service stores ciphertext separately from
+the organization-wide session listing. Consent revocation, credential rotation,
+and vault-key reset invalidate prior publication generations. This adds bounded
+account-service polling/uploads, but no model calls or terminal interactions.
+
+Team delivery and other agent adapters are not implemented yet. The team-sharing
+preference does not broaden this owner-only delivery. Existing hosts need a safe
+restart after upgrading to activate the publisher; the account service requires
+database migration `020_session_content.sql`. A compatible local OpenCode database
+and `sqlite3` executable are required. See [setup, delivery, and privacy limits](docs/session-content.md).
 
 ## Security
 

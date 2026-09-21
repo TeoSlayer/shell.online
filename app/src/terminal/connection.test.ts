@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TerminalConnection, type ConnectionStatus, type HostState } from "./connection";
 import { Opcode, encodeFrame } from "./protocol";
 import { BrowserFrameCipher } from "./e2ee";
@@ -112,6 +112,81 @@ beforeEach(() => {
   vi.useRealTimers();
 });
 
+afterEach(() => vi.restoreAllMocks());
+
+describe("stale socket callbacks", () => {
+  it("does not deliver a frame whose decryption finishes after close", async () => {
+    const { connection, recorded } = connect(`${SALT}&password=hunter2`);
+    await connection.start();
+    const socket = FakeSocket.last!;
+    socket.opened();
+    let finish!: (frame: Uint8Array<ArrayBuffer>) => void;
+    const opening = vi.spyOn(BrowserFrameCipher.prototype, "open").mockImplementationOnce(
+      () => new Promise((resolve) => { finish = resolve; }),
+    );
+    socket.binary(new Uint8Array([1]));
+    await waitFor(() => opening.mock.calls.length === 1, "decryption to start");
+    connection.close();
+    finish(encodeFrame(Opcode.Output, new TextEncoder().encode("stale")));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(recorded.writes).toEqual([]);
+  });
+
+  it("ignores old socket callbacks after reconnect", async () => {
+    vi.useFakeTimers();
+    const { connection, recorded } = connect();
+    await connection.start();
+    const old = FakeSocket.last!;
+    old.opened();
+    old.closedWith(1006);
+    await vi.advanceTimersByTimeAsync(1000);
+    const current = FakeSocket.last!;
+    expect(current).not.toBe(old);
+    current.opened();
+    const statuses = [...recorded.statuses];
+    old.opened();
+    old.control({ readOnly: true });
+    old.binary(encodeFrame(Opcode.Output, new TextEncoder().encode("stale")));
+    old.closedWith(4000);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(recorded.statuses).toEqual(statuses);
+    expect(recorded.readOnly).toEqual([]);
+    expect(recorded.writes).toEqual([]);
+    expect(FakeSocket.created).toBe(2);
+    current.binary(encodeFrame(Opcode.Output, new TextEncoder().encode("current")));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(recorded.writes).toEqual([{ text: "current", reset: false }]);
+    connection.close();
+  });
+
+  it("does not discard a new password when an old decryption fails", async () => {
+    const { connection, recorded } = connect(`${SALT}&password=hunter2`);
+    await connection.start();
+    const old = FakeSocket.last!;
+    old.opened();
+    let fail!: (reason: Error) => void;
+    const opening = vi.spyOn(BrowserFrameCipher.prototype, "open").mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { fail = reject; }),
+    );
+    old.binary(new Uint8Array([1]));
+    await waitFor(() => opening.mock.calls.length === 1, "decryption to start");
+    await connection.submitPassword("replacement");
+    const current = FakeSocket.last!;
+    current.opened();
+    fail(new Error("old decryption failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(connection.needsPassword).toBe(false);
+    expect(recorded.statuses.at(-1)?.status).toBe("connected");
+    const hostCipher = await BrowserFrameCipher.fromPassword("replacement", new Uint8Array(16).fill(7));
+    current.binary(await hostCipher.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("current"))));
+    await waitFor(() => recorded.writes.length > 0, "new key to decrypt");
+    expect(recorded.writes).toEqual([{ text: "current", reset: false }]);
+    connection.close();
+  });
+});
+
 describe("plaintext session", () => {
   it("requests recovery only on an open socket, including read-only viewers", async () => {
     const { connection } = connect();
@@ -174,6 +249,32 @@ describe("plaintext session", () => {
     const sent = new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer);
     expect(sent[0]).toBe(Opcode.Input);
     expect(new TextDecoder().decode(sent.subarray(1))).toBe("ls\r");
+  });
+
+  it("sends binary input as raw bytes without UTF-8 re-encoding", async () => {
+    const { connection } = connect();
+    await connection.start();
+    FakeSocket.last!.opened();
+    // ESC M (X10 mouse report) followed by bytes above 127. A TextEncoder
+    // path would widen 0x80/0xff into two-byte UTF-8 sequences.
+    connection.sendBinary("\u001bM\u0080\u00ff");
+    await waitFor(() => FakeSocket.last!.sent.length > 0, "the binary input frame");
+
+    const sent = new Uint8Array(FakeSocket.last!.sent[0] as ArrayBuffer);
+    expect(sent[0]).toBe(Opcode.Input);
+    expect(Array.from(sent.subarray(1))).toEqual([0x1b, 0x4d, 0x80, 0xff]);
+  });
+
+  it("drops binary input on a read-only session", async () => {
+    const { connection, recorded } = connect();
+    await connection.start();
+    FakeSocket.last!.opened();
+    FakeSocket.last!.control({ readOnly: true });
+    connection.sendBinary("\u001bM\u0080\u00ff");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(recorded.readOnly).toEqual([true]);
+    expect(FakeSocket.last!.sent).toHaveLength(0);
   });
 
   it("drops input on a read-only session", async () => {

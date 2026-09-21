@@ -33,7 +33,9 @@ import {
 import { splitMentions } from "../lib/mentions";
 import { displayName, findPerson } from "../lib/people";
 import { usePageTitle } from "../lib/page-title";
-import { sessionSummary, sessionTitle } from "../lib/session-title";
+import { sessionTitle } from "../lib/session-title";
+import {useSessionContents, withSessionContent} from "../lib/use-session-contents";
+import {SessionSummaryText} from "../components/SessionSummaryText";
 import { assigneeIds, canRemove, canRename, canStop } from "../lib/session-view";
 import { ago, elapsed } from "../lib/time";
 import { useVault } from "../vault/VaultProvider";
@@ -90,8 +92,10 @@ export function Session() {
   const detailGeneration = useRef(0);
   const automationSaving = useRef(false);
   const vault = useVault();
+  const sessionContents = useSessionContents(detail ? [detail.session] : null);
 
   /* The tab carries the session's short title once it has loaded, not a bare word. */
+  // Browser history can retain document titles; keep private suggestions in the page only.
   usePageTitle(detail ? sessionTitle(detail.session) : "Session");
 
   const load = useCallback(async () => {
@@ -145,7 +149,8 @@ export function Session() {
   }
   if (!detail) return <Booting label="Loading the session" />;
 
-  const { session, members, you, comments } = detail;
+  const { members, you, comments } = detail;
+  const session = withSessionContent(detail.session, sessionContents[detail.session.id]);
   const owner = findPerson(members, session.ownerUid);
   const selected = new Set(assigneeIds(session));
   const assignees = members.filter((member) => selected.has(member.uid));
@@ -341,12 +346,11 @@ export function Session() {
 
           {/*
             * A real summary, when the record has one, clamped to two lines.
-            * There is no generated-briefing pipeline yet, so this is usually
-            * the empty state: the command is what runs, not what the session
-            * is, so it is not shown here as a stand-in description.
+            * Extracted content is a transient owner-vault projection, never a
+            * plaintext field returned with the ordinary session listing.
             */}
           <p className="detail-summary">
-            {sessionSummary(session) ?? "No description."}
+            <SessionSummaryText session={session} />
           </p>
 
           <div className="detail-head">

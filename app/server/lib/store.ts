@@ -1,4 +1,6 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
+import type { ContentWriteResult, SessionContent, SessionContentPolicy } from "./session-content";
+import type { McpFlow, McpFlowEvent } from "./mcp-flows";
 import type {
   AccountActivity,
   AppEvent,
@@ -122,6 +124,47 @@ export interface Store {
   revokeDevice(uid: string, id: string, now?: number): Promise<boolean>;
 
   /* ---- Sessions ---- */
+  sessionContentPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionContentPolicy | null>;
+  putSessionContent(orgId: string, sessionId: string, ownerUid: string, deviceId: string, content: SessionContent, now?: number): Promise<ContentWriteResult>;
+  getSessionContent(orgId: string, sessionId: string, ownerUid: string): Promise<SessionContent | null>;
+
+  /* ---- MCP flow feed ---- */
+  /**
+   * Records flow metadata reported by a session's own device, as one step.
+   *
+   * The session row is the bound: it is read as the owner's open session in
+   * the organization and must still be published by this device, or nothing
+   * is written. A report that loses a race with the session closing, being
+   * deleted, or changing provenance writes nothing rather than a row that
+   * outlives the session it describes.
+   *
+   * A row that already exists for the same provenance, event id and phase is
+   * left exactly as it was: a retry neither replaces the metadata nor moves
+   * the expiry. Rows are short-lived by construction (MCP_FLOW_TTL): a row is
+   * unservable the instant it passes its expiry, and the physical delete is
+   * opportunistic, on the operations around it rather than at an exact moment.
+   * The write keeps the owner's share of the table at most MCP_FLOW_LIMIT
+   * rows and the table at most MCP_FLOW_GLOBAL_LIMIT rows, serialized against
+   * every other flow report, not just the owner's own.
+   */
+  putMcpFlows(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    events: McpFlowEvent[],
+    now?: number,
+  ): Promise<boolean>;
+  /**
+   * The owner's live flow feed, rechecked against the sessions as they are
+   * now: only an open session in the organization that the owner still owns
+   * and whose originating device is still active serves its rows.
+   *
+   * Rows whose session lost any of that are deleted on the way, so restoring
+   * the session later cannot resurrect a feed it should have lost. Bounded to
+   * the MCP_FLOW_LIMIT most recent rows, oldest first.
+   */
+  listMcpFlows(orgId: string, ownerUid: string, activeDevices: Set<string>, now?: number): Promise<McpFlow[]>;
   upsertSession(session: SessionRecord): Promise<boolean>;
   patchSession(uid: string, id: string, patch: Partial<SessionRecord>): Promise<SessionRecord | null>;
   listSessions(uid: string): Promise<SessionRecord[]>;

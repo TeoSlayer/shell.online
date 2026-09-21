@@ -2,6 +2,30 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.22.0] — 2026-09-21
+
+### Added
+
+- Open browser terminals show passive output activity and bounded attention hints,
+  without starting model calls or opening additional terminal connections.
+- Opted-in, explicitly resumed OpenCode sessions can publish an existing title and
+  completed-response excerpt encrypted to their owner's vault. Manual names win;
+  excerpts remain owner-only and are not newly generated summaries. Migration 020
+  and an updated running host are required.
+- The game displays recent MCP request lifecycles through an owner-authenticated
+  feed. The relay reports metadata to the linked Go host, never public viewer
+  presence. Unverified callers are shown as external clients, not invented source
+  agents. Input acknowledgement remains distinct from agent task completion.
+
+### Fixed
+
+- App terminals forward legacy mouse-wheel reports as raw bytes, with the same
+  input permissions as keyboard input. Local scrollback remains available to
+  read-only viewers; Chrome and Safari cover both app and standalone viewers.
+- Delayed output from replaced terminal connections cannot overwrite a newer
+  connection's state. Vault lock and consent changes clear decrypted excerpts;
+  generated titles are not written into browser history or saved terminal tabs.
+
 ## [0.21.3] — 2026-09-21
 
 ### Added
