@@ -930,7 +930,7 @@ async function resumeSession(
 
 // --- MCP channel limits and shared helpers ---------------------------------------------
 //
-// Limits follow docs/DESIGN-mcp-channel.md ("Initial limits"): 64 KiB request body, 4
+// MCP request limits: 64 KiB request body, 4
 // concurrent requests per grant, 16 per session. The protocol-header allowlist is the minimal
 // set the stateless MCP handler needs; everything else (cookies, auth, CF-* internals) is
 // stripped at the Worker edge and never forwarded to the DO.
@@ -939,8 +939,8 @@ const MCP_MAX_BODY_BYTES = 64 * 1024;
 const MCP_MAX_MANAGEMENT_BODY_BYTES = 4 * 1024;
 const MCP_MAX_CONCURRENT_PER_GRANT = 4;
 const MCP_MAX_CONCURRENT_PER_SESSION = 16;
-// Observe-surface (Phase 2) limits: the ephemeral terminal model's bounded tail and per-call
-// output cap (docs/DESIGN-mcp-channel.md "Initial limits"), the headless-viewport grid, the
+// Observe limits: the ephemeral terminal model's bounded tail and per-call
+// output cap, the headless-viewport grid, the
 // cold-start snapshot seeding timeout, and the bounded shell_wait long-poll (30 s / 45 s max).
 const MCP_MODEL_COLS = 80;
 const MCP_MODEL_ROWS = 24;
@@ -2501,7 +2501,7 @@ export class TerminalSession extends DurableObject<Env> {
     this.touchMcpActivity(grant);
     this.broadcastPresence();
 
-    // Concurrency limits: per grant + per session (docs/DESIGN-mcp-channel.md "Initial limits").
+    // Concurrency limits: per grant + per session, not lifetime call quotas.
     // Checked before registration; the DO is serializable so there is no check-then-register race.
     const grantInflight = this.mcpInflight.get(grant.grantId) ?? 0;
     if (
