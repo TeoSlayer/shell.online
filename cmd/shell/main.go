@@ -346,6 +346,8 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	contentContext, cancelContent := context.WithCancel(processContext)
 	defer cancelContent()
 	link.StartContent(contentContext, command)
+	// Inert groundwork: the OpenCode adapter refuses automatic briefing activation.
+	link.StartBriefings(contentContext, command)
 	if isBackgroundChild() {
 		onStarted = announceSession
 	} else {
