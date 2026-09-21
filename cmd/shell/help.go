@@ -100,6 +100,7 @@ func runHelp(arguments []string, stdout, stderr io.Writer) int {
   shell mcp list <ID>
   shell mcp revoke <ID> <grant-id>
   shell mcp revoke-all <ID>
+  shell mcp team <ID>
 
 Endpoint: https://shell.online/mcp (or your configured service URL plus /mcp).
 Issuance prints a secret bearer once. Use the MCP client's secret/environment support;
@@ -117,6 +118,12 @@ The controller receives plaintext results. Browser-only sharing remains E2EE.
 shell_send requires a UUID-v4 operation_id. Reuse it with identical arguments on retry.
 delivered means the full PTY write, not task completion. Never blindly retry uncertainty
 with a new ID. Revocation cannot undo completed actions or erase received output.
+
+Team access (shell mcp team <ID>): a teammate with their own sign-in asks for an
+observe-only grant on a session whose owner turned on team MCP. The session's own
+machine answers; the command prints the credential once. It is observe-only --
+input needs a separate control grant from the owner. Access ends when the owner
+turns team MCP off, removes the teammate, or the session closes.
 `)
 	case "start", "run", "share":
 		fmt.Fprint(stdout, `Start and share

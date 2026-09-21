@@ -36,6 +36,7 @@ import {
 } from "./analytics";
 import { isStatsRange, type StatsRange } from "../shared/stats";
 import { fetchAccountStats } from "./account-stats";
+import { checkTeamAuthorization, type TeamAuthorizationResult } from "./team-authorization";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
 import { viewerFrameAction } from "../shared/session-access";
@@ -187,6 +188,14 @@ interface Env {
    */
   APP_STATS_URL?: string;
   APP_STATS_TOKEN?: string;
+  /**
+   * The token the accounts app expects on /api/internal/mcp/team-authorized, the live use-time
+   * check for team grants. Reuses APP_STATS_URL for the origin; absent means team grants are
+   * fail-closed (denied) rather than served on the DO's possibly-stale copy.
+   */
+  MCP_TEAM_CHECK_TOKEN?: string;
+  /** Local synthetic canary only; production requires HTTPS for the accounts origin. */
+  MCP_TEAM_ALLOW_LOCAL_HTTP?: string;
   MCP_LIMITER: RateLimitBinding;
   MCP_ROUTE_KEY?: string;
   MCP_FRAME_KEY?: string;
@@ -1491,6 +1500,22 @@ export class TerminalSession extends DurableObject<Env> {
     return found;
   }
 
+  // Live, fail-closed team authorization: ask the accounts service whether the requester is still
+  // a member of the session's organization and the session still consents. No cache -- a removal
+  // or a consent-off is effective on the very next request. Any doubt (unlinked, unreachable,
+  // unexpected answer) denies, because a team grant the service cannot vouch for is no grant at
+  // all. The owner's own grants never take this path.
+  private async checkTeamAuthorization(grant: McpGrantRecord): Promise<TeamAuthorizationResult> {
+    return checkTeamAuthorization({
+      origin: this.env.APP_STATS_URL,
+      token: this.env.MCP_TEAM_CHECK_TOKEN,
+      sessionId: this.state.id.name,
+      requesterUid: grant.team?.requesterUid,
+      grantId: grant.grantId,
+      allowLocalHttp: this.env.MCP_TEAM_ALLOW_LOCAL_HTTP === "1",
+    });
+  }
+
   private humanViewerCount(): number {
     let count = 0;
     for (const socket of this.state.getWebSockets("viewer")) {
@@ -2206,7 +2231,12 @@ export class TerminalSession extends DurableObject<Env> {
     let flowOutcome: McpAuditOutcome | null = null;
     const onOutcome = (outcome: McpAuditOutcome) => { flowOutcome = outcome; recordOutcome(outcome); };
     const runFlow = <T>(tool: McpFlowTool, handler: () => Promise<T>) => trackMcpFlow(
-      tool, emitFlow, handler,
+      tool, emitFlow, async () => {
+        if (grant.team) await requireTeamLive();
+        const result = await handler();
+        if (grant.team) await requireTeamLive();
+        return result;
+      },
       failed => flowOutcome ?? (controller.signal.aborted ? "cancelled" : failed ? "error" : "ok"),
     );
     const revalidate = (): boolean => {
@@ -2220,6 +2250,16 @@ export class TerminalSession extends DurableObject<Env> {
       if (!revalidate()) {
         onOutcome("revoked");
         throw new Error("grant no longer active");
+      }
+    };
+    const requireTeamLive = async (): Promise<void> => {
+      requireLive();
+      const authorized = await this.checkTeamAuthorization(grant);
+      // The local grant/run can change while the account check is in flight.
+      requireLive();
+      if (!authorized.ok) {
+        onOutcome("revoked");
+        throw new Error("team access is no longer authorized");
       }
     };
     const status = (): string => this.meta?.status ?? "unknown";
@@ -2506,6 +2546,20 @@ export class TerminalSession extends DurableObject<Env> {
       return json({ error: "unauthorized" }, 401);
     }
 
+    // A team grant is re-authorized at use time: the accounts service, not this DO, is the
+    // authority on whether the requester is still a member and the session still consents, and
+    // this copy may be arbitrarily stale (the issuing host may be offline). The check is live --
+    // no cache, so a removal is effective on the very next request -- and fail-closed: an
+    // unlinked or unreachable accounts service denies rather than guesses.
+    if (grant.team) {
+      const authorized = await this.checkTeamAuthorization(grant);
+      if (!authorized.ok) {
+        recordMcpEvent({ action: "auth_failure", outcome: "denied", sessionId, bearer });
+        this.mcpMaybeFreeModel();
+        return json({ error: authorized.error }, authorized.status);
+      }
+    }
+
     // Live-run audit + presence: stamp the call start and refresh this grant's activity lease so
     // the `Agent: <label>` chip reflects recent control. The audit entry is recorded per outcome
     // below (metadata only — never the body content). Broadcast presence so viewers see the chip.
@@ -2724,6 +2778,25 @@ export class TerminalSession extends DurableObject<Env> {
       frameKey = base64url.decode(body.frame_key);
       if (frameKey.byteLength !== FRAME_KEY_BYTES) return json({ error: "invalid frame key" }, 400);
     }
+    // A team grant is minted for a teammate, not the owner: the accounts service, not this DO,
+    // is the authority on whether the teammate may still be here, so the record carries the
+    // requester and every use of the grant is re-checked there, live.
+    let team: { requesterUid: string } | undefined;
+    if (body.team !== undefined) {
+      const candidate = body.team as Record<string, unknown> | null;
+      if (
+        !candidate || typeof candidate !== "object" || Array.isArray(candidate) ||
+        Object.keys(candidate).some((key) => key !== "requester_uid") ||
+        typeof candidate.requester_uid !== "string" ||
+        candidate.requester_uid.length < 1 || candidate.requester_uid.length > 256
+      ) {
+        return json({ error: "invalid team requester" }, 400);
+      }
+      team = { requesterUid: candidate.requester_uid };
+      if (scopes.length !== 1 || scopes[0] !== "observe") {
+        return json({ error: "team grants are observe-only" }, 400);
+      }
+    }
     try {
       const keys = await this.mcpKeyPairs();
       const grantId = randomToken(16);
@@ -2753,6 +2826,7 @@ export class TerminalSession extends DurableObject<Env> {
         runId: this.meta!.runId,
         now,
         lifetime,
+        team,
       });
       this.mcpGrants.push(record);
       await this.persistGrants();

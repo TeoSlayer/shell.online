@@ -35,6 +35,48 @@ Treat share links, browser passwords, bearer files and raw request/tail logs as 
 Store any necessary local credential file owner-only, outside the repository. Grants expire
 at a fixed time and do not renew on use. Create a new grant deliberately when needed.
 
+## Team observation through the CLI
+
+An owner enables team MCP for an individual session with
+`shell permissions <session-id> --mcp-team-access=true`. A teammate signed in
+with `shell auth` can then run `shell mcp team <session-id>`. The command waits
+for that session's machine to issue an observe-only grant and prints the usable
+bearer once to standard output. Supply it through your MCP client's secret
+mechanism with endpoint `https://shell.online/mcp`. Team grants cannot send
+input. The browser does not yet have a team MCP Connect view.
+
+The requesting CLI creates a temporary P-256 key and retains its private half
+only in memory. The authenticated request fixes the public key; the account
+service seals the host-issued bearer to it before persistence. The encrypted
+delivery binds the session, requesting account and request ID. Sealing errors
+fail closed. The CLI decrypts the single-use delivery locally, including for
+accounts with a vault; no vault unlock or browser handoff is required. If the
+command exits before delivery, run it again for a new request. Pending requests
+expire after five minutes; grants have a fixed expiry and do not renew on use.
+
+Membership, owner consent, session state and the exact issued grant are checked
+live by the account service when a team request is admitted, executed and its
+result returned. A check failure or outage denies content, including a wait
+that finishes after consent is revoked. Turning consent back on does not revive
+an old grant. Host polling subsequently revokes the relay grant for cleanup.
+Use `shell permissions <session-id> --mcp-team-access=false` to withdraw consent.
+
+Deploy the matching account service, relay and CLI together, apply the
+`mcp_team_grants` migration, and safely restart the target host when appropriate.
+Configure the same random `MCP_TEAM_CHECK_TOKEN` secret (at least 32 characters)
+on the account service and relay. Both the Node account server and its Cloudflare
+Worker entrypoint support it. On the relay, set `APP_STATS_URL` to the account
+service's HTTPS origin, without a path, query, fragment or URL credentials.
+Redirects are rejected. Missing configuration fails team access closed. These
+are rollout requirements, not a claim that this branch is deployed.
+
+`node scripts/test-mcp-team-local.mjs` runs the real account API, Go host and
+requester, and local workerd using synthetic credentials after `npm run build:web`.
+It verifies protected delivery, encrypted observation, input denial and revocation.
+The canary explicitly sets `MCP_TEAM_ALLOW_LOCAL_HTTP=1` for loopback only; do not
+enable this testing option in production. The CLI permits an explicit loopback
+account URL for local testing and otherwise requires HTTPS for team endpoints.
+
 ## Supported surface
 
 | Tool | Authority | Meaning |

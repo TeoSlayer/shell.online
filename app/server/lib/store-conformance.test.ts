@@ -6,6 +6,8 @@ import { DELETED_ACCOUNT_MEMORY_MS, DELETED_ACTOR_EMAIL, type Store } from "./st
 import { MCP_FLOW_TTL, type McpFlowEvent } from "./mcp-flows";
 import { JEV_ASSESSMENT_TTL_MS, JEV_BUDGET } from "./jev/limits";
 import type { AssessmentSnapshot } from "./jev/integration";
+import { MCP_TEAM_REQUEST_TTL, type McpTeamGrantReport } from "./mcp-team";
+import { createVault, openFromAccount } from "../../src/lib/vault-crypto";
 import type { AgentCommand, AuditEvent, CliToken, Feedback, Notification, SessionRecord } from "./types";
 import type { Invite, Membership, Organization } from "./orgs";
 
@@ -174,6 +176,7 @@ const TABLES = [
   "game_collection_runs",
   "game_profiles",
   "mcp_flows",
+  "mcp_team_grants",
   "feedback",
   "account_activity",
   "app_events",
@@ -684,6 +687,298 @@ for (const implementation of implementations) {
         expect(await peer.consumeJevBudget("org_1", "uid-2", 10, 1000)).toBe(false);
         /* The window slides: past it, the earlier spend is forgotten. */
         expect(await store.consumeJevBudget("org_1", "uid-1", 10, 1000 + JEV_BUDGET.windowMs + 1)).toBe(true);
+      });
+    });
+
+    describe("team MCP grant requests", () => {
+      const origin = 'shell-online-source:{"version":1,"deviceId":"dev_1"}';
+      let recipient: Awaited<ReturnType<typeof createVault>>;
+      let recipientKey: string;
+      const grantId = "AbCdEf0123456789_-AbCQ";
+      const bearer = "eyJhbGciOiJFQ0RILUVTIn0.eyJlbmMiOiJBMjU2R0NNIn0.abc-def_ghi.j9LQyZ8-S_9r_E.abc123";
+      const report = (overrides: Partial<McpTeamGrantReport> = {}): McpTeamGrantReport => ({
+        grantId,
+        expiresAt: 1000 + 3600_000,
+        bearer,
+        ...overrides,
+      });
+
+      async function setup(consent = true) {
+        recipient = await createVault("uid-2");
+        recipientKey = recipient.bundle.publicKey;
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putMembership(membership({ uid: "uid-2", email: "teammate@example.com", role: "member" }));
+        /* A registration carries no consent; only the owner's update does. */
+        await store.upsertSession(session({ origin }));
+        if (consent) await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: true });
+      }
+
+      it("opens a request only for an open, consenting session in the organization", async () => {
+        await setup();
+        expect(await store.requestMcpTeamGrant("org_2", "s1", "uid-2", recipientKey, 1000)).toEqual({ result: "missing" });
+        expect(await store.requestMcpTeamGrant("org_1", "s2", "uid-2", recipientKey, 1000)).toEqual({ result: "missing" });
+        await store.patchSession("uid-1", "s1", { closedAt: 2000 });
+        expect(await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 2000)).toEqual({ result: "closed" });
+        await store.patchSession("uid-1", "s1", { closedAt: undefined });
+        expect(await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000)).toMatchObject({ result: "stored" });
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: false });
+        expect(await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000)).toEqual({ result: "disabled" });
+      });
+
+      it("serves the requester's own request and nothing to anyone else", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        const requestId = opened.requestId!;
+        expect(await store.mcpTeamRequest("org_1", "s1", "uid-2", requestId, 1000)).toMatchObject({
+          requestId,
+          status: "pending",
+          expiresAt: 1000 + MCP_TEAM_REQUEST_TTL,
+        });
+        expect(await store.mcpTeamRequest("org_1", "s1", "uid-1", requestId, 1000)).toBeNull();
+        expect(await store.mcpTeamRequest("org_2", "s1", "uid-2", requestId, 1000)).toBeNull();
+        expect(await store.mcpTeamRequest("org_1", "s1", "uid-2", "mcp_other", 1000)).toBeNull();
+      });
+
+      it("lists issues for the originating machine only, and revokes lost membership on the way", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_2", 1000)).toBeNull();
+        expect(await store.listMcpTeamRequests("org_1", "s1", "uid-2", "dev_1", 1000)).toBeNull();
+        const work = await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 1000);
+        expect(work).toEqual({
+          issues: [{ requestId: opened.requestId, requesterUid: "uid-2", action: "issue", expiresAt: 1000 + MCP_TEAM_REQUEST_TTL }],
+          revocations: [],
+        });
+        /*
+         * The requester leaves: the request is revoked, and a pending row has
+         * no grant to revoke, so it is in neither list -- just gone.
+         */
+        await store.removeMember("org_1", "uid-2");
+        const after = await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 1000);
+        expect(after!.issues).toEqual([]);
+        expect(after!.revocations).toEqual([]);
+      });
+
+      it("stores the reported grant for the requester, idempotently, and delivers it once", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        const requestId = opened.requestId!;
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", requestId, report(), 1000)).toBe("stored");
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", requestId, report(), 2000)).toBe("stored");
+        const first = await store.mcpTeamRequest("org_1", "s1", "uid-2", requestId, 2000);
+        expect(first).toMatchObject({ status: "issued", grantId, grantExpiresAt: 1000 + 3600_000, issuedAt: 1000, sealedToRecipient: true });
+        expect(first!.bearer).not.toContain(bearer);
+        const envelope = JSON.parse(first!.bearer!);
+        expect(await openFromAccount(recipient.opened.privateKey, "s1", `uid-2\u0000mcp-team:${requestId}`, {
+          senderPublicKey: envelope.k, sealed: envelope.s,
+        })).toBe(bearer);
+        /* The second fetch sees the row, but the credential has already left. */
+        const second = await store.mcpTeamRequest("org_1", "s1", "uid-2", requestId, 3000);
+        expect(second).toMatchObject({ status: "issued", grantId, deliveredAt: 2000 });
+        expect(second?.bearer).toBeUndefined();
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_2", requestId, report(), 1000)).toBe("missing");
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", "mcp_other", report(), 1000)).toBe("missing");
+      });
+
+      it("seals to the request's immutable recipient key even when the account has a different vault", async () => {
+        await setup();
+        const vault = await createVault("uid-2");
+        await store.putAccountKey({
+          uid: "uid-2",
+          publicKey: vault.bundle.publicKey,
+          encryptedPrivateKey: vault.bundle.encryptedPrivateKey,
+          recoveryWrap: vault.bundle.recoveryWrap,
+          version: 1,
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        const requestId = opened.requestId!;
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", requestId, report(), 1000)).toBe("stored");
+        const row = await store.mcpTeamRequest("org_1", "s1", "uid-2", requestId, 2000);
+        expect(row?.sealedToRecipient).toBe(true);
+        expect(row?.bearer).not.toBe(bearer);
+        /* The stored copy opens only with this request's private key. */
+        const envelope = JSON.parse(row!.bearer!) as { k: string; s: string };
+        expect(envelope.s.startsWith("v2.")).toBe(true);
+        const share = { senderPublicKey: envelope.k, sealed: envelope.s };
+        expect(await openFromAccount(recipient.opened.privateKey, "s1", `uid-2\u0000mcp-team:${requestId}`, share)).toBe(bearer);
+        await expect(openFromAccount(vault.opened.privateKey, "s1", `uid-2\u0000mcp-team:${requestId}`, share)).resolves.toBeNull();
+        await expect(openFromAccount(recipient.opened.privateKey, "s1", "uid-2\u0000mcp-team:another-request", share)).resolves.toBeNull();
+        await expect(openFromAccount(recipient.opened.privateKey, "s1", `uid-9\u0000mcp-team:${requestId}`, share)).resolves.toBeNull();
+      });
+
+      it("leaves no credential at rest when encryption fails", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", "corrupted-key", 1000);
+        await expect(store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", opened.requestId!, report(), 1000)).rejects.toThrow();
+        const row = await store.mcpTeamRequest("org_1", "s1", "uid-2", opened.requestId!, 2000);
+        expect(row?.status).toBe("pending");
+        expect(row?.bearer).toBeUndefined();
+        const pool = (store as unknown as { pool?: { query: (text: string) => Promise<{ rows: { bearer: string | null }[] }> } }).pool;
+        if (pool) expect((await pool.query("SELECT bearer FROM mcp_team_grants")).rows.every((entry) => entry.bearer === null)).toBe(true);
+        else expect(JSON.stringify((store as unknown as { data: unknown }).data)).not.toContain(bearer);
+      });
+
+      it("requires the issued grant and does not revive it when consent returns", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(await store.teamAuthorization("s1", "uid-2", grantId, 1000)).toBe(false);
+        await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", opened.requestId!, report(), 1000);
+        expect(await store.teamAuthorization("s1", "uid-2", grantId, 1000)).toBe(true);
+        expect(await store.setSessionAutomationConsent("org_1", "s1", "uid-2", { mcpTeamAccess: false })).toBeNull();
+        expect(await store.teamAuthorization("s1", "uid-2", grantId, 1000)).toBe(true);
+        expect(await store.teamAuthorization("s1", "uid-2", "not-issued", 1000)).toBe(false);
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: false });
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: true });
+        expect(await store.teamAuthorization("s1", "uid-2", grantId, 1000)).toBe(false);
+      });
+
+      it.each(["requester", "owner", "dissolved owner"] as const)(
+        "does not revive issued or pending team grants after recreating a deleted %s",
+        async (deleted) => {
+          await setup();
+          await store.upsertSession(session({ id: "s2", origin }));
+          await store.setSessionAutomationConsent("org_1", "s2", "uid-1", { mcpTeamAccess: true });
+          const issued = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+          const pending = await store.requestMcpTeamGrant("org_1", "s2", "uid-2", recipientKey, 1000);
+          expect(issued.result).toBe("stored");
+          expect(pending.result).toBe("stored");
+          expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", issued.requestId!, report(), 1000)).toBe("stored");
+          expect(await store.teamAuthorization("s1", "uid-2", grantId, 1000)).toBe(true);
+          /* Leave the issued credential unclaimed: a prior fetch would hide
+             resurrection behind one-time delivery even with a broken delete. */
+          const deletedUid = deleted === "requester" ? "uid-2" : "uid-1";
+          await store.deleteAccount(deletedUid, { orgId: "org_1", dissolve: deleted === "dissolved owner" }, 1500);
+
+          /* No intervening grant reads: read-side pruning must not mask a
+             missed delete-time revocation before the same identity returns. */
+          if (deleted === "dissolved owner") await store.putOrganization(organization());
+          await store.putMembership(membership());
+          await store.putMembership(membership({ uid: "uid-2", email: "teammate@example.com", role: "member" }));
+          if (deleted !== "requester") {
+            for (const id of ["s1", "s2"]) {
+              await store.upsertSession(session({ id, origin }));
+              await store.setSessionAutomationConsent("org_1", id, "uid-1", { mcpTeamAccess: true });
+            }
+          }
+
+          expect(await store.teamAuthorization("s1", "uid-2", grantId, 2000)).toBe(false);
+          const oldIssued = await store.mcpTeamRequest("org_1", "s1", "uid-2", issued.requestId!, 2000);
+          expect(oldIssued?.status).not.toBe("issued");
+          expect(oldIssued?.bearer).toBeUndefined();
+
+          const pendingGrantId = "AbCdEf0123456789_-AbCR";
+          const result = await store.reportMcpTeamGrant(
+            "org_1", "s2", "uid-1", "dev_1", pending.requestId!, report({ grantId: pendingGrantId }), 2000,
+          );
+          expect(["revoked", "missing"]).toContain(result);
+          expect(await store.teamAuthorization("s2", "uid-2", pendingGrantId, 2000)).toBe(false);
+          const oldPending = await store.mcpTeamRequest("org_1", "s2", "uid-2", pending.requestId!, 2000);
+          expect(oldPending?.status).not.toBe("pending");
+          expect(oldPending?.status).not.toBe("issued");
+          expect(oldPending?.bearer).toBeUndefined();
+        },
+      );
+
+      it("refuses new requests at the global row bound, including unacknowledged revocations", async () => {
+        await setup();
+        const pool = (store as unknown as { pool?: { query: (text: string, values: unknown[]) => Promise<unknown> } }).pool;
+        if (pool) {
+          await pool.query(`INSERT INTO mcp_team_grants
+            (org_id, session_id, request_id, requester_uid, recipient_public_key, status, created_at, expires_at, revoked_at)
+            SELECT 'org_1', 's1', 'limit_' || n, 'uid-2', $1, 'revoked', 1000, 3000, 1000
+            FROM generate_series(1, 512) n`, [recipientKey]);
+        } else {
+          const data = (store as unknown as { data: { mcpTeamGrants: unknown[] } }).data;
+          data.mcpTeamGrants = Array.from({ length: 512 }, (_, index) => ({
+            orgId: "org_1", sessionId: "s1", requestId: `limit_${index}`, requesterUid: "uid-2",
+            recipientPublicKey: recipientKey, status: "revoked", createdAt: 1000, expiresAt: 3000, revokedAt: 1000,
+            sealedToRecipient: false,
+          }));
+        }
+        expect(await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000)).toEqual({ result: "limited" });
+      });
+
+      it("refuses a report once the consent is off or the request has expired", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        const requestId = opened.requestId!;
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: false });
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", requestId, report(), 2000)).toBe("revoked");
+        expect((await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000)).result).toBe("disabled");
+        /* Consent back on: a fresh request can then be refused by the clock. */
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: true });
+        const fresh = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(fresh.result).toBe("stored");
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", fresh.requestId!, report(), 1000 + MCP_TEAM_REQUEST_TTL + 1)).toBe("expired");
+      });
+
+      it("revokes a session's live requests on consent-off, deletion and member loss, and acks them away", async () => {
+        await setup();
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        const requestId = opened.requestId!;
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", requestId, report(), 1000)).toBe("stored");
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { mcpTeamAccess: false });
+        const work = await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 2000);
+        expect(work!.revocations).toEqual([{ requestId, requesterUid: "uid-2", action: "revoke", grantId }]);
+        expect(await store.ackMcpTeamRevocation("org_1", "s1", "uid-1", "dev_1", requestId, 2000)).toBe(true);
+        expect(await store.ackMcpTeamRevocation("org_1", "s1", "uid-1", "dev_1", requestId, 2000)).toBe(false);
+        expect((await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 2000))!.revocations).toEqual([]);
+
+        await setup();
+        const second = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", second.requestId!, report(), 1000)).toBe("stored");
+        await store.deleteSession("org_1", "s1");
+        expect(await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 2000)).toBeNull();
+
+        await setup();
+        const third = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(await store.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", third.requestId!, report(), 1000)).toBe("stored");
+        await store.removeMember("org_1", "uid-2");
+        /*
+         * Two revocations: the member-loss one, and the one the deleted
+         * incarnation left unacked. A re-registered session does not wash
+         * away a grant the machine has not confirmed revoked.
+         */
+        expect((await store.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 2000))!.revocations).toHaveLength(2);
+      });
+
+      it("sweeps finished rows and bounds a burst of sessions", async () => {
+        await setup();
+        /* A pending row a grace past its deadline is swept. */
+        const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+        expect(await store.mcpTeamRequest("org_1", "s1", "uid-2", opened.requestId!, 1000 + MCP_TEAM_REQUEST_TTL + 61 * 60_000)).toBeNull();
+        /* A burst of sessions trims to the global bound without deleting. */
+        for (let i = 0; i < 60; i += 1) {
+          await store.putOrganization(organization({ id: `org_${i + 10}` }));
+          await store.putMembership(membership({ orgId: `org_${i + 10}`, uid: `uid-${i + 10}`, email: `m${i}@example.com` }));
+          await store.putMembership(membership({ orgId: `org_${i + 10}`, uid: "uid-2", email: "teammate@example.com", role: "member" }));
+          await store.upsertSession(session({ id: `s${i + 10}`, orgId: `org_${i + 10}`, uid: `uid-${i + 10}`, ownerUid: `uid-${i + 10}`, origin }));
+          await store.setSessionAutomationConsent(`org_${i + 10}`, `s${i + 10}`, `uid-${i + 10}`, { mcpTeamAccess: true });
+          await store.requestMcpTeamGrant(`org_${i + 10}`, `s${i + 10}`, "uid-2", recipientKey, 1000 + i);
+        }
+        const pool = (store as unknown as { pool?: { query: (text: string) => Promise<{ rows: { count: number }[] }> } }).pool;
+        if (pool) {
+          const { rows } = await pool.query("SELECT count(*)::int AS count FROM mcp_team_grants");
+          expect(rows[0].count).toBeLessThanOrEqual(512);
+        }
+      });
+
+      it("agrees across two connections to the same store", async () => {
+        await setup();
+        const peer = await implementation.openPeer(store);
+        try {
+          const opened = await store.requestMcpTeamGrant("org_1", "s1", "uid-2", recipientKey, 1000);
+          expect(await peer.listMcpTeamRequests("org_1", "s1", "uid-1", "dev_1", 1000)).toMatchObject({ issues: [{ requestId: opened.requestId }] });
+          expect(await peer.reportMcpTeamGrant("org_1", "s1", "uid-1", "dev_1", opened.requestId!, report(), 1000)).toBe("stored");
+          const fetched = await store.mcpTeamRequest("org_1", "s1", "uid-2", opened.requestId!, 1000);
+          expect(fetched).toMatchObject({ status: "issued", sealedToRecipient: true });
+          expect(fetched!.bearer).not.toContain(bearer);
+        } finally {
+          if (peer !== store) await peer.close();
+        }
       });
     });
 

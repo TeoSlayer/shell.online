@@ -314,7 +314,7 @@ func TestRejectInsecureRedirect(t *testing.T) {
 func TestCreateMcpGrantRefusesNonHTTPSNonLoopback(t *testing.T) {
 	session := Session{ID: "abcdefghijklmnopqrstuvwxyzABCDEF", HostToken: "host-token"}
 	client := NewClient("http://shell.online", "shell/test")
-	_, err := client.CreateMcpGrant(context.Background(), session, "codex", []string{"observe"}, 0, make([]byte, 32))
+	_, err := client.CreateMcpGrant(context.Background(), session, "codex", []string{"observe"}, 0, make([]byte, 32), "")
 	if err == nil || !strings.Contains(err.Error(), "requires https") {
 		t.Fatalf("CreateMcpGrant error = %v", err)
 	}
@@ -322,12 +322,18 @@ func TestCreateMcpGrantRefusesNonHTTPSNonLoopback(t *testing.T) {
 
 func TestCreateMcpGrantOverLoopbackHTTP(t *testing.T) {
 	const sessionID = "abcdefghijklmnopqrstuvwxyzABCDEF"
+	var seenTeam *struct {
+		RequesterUID string `json:"requester_uid"`
+	}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/api/sessions/"+sessionID+"/mcp/grant" {
 			t.Fatalf("path = %q", request.URL.Path)
 		}
 		var body struct {
 			FrameKey string `json:"frame_key"`
+			Team     *struct {
+				RequesterUID string `json:"requester_uid"`
+			} `json:"team"`
 		}
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
@@ -335,6 +341,7 @@ func TestCreateMcpGrantOverLoopbackHTTP(t *testing.T) {
 		if body.FrameKey == "" {
 			t.Fatal("frame key was not sent in the grant body")
 		}
+		seenTeam = body.Team
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(writer).Encode(McpGrantCreated{
@@ -346,13 +353,26 @@ func TestCreateMcpGrantOverLoopbackHTTP(t *testing.T) {
 	defer server.Close()
 
 	session := Session{ID: sessionID, HostToken: "host-token"}
-	grant, err := NewClient(server.URL, "shell/test").CreateMcpGrant(
-		context.Background(), session, "codex", []string{"observe"}, 0, make([]byte, 32),
-	)
+	client := NewClient(server.URL, "shell/test")
+
+	// The owner's own grant carries no team marker.
+	grant, err := client.CreateMcpGrant(context.Background(), session, "codex", []string{"observe"}, 0, make([]byte, 32), "")
 	if err != nil {
 		t.Fatalf("CreateMcpGrant: %v", err)
 	}
 	if grant.Bearer != "opaque-bearer" {
 		t.Fatalf("bearer = %q", grant.Bearer)
+	}
+	if seenTeam != nil {
+		t.Fatalf("owner grant carried a team marker: %+v", seenTeam)
+	}
+
+	// A team grant carries the requester.
+	_, err = client.CreateMcpGrant(context.Background(), session, "team:uid-2", []string{"observe"}, 0, make([]byte, 32), "uid-2")
+	if err != nil {
+		t.Fatalf("CreateMcpGrant (team): %v", err)
+	}
+	if seenTeam == nil || seenTeam.RequesterUID != "uid-2" {
+		t.Fatalf("team grant marker = %+v, want requester uid-2", seenTeam)
 	}
 }

@@ -35,6 +35,9 @@ type managedLocalSession struct {
 	onRotate       func(string) (string, error)
 	attached       net.Conn
 	mcpGrant       func(label string, scopes []string, ttl int) (api.McpGrantCreated, error)
+	// mcpTeamGrant mints a grant for a teammate (requesterUID marks it), so the DO
+	// re-authorizes every use against the accounts service, live.
+	mcpTeamGrant   func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error)
 	mcpList        func() ([]api.McpGrant, error)
 	mcpRevoke      func(grantID string) error
 	mcpRevokeAll   func() error
@@ -53,6 +56,12 @@ func (session *managedLocalSession) SetMcpHandlers(
 	session.mcpList = list
 	session.mcpRevoke = revoke
 	session.mcpRevokeAll = revokeAll
+}
+
+// SetMcpTeamGrant wires the team-grant closure: mint an observe-only grant for a teammate,
+// marked so the DO re-authorizes every use against the accounts service.
+func (session *managedLocalSession) SetMcpTeamGrant(grant func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error)) {
+	session.mcpTeamGrant = grant
 }
 
 type localControlResponse struct {
@@ -177,7 +186,7 @@ func wireMcpControl(control localSessionControl, client *api.Client, session api
 			if provider != nil {
 				key = provider()
 			}
-			return client.CreateMcpGrant(ctx, session, label, scopes, ttl, key)
+			return client.CreateMcpGrant(ctx, session, label, scopes, ttl, key, "")
 		},
 		func() ([]api.McpGrant, error) {
 			return client.ListMcpGrants(ctx, session)
@@ -189,6 +198,19 @@ func wireMcpControl(control localSessionControl, client *api.Client, session api
 			return client.RevokeAllMcpGrants(ctx, session)
 		},
 	)
+	unixSession.SetMcpTeamGrant(func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error) {
+		// Same serialization as an owner grant: never mint with a stale frame key.
+		unixSession.rotationMu.Lock()
+		defer unixSession.rotationMu.Unlock()
+		unixSession.terminalMu.Lock()
+		provider := unixSession.mcpFrameKey
+		unixSession.terminalMu.Unlock()
+		key := session.Cipher.Key()
+		if provider != nil {
+			key = provider()
+		}
+		return client.CreateMcpGrant(ctx, session, label, scopes, ttl, key, requesterUID)
+	})
 }
 
 func (session *managedLocalSession) Close() error {
@@ -614,9 +636,13 @@ func runSessionMcp(arguments []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  shell mcp list <session-id>")
 		fmt.Fprintln(stderr, "  shell mcp revoke <session-id> <grant-id>")
 		fmt.Fprintln(stderr, "  shell mcp revoke-all <session-id>")
+		fmt.Fprintln(stderr, "  shell mcp team <session-id>")
 		return 2
 	}
 	action := arguments[0]
+	if action == "team" {
+		return runSessionMcpTeam(arguments[1:], stdout, stderr)
+	}
 	var grantCommand string
 	switch action {
 	case "grant":

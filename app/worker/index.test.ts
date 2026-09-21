@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "./index";
+import { MemoryStore } from "../server/lib/store-memory";
+import { PostgresStore } from "../server/lib/store-postgres";
 
 function environment(fetchAsset: Env["ASSETS"]["fetch"]): Env {
   return {
@@ -14,6 +16,21 @@ function environment(fetchAsset: Env["ASSETS"]["fetch"]): Env {
 }
 
 describe("Cloudflare app assets", () => {
+  it("wires the team authorization secret through the deployed Worker entrypoint", async () => {
+    const store = new MemoryStore(null);
+    const connect = vi.spyOn(PostgresStore, "connect").mockResolvedValue(store as never);
+    const env = { ...environment(async () => new Response("")), MCP_TEAM_CHECK_TOKEN: "team-worker-secret".padEnd(40, "x") };
+    const url = "https://app.shell.online/api/internal/mcp/team-authorized?session=s1&requester=u1&grant=g1";
+    try {
+      const response = await worker.fetch(new Request(url, {
+        headers: { Authorization: `Bearer ${env.MCP_TEAM_CHECK_TOKEN}` },
+      }), env, { waitUntil: vi.fn() });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ authorized: false });
+      const refused = await worker.fetch(new Request(url), env, { waitUntil: vi.fn() });
+      expect(refused.status).toBe(401);
+    } finally { connect.mockRestore(); }
+  });
   it("routes assets through the Worker in production", async () => {
     const config = await readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8");
     expect(config).toMatch(/"run_worker_first"\s*:\s*true/);

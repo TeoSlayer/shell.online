@@ -2,6 +2,7 @@ import type { Invite, Membership, Organization, Role } from "./orgs";
 import type { ContentWriteResult, SessionContent, SessionContentPolicy } from "./session-content";
 import type { McpFlow, McpFlowEvent } from "./mcp-flows";
 import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
+import type { McpTeamGrantReport, McpTeamHostRequest, McpTeamRequest, McpTeamReportResult, McpTeamRequestResult } from "./mcp-team";
 import type {
   AccountActivity,
   AppEvent,
@@ -219,6 +220,103 @@ export interface Store {
   dropJevAssessments(orgId: string, ownerUid: string, sessionIds: string[]): Promise<number>;
   /** Revocation: every snapshot for the owner, in one step. Returns the count. */
   clearJevAssessments(orgId: string, ownerUid: string): Promise<number>;
+
+  /* ---- Team MCP grants ---- */
+  /**
+   * Opens a teammate's request for an observe-only grant on a session.
+   *
+   * The session row is the bound, rechecked as one step: an open session in
+   * the organization with team MCP consent on, or the request is refused with
+   * the reason. A request is short-lived (MCP_TEAM_REQUEST_TTL) and bounded
+   * per session (MCP_TEAM_PENDING_LIMIT); the caps are enforced under the
+   * session's table lock, serialized against the session's other requests.
+   */
+  requestMcpTeamGrant(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    recipientPublicKey: string,
+    now?: number,
+  ): Promise<{ result: McpTeamRequestResult; requestId?: string; expiresAt?: number }>;
+  /**
+   * The requester's own view of one of their requests, and nothing else: a
+   * different member of the same organization reads nothing here.
+   */
+  mcpTeamRequest(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    requestId: string,
+    now?: number,
+  ): Promise<McpTeamRequest | null>;
+  /**
+   * The session's machine's work list: pending requests to answer, and issued
+   * ones to revoke.
+   *
+   * Every row is rechecked against the sessions and memberships as they are
+   * now -- a requester who lost the organization, a session that closed or
+   * lost its consent, revokes the row on the way, so the machine's next poll
+   * carries the revocation rather than the row outliving the fact that killed
+   * it. Null when the session is not the caller's open session.
+   */
+  listMcpTeamRequests(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    now?: number,
+  ): Promise<{ issues: McpTeamHostRequest[]; revocations: McpTeamHostRequest[] } | null>;
+  /**
+   * Records the grant the session's machine minted for a request.
+   *
+   * Rechecks membership, consent and the open session at issuance, not just
+   * at request time: a consent that was off when the machine answered is
+   * refused here rather than served. A report for an already-issued request
+   * is idempotent; the first grant stands and a re-minted one simply runs
+   * out on its own expiry.
+   */
+  reportMcpTeamGrant(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    requestId: string,
+    report: McpTeamGrantReport,
+    now?: number,
+  ): Promise<McpTeamReportResult>;
+  /**
+   * The machine's confirmation that it revoked a grant. Deletes the record;
+   * a record already swept answers false and the machine moves on.
+   */
+  ackMcpTeamRevocation(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    requestId: string,
+    now?: number,
+  ): Promise<boolean>;
+  /**
+   * Revokes every live request on a session: the consent just turned off, or
+   * the session is gone. Issued rows keep their grant id so the machine's
+   * next poll carries the revocation.
+   */
+  revokeMcpTeamSession(orgId: string, sessionId: string, now?: number): Promise<void>;
+  /**
+   * Revokes every live request one member made in an organization: they just
+   * left it, and a listing is not a connection.
+   */
+  revokeMcpTeamMember(orgId: string, requesterUid: string, now?: number): Promise<void>;
+  /**
+   * The live use-time check a team grant is re-authorized against: is the
+   * requester still a member of the session's organization, and is the
+   * session still open and still consenting? Answered from the store's own
+   * current state, not from any cached copy. Fail-closed by construction:
+   * no such session, a closed one, a non-consenting one, or a requester who
+   * is not a member all answer false.
+   */
+  teamAuthorization(sessionId: string, requesterUid: string, grantId: string, now?: number): Promise<boolean>;
+
   upsertSession(session: SessionRecord): Promise<boolean>;
   patchSession(uid: string, id: string, patch: Partial<SessionRecord>): Promise<SessionRecord | null>;
   listSessions(uid: string): Promise<SessionRecord[]>;

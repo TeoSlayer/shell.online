@@ -22,6 +22,13 @@ export interface McpGrantRecord {
   expiresAt: number;
   revoked: boolean;
   revokedAt: number | null;
+  /**
+   * Present when the grant was minted for a teammate, not the owner. The DO
+   * cannot trust its own copy of the world for such a grant: membership and
+   * consent live in the accounts service, so every request from a team grant
+   * is checked there at use time, live and fail-closed.
+   */
+  team?: { requesterUid: string };
 }
 
 const SCOPE_SET_KEY: Record<McpScopeSet, string> = {
@@ -143,10 +150,17 @@ export function createGrantRecord(opts: {
   runId: string;
   now: number;
   lifetime: number;
+  team?: { requesterUid: string };
 }): McpGrantRecord {
   const canonical = validateScopes(opts.scopes);
   if (!Number.isFinite(opts.lifetime) || opts.lifetime < 1) {
     throw new Error("lifetime must be a finite number >= 1s");
+  }
+  if (opts.team !== undefined) {
+    const uid = opts.team.requesterUid;
+    if (typeof uid !== "string" || uid.length < 1 || uid.length > 256 || /[\u0000-\u001f\u007f]/.test(uid)) {
+      throw new Error("invalid team requester");
+    }
   }
   return {
     grantId: opts.grantId,
@@ -158,5 +172,6 @@ export function createGrantRecord(opts: {
     expiresAt: opts.now + Math.floor(opts.lifetime),
     revoked: false,
     revokedAt: null,
+    ...(opts.team !== undefined ? { team: { requesterUid: opts.team.requesterUid } } : {}),
   };
 }

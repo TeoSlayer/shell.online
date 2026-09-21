@@ -47,6 +47,7 @@ const REQUIRED_TABLES = [
   "jev_assessments",
   "jev_budget",
   "memberships",
+  "mcp_team_grants",
   "notifications",
   "organizations",
   "schema_migrations",

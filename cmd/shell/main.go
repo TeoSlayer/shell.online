@@ -269,6 +269,14 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	 */
 	flowReporter := startMcpFlowReporter(link)
 	defer flowReporter.stop()
+	/*
+	 * Team MCP: a teammate's request for an observe-only grant is answered by
+	 * this session's own machine. Optional in both directions, like the flow
+	 * reporter: no linked account or no live MCP control means nothing is
+	 * answered, never a blocked launch.
+	 */
+	teamService := startMcpTeamServiceFor(control, link)
+	defer teamService.stop()
 	publishedSession := account.SessionInput{
 		ID:         session.ID,
 		ShareURL:   session.ShareURL,

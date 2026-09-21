@@ -315,6 +315,343 @@ describe("owner MCP flow feed", () => {
   });
 });
 
+describe("team MCP grant requests", () => {
+  const id = "team_session_123";
+  const grantId = "AbCdEf0123456789_-AbCQ";
+  const bearer = "eyJhbGciOiJFQ0RILUVTIn0.eyJlbmMiOiJBMjU2R0NNIn0.abc-def_ghi.j9LQyZ8-S_9r_E.abc123";
+  const report = () => ({ grantId, expiresAt: Date.now() + 3600_000, bearer });
+
+  /* Owner's machine + session, consent on, and one invited teammate. */
+  async function setup(role: "member" | "admin" = "member") {
+    const tokens = await login();
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { id, share_url: `https://shell.online/s/${id}`, command: "claude", encrypted: true },
+    });
+    await call("PUT", `/api/cli/sessions/${id}/automation`, {
+      auth: tokens.access_token,
+      body: { mcpTeamAccess: true },
+    });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role } });
+    const teammate = await idToken({ sub: "uid-2", email: "teammate@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: teammate });
+    return { tokens, teammate };
+  }
+
+  it("serves the full authorized flow: request, host issue, fetch", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    expect(ask.status).toBe(201);
+    expect(ask.body.requestId).toMatch(/^mcp_[a-f0-9]{32}$/);
+    expect(ask.body.expiresAt).toBeGreaterThan(Date.now());
+
+    /* Pending until the machine answers. */
+    const pending = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate });
+    expect(pending.status).toBe(202);
+    expect(pending.body).toEqual({ status: "pending", expiresAt: ask.body.expiresAt });
+
+    const work = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token });
+    expect(work.status).toBe(200);
+    expect(work.body).toEqual({
+      issues: [{ requestId: ask.body.requestId, requesterUid: "uid-2", action: "issue", expiresAt: ask.body.expiresAt }],
+      revocations: [],
+    });
+
+    const issued = await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    });
+    expect(issued.status).toBe(200);
+    expect(issued.body).toEqual({ result: "stored" });
+
+    const got = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate });
+    expect(got.status).toBe(200);
+    expect(got.body.status).toBe("issued");
+    expect(got.body.grantId).toBe(grantId);
+    expect(got.body.bearer).not.toContain(bearer);
+    expect(JSON.parse(got.body.bearer).s).toMatch(/^v2\./);
+    expect(got.body.sealedToRecipient).toBe(true);
+    expect(got.body.expiresAt).toBeGreaterThan(Date.now());
+    /* The credential leaves exactly once; a lost fetch is recovered by asking again. */
+    const again = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate });
+    expect(again.status).toBe(410);
+    expect(again.body.error).toBe("this request was already delivered");
+  });
+
+  it("requires a valid immutable recipient key before creating a request", async () => {
+    const { teammate } = await setup();
+    for (const body of [{}, { recipientPublicKey: "bad-key" }, { recipientPublicKey: P256_PUBLIC_KEY_A, replace: true }]) {
+      const response = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body });
+      expect(response.status).toBe(400);
+    }
+    const asked = await call("POST", `/api/sessions/${id}/mcp/team`, {
+      auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A },
+    });
+    expect(asked.status).toBe(201);
+    const replaced = await call("PUT", `/api/sessions/${id}/mcp/team/${asked.body.requestId}`, {
+      auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_B },
+    });
+    expect(replaced.status).toBe(405);
+  });
+
+  it("lets the same teammate ask over the CLI with their own account", async () => {
+    const { teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    expect(ask.status).toBe(201);
+    const cli = await login({}, "uid-2");
+    const viaCli = await call("GET", `/api/cli/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: cli.access_token });
+    expect(viaCli.status).toBe(202);
+    expect(viaCli.body.status).toBe("pending");
+    /* The machine cannot fetch a teammate's request: it is not theirs. */
+    const foreign = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: await idToken() });
+    expect(foreign.status).toBe(404);
+  });
+
+  it("refuses while the consent is off, even though the session is listed", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { id, share_url: `https://shell.online/s/${id}`, command: "claude", encrypted: true },
+    });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const teammate = await idToken({ sub: "uid-2", email: "teammate@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: teammate });
+    /* Listing works... */
+    expect((await call("GET", "/api/sessions", { auth: teammate })).body.sessions).toHaveLength(1);
+    /* ...but a listing is not a connection. */
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(403);
+  });
+
+  it("refuses another organization, a closed session, and unknown sessions", async () => {
+    const { tokens, teammate } = await setup();
+    const stranger = await idToken({ sub: "uid-9", email: "stranger@elsewhere.com" });
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: stranger, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(404);
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: await idToken(), body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(201);
+    expect((await call("POST", `/api/sessions/nope_session_999/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(404);
+    await call("PATCH", `/api/sessions/${id}`, { auth: tokens.access_token, body: { exit_code: 0 } });
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(404);
+  });
+
+  it("lets an admin ask, and the owner ask for their own session", async () => {
+    const { teammate } = await setup("admin");
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(201);
+    expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: await idToken(), body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(201);
+  });
+
+  it("bounds pending requests per session", async () => {
+    const { teammate } = await setup();
+    for (let i = 0; i < 4; i += 1) {
+      expect((await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } })).status).toBe(201);
+    }
+    const limited = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    expect(limited.status).toBe(429);
+    expect(limited.body.error).toBe("too many pending team MCP requests");
+  });
+
+  it("keeps the host's work list to the session's own machine", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    const otherMachine = await login({ label: "other machine" });
+    expect((await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: otherMachine.access_token })).status).toBe(403);
+    const teammateCli = await login({}, "uid-2");
+    expect((await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: teammateCli.access_token })).status).toBe(404);
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: teammateCli.access_token,
+      body: report(),
+    })).status).toBe(404);
+    /* Unauthenticated and unparseable reports are refused before the store. */
+    expect((await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`)).status).toBe(401);
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: { grantId: "short", expiresAt: Date.now() + 3600_000, bearer },
+    })).status).toBe(400);
+  });
+
+  it("revokes live requests when the consent turns off, and the machine acks", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    });
+    /* A pending request dies with the consent too. */
+    const pending = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    await call("PUT", `/api/cli/sessions/${id}/automation`, {
+      auth: tokens.access_token,
+      body: { mcpTeamAccess: false },
+    });
+    expect((await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate })).status).toBe(410);
+    expect((await call("GET", `/api/sessions/${id}/mcp/team/${pending.body.requestId}`, { auth: teammate })).status).toBe(410);
+    const work = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token });
+    expect(work.body.issues).toEqual([]);
+    expect(work.body.revocations).toEqual([{ requestId: ask.body.requestId, requesterUid: "uid-2", action: "revoke", grantId }]);
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/revoke-ack`, {
+      auth: tokens.access_token,
+    })).status).toBe(200);
+    expect((await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token })).body.revocations).toEqual([]);
+    /* A second ack finds nothing: the record is gone, and that is fine. */
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/revoke-ack`, {
+      auth: tokens.access_token,
+    })).status).toBe(404);
+  });
+
+  it("revokes a member's live requests when they leave the organization", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    });
+    expect((await call("DELETE", "/api/org/members/uid-2", { auth: await idToken() })).status).toBe(200);
+    /* Their next call starts a fresh organization of one: the session is not in it. */
+    expect((await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate })).status).toBe(404);
+    const work = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token });
+    expect(work.body.revocations).toEqual([{ requestId: ask.body.requestId, requesterUid: "uid-2", action: "revoke", grantId }]);
+  });
+
+  it("revokes a session's requests when the session is deleted", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    });
+    const membership = (await store.membershipOf("uid-1"))!;
+    await store.deleteSession(membership.orgId, id);
+    const work = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token });
+    expect(work.status).toBe(404);
+    /* The revocation is still answerable once the session is back. */
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { id, share_url: `https://shell.online/s/${id}`, command: "claude", encrypted: true },
+    });
+    const again = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token });
+    expect(again.body.revocations).toEqual([{ requestId: ask.body.requestId, requesterUid: "uid-2", action: "revoke", grantId }]);
+  });
+
+  it("treats a retried grant report as idempotent and a foreign one as a no-op upgrade", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    const first = report();
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: first,
+    })).status).toBe(200);
+    /* The same report again: stored, and the first grant still stands. */
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: first,
+    })).status).toBe(200);
+    const got = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate });
+    expect(got.body.bearer).not.toContain(bearer);
+    /* A re-minted grant is accepted as a report, but the row stays issued with
+     * the first grant -- and the credential, already delivered, is not served twice. */
+    const second = { ...report(), grantId: "ZYXwvu0123456789_-ZyxQ" };
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: second,
+    })).status).toBe(200);
+    const delivered = await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate });
+    expect(delivered.status).toBe(410);
+    /* A report for a request that was never made is a miss. */
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/mcp_deadbeefdeadbeefdeadbeefdeadbeef/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    })).status).toBe(404);
+  });
+
+  it("serves a request made on one instance from the host on another", async () => {
+    const { tokens, teammate } = await setup();
+    const ask = await call("POST", `/api/sessions/${id}/mcp/team`, { auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A } });
+    const otherInstance = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN] });
+    const work = await call("GET", `/api/cli/sessions/${id}/mcp/team-requests`, { auth: tokens.access_token }, otherInstance);
+    expect(work.body.issues).toHaveLength(1);
+    expect((await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${ask.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: report(),
+    }, otherInstance)).status).toBe(200);
+    expect((await call("GET", `/api/sessions/${id}/mcp/team/${ask.body.requestId}`, { auth: teammate })).status).toBe(200);
+  });
+});
+
+describe("internal team-authorized check (live use-time authorization)", () => {
+  const id = "authz_session_123";
+  const grantId = "AbCdEf0123456789_-AbCQ";
+  const TOKEN = "team-check-".padEnd(40, "0");
+  const path = (session: string, requester: string) =>
+    `/api/internal/mcp/team-authorized?session=${encodeURIComponent(session)}&requester=${encodeURIComponent(requester)}&grant=${grantId}`;
+
+  /* An app instance the DO can talk to, plus the owner's session with consent on and one teammate. */
+  async function setup() {
+    const teamApp = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN], mcpTeamCheckToken: TOKEN });
+    const tokens = await login();
+    await call("POST", "/api/sessions", {
+      auth: tokens.access_token,
+      body: { id, share_url: `https://shell.online/s/${id}`, command: "claude", encrypted: true },
+    });
+    await call("PUT", `/api/cli/sessions/${id}/automation`, { auth: tokens.access_token, body: { mcpTeamAccess: true } });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const teammate = await idToken({ sub: "uid-2", email: "teammate@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: teammate });
+    const asked = await call("POST", `/api/sessions/${id}/mcp/team`, {
+      auth: teammate, body: { recipientPublicKey: P256_PUBLIC_KEY_A },
+    });
+    await call("POST", `/api/cli/sessions/${id}/mcp/team-requests/${asked.body.requestId}/grant`, {
+      auth: tokens.access_token,
+      body: { grantId, expiresAt: Date.now() + 3600_000, bearer: "a..b.c.d" },
+    });
+    return { teamApp, tokens, teammate };
+  }
+
+  it("does not exist when the token is not configured", async () => {
+    await setup();
+    const answer = await call("GET", path(id, "uid-2"), { auth: TOKEN });
+    expect(answer.status).toBe(404);
+  });
+
+  it("refuses the wrong or missing token before it answers", async () => {
+    const { teamApp } = await setup();
+    expect((await call("GET", path(id, "uid-2"), { auth: "wrong".padEnd(40, "0") }, teamApp)).status).toBe(401);
+    expect((await call("GET", path(id, "uid-2"), {}, teamApp)).status).toBe(401);
+  });
+
+  it("refuses a question that names no session or requester", async () => {
+    const { teamApp } = await setup();
+    expect((await call("GET", "/api/internal/mcp/team-authorized?session=" + id, { auth: TOKEN }, teamApp)).status).toBe(400);
+    expect((await call("GET", "/api/internal/mcp/team-authorized?requester=uid-2", { auth: TOKEN }, teamApp)).status).toBe(400);
+  });
+
+  it("answers yes for a member while the session is open and consenting", async () => {
+    const { teamApp } = await setup();
+    const answer = await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toEqual({ authorized: true });
+  });
+
+  it("answers no the moment the consent turns off", async () => {
+    const { teamApp, tokens } = await setup();
+    expect((await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: true });
+    await call("PUT", `/api/cli/sessions/${id}/automation`, { auth: tokens.access_token, body: { mcpTeamAccess: false } });
+    expect((await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: false });
+  });
+
+  it("answers no when the member leaves, even though the host has not polled", async () => {
+    const { teamApp } = await setup();
+    expect((await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: true });
+    await call("DELETE", "/api/org/members/uid-2", { auth: await idToken() });
+    expect((await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: false });
+  });
+
+  it("answers no for a closed session, an unknown session, and a non-member", async () => {
+    const { teamApp, tokens } = await setup();
+    await call("PATCH", `/api/sessions/${id}`, { auth: tokens.access_token, body: { exit_code: 0 } });
+    expect((await call("GET", path(id, "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: false });
+    expect((await call("GET", path("nope_session_999", "uid-2"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: false });
+    /* uid-9 never joined the organization: no membership row, no access. */
+    expect((await call("GET", path(id, "uid-9"), { auth: TOKEN }, teamApp)).body).toEqual({ authorized: false });
+  });
+});
+
 describe("session registry", () => {
   const session = {
     id: "qN7wKb3xTm9Ld2Ravh4YsPcE8UjZgF6t",

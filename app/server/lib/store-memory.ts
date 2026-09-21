@@ -14,7 +14,20 @@ import {
 } from "./mcp-flows";
 import { JEV_BUDGET, JEV_MAX_SNAPSHOTS } from "./jev/limits";
 import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
-import type { Invite, Membership, Organization, Role } from "./orgs";
+import {
+  MCP_TEAM_REQUEST_TTL,
+  MCP_TEAM_PENDING_LIMIT,
+  MCP_TEAM_GLOBAL_LIMIT,
+  sealTeamBearer,
+  trimMcpTeamRows,
+  teamPublisher,
+  type McpTeamGrantReport,
+  type McpTeamHostRequest,
+  type McpTeamRequest,
+  type McpTeamReportResult,
+  type McpTeamRequestResult,
+} from "./mcp-team";
+import { newId, type Invite, type Membership, type Organization, type Role } from "./orgs";
 import {
   ACCOUNT_ACTIVITY_MEMORY_MS,
   DAY_MS,
@@ -82,6 +95,7 @@ interface Shape {
   jevConsents: { orgId: string; ownerUid: string; externalAnalysis: boolean; updatedAt: number; updatedBy: string }[];
   jevAssessments: { orgId: string; ownerUid: string; sessionId: string; startedAt: number; snapshot: AssessmentSnapshot }[];
   jevBudget: { orgId: string; ownerUid: string; at: number; chars: number }[];
+  mcpTeamGrants: McpTeamRequest[];
   codes: AuthorizationCode[];
   tokens: CliToken[];
   sessions: SessionRecord[];
@@ -107,6 +121,7 @@ const EMPTY: Shape = {
   sessionContent: [],
   mcpFlows: [],
   jevConsents: [], jevAssessments: [], jevBudget: [],
+  mcpTeamGrants: [],
   codes: [], tokens: [], sessions: [], commands: [],
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
@@ -184,6 +199,7 @@ export class MemoryStore implements Store {
         jevConsents: parsed.jevConsents ?? [],
         jevAssessments: parsed.jevAssessments ?? [],
         jevBudget: parsed.jevBudget ?? [],
+        mcpTeamGrants: parsed.mcpTeamGrants ?? [],
         commands: parsed.commands ?? [],
         organizations: parsed.organizations ?? [],
         memberships: parsed.memberships ?? [],
@@ -362,6 +378,27 @@ export class MemoryStore implements Store {
   async deleteAccount(uid: string, plan: AccountDeletion, now = Date.now()): Promise<void> {
     const data = this.data;
     const { orgId } = plan;
+    /*
+     * Revocation must survive recreating the account or session. Capture the
+     * affected session identities before deletion or ownership reassignment,
+     * and retain grant ids only so a remaining host can finish relay cleanup.
+     */
+    const revokedTeamSessions = new Set(
+      data.sessions
+        .filter((session) => session.uid === uid || session.ownerUid === uid)
+        .map((session) => `${session.orgId}\u0000${session.id}`),
+    );
+    for (const request of data.mcpTeamGrants) {
+      if (
+        request.requesterUid === uid ||
+        (orgId && plan.dissolve && request.orgId === orgId) ||
+        revokedTeamSessions.has(`${request.orgId}\u0000${request.sessionId}`)
+      ) {
+        request.status = "revoked";
+        request.revokedAt = now;
+        request.bearer = undefined;
+      }
+    }
     if (orgId && plan.dissolve) {
       data.organizations = data.organizations.filter((entry) => entry.id !== orgId);
       data.memberships = data.memberships.filter((entry) => entry.orgId !== orgId);
@@ -697,6 +734,198 @@ export class MemoryStore implements Store {
     return true;
   }
 
+  /*
+   * Team MCP grant requests. Single-threaded, so the session check and the
+   * write cannot interleave the way they can against a database; the check is
+   * still the same one the SQL store makes under its locks.
+   */
+  async requestMcpTeamGrant(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    recipientPublicKey: string,
+    now = Date.now(),
+  ): Promise<{ result: McpTeamRequestResult; requestId?: string; expiresAt?: number }> {
+    const session = this.data.sessions.find(
+      (entry) => entry.id === sessionId && entry.orgId === orgId,
+    );
+    if (!session) return { result: "missing" };
+    if (session.closedAt !== undefined) return { result: "closed" };
+    if (session.mcpTeamAccess !== true) return { result: "disabled" };
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    if (this.data.mcpTeamGrants.length >= MCP_TEAM_GLOBAL_LIMIT) return { result: "limited" };
+    const pending = this.data.mcpTeamGrants.filter(
+      (row) => row.orgId === orgId && row.sessionId === sessionId && row.status === "pending" && row.expiresAt > now,
+    );
+    if (pending.length >= MCP_TEAM_PENDING_LIMIT) return { result: "limited" };
+    const requestId = newId("mcp");
+    const expiresAt = now + MCP_TEAM_REQUEST_TTL;
+    this.data.mcpTeamGrants.push({
+      requestId, orgId, sessionId, requesterUid, recipientPublicKey, status: "pending", createdAt: now, expiresAt, sealedToRecipient: false,
+    });
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    this.flush();
+    return { result: "stored", requestId, expiresAt };
+  }
+
+  async mcpTeamRequest(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    requestId: string,
+    now = Date.now(),
+  ): Promise<McpTeamRequest | null> {
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    const row = this.data.mcpTeamGrants.find(
+      (entry) =>
+        entry.orgId === orgId &&
+        entry.sessionId === sessionId &&
+        entry.requesterUid === requesterUid &&
+        entry.requestId === requestId,
+    );
+    if (!row) return null;
+    const session = this.data.sessions.find((entry) => entry.id === sessionId && entry.orgId === orgId);
+    if (!session || session.closedAt !== undefined || session.mcpTeamAccess !== true ||
+        !this.data.memberships.some((entry) => entry.orgId === orgId && entry.uid === requesterUid) ||
+        (row.status === "issued" && (row.grantExpiresAt ?? 0) <= now)) {
+      row.status = "revoked";
+      row.revokedAt = now;
+      row.bearer = undefined;
+      this.flush();
+      return { ...row };
+    }
+    /*
+     * The credential is delivered exactly once, and it is out of the store the
+     * moment it is delivered: this fetch is the only one that ever sees it.
+     */
+    if (row.status === "issued" && row.bearer !== undefined && row.deliveredAt === undefined) {
+      const credential = row.bearer;
+      row.bearer = undefined;
+      row.deliveredAt = now;
+      this.flush();
+      return { ...row, bearer: credential };
+    }
+    this.flush();
+    return { ...row };
+  }
+
+  async listMcpTeamRequests(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    now = Date.now(),
+  ): Promise<{ issues: McpTeamHostRequest[]; revocations: McpTeamHostRequest[] } | null> {
+    const session = this.data.sessions.find(
+      (entry) => entry.id === sessionId && entry.orgId === orgId,
+    );
+    if (!session || session.closedAt !== undefined || !teamPublisher(session, orgId, ownerUid, deviceId)) return null;
+    /*
+     * Recheck every row against the world as it is now: a requester who left
+     * the organization, or a consent that just turned off, revokes on the way
+     * so this poll carries the revocation.
+     */
+    const members = new Set(this.data.memberships.filter((entry) => entry.orgId === orgId).map((entry) => entry.uid));
+    const consent = session.mcpTeamAccess === true;
+    for (const row of this.data.mcpTeamGrants) {
+      if (row.orgId !== orgId || row.sessionId !== sessionId || row.status === "revoked") continue;
+      if (!members.has(row.requesterUid) || !consent) {
+        row.status = "revoked";
+        row.revokedAt = now;
+      }
+    }
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    this.flush();
+    const issues: McpTeamHostRequest[] = [];
+    const revocations: McpTeamHostRequest[] = [];
+    for (const row of this.data.mcpTeamGrants) {
+      if (row.orgId !== orgId || row.sessionId !== sessionId) continue;
+      if (row.status === "pending" && row.expiresAt > now) {
+        issues.push({ requestId: row.requestId, requesterUid: row.requesterUid, action: "issue", expiresAt: row.expiresAt });
+      } else if (row.status === "revoked" && row.grantId) {
+        revocations.push({ requestId: row.requestId, requesterUid: row.requesterUid, action: "revoke", grantId: row.grantId });
+      }
+    }
+    return { issues, revocations };
+  }
+
+  async reportMcpTeamGrant(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    requestId: string,
+    report: McpTeamGrantReport,
+    now = Date.now(),
+  ): Promise<McpTeamReportResult> {
+    const session = this.data.sessions.find(
+      (entry) => entry.id === sessionId && entry.orgId === orgId,
+    );
+    if (!session || session.closedAt !== undefined || !teamPublisher(session, orgId, ownerUid, deviceId)) return "missing";
+    const row = this.data.mcpTeamGrants.find(
+      (entry) => entry.orgId === orgId && entry.sessionId === sessionId && entry.requestId === requestId,
+    );
+    if (!row) return "missing";
+    if (row.status === "issued") {
+      /* A retry: the first grant stands, and a re-minted one runs out alone. */
+      this.flush();
+      return "stored";
+    }
+    if (row.status === "revoked") return "revoked";
+    if (row.expiresAt <= now) {
+      row.status = "revoked";
+      row.revokedAt = now;
+      this.flush();
+      return "expired";
+    }
+    const member = this.data.memberships.find((entry) => entry.orgId === orgId && entry.uid === row.requesterUid);
+    if (!member || session.mcpTeamAccess !== true) {
+      row.status = "revoked";
+      row.revokedAt = now;
+      this.flush();
+      return "revoked";
+    }
+    const sealed = await sealTeamBearer(row.recipientPublicKey, sessionId, row.requesterUid, requestId, report.bearer);
+    // Crypto yields: consent, membership and the originating device can change.
+    const currentSession = this.data.sessions.find((entry) => entry.id === sessionId && entry.orgId === orgId);
+    if (!currentSession || currentSession.closedAt !== undefined ||
+        !teamPublisher(currentSession, orgId, ownerUid, deviceId) || currentSession.mcpTeamAccess !== true ||
+        !this.data.memberships.some((entry) => entry.orgId === orgId && entry.uid === row.requesterUid) ||
+        (row.status as string) === "revoked") return "revoked";
+    if ((row.status as string) === "issued") return "stored";
+    row.status = "issued";
+    row.grantId = report.grantId;
+    row.grantExpiresAt = report.expiresAt;
+    row.bearer = sealed;
+    row.sealedToRecipient = true;
+    row.issuedAt = now;
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    this.flush();
+    return "stored";
+  }
+
+  async ackMcpTeamRevocation(
+    orgId: string,
+    sessionId: string,
+    ownerUid: string,
+    deviceId: string,
+    requestId: string,
+    now = Date.now(),
+  ): Promise<boolean> {
+    const session = this.data.sessions.find(
+      (entry) => entry.id === sessionId && entry.orgId === orgId,
+    );
+    if (!session || !teamPublisher(session, orgId, ownerUid, deviceId)) return false;
+    this.data.mcpTeamGrants = trimMcpTeamRows(this.data.mcpTeamGrants, now);
+    const row = this.data.mcpTeamGrants.find(
+      (entry) => entry.orgId === orgId && entry.sessionId === sessionId && entry.requestId === requestId,
+    );
+    if (!row || row.status !== "revoked" || !row.grantId) return false;
+    this.data.mcpTeamGrants = this.data.mcpTeamGrants.filter((entry) => entry !== row);
+    this.flush();
+    return true;
+  }
+
   async listJevAssessments(orgId: string, ownerUid: string, now = Date.now()): Promise<AssessmentSnapshot[]> {
     const before = this.data.jevAssessments.length;
     this.data.jevAssessments = this.data.jevAssessments.filter((entry) => {
@@ -738,6 +967,44 @@ export class MemoryStore implements Store {
     const removed = before - this.data.jevAssessments.length;
     if (removed > 0) this.flush();
     return removed;
+  }
+
+  async revokeMcpTeamSession(orgId: string, sessionId: string, now = Date.now()): Promise<void> {
+    let changed = false;
+    for (const row of this.data.mcpTeamGrants) {
+      if (row.orgId === orgId && row.sessionId === sessionId && row.status !== "revoked") {
+        row.status = "revoked";
+        row.revokedAt = now;
+        changed = true;
+      }
+    }
+    if (changed) this.flush();
+  }
+
+  async revokeMcpTeamMember(orgId: string, requesterUid: string, now = Date.now()): Promise<void> {
+    let changed = false;
+    for (const row of this.data.mcpTeamGrants) {
+      if (row.orgId === orgId && row.requesterUid === requesterUid && row.status !== "revoked") {
+        row.status = "revoked";
+        row.revokedAt = now;
+        changed = true;
+      }
+    }
+    if (changed) this.flush();
+  }
+
+  async teamAuthorization(sessionId: string, requesterUid: string, grantId: string, now = Date.now()): Promise<boolean> {
+    const sessions = this.data.sessions.filter((entry) => entry.id === sessionId);
+    if (sessions.length === 0) return false;
+    for (const session of sessions) {
+      if (session.closedAt !== undefined || session.mcpTeamAccess !== true) return false;
+      const member = this.data.memberships.find((entry) => entry.orgId === session.orgId && entry.uid === requesterUid);
+      if (!member) return false;
+      if (!this.data.mcpTeamGrants.some((row) => row.orgId === session.orgId && row.sessionId === sessionId &&
+          row.requesterUid === requesterUid && row.grantId === grantId && row.status === "issued" &&
+          (row.grantExpiresAt ?? 0) > now)) return false;
+    }
+    return true;
   }
 
   async upsertSession(session: SessionRecord): Promise<boolean> {
@@ -905,7 +1172,15 @@ export class MemoryStore implements Store {
         (entry.ownerUid ?? entry.uid) === ownerUid,
     );
     if (!session) return null;
-    if (consent.mcpTeamAccess !== undefined) session.mcpTeamAccess = consent.mcpTeamAccess;
+    if (consent.mcpTeamAccess !== undefined) {
+      /*
+       * Consent off is a revocation, not just a closed door: live team
+       * requests on this session are marked so the machine's next poll
+       * carries the revocation.
+       */
+      if (session.mcpTeamAccess === true && consent.mcpTeamAccess === false) await this.revokeMcpTeamSession(orgId, sessionId);
+      session.mcpTeamAccess = consent.mcpTeamAccess;
+    }
     if (consent.dailyBriefingEnabled !== undefined) {
       if (!!session.dailyBriefingEnabled !== consent.dailyBriefingEnabled) this.invalidateContent(session);
       session.dailyBriefingEnabled = consent.dailyBriefingEnabled;
@@ -956,6 +1231,7 @@ export class MemoryStore implements Store {
   async deleteSession(orgId: string, id: string): Promise<boolean> {
     const deleted = this.data.sessions.find((item) => item.orgId === orgId && item.id === id);
     if (deleted) this.data.sessionContent = this.data.sessionContent.filter((item) => item.sessionUid !== deleted.uid || item.sessionId !== id);
+    await this.revokeMcpTeamSession(orgId, id);
     const before = this.data.sessions.length;
     this.data.sessions = this.data.sessions.filter(
       (entry) => !(entry.id === id && entry.orgId === orgId),
@@ -1099,6 +1375,8 @@ export class MemoryStore implements Store {
       (entry) => !(entry.orgId === orgId && entry.uid === uid),
     );
     if (this.data.memberships.length === before) return false;
+    /* A listing is not a connection: their live team requests go with them. */
+    await this.revokeMcpTeamMember(orgId, uid);
     for (const session of this.data.sessions) {
       if (session.orgId === orgId && session.keyShares) {
         session.keyShares = session.keyShares.filter((share) => share.uid !== uid);

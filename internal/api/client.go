@@ -303,7 +303,11 @@ func mcpAPIError(response *http.Response, context string) error {
 
 // CreateMcpGrant requests issuance of a short-lived, run-bound MCP bearer. The host supplies
 // the raw E2EE frame key (or nil for --no-e2ee); the DO mints and returns the opaque bearer.
-func (client *Client) CreateMcpGrant(ctx context.Context, session Session, label string, scopes []string, lifetimeSec int, frameKey []byte) (McpGrantCreated, error) {
+//
+// teamRequesterUID marks the grant as minted for a teammate rather than the owner. When set, the
+// DO re-authorizes every use of the grant against the accounts service, live and fail-closed; the
+// owner's own grants (empty) never take that path.
+func (client *Client) CreateMcpGrant(ctx context.Context, session Session, label string, scopes []string, lifetimeSec int, frameKey []byte, teamRequesterUID string) (McpGrantCreated, error) {
 	var result McpGrantCreated
 	frameKeyB64 := encodeFrameKey(frameKey)
 	payload, err := json.Marshal(struct {
@@ -311,11 +315,15 @@ func (client *Client) CreateMcpGrant(ctx context.Context, session Session, label
 		Scopes   []string `json:"scopes"`
 		Lifetime *int     `json:"lifetime,omitempty"`
 		FrameKey string   `json:"frame_key,omitempty"`
+		Team     *struct {
+			RequesterUID string `json:"requester_uid"`
+		} `json:"team,omitempty"`
 	}{
 		Label:    label,
 		Scopes:   scopes,
 		Lifetime: optionalInt(lifetimeSec),
 		FrameKey: frameKeyB64,
+		Team:     optionalTeam(teamRequesterUID),
 	})
 	if err != nil {
 		return result, err
@@ -387,6 +395,18 @@ func optionalInt(value int) *int {
 		return nil
 	}
 	return &value
+}
+
+// optionalTeam builds the grant's team marker, or nil for the owner's own grant.
+func optionalTeam(requesterUID string) *struct {
+	RequesterUID string `json:"requester_uid"`
+} {
+	if requesterUID == "" {
+		return nil
+	}
+	return &struct {
+		RequesterUID string `json:"requester_uid"`
+	}{RequesterUID: requesterUID}
 }
 
 func encodeFrameKey(frameKey []byte) string {

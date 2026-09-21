@@ -69,6 +69,12 @@ export interface Config {
   /** Server-only credential for the optional external-analysis provider. */
   jevApiKey?: string;
   /**
+   * The bearer token the relay's DO presents for the live team-MCP
+   * use-time check. Absent means that route does not exist, and the DO fails
+   * team grants closed.
+   */
+  mcpTeamCheckToken?: string;
+  /**
    * Accounts the statistics dashboard leaves out of every figure: ours, not
    * customers'. Addresses and domains, read from STATS_EXCLUDE; see
    * internal-accounts.ts for why it is configuration rather than source.
@@ -226,6 +232,12 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new ConfigError("STATS_TOKEN must be at least 32 characters");
   }
 
+  const mcpTeamCheckToken = env.MCP_TEAM_CHECK_TOKEN?.trim() || undefined;
+  /* Same bound: this one authorizes a teammate's access to a live session. */
+  if (mcpTeamCheckToken !== undefined && mcpTeamCheckToken.length < 32) {
+    throw new ConfigError("MCP_TEAM_CHECK_TOKEN must be at least 32 characters");
+  }
+
   const clientDir = env.CLIENT_DIR?.trim() || undefined;
   const relayUrl = env.RELAY_URL?.trim() || undefined;
   if (relayUrl) {
@@ -271,6 +283,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     feedbackTo: env.FEEDBACK_TO?.trim() || undefined,
     statsToken,
     jevApiKey,
+    mcpTeamCheckToken,
     excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
   };
 }

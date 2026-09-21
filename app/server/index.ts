@@ -52,6 +52,7 @@ const server = createAccountsServer({
   feedbackTo: config.feedbackTo,
   statsToken: config.statsToken,
   jevApiKey: config.jevApiKey,
+  mcpTeamCheckToken: config.mcpTeamCheckToken,
   excludedAccounts: config.excludedAccounts,
   serveClient: config.clientDir
     ? staticFiles(config.clientDir, config.identity.issuer)

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { hashBearer } from "../shared/mcp-bearer";
 import {
+  createGrantRecord,
   isGrantLiveForRun,
   isLive,
   pruneGrantRecords,
@@ -201,5 +202,33 @@ describe("mcp grant-record retention bound", () => {
   it("a run with only live grants is unchanged by pruning", () => {
     const live = [grant({ grantId: "l1" }), grant({ grantId: "l2" })];
     expect(pruneGrantRecords(live, "run-A", NOW)).toEqual(live);
+  });
+});
+
+describe("mcp team grant records", () => {
+  const base = {
+    grantId: "grant-1",
+    bearerHash: "ab".repeat(32),
+    label: "team:uid-2",
+    scopes: ["observe"] as ("observe" | "input" | "interrupt")[],
+    runId: "run-A",
+    now: NOW,
+    lifetime: 3600,
+  };
+
+  it("carries the requester when minted for a teammate", () => {
+    const record = createGrantRecord({ ...base, team: { requesterUid: "uid-2" } });
+    expect(record.team).toEqual({ requesterUid: "uid-2" });
+  });
+
+  it("has no team marker for the owner's own grant", () => {
+    const record = createGrantRecord(base);
+    expect(record.team).toBeUndefined();
+  });
+
+  it("refuses a malformed team requester", () => {
+    for (const team of [{ requesterUid: "" }, { requesterUid: 5 }, { requesterUid: "a\u0000b" }, { requesterUid: "x".repeat(257) }]) {
+      expect(() => createGrantRecord({ ...base, team: team as { requesterUid: string } })).toThrow();
+    }
   });
 });
