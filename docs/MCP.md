@@ -1,6 +1,6 @@
 # MCP observation and input
 
-This unreleased feature extends the current relay and Go host. Input is off by default;
+Introduced in v0.21.0, MCP extends the relay and Go host. Input is off by default;
 deploying the code does not enable control without the operator gate below.
 
 The MCP endpoint is `https://shell.online/mcp`. The Go host owns the PTY; the Worker/DO
