@@ -82,7 +82,7 @@ function Card({
         * A genuine two-line summary when the record carries one, and the
         * truthful empty state when it does not; commands are not descriptions.
         */}
-      <p className="board-card-summary"><SessionSummaryText session={session} /></p>
+      <div className="board-card-summary"><SessionSummaryText session={session} /></div>
 
       <p className="board-card-meta">
         {session.host}

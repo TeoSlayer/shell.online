@@ -10,9 +10,9 @@ export interface SessionContent {
   observedAt: number;
 }
 
-function validText(value: unknown, max: number): value is string {
+function validText(value: unknown, max: number, multiline = false): value is string {
   return typeof value === "string" && value.length <= max * 2 && [...value].length <= max
-    && !/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(value)
+    && !/[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u.test(multiline ? value.replace(/[\n\t]/g, "") : value)
     && !/[\ud800-\udfff]/u.test(value);
 }
 
@@ -57,7 +57,7 @@ export async function openSessionContent(
       const content = value as Record<string, unknown>;
       if (Object.keys(content).sort().join(",") !== "description,observedAt,source,suggestedTitle,version"
         || content.version !== 1 || content.observedAt !== observedAt
-        || !validText(content.suggestedTitle, 120) || !validText(content.description, 600)
+        || !validText(content.suggestedTitle, 120) || !validText(content.description, 600, true)
         || (content.source !== "opencode-launch" && content.source !== "generic")) return null;
       return content as unknown as SessionContent;
     } finally { plaintext.fill(0); }

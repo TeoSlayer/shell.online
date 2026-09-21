@@ -176,7 +176,7 @@ const SETUP = `
     const key = await crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(0),info:new TextEncoder().encode(context)},material,{name:'AES-GCM',length:256},false,['encrypt']);
     const observedAt = Date.now()-1000;
     const generation = 'a'.repeat(32);
-    const content = {version:1,suggestedTitle:'Synthetic private suggestion',description:'Synthetic completed private response excerpt.',source:'opencode-launch',observedAt};
+    const content = {version:1,suggestedTitle:'Synthetic private suggestion',description:'**Synthetic completed private response excerpt**\\n\\n- Review the '+String.fromCharCode(96)+'diff'+String.fromCharCode(96)+'\\n- Keep *permissions* intact',source:'opencode-launch',observedAt};
     const nonce = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({name:'AES-GCM',iv:nonce,additionalData:new TextEncoder().encode(JSON.stringify([context,'route-test','qa-owner',generation,observedAt]))},key,new TextEncoder().encode(JSON.stringify(content)));
     const sealed = new Uint8Array(nonce.length+encrypted.byteLength); sealed.set(nonce); sealed.set(new Uint8Array(encrypted),nonce.length);
@@ -266,6 +266,9 @@ try {
   assert.match(await evaluate(`document.querySelector('.detail-summary').textContent`), /Synthetic completed private response excerpt/);
   assert.doesNotMatch(await evaluate(`document.title`), /Synthetic private/, 'decrypted title must not enter browser history');
   assert.equal(await evaluate(`routeTest.contentGets > 0`), true, 'content fetched through the real API hook');
+  assert.equal(await evaluate(`document.querySelector('.detail-summary strong')?.textContent`), 'Synthetic completed private response excerpt');
+  assert.equal(await evaluate(`document.querySelectorAll('.detail-summary li').length`), 2, 'Markdown lists survive encrypted publication');
+  assert.equal(await evaluate(`document.querySelector('.detail-summary code')?.textContent`), 'diff');
   await captureContent('detail', '.detail-summary');
 
   // Manual labels take precedence; revocation removes both private fields.
@@ -280,10 +283,12 @@ try {
   await evaluate(`(() => { routeTest.navigate('/sessions'); return true; })()`);
   await waitFor(() => evaluate(`document.querySelector('.table-subject')?.textContent.includes('Synthetic private suggestion')`), 'workspace private title');
   assert.match(await evaluate(`document.querySelector('.table-summary').textContent`), /Synthetic completed private response excerpt/);
+  assert.equal(await evaluate(`!!document.querySelector('.table-summary .session-markdown.is-compact strong')`), true);
   await captureContent('list', '.table-summary');
   await evaluate(`(() => { routeTest.navigate('/sessions?open=route-test'); return true; })()`);
   await waitFor(() => evaluate(`document.querySelector('.tab[aria-selected="true"], .tab [aria-selected="true"]')?.textContent.includes('Synthetic private suggestion')`), 'open tab private title');
   assert.match(await evaluate(`document.querySelector('.session-panel-summary').textContent`), /Synthetic completed private response excerpt/);
+  assert.equal(await evaluate(`!!document.querySelector('.session-panel-summary .session-markdown.is-compact strong')`), true);
   assert.doesNotMatch(await evaluate(`document.title`), /Synthetic private/);
   await captureContent('tab', '.session-panel-summary');
   await evaluate(`routeTest.vault.lock()`);

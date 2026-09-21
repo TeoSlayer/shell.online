@@ -42,10 +42,17 @@ func SealSessionContent(accountPublicKey, sessionID, recipientUID, generation st
 }
 
 func validContentText(text string, max int) bool {
+	return validContentTextWithLayout(text, max, false)
+}
+
+func validContentTextWithLayout(text string, max int, multiline bool) bool {
 	if !utf8.ValidString(text) || utf8.RuneCountInString(text) > max {
 		return false
 	}
 	for _, r := range text {
+		if multiline && (r == '\n' || r == '\t') {
+			continue
+		}
 		if unicode.IsControl(r) || r == 0x061c || r == 0x200e || r == 0x200f || (r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069) {
 			return false
 		}
@@ -60,7 +67,7 @@ func validateSessionContent(sessionID, recipientUID, generation string, content 
 		}
 	}
 	if content.Version != 1 || content.ObservedAt <= 0 || content.ObservedAt > 9007199254740991 ||
-		!validContentText(content.SuggestedTitle, 120) || !validContentText(content.Description, 600) ||
+		!validContentText(content.SuggestedTitle, 120) || !validContentTextWithLayout(content.Description, 600, true) ||
 		(content.Source != "opencode-launch" && content.Source != "generic") {
 		return errors.New("invalid session content")
 	}

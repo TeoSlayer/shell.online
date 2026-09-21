@@ -51,8 +51,12 @@ SQLite's read-only mode, ignore user initialization files, and have bounded
 output and a timeout. Missing tools, incompatible data or unsupported agents
 leave the normal fallback title and empty excerpt.
 
-Titles are capped at 120 characters and excerpts at 600, with control characters
-removed. The host checks account policy about once a minute for supported
+Titles are capped at 120 characters and excerpts at 600. Descriptions preserve
+Markdown newlines and tabs; terminal and bidi controls are removed. The app renders
+Markdown with compact list/card previews and a structured detail view. Raw HTML,
+remote images and non-HTTP(S) links are disabled; titles remain plain text.
+Existing flattened excerpts cannot recover their original line breaks.
+The host checks account policy about once a minute for supported
 launches; it publishes at most once per rolling 24-hour window enforced by the
 account service. Identical retry envelopes are idempotent. Revocation or key
 changes create a new publication generation. This polling and upload traffic

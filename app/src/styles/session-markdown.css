@@ -1,0 +1,21 @@
+.session-markdown { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.session-markdown > :first-child { margin-top: 0; }
+.session-markdown > :last-child { margin-bottom: 0; }
+.session-markdown p, .session-markdown ul, .session-markdown ol,
+.session-markdown blockquote, .session-markdown pre { margin: .4em 0; }
+.session-markdown :is(h1,h2,h3,h4,h5,h6) { font-size: 1em; line-height: inherit; margin: .5em 0 .25em; }
+.session-markdown :is(ul,ol) { padding-inline-start: 1.3em; }
+.session-markdown blockquote { margin-inline: 0; padding-inline-start: .7em; border-inline-start: 2px solid currentColor; }
+.session-markdown pre { max-width: 100%; overflow-x: auto; white-space: pre-wrap; }
+.session-markdown code { font-size: .92em; white-space: break-spaces; }
+.session-markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.session-markdown :is(th,td) { padding: .15em .4em; border: 1px solid currentColor; }
+.session-markdown a { position: relative; text-decoration: underline; }
+.session-markdown.is-compact { display: inline; }
+.session-markdown.is-compact :is(p,pre,blockquote,ul,ol,li,h1,h2,h3,h4,h5,h6,table,thead,tbody,tr,th,td) {
+  display: inline; margin: 0; padding: 0; border: 0; white-space: normal;
+}
+.session-markdown.is-compact :is(p,li,tr)::after { content: " "; }
+.session-markdown.is-compact li::before { content: "• "; }
+.session-markdown.is-compact :is(th,td)::after { content: " · "; }
+.detail-summary:has(.session-markdown:not(.is-compact)) { display: block; -webkit-line-clamp: unset; }

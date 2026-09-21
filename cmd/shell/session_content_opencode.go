@@ -124,7 +124,7 @@ func readOpenCodeSessionContentFrom(ctx context.Context, argv []string, now time
 		return nil, nil
 	}
 	title := cleanOpenCodeContent(row.Title, 120)
-	description := cleanOpenCodeContent(row.Description, 600)
+	description := cleanOpenCodeMarkdown(row.Description, 600)
 	if title == "" && description == "" {
 		return nil, nil
 	}
@@ -144,6 +144,25 @@ func cleanOpenCodeContent(value string, limit int) string {
 		return string(runes[:limit])
 	}
 	return value
+}
+
+// Preserve Markdown structure while stripping terminal and bidi controls.
+func cleanOpenCodeMarkdown(value string, limit int) string {
+	value = strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
+	value = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return ' '
+		}
+		return r
+	}, value)
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) > limit {
+		runes = runes[:limit]
+	}
+	return string(runes)
 }
 
 type openCodeContentBuffer struct{ bytes.Buffer }

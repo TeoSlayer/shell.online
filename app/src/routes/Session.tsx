@@ -349,9 +349,9 @@ export function Session() {
             * Extracted content is a transient owner-vault projection, never a
             * plaintext field returned with the ordinary session listing.
             */}
-          <p className="detail-summary">
-            <SessionSummaryText session={session} />
-          </p>
+          <div className="detail-summary">
+            <SessionSummaryText session={session} compact={false} />
+          </div>
 
           <div className="detail-head">
             <span className={online ? "detail-status is-live" : "detail-status"}>

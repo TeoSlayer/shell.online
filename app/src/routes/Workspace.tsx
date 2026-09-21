@@ -796,7 +796,7 @@ export function Workspace() {
       )}
 
       {!showingList && sessions?.find(s => s.id === state.activeId && sessionSummary(s)) && (
-        <p className="session-panel-summary"><SessionSummaryText session={sessions.find(s => s.id === state.activeId)!} /></p>
+        <div className="session-panel-summary"><SessionSummaryText session={sessions.find(s => s.id === state.activeId)!} /></div>
       )}
 
       {state.tabs.length > 0 && terminalRenderer === "refstream" && (
@@ -1219,7 +1219,7 @@ function SessionGroup({
                     * and the truthful empty state when it does not. The command
                     * is not a summary; it stays behind the toggle below.
                     */}
-                  <span className="table-summary"><SessionSummaryText session={session} /></span>
+                  <div className="table-summary"><SessionSummaryText session={session} /></div>
                   {/*
                     * Outside the link, because it is a button and a button
                     * inside an anchor is neither valid nor operable by

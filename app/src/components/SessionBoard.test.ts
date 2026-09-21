@@ -56,6 +56,6 @@ describe("board card summaries", () => {
 
   it("shows the truthful empty state when there is no description", () => {
     const html = render();
-    expect(html).toContain('<p class="board-card-summary">No description.</p>');
+    expect(html).toContain('<div class="board-card-summary">No description.</div>');
   });
 });

@@ -64,6 +64,12 @@ describe("owner session content", () => {
     const payload = { ...fixture.content, suggestedTitle: "🔒".repeat(120), description: "é".repeat(600), source: "generic" };
     expect(await open(await sealPayload(payload))).toEqual(payload);
   });
+  it("preserves Markdown newlines and tabs only in descriptions", async () => {
+    const payload = {...fixture.content, description: "## Heading\n\n- first\n\tcode"};
+    expect(await open(await sealPayload(payload))).toEqual(payload);
+    expect(await open(await sealPayload({...fixture.content, suggestedTitle: "bad\ntitle"}))).toBeNull();
+    expect(await open(await sealPayload({...fixture.content, description: "bad\u001bcontrol"}))).toBeNull();
+  });
   it("rejects malformed and oversized outer values", async () => {
     for (const sealed of ["", "sc1.AA", "sc1." + "A".repeat(8192), fixture.sealed + "=", "v2." + fixture.sealed.slice(4)]) expect(await open({ ...fixture, sealed })).toBeNull();
     expect(await open({ ...fixture, senderPublicKey: "invalid" })).toBeNull();
