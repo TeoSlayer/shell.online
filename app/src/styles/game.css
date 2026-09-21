@@ -802,8 +802,15 @@
 
 .keep-pause {
   display: flex;
-  position: absolute;
+  position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
   z-index: var(--keep-z-modal);
   padding: var(--keep-safe-top) var(--keep-safe-right) var(--keep-safe-bottom) var(--keep-safe-left);
   align-items: center;

@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { dialogControls, trapDialogTab } from "../engine/dialog-focus";
+import { useGamepadActions } from "../engine/use-gamepad";
 import { BORING_UI, KEEP_BUILD } from "../keep";
 import { CLASS_LORE } from "../lore/world";
 import type { Purse } from "../state/shop";
@@ -73,42 +75,60 @@ export function PauseMenu({
   const navigate = useNavigate();
   const [pane, setPane] = useState<Pane>(openAt ?? "root");
   const { options } = useGameShell();
+  const dialog = useRef<HTMLDialogElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   /* Where the root menu was, so a side trip does not reset it. */
   const rootIndex = useRef(0);
-  /* Focus goes back where it came from when the menu closes. */
-  const returnFocus = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    returnFocus.current = document.activeElement as HTMLElement | null;
-    return () => returnFocus.current?.focus?.();
-  }, []);
-
   /*
-   * A modal that does not hold focus is a modal a keyboard can walk out of
-   * while it is still covering the screen, which leaves somebody typing into
-   * a page they cannot see.
+   * The native modal keeps the field inert and remembers the opener before
+   * the child Menu's focus effect runs. Closing restores that same opener.
    */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
-      const focusable = panel.current?.querySelectorAll<HTMLElement>(
-        "button:not([disabled]), [href], input, select, [tabindex]:not([tabindex='-1'])",
-      );
-      if (!focusable || focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+  useLayoutEffect(() => {
+    const element = dialog.current;
+    element?.showModal();
+    return () => element?.close();
   }, []);
+
+  useLayoutEffect(() => {
+    if (pane !== "root") dialogControls(panel.current)[0]?.focus();
+  }, [pane]);
+
+  const goBack = () => {
+    if (pane === "root") onResume();
+    else setPane("root");
+  };
+
+  /* Root Menu handles its own list. Other panes use their native controls. */
+  useGamepadActions((action) => {
+    if (action === "cancel" || action === "pause") {
+      goBack();
+      return;
+    }
+    const controls = dialogControls(panel.current);
+    if (controls.length === 0) return;
+    const current = controls.indexOf(document.activeElement as HTMLElement);
+    if (action === "up" || action === "down") {
+      const direction = action === "up" ? -1 : 1;
+      const next = current < 0 ? 0 : (current + direction + controls.length) % controls.length;
+      controls[next]?.focus();
+    } else if (action === "confirm") {
+      controls[Math.max(0, current)]?.click();
+    } else if (action === "left" || action === "right") {
+      const control = controls[current];
+      if (control instanceof HTMLInputElement && control.type === "range") {
+        if (action === "left") control.stepDown();
+        else control.stepUp();
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+      } else if (control instanceof HTMLInputElement && control.type === "radio") {
+        const choices = controls.filter((item): item is HTMLInputElement =>
+          item instanceof HTMLInputElement && item.type === "radio" && item.name === control.name,
+        );
+        const next = (choices.indexOf(control) + (action === "left" ? -1 : 1) + choices.length) % choices.length;
+        choices[next]?.focus();
+        choices[next]?.click();
+      }
+    }
+  }, pane !== "root");
 
   const lore = CLASS_LORE[characterClass] ?? CLASS_LORE.terminal;
 
@@ -183,12 +203,28 @@ export function PauseMenu({
   const title = TITLES[pane];
 
   return (
-    <div className="keep-pause" role="presentation">
+    <dialog
+      className="keep-pause"
+      ref={dialog}
+      aria-label={title}
+      onCancel={(event) => {
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        goBack();
+      }}
+      onKeyDownCapture={(event) => {
+        trapDialogTab(event);
+        if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+        if (event.target instanceof Element && event.target.closest("dialog") !== event.currentTarget) return;
+        event.preventDefault();
+        event.stopPropagation();
+        goBack();
+      }}
+      onKeyDown={(event) => event.stopPropagation()}
+      onKeyUp={(event) => event.stopPropagation()}
+    >
       <div
         className={`keep-pause-panel keep-panel keep-panel-heavy${pane === "root" ? " is-root" : " is-wide"}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
         ref={panel}
       >
         <header className="keep-pause-head">
@@ -261,6 +297,6 @@ export function PauseMenu({
           <span className="keep-build">Build {KEEP_BUILD}</span>
         </footer>
       </div>
-    </div>
+    </dialog>
   );
 }

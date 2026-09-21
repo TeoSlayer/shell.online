@@ -31,16 +31,10 @@ export function useGamepadActions(onAction: (action: GameAction) => void, active
     if (typeof navigator.getGamepads !== "function") return;
 
     let frame = 0;
-    /* Which actions were held on the previous frame, to find the edges. */
-    let previous = new Set<GameAction>();
     /* When a held direction is due to fire again. */
     const repeatAt = new Map<GameAction, number>();
 
-    const poll = () => {
-      frame = requestAnimationFrame(poll);
-      if (document.hidden) return;
-
-      const now = performance.now();
+    const readHeld = () => {
       /*
        * Gathered across every pad and every source first, then compared. The
        * d-pad and the left stick both produce "up", and two passes that each
@@ -66,6 +60,22 @@ export function useGamepadActions(onAction: (action: GameAction) => void, active
         if (y < -STICK_THRESHOLD) held.add("up");
         if (y > STICK_THRESHOLD) held.add("down");
       }
+      return held;
+    };
+
+    /*
+     * A menu can mount while the button that opened it is still held. Seed
+     * the edge detector from the hardware so that press is not dispatched
+     * again to the new menu (or back to the field when the menu closes).
+     */
+    let previous = readHeld();
+
+    const poll = () => {
+      frame = requestAnimationFrame(poll);
+      if (document.hidden) return;
+
+      const now = performance.now();
+      const held = readHeld();
 
       /* Newly pressed fires immediately and arms the repeat. */
       for (const action of held) {
