@@ -33,7 +33,7 @@ func openCodeContentSessionID(argv []string) (string, bool) {
 			continue
 		}
 		switch flag {
-		case "-s", "--session", "-m", "--model", "--agent", "--variant":
+		case "-s", "--session", "-m", "--model", "--agent", "--variant", "--port":
 		default:
 			return "", false
 		}

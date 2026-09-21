@@ -18,6 +18,8 @@ func TestOpenCodeContentSessionBinding(t *testing.T) {
 		{"opencode", "--session=ses_123"},
 		{"opencode", "--pure", "-s", "ses_123", "--model", "provider/model"},
 		{"/opt/bin/opencode", "--session=ses_123", "--model", "provider/model", "--variant=high"},
+		{"opencode", "--pure", "-s", "ses_123", "--port", "4096"},
+		{"opencode", "--pure", "-s", "ses_123", "--port=4096"},
 	} {
 		if id, ok := openCodeContentSessionID(argv); !ok || id != "ses_123" {
 			t.Fatalf("valid binding rejected: %q", argv)
