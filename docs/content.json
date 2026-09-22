@@ -294,6 +294,10 @@
           "Create or sign into your account at [app.shell.online](https://app.shell.online/), then run this on the host computer. Complete the approval in your browser.",
           [
             [
+              "curl -fsSL https://shell.online/install | sh -s -- auth",
+              "Install shell and link this machine in one line, before its install directory is on PATH."
+            ],
+            [
               "shell auth",
               "Link this machine. Remote start is a separate choice during setup."
             ],

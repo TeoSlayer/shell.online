@@ -211,6 +211,17 @@ func TestLoginTimesOutWhenTheBrowserNeverReturns(t *testing.T) {
 	if !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("error = %v, want a timeout", err)
 	}
+	if !strings.Contains(err.Error(), "run 'shell auth' again") {
+		t.Fatalf("error = %v, want it to say how to get a fresh link", err)
+	}
+}
+
+func TestLoginWaitsLongEnoughToSetUpAVault(t *testing.T) {
+	// Signing in, creating a vault and confirming its recovery key in the
+	// browser took longer than five minutes in a first-run test.
+	if LoginTimeout < 15*time.Minute {
+		t.Fatalf("LoginTimeout = %s, want at least 15m for a first link", LoginTimeout)
+	}
 }
 
 func TestLoginStopsWhenTheContextIsCancelled(t *testing.T) {

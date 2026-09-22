@@ -1407,8 +1407,13 @@ button.tab {
   font-family: var(--mono);
   font-size: 13.5px;
   line-height: 1.5;
-  white-space: pre;
-  overflow-x: auto;
+  /*
+   * Wrapped, not scrolled: on a phone the one-line setup command ran off the
+   * edge, and a command someone is meant to read and send on has to be seen
+   * whole. Soft wraps add no newline to what gets copied.
+   */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   /* One click takes the whole command, and there is no prompt glyph to strip. */
   user-select: all;
 }

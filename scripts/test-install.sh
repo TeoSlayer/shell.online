@@ -32,7 +32,9 @@ case "$(uname -m)" in
 esac
 
 binary_name=shell-$platform-$architecture
-printf '%s\n' '#!/bin/sh' 'printf "shell 9.9.9\\n"' > "$downloads/$binary_name"
+# Run with arguments, the mock says what it ran and what its stdin held: a
+# terminal, or a byte count, which must be 0 and never the installer's text.
+printf '%s\n' '#!/bin/sh' 'if [ "$#" -gt 0 ] && [ "$1" != --version ]; then if [ -t 0 ]; then input=tty; else input=$(wc -c | tr -d " "); fi; printf "ran:%s stdin:%s\\n" "$*" "$input"; exit 0; fi' 'printf "shell 9.9.9\\n"' > "$downloads/$binary_name"
 chmod 0755 "$downloads/$binary_name"
 
 if command -v sha256sum >/dev/null 2>&1; then
@@ -177,5 +179,47 @@ if grep -q "install/report" "$report_log"; then
   printf 'A check run reported its outcome.\n' >&2
   exit 1
 fi
+
+# Arguments after the script name are a command for the new executable, run
+# by its full path so it works before the install directory is on PATH, and
+# fed from the pipe the script itself did not come down.
+args_install=$test_root/args-install/bin
+args_tmp=$test_root/args-tmp
+mkdir -p "$args_tmp"
+output=$(TMPDIR=$args_tmp SHELL_ONLINE_BASE_URL=$base_url SHELL_ONLINE_INSTALL_DIR=$args_install SHELL=/bin/zsh \
+  PATH=/usr/bin:/bin sh -s -- auth --allow-remote-start < "$installer" 2>&1)
+assert_contains "$output" "Installed shell to $args_install/shell"
+assert_contains "$output" "Running: shell auth --allow-remote-start"
+assert_contains "$output" "ran:auth --allow-remote-start stdin:"
+case "$output" in
+  *"Next:"*)
+    printf 'Installer printed next steps after running a command.\n%s\n' "$output" >&2
+    exit 1
+    ;;
+esac
+# With no terminal the command gets no input, never the rest of the script.
+case "$output" in
+  *"stdin:tty"*|*"stdin:0"*) ;;
+  *)
+    printf 'The command after install was fed the installer script.\n%s\n' "$output" >&2
+    exit 1
+    ;;
+esac
+# exec replaces the installer's shell, so it cleans up before, not on exit.
+if [ -n "$(find "$args_tmp" -mindepth 1 -maxdepth 1 -name 'shell-online.*' -print -quit)" ]; then
+  printf 'Installer left its temporary directory behind after running a command.\n' >&2
+  ls -la "$args_tmp" >&2
+  exit 1
+fi
+
+# Without arguments it only installs and says what to do next.
+output=$(run_installer "$test_root/no-args/bin" env)
+assert_contains "$output" "Next:"
+case "$output" in
+  *"Running:"*)
+    printf 'Installer ran a command it was not given.\n%s\n' "$output" >&2
+    exit 1
+    ;;
+esac
 
 printf 'Installer integration scenarios passed.\n'
