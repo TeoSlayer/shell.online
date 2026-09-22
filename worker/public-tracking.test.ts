@@ -22,6 +22,14 @@ function harness(assetStatus = 200) {
     ASSETS: {
       fetch: async (request: Request) => {
         assets.push(new URL(request.url).pathname);
+        // Cloudflare's default HTML handling redirects /file.html to /file.
+        // Passing that through would lose the original archived version URL.
+        if (new URL(request.url).pathname.endsWith(".html")) {
+          return new Response(null, {
+            status: 307,
+            headers: { Location: new URL(request.url).pathname.slice(0, -5) },
+          });
+        }
         return new Response("fixture", {
           status: assetStatus,
           headers: {
@@ -69,9 +77,11 @@ describe("first-party analytics through the real Worker route", () => {
   it("serves the requested current guide but not current instructions for historical releases", async () => {
     const h = harness();
     await h.fetch(`/docs/v${RELEASE_VERSION}/mobile/`);
-    await h.fetch("/docs/v0.6.0/mobile/");
+    const archive = await h.fetch("/docs/v0.6.0/mobile/");
     const agents = await h.fetch("/agents/");
-    expect(h.assets).toEqual(["/mobile/", "/docs/archive.html", "/agents/"]);
+    expect(archive.status).toBe(200);
+    expect(archive.headers.get("Location")).toBeNull();
+    expect(h.assets).toEqual(["/mobile/", "/docs/archive/", "/agents/"]);
     expect(agents.status).toBe(200);
     expect(agents.headers.get("Content-Security-Policy")).toContain(
       "www.googletagmanager.com",

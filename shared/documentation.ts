@@ -144,7 +144,7 @@ export function documentationAssetPath(
   const route = resolveDocumentationRoute(pathname, currentVersion)!;
   return route.version === currentVersion
     ? currentDocumentationHref(route.kind)
-    : "/docs/archive.html";
+    : "/docs/archive/";
 }
 
 export function resolveAvailableDocumentationKind(

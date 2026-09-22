@@ -79,7 +79,7 @@ describe("task-first documentation", () => {
     expect(html).not.toContain("Connect an agent · MCP");
     expect(
       documentationAssetPath("/docs/v0.6.0/mobile/", content.version),
-    ).toBe("/docs/archive.html");
+    ).toBe("/docs/archive/");
     expect(
       documentationAssetPath(
         `/docs/v${content.version}/mobile/`,

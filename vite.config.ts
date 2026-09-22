@@ -41,7 +41,7 @@ function documentationPages(): Plugin {
       }
       this.emitFile({
         type: "asset",
-        fileName: "docs/archive.html",
+        fileName: "docs/archive/index.html",
         source: renderDocumentationPage(source, "docs", true),
       });
       delete bundle[template.fileName];
