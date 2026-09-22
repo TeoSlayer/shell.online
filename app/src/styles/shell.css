@@ -608,151 +608,111 @@
     --zoom: 1.15;
   }
 
-  .shell {
-    /*
-     * 100dvh is a viewport measurement, and viewport units do not follow the
-     * zoom above: 100dvh resolves against the undivided viewport and is then
-     * drawn in this scaled space, so the page was 15% taller than the screen
-     * on every phone. That bought nothing and cost a page that scrolled
-     * underneath a fixed bottom bar and anything docked above it.
-     */
-    min-height: calc(100dvh / var(--zoom));
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   /*
-   * A session is an application, so it is exactly one screen tall and does
-   * not scroll.
+   * Every page on a phone is one screen tall, with the bar as its last row.
    *
-   * Everything else on a phone is a document: a list of sessions, an audit
-   * log, a settings sheet. Those are as long as they are and the page carries
-   * them. A session is not. It has one thing that scrolls -- the conversation,
-   * or the terminal's own scrollback -- and a box at the foot of the screen
-   * that is typed into, and if the page itself can also move then the box
-   * moves with it and is wherever the page was left rather than under the
-   * thumb.
+   * A session had to be this already -- a terminal that scrolls the page under
+   * itself puts the thing being typed into wherever the page happens to be
+   * rather than at the foot of the screen -- and the rest of the app was left
+   * as documents that scroll under a bar fixed to the window. That left where
+   * the bar sat a question about the browser rather than about the layout: it
+   * depended on `100dvh` resolving the same way on every engine and at every
+   * moment, on the toolbar not collapsing mid-scroll, and on the page's own
+   * bottom padding being a good guess at the height of a bar that reserves no
+   * space. It was an 88px guess at a 69px bar, so there was a strip of dead
+   * page below the last row of every list, and a page whose content arrived
+   * late, arrived short, or failed to arrive at all moved the bar with it.
    *
-   * The height is the screen, less whatever an on-screen keyboard is
-   * covering. `--keyboard-inset` is already in this element's own units (see
-   * keyboard-inset.ts), and `100dvh` is not, so only the viewport measurement
-   * is divided by the zoom.
+   * As a row it is none of those things. It measures itself -- a touch target
+   * plus a home-indicator inset plus whatever the type scale came out at, a
+   * number nothing else has to know -- and it is the bottom edge of a box
+   * rather than a guess about a viewport.
    *
-   * Everything below is then an ordinary flex column: the pane is the child
-   * that takes what is left, which is a fact the browser works out on every
-   * layout, rather than a number measured once in JavaScript and left behind
-   * the first time a tab line wrapped or a notice appeared above it.
+   * The height is the screen, less whatever an on-screen keyboard is covering.
+   * --app-height is that screen, measured; see lib/app-height.ts for why the
+   * measurement beats asking `100dvh` at first paint. The fallback is the
+   * viewport measurement divided by the zoom above, which viewport units do
+   * not follow. `--keyboard-inset` is already in this element's own units (see
+   * keyboard-inset.ts), so it is subtracted outside that division.
    */
-  :root[data-pane="open"] .shell {
-    height: calc(100dvh / var(--zoom) - var(--keyboard-inset, 0px));
+  .shell {
+    height: calc(var(--app-height, calc(100dvh / var(--zoom))) - var(--keyboard-inset, 0px));
     min-height: 0;
     overflow: hidden;
+    grid-template-columns: minmax(0, 1fr);
     /*
-     * The session, then the bar. Named rows rather than source order,
-     * because the rail is the shell's first child: it is the left-hand
-     * column on a desktop and it stays there in the markup.
+     * The page, then the bar. Named rows rather than source order, because
+     * the rail is the shell's first child: it is the left-hand column on a
+     * desktop and it stays there in the markup.
      */
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
-  :root[data-pane="open"] .shell-main {
+  .shell-main {
     grid-row: 1;
     min-height: 0;
   }
 
-  :root[data-pane="open"] .shell-content {
+  /*
+   * A session has one thing that scrolls -- the conversation, or the
+   * terminal's own scrollback -- and the pane is then the child of this column
+   * that takes what is left, which is a fact the browser works out on every
+   * layout rather than a number measured once in JavaScript.
+   *
+   * A document scrolls here instead, and this is the box it scrolls in.
+   */
+  .shell-content {
     min-height: 0;
+    padding-bottom: 20px;
+    overflow-y: auto;
+    /* A list that has reached its end does not then drag the shell. */
+    overscroll-behavior: contain;
+  }
+
+  :root[data-pane="open"] .shell-content {
     /*
-     * The padding a document needs here is dead space in a session.
-     *
-     * The rule further down leaves a bar's height plus a safe-area inset at
-     * the foot of every phone page, so the last row of a list is not under
-     * the bar. In a session the bar is a row of the column rather than a
-     * thing on top of it, so nothing is under it -- and that padding was a
-     * hundred pixels of nothing between the composer and the bar, which is
-     * most of what "the box floats in the middle of the screen" was.
-     *
-     * The top comes in too. A session has a tab line telling you which one
-     * you are looking at; it does not need a page's worth of air above that.
+     * The padding a document needs at its foot is dead space in a session: the
+     * composer is the last thing in the column and the bar is directly under
+     * it. The top comes in too -- a session has a tab line telling you which
+     * one you are looking at; it does not need a page's worth of air above it.
      */
     padding-top: 8px;
     padding-bottom: 0;
   }
 
-  /*
-   * The bar takes its own space instead of lying over the foot of the screen.
-   *
-   * Everywhere else on a phone it is fixed to the window, which is right for
-   * a page that scrolls underneath it. In a session the shell is exactly one
-   * screen tall, so a bar on top of it is a bar covering the bottom of the
-   * conversation -- and anything that wanted to sit above the bar had to know
-   * how tall the bar is. Nothing can know that: it is a touch target plus a
-   * home-indicator inset plus whatever the type scale came out at, and every
-   * number written down for it here was wrong on some phone. As a row it
-   * measures itself.
-   */
-  :root[data-pane="open"] .rail {
+  .rail {
+    /*
+     * A row of the shell, not something lying over the foot of the screen.
+     * Nothing passes behind it, which is why it is opaque and no longer
+     * blurred: the wash and the blur had nothing to soften and only let the
+     * page show faintly through the words.
+     */
     position: static;
     grid-row: 2;
-  }
-
-  /*
-   * The keyboard takes the bar with it, and takes the space back too. There
-   * is no transition on this: the visual viewport reports the keyboard's own
-   * animation frame by frame, and a transition on top of that is a second
-   * animation running against the first, which is a composer that lags the
-   * keyboard up the screen and then overshoots it.
-   */
-  :root[data-pane="open"][data-keyboard="open"] .rail {
-    display: none;
-  }
-
-  .rail {
-    position: fixed;
     z-index: 40;
-    /*
-     * top must be released, not just left unset. The desktop rule pins the
-     * rail with `top: 0` so it can stick, and a fixed element given both a top
-     * and a bottom stretches between them however `height: auto` reads. The
-     * bar then covered the whole screen and the page appeared blank behind it.
-     */
-    top: auto;
-    right: 0;
-    bottom: 0;
-    left: 0;
     height: auto;
     padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
-    background: color-mix(in srgb, var(--paper) 94%, transparent);
-    backdrop-filter: blur(12px);
+    background: var(--paper);
     flex-direction: row;
   }
 
   /*
-   * The keyboard takes the bar with it.
+   * The keyboard takes the bar with it, and takes the space back too.
    *
-   * The bar is fixed to the window, so an on-screen keyboard opening does not
-   * move it: it stays where it was, under the keyboard, and the space it
-   * occupies is space the thing being typed into cannot have. Nobody
-   * navigates to another page in the middle of typing, so while the keyboard
-   * is up the bar leaves, and it comes back when the keyboard does.
+   * Nobody navigates to another page in the middle of typing, and the room the
+   * bar holds is room the thing being typed into needs. It leaves rather than
+   * sliding: sliding was written for a bar fixed to the window, where the
+   * space it gave up was not the shell's to reclaim, and a row that translates
+   * itself off the screen leaves its own height behind as a blank strip.
    *
-   * It slides rather than vanishing, so the room it gives up reads as the
-   * keyboard arriving rather than as the page flickering.
+   * There is no transition on this either. The visual viewport reports the
+   * keyboard's own animation frame by frame, and a transition on top of that
+   * is a second animation running against the first, which is a composer that
+   * lags the keyboard up the screen and then overshoots it.
    */
-  .rail {
-    transition: transform 200ms var(--ease), opacity 160ms var(--ease);
-  }
-
   :root[data-keyboard="open"] .rail {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(100%);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .rail {
-      transition: none;
-    }
+    display: none;
   }
 
   /* The wordmark, the copy-command hint and the account row all live in the
@@ -833,11 +793,6 @@
     padding-bottom: 2px;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* Clear of the bar, so the last row of a table is not under it. */
-  .shell-content {
-    padding-bottom: calc(88px + env(safe-area-inset-bottom));
   }
 
   /*

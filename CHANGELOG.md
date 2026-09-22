@@ -41,6 +41,31 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Pages no longer scroll 15% further than the screen on a phone: `100dvh` does
   not follow the root zoom the phone breakpoint applies, so every page was
   taller than the window it was measured against.
+- Every control in the sessions toolbar is the height of the search field
+  beside it. The status picker, the clean-up button and the view toggle were
+  each sized by their own contents, and further apart on a touch screen than
+  on a desktop, because the three that are buttons took the 44px minimum every
+  touch target uses and the search field, which is a label around an input,
+  did not. The toggle's icons sat at the top of that extra height rather than
+  in the middle of it.
+- A session card offers open and stop the way a session row does: one pair, in
+  that order, at the end of the line. They were three separate items spread
+  across the foot of the card, at a larger size than the row's, and on a narrow
+  card the primary button hung off the right edge.
+- The bottom navigation bar on a phone is the last row of the screen rather
+  than something fixed on top of a page that scrolls underneath it. Every page
+  is now one screen tall with its content scrolling inside, the way a session
+  already was, so the bar is where it is because of the layout rather than
+  because of what the browser makes of `100dvh` at that moment. The bar
+  measures itself instead of every page leaving an 88px guess at its height
+  under the last row, and nothing passes behind it, so it is opaque.
+- The navigation bar is already in place while the session check runs, and
+  stays in place when something on a page fails to render. The wait used to be
+  a bare card with no shell around it, and an unhandled render error took the
+  whole application down to a blank screen -- on a phone, that is every way off
+  the broken page going with it.
+- The Finished column says what happened in one phrase rather than listing
+  every way a run can end.
 
 ## [0.22.0] — 2026-09-21
 

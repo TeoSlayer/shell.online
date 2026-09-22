@@ -10,6 +10,8 @@ import { Wordmark } from "./Wordmark";
 import { useAuth } from "../auth/AuthProvider";
 import { useFeedback } from "../feedback/context";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
+import { watchAppHeight } from "../lib/app-height";
+import { PageError } from "./PageError";
 
 const NAV = [
   { to: "/sessions", label: "Sessions", Icon: Terminal },
@@ -218,6 +220,13 @@ interface AppShellProps {
 }
 
 export function AppShell({ title, aside, children }: AppShellProps) {
+  /*
+   * The phone layout is a shell exactly one screen tall with the bottom bar as
+   * its bottom edge, so the shell has to know how tall a screen actually is
+   * rather than what `dvh` says it is at first paint. See lib/app-height.ts.
+   */
+  useEffect(() => watchAppHeight(), []);
+
   return (
     <div className="shell">
       <aside className="rail">
@@ -292,7 +301,13 @@ export function AppShell({ title, aside, children }: AppShellProps) {
           </div>
         </header>
 
-        <div className="shell-content">{children}</div>
+        {/*
+          * The boundary is inside the shell, not around it: a page that throws
+          * should cost the page, not the navigation. See PageError.
+          */}
+        <div className="shell-content">
+          <PageError>{children}</PageError>
+        </div>
       </div>
     </div>
   );

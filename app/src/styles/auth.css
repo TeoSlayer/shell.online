@@ -987,6 +987,19 @@
   margin-top: 22px;
 }
 
+/* What is left of a page that threw; the shell around it stays. See PageError. */
+.page-failed {
+  margin-top: 22px;
+}
+
+.page-failed .alert > span {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .sessions-error .alert > span {
   display: flex;
   width: 100%;
@@ -1594,6 +1607,8 @@
   background: none;
   color: var(--muted);
   cursor: pointer;
+  align-items: center;
+  justify-content: center;
 }
 
 .view-option:hover {
@@ -1653,6 +1668,48 @@
 .sessions-pagination span {
   color: var(--muted);
   font-size: 12.5px;
+}
+
+/*
+ * One height for the whole row.
+ *
+ * Each control in the toolbar used to be sized by whatever was inside it: a
+ * 34px search field beside a 40px status picker, and a view toggle padded
+ * around its own icons. On a touch screen the gap widened rather than closed,
+ * because the picker and the toggle's two options each took the 44px minimum
+ * in base.css and the search field, which is a label around an input rather
+ * than a button, did not. The toggle ended up half again as tall as the field
+ * next to it, with its icons pinned to the top of that extra height because a
+ * minimum height stretches the box without moving what is in it.
+ *
+ * So the row is given one height, and the search field is what sets it: it is
+ * the control the phone layout puts on a line of its own, and the one every
+ * other control is read against. The minimum is restated rather than removed,
+ * because base.css sets it under `pointer: coarse` and a shorthand `height`
+ * alone would lose to it.
+ */
+.sessions-toolbar {
+  --filter-height: 34px;
+}
+
+.sessions-toolbar .sessions-search,
+.sessions-toolbar .filter-picker-trigger,
+.sessions-toolbar .cleanup-sessions,
+.sessions-toolbar .view-toggle {
+  height: var(--filter-height);
+  min-height: var(--filter-height);
+}
+
+/* The field's own padding is what made it 34px; the height now says so. */
+.sessions-toolbar .sessions-search input {
+  padding: 0;
+}
+
+/* Fills the toggle rather than setting its height, so the icons stay centred. */
+.sessions-toolbar .view-option {
+  height: 100%;
+  min-height: 0;
+  padding: 0 9px;
 }
 
 /* ---------------------------------------------------------------
@@ -1836,6 +1893,30 @@
   align-items: center;
   gap: 8px;
   justify-content: space-between;
+}
+
+/*
+ * Who it is assigned to at one end, what you can do with it at the other, and
+ * the buttons themselves sized the way the table sizes them so a card and a
+ * row do not offer the same two controls at two different scales. The
+ * assignee gives way first: the actions are the point of the foot, and a long
+ * name used to push the primary button past the edge of the card.
+ */
+.board-card-foot > :first-child {
+  min-width: 0;
+}
+
+.board-card-foot .session-actions {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.board-card-foot .session-action {
+  height: 34px;
+  padding: 0 7px;
+  font-size: 12.5px;
+  gap: 4px;
 }
 
 .board-card-unassigned {

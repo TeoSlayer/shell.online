@@ -1,4 +1,4 @@
-import { Eye, Stop as StopIcon, Terminal as TerminalIcon, Trash } from "@phosphor-icons/react";
+import { Eye, Terminal as TerminalIcon, Trash } from "@phosphor-icons/react";
 import { Link } from "react-router-dom";
 import { PeopleChip } from "./Avatar";
 import { kindForCommand } from "../lib/session-kinds";
@@ -109,22 +109,30 @@ function Card({
           <PeopleChip people={assignees} />
         )}
         {/*
+          * The same pair the table's last column carries, in the same order
+          * and at the same size: open first, stop after it, grouped in one
+          * run at the end of the line. They used to be separate children of a
+          * space-between row, which put the assignee, the stop and the open
+          * at three different places in every card and left the primary button
+          * hanging off the right edge of a narrow one.
+          *
           * Stopping was reachable from the table and not from here, so the
           * board could show a session that was yours to stop and give you no
           * way to stop it.
           */}
-        {!sessionEnded(session) && canStop(session, you) && (
-          <button
-            type="button"
-            className="session-action"
-            onClick={() => void onStop(session)}
-            disabled={stopping === session.id}
-          >
-            <StopIcon size={14} weight="bold" />
-            {stopping === session.id ? "Stopping" : "Stop"}
-          </button>
-        )}
-        {action}
+        <div className="session-actions">
+          {action}
+          {!sessionEnded(session) && canStop(session, you) && (
+            <button
+              type="button"
+              className="session-action"
+              onClick={() => void onStop(session)}
+              disabled={stopping === session.id}
+            >
+              {stopping === session.id ? "Stopping" : "Stop"}
+            </button>
+          )}
+        </div>
       </div>
     </li>
   );
@@ -173,7 +181,7 @@ export function SessionBoard({
     {
       key: "finished",
       title: "Finished",
-      hint: "The process exited, or its machine stopped answering",
+      hint: "Process has exited",
       sessions: finished,
     },
   ];
@@ -229,12 +237,12 @@ export function SessionBoard({
                       >
                         {column.key === "write" ? (
                           <>
-                            <TerminalIcon size={14} weight="bold" />
+                            <TerminalIcon size={15} weight="bold" />
                             Open
                           </>
                         ) : (
                           <>
-                            <Eye size={14} />
+                            <Eye size={15} />
                             Watch
                           </>
                         )}

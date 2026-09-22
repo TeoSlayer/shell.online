@@ -324,6 +324,13 @@ export function Audit() {
     setPage(nextPage);
     setEvents(null);
     writeParams(filters, nextPage);
+    /*
+     * Both, because which one scrolls depends on the width. On a phone the
+     * shell is one screen tall and the content column is what moves; on a
+     * desktop the window still does. Asking only the window left the second
+     * page of the log opened halfway down on a phone.
+     */
+    document.querySelector(".shell-content")?.scrollTo({ top: 0, behavior: "smooth" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
