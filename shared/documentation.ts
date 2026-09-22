@@ -4,6 +4,7 @@ export const DOCUMENTATION_KINDS = [
   "cli",
   "platforms",
   "mobile",
+  "agents",
   "refstream",
   "reliability",
   "security",
@@ -50,41 +51,46 @@ export const DOCUMENTATION_NAVIGATION: readonly {
   entries: readonly { kind: DocumentationKind; label: string }[];
 }[] = [
   {
-    section: "Get started",
+    section: "Start here",
     entries: [
-      { kind: "docs", label: "Overview" },
-      { kind: "app", label: "Web app" },
-      { kind: "platforms", label: "Platforms and devices" },
+      { kind: "docs", label: "Your first session" },
+      { kind: "platforms", label: "Install & update" },
+      { kind: "mobile", label: "Use your phone" },
     ],
   },
   {
-    section: "Terminal experience",
+    section: "Do more",
     entries: [
-      { kind: "mobile", label: "Mobile terminals" },
-      { kind: "refstream", label: "Refstream (alpha)" },
-      { kind: "reliability", label: "Reliability" },
+      { kind: "app", label: "Sessions & teammates" },
+      { kind: "agents", label: "Connect an agent · MCP" },
+      { kind: "docker", label: "Keep a Docker workspace" },
+      { kind: "refstream", label: "Try Refstream · alpha" },
     ],
   },
   {
-    section: "Operations and trust",
+    section: "Help & safety",
     entries: [
-      { kind: "security", label: "Security model" },
-      { kind: "e2ee", label: "End-to-end encryption" },
-      { kind: "docker", label: "Persistent Docker" },
-      { kind: "self-hosting", label: "Self-hosting" },
+      { kind: "reliability", label: "Fix a connection" },
+      { kind: "security", label: "Share safely" },
+      { kind: "e2ee", label: "Passwords & encryption" },
     ],
   },
   {
     section: "Reference",
-    entries: [{ kind: "cli", label: "CLI reference" }],
+    entries: [
+      { kind: "cli", label: "Command reference" },
+      { kind: "self-hosting", label: "Run your own relay" },
+    ],
   },
 ];
 
 const DOCUMENTATION_KIND_PATTERN = DOCUMENTATION_KINDS.join("|");
-const VERSIONED_SUBPAGE_PATTERN = DOCUMENTATION_KINDS
-  .filter((kind) => kind !== "docs")
-  .join("|");
-const SHORT_DOCUMENTATION_ROUTE = new RegExp(`^/(${DOCUMENTATION_KIND_PATTERN})/?$`);
+const VERSIONED_SUBPAGE_PATTERN = DOCUMENTATION_KINDS.filter(
+  (kind) => kind !== "docs",
+).join("|");
+const SHORT_DOCUMENTATION_ROUTE = new RegExp(
+  `^/(${DOCUMENTATION_KIND_PATTERN})/?$`,
+);
 const VERSIONED_DOCUMENTATION_ROUTE = new RegExp(
   `^/docs/v(\\d+\\.\\d+\\.\\d+)(?:/(${VERSIONED_SUBPAGE_PATTERN}))?/?$`,
 );
@@ -95,7 +101,10 @@ export function resolveDocumentationRoute(
 ): DocumentationRoute | null {
   const shortRoute = pathname.match(SHORT_DOCUMENTATION_ROUTE);
   if (shortRoute) {
-    return { kind: shortRoute[1] as DocumentationKind, version: currentVersion };
+    return {
+      kind: shortRoute[1] as DocumentationKind,
+      version: currentVersion,
+    };
   }
   const versionedRoute = pathname.match(VERSIONED_DOCUMENTATION_ROUTE);
   if (!versionedRoute) return null;
@@ -105,7 +114,10 @@ export function resolveDocumentationRoute(
   };
 }
 
-export function documentationHref(version: string, kind: DocumentationKind): string {
+export function documentationHref(
+  version: string,
+  kind: DocumentationKind,
+): string {
   return `/docs/v${version}/${kind === "docs" ? "" : `${kind}/`}`;
 }
 
@@ -121,6 +133,18 @@ export function normalizeDocumentationVersion(value: string): string | null {
 
 export function isVersionedDocumentationPath(pathname: string): boolean {
   return VERSIONED_DOCUMENTATION_ROUTE.test(pathname);
+}
+
+// Never serve today's instructions as the static body of an older release.
+export function documentationAssetPath(
+  pathname: string,
+  currentVersion: string,
+): string {
+  if (!isVersionedDocumentationPath(pathname)) return pathname;
+  const route = resolveDocumentationRoute(pathname, currentVersion)!;
+  return route.version === currentVersion
+    ? currentDocumentationHref(route.kind)
+    : "/docs/archive/";
 }
 
 export function resolveAvailableDocumentationKind(
@@ -147,7 +171,11 @@ export function isDocumentationContent(
 ): value is DocumentationContent {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as { version?: unknown; pages?: unknown };
-  if (candidate.version !== version || typeof candidate.pages !== "object" || candidate.pages === null) {
+  if (
+    candidate.version !== version ||
+    typeof candidate.pages !== "object" ||
+    candidate.pages === null
+  ) {
     return false;
   }
   return DOCUMENTATION_KINDS.every((kind) => {
@@ -155,20 +183,45 @@ export function isDocumentationContent(
     if (page === undefined) return true;
     if (typeof page !== "object" || page === null) return false;
     const fields = page as Record<string, unknown>;
-    const cardsAreValid = Array.isArray(fields.cards) && fields.cards.every((card) =>
-      Array.isArray(card) && (card.length === 2 || card.length === 3) &&
-      typeof card[0] === "string" && typeof card[1] === "string" &&
-      (card[2] === undefined || (Array.isArray(card[2]) && card[2].every((entry) =>
-        Array.isArray(entry) && entry.length === 2 && entry.every((item) => typeof item === "string")))));
-    if (typeof fields.eyebrow !== "string" || typeof fields.title !== "string" ||
-        typeof fields.intro !== "string" || !cardsAreValid) return false;
+    const cardsAreValid =
+      Array.isArray(fields.cards) &&
+      fields.cards.every(
+        (card) =>
+          Array.isArray(card) &&
+          (card.length === 2 || card.length === 3) &&
+          typeof card[0] === "string" &&
+          typeof card[1] === "string" &&
+          (card[2] === undefined ||
+            (Array.isArray(card[2]) &&
+              card[2].every(
+                (entry) =>
+                  Array.isArray(entry) &&
+                  entry.length === 2 &&
+                  entry.every((item) => typeof item === "string"),
+              ))),
+      );
+    if (
+      typeof fields.eyebrow !== "string" ||
+      typeof fields.title !== "string" ||
+      typeof fields.intro !== "string" ||
+      !cardsAreValid
+    )
+      return false;
     if (fields.diagrams === undefined) return true;
-    return Array.isArray(fields.diagrams) && fields.diagrams.every((diagram) => {
-      if (typeof diagram !== "object" || diagram === null) return false;
-      const diagramFields = diagram as Record<string, unknown>;
-      return Number.isInteger(diagramFields.after) && Number(diagramFields.after) > 0 &&
-        typeof diagramFields.title === "string" && typeof diagramFields.caption === "string" &&
-        typeof diagramFields.desktop === "string" && typeof diagramFields.mobile === "string";
-    });
+    return (
+      Array.isArray(fields.diagrams) &&
+      fields.diagrams.every((diagram) => {
+        if (typeof diagram !== "object" || diagram === null) return false;
+        const diagramFields = diagram as Record<string, unknown>;
+        return (
+          Number.isInteger(diagramFields.after) &&
+          Number(diagramFields.after) > 0 &&
+          typeof diagramFields.title === "string" &&
+          typeof diagramFields.caption === "string" &&
+          typeof diagramFields.desktop === "string" &&
+          typeof diagramFields.mobile === "string"
+        );
+      })
+    );
   });
 }

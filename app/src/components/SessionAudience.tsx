@@ -114,10 +114,10 @@ export function SessionAudience({
 
   return (
     <section className="audience">
-      <h2 className="detail-heading">Who can open it</h2>
+      <h2 className="detail-heading">People with saved access</h2>
 
       {shared.length === 0 ? (
-        <p className="detail-empty">Only you. Add someone and they can open it straight away.</p>
+        <p className="detail-empty">No teammates have a saved password yet. Add someone to share access through their vault. Anyone you gave the link and password to can also open it.</p>
       ) : (
         <ul className="audience-list">
           {/*

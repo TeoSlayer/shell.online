@@ -1,246 +1,162 @@
 # shell.online
 
-MCP (v0.21.0+, input requires the operator gate): endpoint https://shell.online/mcp; create an owner-issued scoped bearer with
-shell mcp grant <session-id> <label> observe|control [ttl-seconds]. Pass the bearer via the
-MCP client's secret environment support, never a URL or public log. Tools: shell_status,
-shell_screen, shell_output, shell_wait; compatible control sessions also offer shell_send.
-shell_send requires a UUID-v4 operation_id; reuse it on retries. delivered confirms the PTY
-write, not agent completion. No shell_key or shell_interrupt in this release. Read-only blocks
-writes. Revoke with shell mcp revoke-all <session-id>. MCP explicitly authorizes server-side
-in-memory decryption using a host-supplied frame key; the agent receives plaintext results.
-Quote grant labels containing spaces. v0.21.1 validates labels, scopes and lifetimes separately.
-New grants require an updated running host: restart older hosts only when the operator says it is safe.
-Updating the binary does not update an already-running host. Existing grant listing/revocation still work.
+> Start a terminal process on your computer. Open the same session from any browser.
 
-shell.online wraps a local terminal process and produces an unguessable browser link. The process remains on the local machine. Links can be interactive or server-enforced read-only.
+Free, open-source terminal sharing. The process stays on the host computer,
+which must stay awake and online. An account is optional. It starts a new
+process; it cannot adopt an arbitrary process that is already running. An
+agent's resume command can open its saved conversation in a new process.
+Do not describe a conversation fork as attachment to the original PID.
 
-## Noninteractive installation
+## Start here
 
-curl -fsSL https://shell.online/install | sh
+macOS / Linux:
 
-Supported platforms: macOS; Windows with native ConPTY; Linux across x86, ARMv5/6/7/64, MIPS/MIPSLE/MIPS64/MIPS64LE, PPC64/PPC64LE, RISC-V 64, s390x, and LoongArch64; FreeBSD; OpenBSD; NetBSD; DragonFly BSD; and Solaris. Every Linux release artifact executes the full Go and PTY integration suite under QEMU; Windows amd64 runs a native ConPTY suite; other artifacts are build-verified. QEMU does not reproduce vendor firmware or kernel restrictions. This includes many OpenWrt and Ubiquiti-style Linux devices. The POSIX and PowerShell installers verify SHA-256, never invoke sudo, and print PATH instructions when needed. Full matrix: https://shell.online/platforms/
+    curl -fsSL https://shell.online/install | sh
 
-Windows PowerShell installation:
+Windows PowerShell:
 
-irm https://shell.online/install.ps1 | iex
+    irm https://shell.online/install.ps1 | iex
 
-Optional Homebrew installation (the tap lives in this repository):
+Start an agent that is already installed:
 
-brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online
-brew trust --tap teoslayer/shell-online
-brew install shell-online
+    shell codex
+    shell claude
+    shell opencode
+    shell muse
 
-Homebrew 6 requires one-time trust for third-party taps. Tap-level trust persists across formula updates; review the repository before granting it. Older versions without `brew trust` do not require that line. After setup, use `brew install shell-online`, `brew upgrade shell-online`, or `brew uninstall shell-online`. Homebrew is not required; use the verified installer above on machines without it.
+Other terminal commands work too. The CLI prints a private link, password
+and QR code. Open the link in a browser and enter the password. Anyone with
+both can access the session, so give them only to intended recipients.
 
-The Homebrew formula builds locally: Brew fetches the checksum-pinned tagged source, installs Go as a build-only dependency when needed, runs go build, and links the result. Application modules are pinned by go.sum and resolved by Go during the build; there are no runtime package dependencies.
+## Task guides
 
-The standalone installer uses a checksum-pinned release binary. To compile and run the tagged source outside either installation path:
+- [Your first session](https://shell.online/docs/): install, start, open, attach and stop.
+- [Install & update](https://shell.online/platforms/): platforms, Homebrew, checksums and PATH help.
+- [Use your phone](https://shell.online/mobile/): scrolling, typing, grids and reconnecting.
+- [Sessions & teammates](https://shell.online/app/): accounts, machines, vaults and permissions.
+- [Connect an agent · MCP](https://shell.online/agents/): scoped grants, safe input and revocation.
+- [Keep a Docker workspace](https://shell.online/docker/): persistent identity and files, not process-memory restoration.
+- [Try Refstream · alpha](https://shell.online/refstream/): optional renderer and experimental connector.
+- [Fix a connection](https://shell.online/reliability/): symptoms, checks and next steps.
+- [Share safely](https://shell.online/security/): view-only access, passwords and file sharing.
+- [Passwords & encryption](https://shell.online/e2ee/): encryption boundaries and recovery limits.
+- [Command reference](https://shell.online/cli/): commands, flags and environment variables.
+- [Run your own relay](https://shell.online/self-hosting/): standalone Docker, Worker and account deployments.
+
+## Automation and lifecycle
+
+To build the CLI yourself, install Git and Go 1.26.8, then follow
+[Build from source](https://shell.online/platforms/#section-4). Use the release
+tag and verify the resulting binary with --version. Node.js is not needed
+unless you are also developing the website. Windows uses shell.exe.
 
-git clone --depth 1 --branch v0.22.0 https://github.com/TeoSlayer/shell.online.git
-cd shell.online
-go build -trimpath -ldflags="-X main.version=0.22.0" -o ./shell ./cmd/shell
-./shell --version
+## Machine-readable launch and local control
 
-The source-build path requires Go 1.26.8 or newer, except Go 1.27.x is intentionally unsupported on MIPS64 because of go.dev/issue/80978. Keep using ./shell or move it to a directory on PATH.
-
-Agent skill file: https://shell.online/skill
-Current release metadata: https://shell.online/downloads/release.json
-SHA-256 manifest: https://shell.online/downloads/SHA256SUMS
-
-## Agent usage
-
-Account automation consent is owner-controlled and shared by CLI and web:
-shell permissions <ID> reads the three switches; append --daily-briefing=true|false,
---mcp-team-access=true|false, or --briefing-team-access=true|false to change only
-those switches. shell briefings status|on|off manages the account's default;
-on/off --all also applies it to existing owned sessions. These settings record
-consent. From v0.22.0, daily-briefing consent also permits an updated host to
-publish an existing title and completed-response excerpt from an explicitly
-resumed OpenCode launch, encrypted to the owner's vault, at most once per
-rolling day. This does not generate a new summary or call a model. Team delivery
-and the team MCP gateway remain unimplemented. These switches do not replace
-explicit scoped MCP grants. See docs/session-content.md for supported forms.
-
-Open app terminals show passive output activity without model calls. The game
-shows short-lived, owner-only MCP request metadata from updated hosts. External
-callers are not attributed to another agent, and delivered input is not proof
-of task completion. Jev supervision is not integrated into this release.
-
-Terminal snapshot fixes require a new Go host process. Updating the binary does
-not restart existing sessions; coordinate restarts with the owner.
-
-Start a long-running process under shell.online:
-
-shell --json -- your-command --its-arguments
-
-For monitoring without browser input:
-
-shell --read-only --json -- your-command --its-arguments
-
-File access is disabled by default. Enable only the directory the operator has
-asked to expose:
-
-shell --files --json -- your-command --its-arguments
-shell --files-root ./artifacts --json -- your-command --its-arguments
-
---files uses the process working directory; --files-root selects another root.
-The browser shows no Files control until the host opts in. Listings and file
-contents are requested on demand over the existing E2EE WebSocket. The CLI
-rejects parent traversal, non-regular files, and symlink escapes. File access
-cannot be combined with --no-e2ee.
-
-Every normal share is end-to-end encrypted automatically. When SHELL_ONLINE_E2EE_PASSWORD is unset, the CLI generates a cryptographically random ten-character Base64URL browser password. For sensitive or long-lived sessions, set a longer unique password before starting shell:
-
-SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell --json -- your-command --its-arguments
-
-The URL contains only a random #salt= fragment; the CLI and browser derive the AES-256-GCM key locally with PBKDF2-HMAC-SHA256. The old --e2ee flag is accepted for compatibility but is redundant. Lost passwords cannot be recovered. Cloudflare sees authenticated ciphertext plus routing, traffic, IP, and lifecycle metadata.
-
-For deliberate compatibility or debugging only, `shell --no-e2ee <command>` disables payload E2EE. HTTPS/WSS still protects each transport hop, but Cloudflare can access terminal input and output while relaying it. This option conflicts with --e2ee, SHELL_ONLINE_E2EE_PASSWORD, and --persistent.
-
-The first stderr line is a JSON event:
-
-{"type":"session","session_id":"...","share_url":"https://shell.online/s/...#salt=...","e2ee_password":"Ab3dE7-_xY","read_only":false,"encrypted":true,"background":true,...}
-
-Send the complete share_url, including its fragment, and e2ee_password to the human operator through the agent's normal communication channel. For sensitive work, use separate operator-approved channels when possible. If the operator explicitly requested --no-e2ee, the event has encrypted=false and no e2ee_password; disclose that Cloudflare is then inside the content trust boundary. Prefer --read-only when the operator only needs to monitor progress. Read-only is fixed at session creation and enforced by the Worker.
-
-Inside Claude Code, use `shell --json -- claude` to hand off the current conversation. shell.online detects CLAUDE_CODE_SESSION_ID and starts `claude --resume <current-session> --fork-session` inside the shared process. The new process keeps the conversation history and workspace; the original Claude process remains open, and new messages do not synchronize between them. Report this as a conversation fork, not as adoption of the original PID.
-
-Use `shell` with no command to share a fresh default shell. Use `shell --foreground command` to mirror output and accept input locally as well as in the browser.
-
-xterm.js is the default browser renderer. Refstream (unstable alpha) can be selected in
-the terminal settings without restarting the process. Its Connect agent flow
-creates a revocable invitation scoped to this one session. Read access permits
-terminal read, search, and wait; control additionally permits text, commands,
-and key signals such as Ctrl-C. Keep the returned connector session open and
-reuse its task IDs for follow-ups; status, partial output, and collected answers
-survive panel changes and reconnects. Refstream no longer persists terminal
-state to browser storage; startup purges the legacy shell-online-refstream-session:
-caches (exact prefix only) from session and local storage, and a reload re-syncs
-from the live relay snapshot while the local shell process is running. The relay
-stores no terminal output. File access remains a separate host opt-in.
-
-Refstream is currently v0.1.0-alpha.5. It owns only the browser terminal model
-and renderer; shell.online continues to own the PTY, E2EE transport, read-only
-policy, input lease, shared grid, and process lifecycle. Reuse the connector's
-session ID and stable task IDs for follow-ups. A task is complete only with a
-shell marker, a trusted host callback, or an explicitly labelled agent
-observation; output, silence, and redraws are not completion. Remote writes use
-a recent sequence and never override a protected local draft. See
-https://shell.online/refstream/ and the pinned upstream protocol at
-https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md.
-
-The optional account app is documented at https://shell.online/app/. A vault is
-personal rather than team-wide, and machine remote-start permission is explicit.
-The hosted app uses Firebase sign-in. A self-hosted app may instead use an
-OpenID Connect provider; in that mode passwords stay with the provider.
-
-Manage local sessions:
-
-shell help
-shell list
-shell list --json
-shell attach <session-id-or-prefix>
-shell kill <session-id-or-prefix>
-shell kill --all
-
-`shell help` prints a guided lifecycle; `shell help attach` explains local takeover and detaching.
-
-`shell attach` opens the existing PTY locally. Its terminal title keeps a Ctrl-X D to detach reminder visible even when a full-screen TUI redraws the terminal. Press Ctrl-X, release it, then press D to detach without stopping it (Ctrl-] remains a legacy alternative); the wrapper intercepts the sequence before the child process receives it. Input and output remain mirrored to browser viewers. Anonymous presence and a brief per-typist input lease prevent remote keystrokes from interleaving.
-
-Full-screen and nested terminals are supported. Snapshot restoration suppresses replies to historical terminal queries, so a joining or reconnecting browser cannot inject old capability responses into tmux, Herdr, mosh, or another live TUI.
-
-Sessions close immediately when their task exits. `--auto-close 5m` or an absolute/local date adds an earlier deadline; supported duration units are ms, s, m, h, d, w, mo, and y.
-
-ROS 1 and ROS 2 processes need no plugin: source the ROS environment, then run `shell roscore`, `shell roslaunch <package> <launch-file>`, `shell ros2 run <package> <executable>`, or `shell ros2 launch <package> <launch-file>`. shell.online platform support does not expand the supported platforms of the installed ROS distribution.
-
-Native shares run in the background by default. Re-run `shell --persistent <state-file> <command>` with the same private state file to recover the same URL and password after a process or machine restart. Docker combines the same identity with `restart: unless-stopped` for automatic recovery.
-
-The repository includes a persistent Docker client. Run `docker compose up --build -d`, then `docker compose logs shell-online` for its stable E2EE URL and generated ten-character browser password. Its state and workspace live in separate named volumes; the state volume contains the browser password, host credential, and decryption key. The saved password is reused across restarts, and a conflicting configured password is refused. Create new state to rotate the password and URL. This is a client for the hosted shell.online relay, not self-hosting documentation.
-
-## Accounts, machines, and organizations
-
-Accounts are optional. Every command above works without one, and an
-unlinked machine behaves exactly as described.
-
-`shell login` links a machine to an account. The account and the web app live
-at https://app.shell.online; shell.online itself serves this site and the
-session links. It opens a browser to approve the request, then returns to the
-sessions page; a browser with no account yet is
-sent to the sign-up page first, which asks for a name for the organization
-being created. Signing in again from the same machine updates that machine's
-entry rather than adding a second one. `shell whoami` shows which account
-a machine is linked to; `shell logout` unlinks it and revokes its token. Once
-linked, sessions started with `shell` appear in the account automatically. What
-is published is the share URL, the command line, the host name, the session
-name, the timings, and the read-only/encrypted/persistent flags. Terminal
-output is never published, and neither is the encryption key.
-
-Signing up creates an organization; an invite link joins an existing one.
-Everyone in an organization can see every member's sessions. A session has an
-owner and an assignee, and the owner can hand it off.
-
-The web app has a feedback form. Send feedback is in the account menu and on
-the Account page, and a Tell us link sits where something can go wrong: the
-new session form, the session password gate, a session that has ended, error
-notices, the empty sessions list, the vault screens, and the delete account
-form. A message carries the page it came from, the app version, the browser
-name, and a few facts that screen attaches, all shown before sending. Terminal
-contents, share links, and passwords are never attached.
-
-## Sessions started from the browser
-
-Every interactive `shell login` asks whether the signed-in browser may start
-sessions on that machine, using the previous answer as the default. A
-non-interactive login keeps a previous grant but otherwise defaults to no.
-After a yes, a background daemon polls for work and can start and stop sessions
-on that machine.
-
-The browser chooses the session password and seals it to an ephemeral key the
-daemon publishes, so the accounts service relays an envelope it cannot open.
-
-The daemon also reports which agent harnesses this machine can run, so the web
-app offers the ones that are actually there. It looks up four command names on
-PATH -- claude, codex, hermes, openclaw -- once per daemon run. It does not
-execute them, read their configuration, or read anything in your projects. The
-list of which of those four exist is what is sent.
-
-    shell daemon status              is this machine reachable from a browser
-    shell daemon stop                stop until the next shell command
-    shell login --no-remote-start    withdraw it on this machine
-    shell service install            keep the daemon running across restarts
-
-An agent should not enable this on a machine it does not own, and should tell
-the operator plainly if it does: while it is allowed, anyone signed in to that
-account can start processes on that machine.
-
-## Collaboration records
-
-The accounts service records collaboration metadata such as session ownership,
-handoffs, comments, mentions, and notifications, and session records: the share
-URL, the command line as written, the machine's host name, the session name,
-timings, and exit code. Every member of the team sees those.
-
-What anyone types into a session from the browser (commands, agent prompts,
-Ctrl-C) is recorded in the team's audit log. It is end-to-end encrypted in the
-browser to the team's audit key: every member of the organization can read and
-export it, and the accounts service stores only ciphertext it cannot read. The
-service still sees who acted, in which session, what kind of entry it was, and
-when. Anything typed by mistake, such as a pasted password, is recorded and
-readable by the whole team. Typing in the terminal a session was started from
-never reaches the browser or the service, and a --read-only share accepts no
-browser input at all.
-
-Session passwords are sealed to each person's session vault; the service stores
-them sealed and cannot open them. Terminal output stays inside the end-to-end
-encrypted stream.
-
-## Release integrity
-
-Run `shell --version` to print the installed CLI version. The installer validates the platform binary against the canonical SHA-256 manifest and prints the verified digest. The website and corresponding GitHub release expose the same version, binaries, and SHA256SUMS file.
-
-## Security model
-
-The share URL and browser password together are a bearer capability. Interactive shares grant terminal input; --read-only shares grant viewing only and reject browser input server-side. Only send access to an intended operator. An account is optional and changes
-none of this: the link and password remain the capability, and the relay still
-sees only ciphertext. Every current-CLI share encrypts terminal payloads end to
-end. Cloudflare relays ciphertext while active and deletes ordinary session state when the task closes; an old link reports that the session no longer exists.
+    shell --json -- your-command --its-arguments
+    shell --read-only --json -- your-command --its-arguments
+
+The first stderr event includes session_id, share_url, e2ee_password,
+read_only and encrypted. Treat the complete event as secret. Do not send it
+to analytics or public logs. Share only through an operator-approved channel.
+
+    shell list
+    shell attach <session-id-or-prefix>
+    shell kill -- <session-id-or-prefix>
+
+Native sessions run in the background by default. Local attachment joins the
+existing PTY. Ctrl-X, then D detaches without stopping it. Closing a browser
+tab also leaves the process running. Task exit means the process is over.
+--persistent reuses a link and credentials on a later launch; it does not
+restore process memory. Only use shell kill --all when explicitly intended.
+
+Updating the CLI does not update existing hosts. Coordinate restarts after
+work is saved; never interrupt active work merely to apply an update.
+
+## Native MCP
+
+Endpoint: https://shell.online/mcp
+
+    shell mcp grant <session-id> <label> observe [ttl-seconds]
+    shell mcp grant <session-id> <label> control [ttl-seconds]
+    shell mcp list <session-id>
+    shell mcp revoke <session-id> <grant-id>
+    shell mcp revoke-all <session-id>
+
+Quote labels containing spaces. A bearer is separate from the browser password.
+Use the MCP client's secret environment support for Authorization, never a URL
+or public log. Grants are scoped, run-bound, expiring and revocable. Start with
+observe unless input is needed and approved.
+
+Tools: shell_status, shell_screen, shell_output, shell_wait. Compatible control
+sessions also offer shell_send when the operator's input gate is enabled.
+Read-only sessions cannot accept input. shell_wait has a 45-second maximum;
+preserve returned cursors and handle reset explicitly.
+
+shell_send requires a UUID-v4 operation_id. Reuse the same ID and arguments
+for a retry. delivered confirms host delivery, not task completion. Do not
+blindly replay delivery_uncertain: inspect output before deciding what happened.
+Human typing has priority. No native shell_key or shell_interrupt in v0.22.0.
+
+MCP authorizes server-side in-memory decryption with a host-supplied frame key.
+The controller receives plaintext results. This changes the ordinary browser
+E2EE boundary and is disclosed by the browser. Standalone Docker does not
+implement the native MCP route. Refstream's invitation is a separate connector.
+
+## Security and retention
+
+Ordinary shares encrypt terminal payloads by default. The CLI generates a
+random ten-character Base64URL password unless SHELL_ONLINE_E2EE_PASSWORD is
+set. Use a longer unique password for sensitive or long-lived sessions. The
+URL fragment contains the salt; PBKDF2-HMAC-SHA256 derives the AES-256-GCM key.
+--no-e2ee permits relay access to terminal content. HTTPS/WSS is still required.
+
+Read-only is enforced by the relay. File access is off unless --files or
+--files-root explicitly exposes a selected directory.
+
+    shell password rotate <session-id>
+
+Password rotation changes browser access and revokes MCP grants. It cannot
+erase output already received. Persistent state need not be deleted to rotate.
+The relay sees routing and lifecycle metadata. Bounded encrypted last-screen
+state supports reconnects; this is not a full recording or backup. Do not claim
+that no terminal-derived data is ever retained. Saved host state contains
+credentials. Browser terminal passwords and integrated Refstream state are
+memory-only; legacy caches are removed. Consult the security guides for limits.
+
+## Accounts and current limits
+
+    shell auth
+    shell whoami
+    shell permissions <session-id>
+    shell briefings status
+
+Accounts live at https://app.shell.online. Listing access, a personal vault,
+content access, input permission and remote-start permission are different
+things. Never infer terminal access from a visible listing. Team assignment
+does not replace an explicit MCP grant.
+
+The three owner-controlled automation switches are independent. In v0.22.0,
+daily-briefing permission can allow an updated host to publish an existing
+title and completed-response excerpt for a supported, explicitly resumed
+OpenCode conversation, encrypted to the owner's vault, at most once per rolling
+day. It does not call a model or generate a new summary. Team delivery, a team
+MCP gateway and Jev supervision are not implemented in this release. Do not
+present planned features as shipped.
+
+Browser input can also become an encrypted team-audit entry where enabled.
+Avoid typing secrets into shared sessions. Revocation cannot retract copies
+already held by a recipient.
+
+## Release and operator references
+
+- [Release metadata](https://shell.online/downloads/release.json)
+- [SHA-256 manifest](https://shell.online/downloads/SHA256SUMS)
+- [Agent skill](https://shell.online/skill)
+- [MCP operator guide](https://github.com/TeoSlayer/shell.online/blob/main/docs/MCP.md)
+- [Session content limits](https://github.com/TeoSlayer/shell.online/blob/main/docs/session-content.md)
+- [Self-hosting operator guide](https://github.com/TeoSlayer/shell.online/blob/main/docs/self-hosting.md)
+
+Run shell --version to inspect the installed binary. Website changes and CLI
+releases are separate. The platform guide distinguishes runtime-tested targets
+from cross-builds; a build alone does not prove compatibility with every device.

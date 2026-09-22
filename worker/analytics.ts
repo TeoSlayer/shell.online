@@ -1,8 +1,11 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
 import type { UniqueSurface } from "../shared/stats";
+import { campaignSource, classifyReferrer, PUBLIC_CTA_TARGETS } from "../shared/public-attribution";
+export { campaignSource, classifyReferrer } from "../shared/public-attribution";
 
 export type AnalyticsEvent =
   | "page_view"
+  | "page_loaded"
   | "copy"
   | "cta_click"
   | "installer_download"
@@ -89,10 +92,10 @@ export function installReportOutcome(url: URL): string | null {
 }
 
 /** What the landing page reports when one of its sign-up links is clicked. */
-export const CTA_TARGETS: ReadonlySet<string> = new Set(["signup_nav", "signup_hero", "signup_team", "signup_footer"]);
+export const CTA_TARGETS: ReadonlySet<string> = PUBLIC_CTA_TARGETS;
 
 /** What the landing page reports when a command or link is copied. */
-export const COPY_TARGETS: ReadonlySet<string> = new Set(["install", "brew_install", "source_build", "run", "share", "skill"]);
+export const COPY_TARGETS: ReadonlySet<string> = new Set(["install", "brew_install", "source_build", "run", "docs_command", "share", "skill"]);
 
 /** A share page: /s/ and a session id. */
 const SESSION_PATH = /^\/s\/[A-Za-z0-9_-]{32}\/?$/;
@@ -165,44 +168,10 @@ export function requestAnalyticsContext(request: Request): AnalyticsContext {
   return {
     device: classifyDevice(userAgent, request.headers.get("Sec-CH-UA-Mobile")),
     client: classifyClient(userAgent),
-    referrer: campaign !== null && (referrer === "direct" || referrer === "other") ? campaign : referrer,
+    referrer: campaign ?? referrer,
   };
 }
 
-/**
- * utm_source or ref on a landing link, folded to the same tokens the referrer
- * classifier uses, so a launch post still shows as its source when the
- * browser sent no referrer. Only names on this list count: the dimension has
- * to stay small, and a stranger's query string is not a source.
- */
-const CAMPAIGN_SOURCES: Record<string, string> = {
-  hn: "hacker_news",
-  hackernews: "hacker_news",
-  hacker_news: "hacker_news",
-  reddit: "reddit",
-  x: "x",
-  twitter: "x",
-  github: "github",
-  google: "google",
-  newsletter: "newsletter",
-  email: "newsletter",
-  producthunt: "product_hunt",
-  product_hunt: "product_hunt",
-  linkedin: "linkedin",
-  youtube: "youtube",
-  discord: "discord",
-  slack: "slack",
-  mastodon: "mastodon",
-  bluesky: "bluesky",
-  podcast: "podcast",
-};
-
-export function campaignSource(url: URL): string | null {
-  const raw = url.searchParams.get("utm_source") ?? url.searchParams.get("ref");
-  if (!raw) return null;
-  const key = raw.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 40);
-  return CAMPAIGN_SOURCES[key] ?? null;
-}
 
 export function hasVisitorSalt(salt: unknown): salt is string {
   return typeof salt === "string" && salt.length >= MIN_VISITOR_SALT_LENGTH;
@@ -247,6 +216,7 @@ export type VisitorKind = "browser" | "machine";
  * every people figure, which is what the dashboard says of it.
  */
 export async function requestVisitor(salt: unknown, request: Request, kind: VisitorKind = "browser"): Promise<string | undefined> {
+  if (request.headers.get("Sec-GPC") === "1" || request.headers.get("DNT") === "1") return undefined;
   if (!hasVisitorSalt(salt)) return undefined;
   const address = request.headers.get("CF-Connecting-IP");
   if (!address) return undefined;
@@ -352,27 +322,6 @@ export function classifyClient(userAgent: string): string {
   return userAgent ? "web" : "unknown";
 }
 
-export function classifyReferrer(referrer: string | null, requestOrigin: string): string {
-  if (!referrer) return "direct";
-
-  try {
-    const url = new URL(referrer);
-    if (url.origin === requestOrigin) return "internal";
-    const hostname = url.hostname.toLowerCase();
-    /* The accounts app is ours: a visit from it is a signed-in person coming back to the docs. */
-    if (hostname === "app.shell.online" || hostname === `app.${new URL(requestOrigin).hostname}`) return "app";
-    if (hostname === "news.ycombinator.com") return "hacker_news";
-    if (hostname === "github.com" || hostname.endsWith(".github.com")) return "github";
-    if (hostname === "reddit.com" || hostname.endsWith(".reddit.com")) return "reddit";
-    if (hostname === "x.com" || hostname === "twitter.com" || hostname.endsWith(".twitter.com")) {
-      return "x";
-    }
-    if (hostname === "google.com" || hostname.endsWith(".google.com")) return "google";
-    return "other";
-  } catch {
-    return "other";
-  }
-}
 
 function cleanDimension(value: string | undefined, fallback: string): string {
   if (!value) return fallback;

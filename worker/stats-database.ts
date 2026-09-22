@@ -59,6 +59,7 @@ export interface CollectedStatsRows {
 }
 
 export const ANALYTICS_EVENTS = new Set<AnalyticsEvent>([
+  "page_loaded",
   "page_view",
   "copy",
   "cta_click",

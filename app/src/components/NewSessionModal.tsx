@@ -121,6 +121,7 @@ export function NewSessionModal({
         </header>
 
         <div className="sheet-body">
+          <p className="sheet-help">Start a new process on your linked computer. It stays there; this app opens its terminal. This does not attach to a process already running.</p>
           <div className="kind-grid" role="radiogroup" aria-label="What to run">
             {SESSION_KINDS.map((candidate) => (
               <button
@@ -195,9 +196,9 @@ export function NewSessionModal({
               </div>
             ))}
 
-            {devices.length > 1 && (
+            {devices.length > 0 && (
               <div className="sheet-field">
-                <label htmlFor="f-machine">Machine</label>
+                <label htmlFor="f-machine">Run on</label>
                 <select
                   id="f-machine"
                   value={machine}

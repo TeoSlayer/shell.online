@@ -17,9 +17,6 @@ import {
 } from "../shared/session-capacity";
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import {
-  formatGitHubStarCount,
-  GITHUB_REPOSITORY_URL,
-  readGitHubSummaryStarCount,
 } from "../shared/github";
 import { TerminalWriteQueue } from "./terminal-writes";
 import {
@@ -66,29 +63,21 @@ import {
 import "./style.css";
 import "./relay-files.css";
 import "./landing.css";
+import { initAnalytics } from "./analytics";
+import { sessionConnectionLabel } from "./session-status";
 import { observeProductPage, trackProduct } from "./posthog";
-
-observeProductPage();
-document.addEventListener("click", (event) => {
-  if (event.target instanceof Element && event.target.closest("#issue-open")) {
-    trackProduct("report_opened", { target: "feedback" });
-  }
-});
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
 
+initAnalytics();
+observeProductPage();
+document.addEventListener("click", (event) => {
+  if (event.target instanceof Element && event.target.closest("#issue-open")) trackProduct("report_opened", { target: "feedback" });
+});
+
 type TerminalColorMode = "dark" | "light";
 const TYPING_LEASE_MS = 1_800;
-const PILOT_PROTOCOL_URL = "https://pilotprotocol.network/";
-
-/*
- * Where the web app is served. It is a separate Worker from this one -- the
- * relay serves the marketing pages and /s/<id>, nothing else -- so its host is
- * not derivable from anything here and lives in one place instead.
- */
-const WEB_APP_URL = "https://app.shell.online";
-const SIGNUP_URL = `${WEB_APP_URL}/signup`;
 interface PresenceParticipant {
   id: number;
   name: string;
@@ -168,463 +157,11 @@ if (statsDashboard) {
 }
 
 function renderLanding(): void {
-  const windowsVisitor = /Windows/i.test(navigator.userAgent);
-  const installCommand = windowsVisitor
-    ? "irm https://shell.online/install.ps1 | iex"
-    : "curl -fsSL https://shell.online/install | sh";
-  const installPrompt = windowsVisitor ? "PS>" : "$";
-  document.title = "Share a Live Terminal in Any Browser | shell.online";
-  document.documentElement.classList.add("marketing-root");
-  document.body.classList.add("marketing-body");
-  app!.innerHTML = `
-    <section class="marketing">
-      <header class="marketing-nav">
-        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
-        <nav class="marketing-links" aria-label="Main navigation">
-          <a href="/docs/">Docs</a>
-          <a href="#use-cases">Use cases</a>
-          <a class="marketing-github-link" href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer" aria-label="Star shell.online on GitHub">★ GitHub <span id="github-star-count" aria-live="polite">—</span></a>
-          <button class="nav-install" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online install command">
-            <span data-copy-label aria-live="polite">Copy install</span>
-          </button>
-          <a class="nav-signup" href="${SIGNUP_URL}" data-cta="signup_nav">Sign up free</a>
-        </nav>
-      </header>
-
-      <main>
-        <section class="marketing-hero">
-          <div class="hero-copy">
-            <h1>Run it here.<br /><em>Open it anywhere.</em></h1>
-            <p class="hero-dek">Run <code>shell &lt;command&gt;</code> on your machine. It gives you a link and password to the same encrypted terminal—open it from any desktop or phone to watch or type.</p>
-            <div class="hero-actions">
-              <ol class="hero-steps" aria-label="Get started in two steps">
-                <li class="hero-step hero-step-account">
-                  <span class="hero-step-marker" aria-hidden="true">1</span>
-                  <p class="hero-step-label">Step 1 <i aria-hidden="true">·</i> Create your account</p>
-                  <div class="hero-step-body">
-                    <a class="hero-signup" href="${SIGNUP_URL}" data-cta="signup_hero">
-                      <b>Sign up free</b>
-                      <span aria-hidden="true">→</span>
-                    </a>
-                  </div>
-                </li>
-                <li class="hero-step hero-step-cli">
-                  <span class="hero-step-marker" aria-hidden="true">2</span>
-                  <p class="hero-step-label">Step 2 <i aria-hidden="true">·</i> Install the CLI</p>
-                  <div class="hero-step-body">
-                    <p class="hero-step-note">You will also need to install the shell CLI for terminal creation.</p>
-                    <button class="install-command${windowsVisitor ? " install-command-windows" : ""}" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy install command">
-                      <span class="command-prompt" aria-hidden="true">${installPrompt}</span>
-                      <code>${installCommand}</code>
-                      <span class="command-copy-label" data-copy-label aria-live="polite">Copy</span>
-                    </button>
-                  </div>
-                </li>
-              </ol>
-              <div class="hero-secondary-actions">
-                <a class="text-link" href="#how">See how it works <span aria-hidden="true">↓</span></a>
-              </div>
-            </div>
-          </div>
-
-          <div class="product-demo phone-product-demo" aria-label="A live shell.online agent session viewed on a phone">
-            <div class="demo-aura" aria-hidden="true"></div>
-            <figure class="real-phone-demo">
-              <div class="phone-device">
-                <span class="phone-btn phone-btn-action" aria-hidden="true"></span>
-                <span class="phone-btn phone-btn-vol-up" aria-hidden="true"></span>
-                <span class="phone-btn phone-btn-vol-down" aria-hidden="true"></span>
-                <span class="phone-btn phone-btn-power" aria-hidden="true"></span>
-                <div class="phone-bezel">
-                <div class="hero-phone-screen">
-                  <div class="phone-status" aria-hidden="true">
-                    <span>9:41</span>
-                    <span class="phone-island"></span>
-                    <span>
-                      <svg width="17" height="11" viewBox="0 0 17 11"><rect x="0" y="7" width="3" height="4" rx="1"/><rect x="4.5" y="5" width="3" height="6" rx="1"/><rect x="9" y="2.5" width="3" height="8.5" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
-                      <svg width="17" height="12" viewBox="0 0 18 13" fill="none" stroke="currentcolor" stroke-width="1.6" stroke-linecap="round"><path d="M1.58 5.58A10.5 10.5 0 0 1 16.42 5.58"/><path d="M3.84 7.84A7.3 7.3 0 0 1 14.16 7.84"/><path d="M6.1 10.1A4.1 4.1 0 0 1 11.9 10.1"/><circle cx="9" cy="11.6" r="1.3" fill="currentcolor" stroke="none"/></svg>
-                      <svg width="27" height="12" viewBox="0 0 27 12"><rect x=".5" y=".5" width="23" height="11" rx="3" fill="none" stroke="currentcolor" stroke-opacity=".4"/><rect x="2" y="2" width="20" height="8" rx="1.8"/><path d="M25 4v4a2 2 0 0 0 0-4Z" fill-opacity=".4"/></svg>
-                    </span>
-                  </div>
-                  <div class="hero-phone-head">
-                    <strong>shell.online</strong>
-                    <span class="hero-phone-latency"><i></i> 22 ms</span>
-                    <span class="hero-phone-viewers" aria-label="One viewer">1</span>
-                    <span class="hero-phone-control" aria-hidden="true">☼</span>
-                    <span class="hero-phone-control hero-phone-settings" aria-hidden="true"></span>
-                  </div>
-                  <div class="hero-phone-terminal">
-                    <div class="hero-agent-title">
-                      <span class="hero-agent-mark" aria-hidden="true">✦</span>
-                      <span><strong>Claude Code</strong><small>Sonnet · ~/project</small></span>
-                    </div>
-                    <div class="hero-agent-prompt"><span>❯</span> Fix the failing heartbeat test</div>
-                    <p>I found the race in the deadline check. I’m adding a regression test now.</p>
-                    <div class="hero-agent-command"><span>›</span> go test ./...</div>
-                    <div class="hero-agent-result"><i>✓</i><span><strong>Fixed</strong><small>42 tests pass · 1.8s</small></span></div>
-                    <div class="hero-agent-input"><span>❯</span><i></i></div>
-                  </div>
-                  <div class="hero-phone-keys" aria-hidden="true">
-                    <span>esc</span><span>tab</span><span>←</span><span>↑</span><span>↓</span><span>→</span><span>enter</span><span>ctrl-c</span>
-                  </div>
-                  <span class="phone-home" aria-hidden="true"></span>
-                </div>
-                </div>
-              </div>
-              <figcaption><span><i></i> Interactive in any browser</span><strong>Claude Code · live via shell.online</strong></figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <section class="use-strip" aria-label="Use shell.online with any terminal process">
-          <p>One prefix. Whatever you already run.</p>
-          <div>
-            <code>shell claude</code>
-            <code>shell codex</code>
-            <code>shell python train.py</code>
-            <code>shell docker compose up</code>
-            <code>shell terraform apply</code>
-            <code>shell ssh my-server</code>
-            <code>shell htop</code>
-            <code>shell bash</code>
-            <code>shell --read-only python train.py</code>
-          </div>
-        </section>
-
-        <section class="how-section" id="how">
-          <div class="section-heading">
-            <p>How a share works</p>
-            <h2>A share link,<br />not a remote machine.</h2>
-            <span>The command and PTY stay where you started them. shell.online relays encrypted terminal frames to people holding the link and browser password.</span>
-          </div>
-          <div class="steps-grid">
-            <article class="step-card">
-              <span class="step-index">01</span>
-              <div class="step-visual step-command" aria-hidden="true"><code><i>$</i> shell python train.py</code><b></b></div>
-              <h3>Prefix the command</h3>
-              <p>Start any CLI, agent, server, job, TUI, or fresh shell exactly where it already lives.</p>
-            </article>
-            <article class="step-card">
-              <span class="step-index">02</span>
-              <div class="step-visual step-share" aria-hidden="true">
-                <div><i>↗</i><code>shell.online/s/k9f…</code></div>
-                <span>Password · Ab3dE7-_</span>
-              </div>
-              <h3>Send the link and password</h3>
-              <p>No SSH keys to exchange. Choose interactive or server-enforced view-only access, then send both values to the people you trust.</p>
-            </article>
-            <article class="step-card">
-              <span class="step-index">03</span>
-              <div class="step-visual step-collab" aria-hidden="true">
-                <div><span>Y</span><span>M</span><span>R</span></div>
-                <p><i></i> Maya is typing</p>
-              </div>
-              <h3>Watch, or type together</h3>
-              <p>Use read-only to follow progress safely, or keep the default interactive mode to take control and pair in the same terminal.</p>
-            </article>
-          </div>
-          <aside class="product-path" aria-label="More ways to use shell.online">
-            <a href="${SIGNUP_URL}" data-cta="signup_team"><b>Manage a team</b><span>Link machines, open sessions, assign work.</span><i>→</i></a>
-            <a href="/e2ee/"><b>Understand E2EE</b><span>See exactly what the relay can and cannot read.</span><i>→</i></a>
-            <a href="/skill"><b>Install for agents</b><span>Give terminal-native agents the same workflow.</span><i>→</i></a>
-          </aside>
-        </section>
-
-        <section class="use-cases-section" id="use-cases">
-          <div class="section-heading use-cases-heading">
-            <p>Use cases</p>
-            <h2>One live link.<br />Plenty to keep moving.</h2>
-            <span>Use shell.online anywhere a terminal process outlasts your attention, needs a second pair of eyes, or asks for input while you are away. Access is interactive by default; add <code>--read-only</code> when recipients should only watch.</span>
-          </div>
-          <div class="use-cases-grid">
-            <article class="use-case-card">
-              <header><span>01</span><i>AI agents</i></header>
-              <h3>Watch coding agents from your phone</h3>
-              <p>Follow Codex or Claude Code while it explores, edits, and tests. Answer a prompt without returning to the computer that started it.</p>
-              <code><b>$</b> shell codex</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>02</span><i>Builds + tests</i></header>
-              <h3>Keep long test suites within reach</h3>
-              <p>Watch compilation and test output live, inspect a failure, or interrupt a stuck run from another device.</p>
-              <code><b>$</b> shell go test -race ./...</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>03</span><i>ML + data</i></header>
-              <h3>Follow training and data jobs</h3>
-              <p>Check progress logs for model training, ETL jobs, migrations, and batch scripts without granting browser control.</p>
-              <code><b>$</b> shell --read-only python train.py</code>
-            </article>
-            <article class="use-case-card">
-              <header><span>04</span><i>Local servers</i></header>
-              <h3>Carry development logs with you</h3>
-              <p>Open a live window into development servers, Docker stacks, file watchers, and other processes that keep printing.</p>
-              <code><b>$</b> shell docker compose up</code>
-            </article>
-          </div>
-        </section>
-
-        <section class="demo-proof">
-          <div class="demo-proof-heading">
-            <p>Captured live, not a mockup</p>
-            <h2>Follow the work.<br />See the result.</h2>
-            <span>The same real Codex session, captured on a phone while it diagnosed and fixed a heartbeat timeout, then passed the package tests and Go’s race detector.</span>
-          </div>
-          <div class="demo-proof-grid">
-            <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-working-mobile.png" width="780" height="1688" alt="Codex diagnosing a failing heartbeat test through shell.online on a phone" loading="lazy" />
-              </div>
-              <figcaption><b>Working</b><span>Follow the diagnosis and live test output.</span></figcaption>
-            </figure>
-            <figure class="phone-proof">
-              <div class="phone-proof-screen">
-                <img src="/screenshots/codex-complete-mobile.png" width="780" height="1688" alt="The completed Codex fix with passing tests viewed through shell.online on a phone" loading="lazy" />
-              </div>
-              <figcaption><b>Complete</b><span>Review the fix and the passing test suite.</span></figcaption>
-            </figure>
-          </div>
-        </section>
-
-        <section class="install-paths" id="install">
-          <div class="install-paths-heading">
-            <p>Install your way</p>
-            <h2>Three ways<br />to install.</h2>
-            <span>Use Homebrew, the verified standalone installer, or build the tagged source yourself.</span>
-          </div>
-          <div class="install-path-grid">
-            <article class="install-path-card install-path-primary">
-              <div class="install-path-meta"><span>Homebrew</span><strong>Managed install</strong></div>
-              <h3>Let Brew build and manage it.</h3>
-              <button class="method-command method-command-brew" type="button" data-copy-target="brew_install" data-copy-value="brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online&#10;brew trust --tap teoslayer/shell-online&#10;brew install shell-online" aria-label="Copy the Homebrew tap, trust, and install commands">
-                <code><span>brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online</span><span>brew trust --tap teoslayer/shell-online</span><span>brew install shell-online</span></code>
-                <span data-copy-label aria-live="polite">Copy setup</span>
-              </button>
-              <ul>
-                <li>Fetches the checksum-pinned tagged source.</li>
-                <li>Installs Go as a build-only dependency and compiles locally.</li>
-                <li>Homebrew 6 asks you to trust this vendor tap once.</li>
-                <li>Upgrades are simply <code>brew upgrade shell-online</code>.</li>
-              </ul>
-            </article>
-            <article class="install-path-card">
-              <div class="install-path-meta"><span>No Brew</span><strong>Verified download</strong></div>
-              <h3>Use the standalone installer.</h3>
-              <button class="method-command" type="button" data-copy-target="install" data-copy-value="${installCommand}" aria-label="Copy the shell.online installer command">
-                <code>${installCommand}</code>
-                <span data-copy-label aria-live="polite">Copy</span>
-              </button>
-              <ul>
-                <li>Detects Windows, macOS, Linux, BSD, Solaris, and 15 architectures.</li>
-                <li>Verifies SHA-256 before installing.</li>
-                <li>Never invokes sudo or edits your shell files.</li>
-              </ul>
-            </article>
-            <article class="install-path-card install-path-source">
-              <div class="install-path-meta"><span>Source</span><strong>Go 1.26.8</strong></div>
-              <h3>Build it yourself. Run it anywhere.</h3>
-              <button class="method-command" type="button" data-copy-target="source_build" data-copy-value="git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git &amp;&amp; cd shell.online &amp;&amp; go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell" aria-label="Copy the source build commands">
-                <code><span>git clone --depth 1 --branch v${RELEASE_VERSION} https://github.com/TeoSlayer/shell.online.git</span><span>cd shell.online</span><span>go build -trimpath -ldflags='-X main.version=${RELEASE_VERSION}' -o ./shell ./cmd/shell</span></code>
-                <span data-copy-label aria-live="polite">Copy build</span>
-              </button>
-              <ul>
-                <li>Checks out the exact tagged release source.</li>
-                <li>Produces <code>./shell</code> inside your clone.</li>
-                <li>Run it there or move it to any directory on your PATH.</li>
-              </ul>
-            </article>
-          </div>
-        </section>
-
-      </main>
-
-      <footer class="marketing-footer">
-        <a class="wordmark" href="/" aria-label="shell.online home"><span>shell</span><i>.</i>online</a>
-        <p>Live browser terminals for the work your machine is already doing.<span>Developed by <a href="${PILOT_PROTOCOL_URL}" target="_blank" rel="noreferrer">Pilot Protocol</a>.</span></p>
-        <nav aria-label="Footer navigation">
-          <a href="/docs/">Docs</a>
-          <a href="${SIGNUP_URL}" data-cta="signup_footer">Web app</a>
-          <a href="#use-cases">Use cases</a>
-          <a href="/mobile/">Mobile</a>
-          <a href="/reliability/">Reliability</a>
-          <a href="/security/">Security</a>
-          <a href="/e2ee/">E2EE</a>
-          <a href="/docker/">Docker</a>
-          <a href="/platforms/">Platforms</a>
-          <a href="${GITHUB_REPOSITORY_URL}" target="_blank" rel="noreferrer">Star on GitHub</a>
-          <a href="/skill">Agent skill</a>
-          <a href="/llms.txt">llms.txt</a>
-          <a href="${RELEASE_CHECKSUMS_PATH}" target="_blank" rel="noreferrer">v${RELEASE_VERSION} · SHA-256</a>
-        </nav>
-      </footer>
-    </section>
-  `;
-
-  wireLandingCopyButtons();
-
-  wireLandingCtaLinks();
-  void wireGitHubStarCount();
-}
-
-async function wireGitHubStarCount(): Promise<void> {
-  const link = document.querySelector<HTMLAnchorElement>(".marketing-github-link");
-  const count = document.querySelector<HTMLElement>("#github-star-count");
-  if (!link || !count) return;
-
-  try {
-    const response = await fetch("/api/github", {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) return;
-
-    const stars = readGitHubSummaryStarCount(await response.json());
-    if (stars === null) return;
-
-    count.textContent = formatGitHubStarCount(stars);
-    const exactCount = stars.toLocaleString("en-US");
-    const noun = stars === 1 ? "star" : "stars";
-    link.title = `${exactCount} GitHub ${noun}`;
-    link.setAttribute(
-      "aria-label",
-      `Open shell.online on GitHub — ${exactCount} ${noun}`,
-    );
-  } catch {
-    // The repository link remains useful when GitHub's API is unavailable.
-  }
-}
-
-function wireLandingFit(): void {
-  const landing = document.querySelector<HTMLElement>(".landing");
-  const stage = document.querySelector<HTMLElement>(".landing-stage");
-  const layout = document.querySelector<HTMLElement>(".home-layout");
-  if (!landing || !stage || !layout) return;
-
-  let animationFrame = 0;
-  let lastScale = "";
-  let pointerIsDown = false;
-  let fitWasDeferred = false;
-  const fit = (): void => {
-    if (pointerIsDown) {
-      fitWasDeferred = true;
-      return;
-    }
-    window.cancelAnimationFrame(animationFrame);
-    animationFrame = window.requestAnimationFrame(() => {
-      const stageStyle = window.getComputedStyle(stage);
-      const landingStyle = window.getComputedStyle(landing);
-      const availableWidth = stage.clientWidth
-        - Number.parseFloat(stageStyle.paddingLeft)
-        - Number.parseFloat(stageStyle.paddingRight);
-      const availableHeight = stage.clientHeight
-        - Number.parseFloat(stageStyle.paddingTop)
-        - Number.parseFloat(stageStyle.paddingBottom);
-      const preferredScale = Number.parseFloat(
-        landingStyle.getPropertyValue("--landing-max-scale"),
-      ) || 1;
-      const widthScale = availableWidth / Math.max(layout.offsetWidth, 1);
-      const heightScale = availableHeight / Math.max(layout.offsetHeight, 1);
-      const scale = Math.max(0.1, Math.min(preferredScale, widthScale, heightScale));
-      const nextScale = scale.toFixed(4);
-      if (nextScale === lastScale) return;
-      lastScale = nextScale;
-      layout.style.setProperty("--landing-scale", nextScale);
-    });
-  };
-
-  const lockFit = (event: PointerEvent): void => {
-    if (event.pointerType === "mouse") return;
-    pointerIsDown = true;
-    landing.classList.add("is-interacting");
-  };
-  const unlockFit = (): void => {
-    if (!pointerIsDown) return;
-    pointerIsDown = false;
-    landing.classList.remove("is-interacting");
-    if (!fitWasDeferred) return;
-    fitWasDeferred = false;
-    fit();
-  };
-
-  const resizeObserver = new ResizeObserver(fit);
-  resizeObserver.observe(stage);
-  resizeObserver.observe(layout);
-  window.addEventListener("resize", fit, { passive: true });
-  window.addEventListener("orientationchange", fit, { passive: true });
-  landing.addEventListener("pointerdown", lockFit, { capture: true, passive: true });
-  window.addEventListener("pointerup", unlockFit, { passive: true });
-  window.addEventListener("pointercancel", unlockFit, { passive: true });
-  void document.fonts.ready.then(fit);
-  fit();
+  void import("./landing").then(({ initLanding }) => initLanding());
 }
 
 type CopyTarget = "install" | "brew_install" | "source_build" | "run" | "share" | "skill";
 type CtaTarget = "signup_nav" | "signup_hero" | "signup_team" | "signup_footer";
-
-function isCtaTarget(value: string | undefined): value is CtaTarget {
-  return value === "signup_nav" || value === "signup_hero" || value === "signup_team" || value === "signup_footer";
-}
-
-/*
- * Which sign-up link was clicked, and nothing else: the click itself goes
- * ahead as a normal navigation, and keepalive lets the report finish after
- * the page has gone.
- */
-function wireLandingCtaLinks(): void {
-  for (const link of document.querySelectorAll<HTMLAnchorElement>("a[data-cta]")) {
-    link.addEventListener("click", () => {
-      const target = link.dataset.cta;
-      if (isCtaTarget(target)) trackEvent("cta_click", target);
-    });
-  }
-}
-
-function wireLandingCopyButtons(): void {
-  const buttons = document.querySelectorAll<HTMLButtonElement>("button[data-copy-target][data-copy-value]");
-  const resetTimers = new WeakMap<HTMLButtonElement, number>();
-  const copyAttempts = new WeakMap<HTMLButtonElement, number>();
-  const defaultLabels = new WeakMap<HTMLButtonElement, string>();
-  for (const button of buttons) {
-    button.addEventListener("click", async () => {
-      const target = button.dataset.copyTarget;
-      const command = button.dataset.copyValue;
-      const label = button.querySelector<HTMLElement>("[data-copy-label]");
-      if (
-        (target !== "install" &&
-          target !== "brew_install" &&
-          target !== "source_build" &&
-          target !== "run" &&
-          target !== "skill") ||
-        !command ||
-        !label
-      ) return;
-      const defaultLabel = defaultLabels.get(button) ?? label.textContent ?? "Copy";
-      defaultLabels.set(button, defaultLabel);
-      const attempt = (copyAttempts.get(button) ?? 0) + 1;
-      copyAttempts.set(button, attempt);
-      window.clearTimeout(resetTimers.get(button));
-
-      label.textContent = "Copying…";
-      button.classList.remove("copied");
-      try {
-        await copyToClipboard(command);
-        trackCopy(target);
-        if (copyAttempts.get(button) !== attempt) return;
-        label.textContent = "Copied";
-        button.classList.add("copied");
-      } catch {
-        if (copyAttempts.get(button) !== attempt) return;
-        label.textContent = "Try again";
-      }
-
-      const resetTimer = window.setTimeout(() => {
-        if (copyAttempts.get(button) !== attempt) return;
-        label.textContent = defaultLabel;
-        button.classList.remove("copied");
-      }, 1_500);
-      resetTimers.set(button, resetTimer);
-    });
-  }
-}
 
 async function copyToClipboard(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
@@ -692,7 +229,7 @@ function renderTerminal(sessionId: string): void {
       <header id="session-header" class="session-header">
         <a class="wordmark compact" href="/" target="_blank" rel="noreferrer"><span>shell</span><i>.</i>online</a>
         <div class="session-identity">
-          <span id="session-label">terminal</span>
+          <span id="session-label">Shared terminal</span>
           <span id="session-access" class="session-access" hidden>View only</span>
           <span id="session-encryption" class="session-access encryption" hidden>End-to-end encrypted</span>
           <span id="session-status" class="status offline" role="status" aria-live="polite"><i></i><b>Offline</b></span>
@@ -743,10 +280,12 @@ function renderTerminal(sessionId: string): void {
         <form id="encryption-form" class="encryption-panel">
           <span class="settings-kicker">Private terminal</span>
           <h2>Enter the session password</h2>
-          <p id="encryption-message">The password is processed on this device and is never sent to shell.online.</p>
+          <p id="encryption-message">Use the password printed next to the link on the host computer, or ask the person who shared it.</p>
           <label for="encryption-password">Password</label>
-          <input id="encryption-password" type="password" required autocomplete="new-password" autocapitalize="off" spellcheck="false" />
-          <button type="submit">Decrypt terminal</button>
+          <input id="encryption-password" type="password" required autocomplete="current-password" autocapitalize="off" spellcheck="false" aria-describedby="encryption-message encryption-privacy" />
+          <button type="submit">Open terminal</button>
+          <p id="encryption-privacy" class="encryption-help">This is the session password, not your account password. It unlocks the terminal on this device and is never sent to shell.online.</p>
+          <details class="encryption-help"><summary>Need the password?</summary><p>On the computer running this session, use <code>shell list</code> to find its ID, then <code>shell password &lt;ID&gt;</code>. If it is saved in your vault, <a href="https://app.shell.online/sessions" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">open the app</a> and unlock your vault there.</p></details>
         </form>
       </div>
       <dialog id="terminal-settings" class="settings-dialog" aria-labelledby="settings-title">
@@ -1033,6 +572,8 @@ function renderTerminal(sessionId: string): void {
     encryptionForm.querySelector<HTMLLabelElement>("label")!.hidden = !allowPassword;
     encryptionForm.querySelector<HTMLButtonElement>("button")!.hidden = !allowPassword;
     terminal.options.disableStdin = true;
+    statusText!.textContent = allowPassword ? "Password needed" : "Access blocked";
+    statusElement.setAttribute("aria-label", statusText!.textContent);
     syncMobileKeys();
     if (allowPassword) encryptionPassword.focus();
   };
@@ -1070,7 +611,7 @@ function renderTerminal(sessionId: string): void {
     updateEncryptionDisclosure();
     renderAccessDescription();
     if (encrypted && !frameCipher && !encryptionDescriptor) {
-      showEncryptionGate("This E2EE link is missing its decryption fragment. Ask the sender for the complete URL, including everything after #.", false);
+      showEncryptionGate("This link is incomplete. Ask the sender to copy the whole link, including everything after #. A password alone cannot open it.", false);
       socket?.close(4003, "missing encryption key");
     }
   };
@@ -1266,18 +807,14 @@ function renderTerminal(sessionId: string): void {
   };
 
   const renderConnectionStatus = (): void => {
-    const online = lastStatus === "connected" && latencyMilliseconds !== null;
-    const waitingForSlot = lastStatus === "full";
+    const online = lastStatus === "connected" && !waitingForEncryptionKey;
+    const label = sessionConnectionLabel(lastStatus, waitingForEncryptionKey, latencyMilliseconds);
     statusElement.className = `status ${online ? "connected" : "offline"} state-${lastStatus}`;
     statusElement.setAttribute(
       "aria-label",
-      online
-        ? `${latencyMilliseconds} millisecond round-trip latency to the shared machine`
-        : waitingForSlot
-          ? `Session full; waiting for one of ${MAX_SESSION_VIEWERS} viewer slots`
-          : "Offline",
+      label,
     );
-    if (statusText) statusText.textContent = online ? `${latencyMilliseconds} ms` : waitingForSlot ? "Full · waiting" : "Offline";
+    if (statusText) statusText.textContent = label;
     renderLatencyGraph();
   };
 
@@ -2122,7 +1659,7 @@ function renderTerminal(sessionId: string): void {
       frameCipher = await BrowserFrameCipher.fromKey(encryptionDescriptor.key);
     } else if (encryptionDescriptor?.kind === "password") {
       if (!encryptionDescriptor.password) {
-        showEncryptionGate("The password is processed on this device and is never sent to shell.online.", true);
+        showEncryptionGate("Use the password printed next to the link on the host computer, or ask the person who shared it.", true);
         return;
       }
       try {

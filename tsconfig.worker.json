@@ -10,5 +10,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["worker/**/*.ts", "shared/**/*.ts", "tests/mcp-lifecycle.test.ts", "tests/mcp-observe.test.ts", "tests/mcp-write-do.test.ts"]
+  "include": ["worker/**/*.ts", "shared/**/*.ts", "tests/mcp-lifecycle.test.ts", "tests/mcp-observe.test.ts", "tests/mcp-write-do.test.ts", "tests/csp-ga.test.ts"]
 }

@@ -1180,6 +1180,26 @@
   background: var(--white);
 }
 
+.session-start-guide { max-width: 620px; text-align: left; margin-inline: auto; }
+.session-start-guide h2 { color: var(--ink); font-size: 24px; letter-spacing: -.03em; margin: 0 0 8px; }
+.session-start-guide ol { padding-left: 22px; }
+.session-start-guide li { padding: 10px 0; }
+.session-start-guide li > strong { color: var(--ink); }
+.sessions-empty .session-start-guide p { margin: 8px 0; font-size: 14px; font-weight: 400; line-height: 1.5; color: var(--muted); }
+.start-platforms { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.start-platforms button, .start-command button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 12px; cursor: pointer; background: var(--paper); color: var(--ink); font: inherit; font-size: 13px; }
+.start-platforms button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.start-command { display: flex; align-items: center; gap: 8px; margin-block: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.sessions-empty .start-command code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; display: block; margin: 0; padding: 0; border: 0; background: none; }
+.start-command button { flex-shrink: 0; }
+.clip-help { max-width: 300px; margin: 8px 12px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.clip-help a { color: inherit; text-decoration: underline; }
+@media (max-width: 600px) {
+  .sessions-empty.first-session { padding: 20px 16px; }
+  .session-start-guide .start-command { flex-direction: column; align-items: stretch; }
+  .start-command button { align-self: flex-end; }
+}
+
 .sessions-empty p {
   margin: 0;
   color: var(--ink);

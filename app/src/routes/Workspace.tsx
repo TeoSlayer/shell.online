@@ -18,6 +18,7 @@ import { sessionSummary, sessionTitle } from "../lib/session-title";
 import {useSessionContents, withSessionContent} from "../lib/use-session-contents";
 import {SessionSummaryText} from "../components/SessionSummaryText";
 import { NewSessionModal } from "../components/NewSessionModal";
+import { SessionStartGuide } from "../components/SessionStartGuide";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
 import { SignedInModal } from "../components/SignedInModal";
@@ -893,24 +894,8 @@ export function Workspace() {
             <span />
           </div>
         ) : sessions.length === 0 ? (
-          <div className="sessions-empty">
-            <p>No sessions yet.</p>
-            <ol>
-              <li>
-                Install shell on the machine you want to run on.
-                <code className="empty-command">
-                  curl -fsSL https://shell.online/install | sh
-                </code>
-              </li>
-              <li>
-                Sign that machine in, and allow browser-started sessions.
-                <code className="empty-command">shell auth</code>
-              </li>
-              <li>
-                Press <b>+ Session</b> and pick what to run. It opens here as a
-                tab you can type into.
-              </li>
-            </ol>
+          <div className="sessions-empty first-session">
+            <SessionStartGuide />
             {/* The first run is where most people are lost, and silently. */}
             <div className="sessions-empty-foot">
               <FeedbackLink

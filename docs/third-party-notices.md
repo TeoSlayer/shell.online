@@ -29,6 +29,14 @@ Copyright (c) 2011 Einar Otto Stangvik; Copyright (c) 2013 Arnout Kazemier and c
 
 The bundled font is Copyright (c) 2022 Kasper Nordkvist. “Uncut Sans” is a trademark of Kasper Nordkvist. Its full license is included at [`public/fonts/OFL-Uncut-Sans.txt`](../public/fonts/OFL-Uncut-Sans.txt).
 
+## Public landing-page brand marks
+
+Agent and host-platform marks identify compatible terminal tools and operating
+systems, not endorsements. Artwork sources and the included Lobe Icons MIT and
+Simple Icons CC0 licenses are listed in
+[`public/brands/README.md`](../public/brands/README.md). Trademarks remain with
+their respective owners.
+
 ## Kenney game assets — Creative Commons Zero (CC0 1.0)
 
 The game skin's artwork is by Kenney Vleugels (https://kenney.nl), released

@@ -5,18 +5,18 @@ import { automationConsent, canManageAutomation } from "../lib/session-automatio
 const switches: { key: keyof SessionAutomationConsent; label: string; help: string }[] = [
   {
     key: "mcpTeamAccess",
-    label: "Allow team-wide MCP access",
-    help: "Opt this session into access by authenticated teammates. Terminal input still requires a separate control grant; the browser password is not shared by this switch.",
+    label: "Team agent access (MCP)",
+    help: "Save permission for teammates’ agents. This does not create a connection or share the browser password. Typing needs a separate control grant.",
   },
   {
     key: "dailyBriefingEnabled",
-    label: "Use existing responses for a daily briefing",
-    help: "At most once a day, a supported host can save an encrypted title and excerpt from its explicitly resumed launch conversation. No new prompt or model call. This version delivers only to your unlocked vault; unsupported sessions are skipped.",
+    label: "Daily briefing",
+    help: "Reuse an existing agent response as a title and summary, at most once a day. No extra prompt or model call. Requires a supported, updated host and your unlocked vault; other sessions are skipped.",
   },
   {
     key: "dailyBriefingTeamAccess",
-    label: "Share briefings with the whole team",
-    help: "A separate opt-in for future team delivery. This version keeps extracted titles and responses owner-only, even when this preference is saved.",
+    label: "Team briefing delivery (not available yet)",
+    help: "Saves your preference for future team delivery. Briefings remain visible only to you in this version.",
   },
 ];
 
@@ -52,10 +52,8 @@ export function SessionAutomation({ session, you, onChange }: {
     <section className="session-automation" aria-label="Agent permissions">
       <h2 className="detail-heading">Agent permissions</h2>
       <p className="detail-empty">
-        Each session saves its own choice; new ones start from your account
-        default (set in the shell CLI), so a session can sit on either side of it.
-        Only you, the owner, can change these. Enabling passive briefings lets a
-        compatible host publish existing material; it never starts an MCP connection or wakes an agent.
+        Only you, the session owner, can change these. Changes sync with the CLI.
+        New sessions use your account default; this session keeps its own settings.
       </p>
       <fieldset disabled={busy} aria-busy={busy}>
         <legend className="visually-hidden">Owner consent</legend>
@@ -68,7 +66,7 @@ export function SessionAutomation({ session, you, onChange }: {
         ))}
       </fieldset>
       <p className="session-automation-status" role="status">
-        {busy ? "Saving permission…" : saved ? "Permission saved. A compatible running host and an unlocked vault are needed to display content." : "Passive briefings require an updated compatible host. Team MCP connection and team briefing delivery are not enabled by saving these preferences."}
+        {busy ? "Saving…" : saved ? "Saved. The CLI uses the same settings." : "Saving permission does not start an agent or an MCP connection."}
       </p>
       {error && <p className="audience-error" role="alert">{error}</p>}
     </section>

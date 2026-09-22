@@ -18,9 +18,11 @@ describe("session automation controls", () => {
     const { html, onChange } = render("owner");
     expect(html.match(/type="checkbox"/g)).toHaveLength(3);
     expect(html).not.toContain("checked=");
-    expect(html).toContain("No new prompt or model call");
-    expect(html).toContain("owner-only");
-    expect(html).toContain("updated compatible host");
+    expect(html).toContain("No extra prompt or model call");
+    expect(html).toContain("visible only to you");
+    expect(html).toContain("supported, updated host");
+    expect(html).toContain("not available yet");
+    expect(html).toContain("does not start an agent or an MCP connection");
     expect(onChange).not.toHaveBeenCalled();
   });
   it("does not turn team MCP permission into briefing permission", () => {

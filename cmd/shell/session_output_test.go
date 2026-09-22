@@ -12,7 +12,7 @@ func TestSessionCardMakesEncryptedAccessExplicit(t *testing.T) {
 		ID: "abcdefghijklmnopqrstuvwxyzABCDEF", ShareURL: "https://shell.online/s/example#salt=value",
 		Password: "Ab3dE7-_", Encrypted: true, Vault: vaultSaved,
 	}, true)
-	for _, expected := range []string{"shell.online  ✦", "Password", "Ab3dE7-_", "Vault", "saved to your account vault", "interactive · end-to-end encrypted", "Rejoin", "shell attach abcdefghij"} {
+	for _, expected := range []string{"shell.online  ✦", "Your terminal is ready", "Password", "Ab3dE7-_", "Vault", "saved to your account vault", "view and type · end-to-end encrypted", "Rejoin", "shell attach abcdefghij", "shell kill -- abcdefghij", "Open the full link", "awake and online", "Closing the browser does not stop it"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("session card does not contain %q:\n%s", expected, output.String())
 		}

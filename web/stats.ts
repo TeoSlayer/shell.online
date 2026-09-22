@@ -401,7 +401,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
     .map((metric) => ({ label: metric.target, value: metric.count }))
     .sort((left, right) => right.value - left.value);
   const installerAudience = [
-    { label: "Piped to a shell (curl, wget)", value: audiences.installer.tools },
+    { label: "Fetched by command-line tools", value: audiences.installer.tools },
     { label: "Read in a browser", value: audiences.installer.browsers },
     { label: "Fetched by crawlers", value: audiences.installer.crawlers },
     { label: "No user agent", value: audiences.installer.unknown },
@@ -440,11 +440,9 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         delta(figures.siteViews, previous?.figures.siteViews),
       )}
       ${renderKpi(
-        "Installs completed",
+        "Binary downloads",
         figures.installs,
-        figures.installerRuns === 0
-          ? "no installer runs in this range"
-          : `${formatPercent(ratio(figures.installs, figures.installerRuns))} of ${integerFormatter.format(figures.installerRuns)} installer run${figures.installerRuns === 1 ? "" : "s"}`,
+        `${integerFormatter.format(figures.installsReported)} installer success reports · not inferred from downloads`,
         snapshot.trend,
         "installs",
         "amber",
@@ -601,11 +599,11 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
         installerAudience,
         "download",
         metrics.skillDownloads === 0
-          ? "Only a fetch by curl or wget counts as a run."
-          : `Only a fetch by curl or wget counts as a run. The agent skill file was fetched ${integerFormatter.format(metrics.skillDownloads)} time${metrics.skillDownloads === 1 ? "" : "s"}.`,
+          ? "A script fetch does not prove it was executed."
+          : `A script fetch does not prove it was executed. The agent skill file was fetched ${integerFormatter.format(metrics.skillDownloads)} time${metrics.skillDownloads === 1 ? "" : "s"}.`,
       )}
       ${renderBreakdown(
-        "Installs by platform",
+        "Downloads by platform",
         "Release binaries served",
         installsByPlatform,
         "download",
@@ -839,9 +837,9 @@ function renderInstallConversion(snapshot: StatsSnapshot): string {
   if (conversion === null || conversion.installers === 0) return "";
   const fresh = conversion.installers - conversion.matured;
   const verdict = conversion.matured === 0
-    ? `${integerFormatter.format(conversion.installers)} machine${conversion.installers === 1 ? "" : "s"} installed in this range, all within the last ${INSTALL_CONVERSION_DAYS} days, too recently to tell whether a session followed.`
-    : `Of the ${integerFormatter.format(conversion.matured)} machine${conversion.matured === 1 ? "" : "s"} that installed at least ${INSTALL_CONVERSION_DAYS} days ago, ${integerFormatter.format(conversion.started)} (${formatPercent(ratio(conversion.started, conversion.matured))}) started a session within ${INSTALL_CONVERSION_DAYS} days.${fresh > 0 ? ` ${integerFormatter.format(fresh)} more installed too recently to tell.` : ""}`;
-  return `<p class="cohort-empty">${escapeHtml(verdict)} Machines are followed by address from the binary download to the first session.</p>`;
+    ? `${integerFormatter.format(conversion.installers)} addresses fetched an installer or binary within the last ${INSTALL_CONVERSION_DAYS} days, too recently to evaluate follow-up CLI requests.`
+    : `Of ${integerFormatter.format(conversion.matured)} addresses that first fetched an installer or binary at least ${INSTALL_CONVERSION_DAYS} days ago, ${integerFormatter.format(conversion.started)} (${formatPercent(ratio(conversion.started, conversion.matured))}) made a session-creation request within ${INSTALL_CONVERSION_DAYS} days.${fresh > 0 ? ` ${integerFormatter.format(fresh)} are too recent to evaluate.` : ""}`;
+  return `<p class="cohort-empty">${escapeHtml(verdict)} This approximate address-based join does not prove installation or a working session. Shared networks can merge users and network changes can split one user.</p>`;
 }
 
 /*

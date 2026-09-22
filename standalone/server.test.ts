@@ -8,6 +8,7 @@ import { WebSocket, type ClientOptions } from "ws";
 import { Opcode } from "../shared/protocol";
 import { persistentSessionID } from "../shared/persistent-session";
 import { createStandaloneServer } from "./server";
+import { RELEASE_VERSION } from "../shared/release";
 
 const cleanup: Array<() => Promise<void> | void> = [];
 
@@ -23,7 +24,7 @@ async function start(stateFile?: string) {
   await new Promise<void>((resolve) => runtime.server.listen(0, "127.0.0.1", resolve));
   const port = (runtime.server.address() as AddressInfo).port;
   cleanup.push(async () => { await runtime.close(); rmSync(root, { recursive: true, force: true }); });
-  return { runtime, base: `http://127.0.0.1:${port}`, ws: `ws://127.0.0.1:${port}`, stateFile: stateFile ?? join(root, "state.json") };
+  return { runtime, webRoot: join(root, "web"), base: `http://127.0.0.1:${port}`, ws: `ws://127.0.0.1:${port}`, stateFile: stateFile ?? join(root, "state.json") };
 }
 
 async function create(base: string, readOnly = false, encrypted = false) {
@@ -56,6 +57,16 @@ function message(socket: WebSocket, predicate: (value: string | Buffer) => boole
 }
 
 describe("standalone relay", () => {
+  test("serves current and archived documentation through the same version-aware mapping", async () => {
+    const { base, webRoot } = await start();
+    mkdirSync(join(webRoot, "docs"));
+    mkdirSync(join(webRoot, "docs", "archive"));
+    mkdirSync(join(webRoot, "mobile"));
+    writeFileSync(join(webRoot, "docs", "archive", "index.html"), "archived guide loading");
+    writeFileSync(join(webRoot, "mobile", "index.html"), "current mobile guide");
+    expect(await (await fetch(`${base}/docs/v0.6.0/mobile/`)).text()).toBe("archived guide loading");
+    expect(await (await fetch(`${base}/docs/v${RELEASE_VERSION}/mobile/`)).text()).toBe("current mobile guide");
+  });
   test("serves the app and health endpoint", async () => {
     const { base } = await start();
     expect(await (await fetch(base)).text()).toContain("standalone");

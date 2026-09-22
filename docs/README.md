@@ -35,7 +35,7 @@ and the [changelog](../CHANGELOG.md).
 ## Change the documentation
 
 - `content.json` holds the versioned public guides. Its version must match `package.json`; tagged copies support older-release docs.
-- `shared/documentation.ts` defines routes and navigation. `web/documentation.ts` renders the guides using `web/documentation.html`.
+- `shared/documentation.ts` defines routes and navigation. The build renders complete, readable HTML using `shared/documentation-view.ts` and `web/documentation.html`. `web/documentation.ts` adds local search, copy buttons and archived-version loading; current guides remain readable without JavaScript.
 - Start with what someone needs to do and what they should see. Put protocol detail, architecture and optional features after the common path.
 - Keep commands copyable, examples synthetic, and security boundaries explicit. Do not present intended work as a shipped feature.
 - Preserve the content schema and optional historical Mermaid diagrams. Run `npm run check` and `npm run build:web` after changing website documentation.

@@ -132,6 +132,10 @@ export interface StatsAudiences {
  * thing. The raw event totals stay in metrics and the ledger.
  */
 export interface StatsFigures {
+  /** Browser-reported public page loads; missing when JS/reporting is blocked. */
+  pageLoads: number;
+  /** Successful installer reports, not inferred from a binary download. */
+  installsReported: number;
   /** Landing and documentation views from browsers: people looking. */
   siteViews: number;
   /** The same pages fetched by self-identified crawlers. */
@@ -141,7 +145,7 @@ export interface StatsFigures {
   installCopies: number;
   /** Install script fetches by curl or wget: the installer actually run, not read. */
   installerRuns: number;
-  /** Release binaries served to anything but a crawler: an install completed. */
+  /** Full binary responses to non-crawlers; NOT proof of installation. Legacy field name. */
   installs: number;
   sessionsStarted: number;
   /** Sessions that ended without the host ever connecting: a blocked WebSocket, usually. */
@@ -289,7 +293,7 @@ export interface StatsSnapshot {
     /** Requests for the install script, which humans and crawlers both make. */
     installs: number;
     skillDownloads: number;
-    /** Release binaries served: the installer's last step, so a completed install. */
+    /** Full release binary responses; not proof of a completed install. */
     binaryDownloads: number;
     /** Installers that reported finishing, from the script itself. */
     installsReported: number;

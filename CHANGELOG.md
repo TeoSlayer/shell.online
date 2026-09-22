@@ -2,7 +2,28 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## [0.23.0] — 2026-09-23
+
+### Added
+
+- A step-by-step app setup guide with copyable Windows and macOS/Linux commands.
+- Shared links explain where to get the session password and how to recover it
+  on the host or through the account vault. An account password is not a session password.
+- Explicit, content-free PostHog events across product surfaces. GA4 remains
+  public-page only; neither records terminal content or access credentials.
+
+### Improved
+
+- CLI help and launch output lead with opening the session, sharing safely,
+  keeping the host online and returning locally. JSON output is unchanged.
+- Viewer status distinguishes connecting, connected, waiting, ended and missing
+  sessions. Waiting for a latency measurement no longer falsely says Offline.
+- The app labels sharing actions, explains missing vault passwords and separates
+  saved permissions from available functionality. Windows onboarding commands wrap on phones.
+- Integrated the deployed, mobile-first landing page and task-first public docs
+  with current app and CLI source, including GA4 and first-party measurement fixes.
+- Shared-terminal reports open the same authenticated feedback flow as the app,
+  without including the session URL, password or terminal contents.
 
 ### Changed
 

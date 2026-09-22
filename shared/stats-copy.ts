@@ -76,7 +76,7 @@ export function humanize(value: string): string {
     checksum_mismatch: "Checksum mismatch",
     write_failed: "Could not write executable",
     remote_input: "Remote input",
-    cta_click: "Sign-up click",
+    cta_click: "Call-to-action click",
     signup_nav: "Sign up free (nav)",
     signup_hero: "Sign up free (hero)",
     signup_team: "Manage a team",
@@ -97,7 +97,12 @@ export function humanize(value: string): string {
     docs_self_hosting: "Docs · Self-hosting",
     session: "Shared terminal",
     installer_download: "Installer fetched",
-    binary_download: "Install completed",
+    binary_download: "Binary downloaded",
+    page_loaded: "Browser reported a page load",
+    start_nav: "Get started (nav)",
+    start_hero: "Start a session (hero)",
+    start_footer: "Start a session (footer)",
+    demo: "See a real session",
     share_opened: "Opened in a browser",
     viewer_connected: "Viewer connected",
     viewer_disconnected: "Viewer disconnected",
@@ -174,9 +179,7 @@ export function funnelInsight(snapshot: StatsSnapshot): string {
     parts.push(`${integerFormatter.format(figures.siteViews)} views by people${visitors}${crawlers}.`);
     if (figures.installCopies > 0) parts.push(`${integerFormatter.format(figures.installCopies)} copied an install command.`);
     const runs = figures.installerRuns;
-    parts.push(runs === 0
-      ? "Nobody ran the installer."
-      : `${integerFormatter.format(runs)} installer run${runs === 1 ? "" : "s"}, ${integerFormatter.format(figures.installs)} completed (${formatPercent(ratio(figures.installs, runs))}).`);
+    parts.push(`${integerFormatter.format(runs)} install-script ${runs === 1 ? "fetch" : "fetches"}, ${integerFormatter.format(figures.installs)} binary download${figures.installs === 1 ? "" : "s"}, ${integerFormatter.format(figures.installsReported)} reported successful install${figures.installsReported === 1 ? "" : "s"}. These are separate event counts, not a matched conversion rate.`);
   }
   if (figures.sessionsStarted === 0) {
     parts.push("No session started.");

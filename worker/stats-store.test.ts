@@ -202,6 +202,8 @@ describe("people and the funnel", () => {
     expect(snapshot.audiences.installer).toEqual({ browsers: 4, tools: 50, crawlers: 8, unknown: 0 });
     expect(snapshot.audiences.installs).toEqual({ browsers: 0, tools: 3, crawlers: 1, unknown: 0 });
     expect(snapshot.figures).toEqual({
+      pageLoads: 0,
+      installsReported: 3,
       siteViews: 790,
       crawlerViews: 218,
       ctaClicks: 12,
@@ -228,10 +230,12 @@ describe("people and the funnel", () => {
     const snapshot = buildStatsSnapshot(rows, "7d", now, rangeStart);
     expect(snapshot.funnel.map((step) => [step.key, step.count, step.unique])).toEqual([
       ["visited", 790, 400],
+      ["loaded", 0, null],
       ["signup", 12, null],
       ["copied", 25, null],
       ["installer", 50, 40],
       ["installed", 3, null],
+      ["reported_install", 3, null],
       ["session", 48, 9],
       ["opened", 6, 5],
       ["typed", 5, null],
@@ -240,14 +244,16 @@ describe("people and the funnel", () => {
       [{ label: "by crawlers", count: 218 }, { label: "by tools", count: 9 }],
       [],
       [],
+      [],
       [{ label: "read in a browser", count: 4 }, { label: "by crawlers", count: 8 }],
       [{ label: "by crawlers", count: 1 }],
+      [],
       [{ label: "created but never connected", count: 4 }],
       [],
       [{ label: "opened read-only, typing impossible", count: 1 }],
     ]);
     for (const step of snapshot.funnel) expect(step.note.length).toBeGreaterThan(20);
-    expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, "visited", "visited", "visited", "installer", null, "session", "opened"]);
+    expect(snapshot.funnel.map((step) => step.basis)).toEqual([null, null, null, null, null, null, null, null, "session", "opened"]);
   });
 
   it("keeps what happens after a link is opened: waits, stays, refusals, and read-only sessions apart", () => {
@@ -293,6 +299,8 @@ describe("people and the funnel", () => {
       rangeStart: rangeStart - 7 * DAY_MS,
       rangeEnd: rangeStart,
       figures: {
+        pageLoads: 0,
+        installsReported: 0,
         siteViews: 500,
         crawlerViews: 300,
         ctaClicks: 6,

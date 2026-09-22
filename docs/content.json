@@ -1,957 +1,1225 @@
 {
-  "version": "0.22.0",
+  "version": "0.23.0",
   "pages": {
     "docs": {
-      "eyebrow": "Documentation",
-      "title": "Share any terminal process in a browser.",
-      "intro": "shell.online wraps a command in a local PTY, keeps it running on your machine, and exposes its live terminal through an interactive or server-enforced read-only URL. Link the machine to an account and those sessions also gather in a web app you and your organization can work from.",
+      "eyebrow": "Quick start",
+      "title": "Your terminal. Open anywhere.",
+      "intro": "Start a session on your computer, then open it in any browser. Watch your agent, reply to a prompt, or bring in a teammate. No account needed.",
       "seo": {
-        "description": "Install shell.online, share interactive or read-only terminal processes, link machines, and manage sessions and organizations from the web app.",
-        "socialTitle": "Documentation | shell.online",
-        "socialDescription": "Share, monitor, and manage live terminal processes, from the one-line install to optional organizations."
+        "description": "Start a session on your computer, then open it in any browser. Watch your agent, reply to a prompt, or bring in a teammate. No account needed.",
+        "socialTitle": "Your terminal. Open anywhere. | shell.online",
+        "socialDescription": "Start a session on your computer, then open it in any browser. Watch your agent, reply to a prompt, or bring in a teammate. No account needed."
       },
       "cards": [
         [
-          "Scoped MCP access",
-          "shell mcp grant <ID> <label> observe 900 issues a short-lived bearer for status, screen, output and waits at /mcp. Quote labels containing spaces. v0.21.1 keeps labels separate from permissions and lifetime; new grants require an updated running host, so restart older hosts when safe after upgrading. Listing and revocation remain compatible. The control preset adds shell_send when the operator enables it. The host supplies its frame key for server-side decryption; agents receive plaintext. Revoke with shell mcp revoke-all <ID>. This native channel is separate from Refstream Connect agent."
+          "1. Install on your computer",
+          "Use the computer where your agent or command will run. Choose the command for its operating system.",
+          [
+            [
+              "curl -fsSL https://shell.online/install | sh",
+              "macOS, Linux, BSD or Solaris. Run in a terminal."
+            ],
+            [
+              "irm https://shell.online/install.ps1 | iex",
+              "Windows. Run in PowerShell."
+            ]
+          ]
         ],
         [
-          "Install",
-          "Run curl -fsSL https://shell.online/install | sh on macOS, Linux, BSD, or Solaris; on Windows PowerShell use irm https://shell.online/install.ps1 | iex. Both installers verify SHA-256 before writing the binary and print PATH instructions when needed."
+          "2. Start something to share",
+          "Put `shell` before the command you normally use. Your agent must already be installed and signed in. This starts a new process; it does not attach to one that is already running.",
+          [
+            [
+              "shell claude",
+              "Start Claude Code."
+            ],
+            [
+              "shell codex",
+              "Start Codex."
+            ],
+            [
+              "shell opencode",
+              "Start OpenCode."
+            ],
+            [
+              "shell muse",
+              "Start Muse Code."
+            ],
+            [
+              "shell -- npm run dev",
+              "Or share another terminal command."
+            ]
+          ]
         ],
         [
-          "Start a share",
-          "Prefix an existing command: shell claude, shell codex, or shell python train.py. Omit the command for a fresh shell. The URL prints after the relay exists and the task survives a short usability handshake; a task that exits immediately produces no dead link."
+          "3. Open the link",
+          "The terminal prints a link, password and QR code. Scan the QR code on your phone, or open the full link in another browser and enter the password.\n\nYou should see the same terminal output. You can type unless the session is read-only. Keep the host computer awake and connected to the internet."
         ],
         [
-          "Choose access",
-          "Links are interactive by default. Add --read-only before the command when viewers should monitor without being able to send terminal input."
+          "Leave the tab. Keep the work.",
+          "Closing the browser does not stop the process. Normal sessions run in the background. Reopen the link to return, or attach on the host computer.",
+          [
+            [
+              "shell list",
+              "Find your local sessions and their IDs."
+            ],
+            [
+              "shell attach <ID>",
+              "Return to a local session. Press Ctrl-X, then D to detach without stopping it."
+            ],
+            [
+              "shell kill -- <ID>",
+              "Stop that process and close its share."
+            ]
+          ]
         ],
         [
-          "Refstream alpha",
-          "xterm.js remains the default renderer. Refstream v0.1.0-alpha.5 is an optional browser setting for search, marked-command inspection, themes, output export, backed file references, and revocable agent handoffs. It changes only the browser renderer; switch back to xterm.js whenever a TUI or input path is not yet compatible."
+          "Share only what you mean to",
+          "An interactive link and its password let someone type with the process’s permissions. Give them only to people you trust. For watching without typing, start a read-only session.",
+          [
+            [
+              "shell --read-only claude",
+              "Watch-only browser access. Choose this when creating the session."
+            ]
+          ]
         ],
         [
-          "Encryption is automatic",
-          "Every normal share is E2EE. shell prints a ten-character browser password with the URL; set SHELL_ONLINE_E2EE_PASSWORD to choose your own. --no-e2ee is an explicit compatibility opt-out. Use Docker when the same encrypted shell and URL should survive container restarts."
-        ],
-        [
-          "Manage locally",
-          "Use shell list to see local process uptime and the relay's independent online, reconnecting, expired, or unknown state. Wide terminals get a compact table; narrow terminals get one readable card per share with the same URL, password, rejoin, and stop details. Use shell attach <ID> to take over locally and shell kill <ID> to stop one. Task exit always closes an ordinary share."
-        ],
-        [
-          "Link a machine",
-          "shell auth, which up to 0.18 was called shell login and still answers to it, opens a browser on the approval screen at app.shell.online and hands a one-time code back to a listener bound to 127.0.0.1, so the code never leaves the computer. shell auth --no-browser prints the URL instead of launching the browser, for a machine with no browser on it; approve it anywhere, and if that browser cannot reach the loopback listener it stops on a page that will not load, whose address pasted back into the terminal completes the sign-in. Use shell whoami to see the linked account and shell logout to unlink it and revoke its token. Linking is optional; the CLI behaves identically without it. Each share is then published to your account as it starts and marked closed when the process exits: the share URL, the command name, the host name, and the timing. Never terminal contents, and never the E2EE key, which lives in the URL fragment and is stripped before the URL is sent."
-        ],
-        [
-          "Work from the web app",
-          "Sessions from every linked machine appear in one searchable list or board, grouped by access and reconciled with the relay's current Online, Starting, Offline, Finished, or Unavailable state. Row controls act independently from the row link, assignee pickers show names and email context, and failed loads can be retried without losing the current view. A session started in the browser opens its terminal tab as soon as the machine publishes it; switching tabs does not disconnect any terminal."
-        ],
-        [
-          "Start sessions from the browser",
-          "The first shell auth on a machine asks whether your signed-in browser may start sessions there; after that the answer stands, and every login prints which way it went. Agree and a small daemon runs in the background for as long as you stay signed in, and is installed as a background service so the machine is still reachable after a restart, so pick a machine, pick what to run, and it starts there. The choices are Claude Code, GPT Codex, Hermes Agent, OpenClaw, or a plain terminal process. Browser-entered command lines use sh on Unix and Windows PowerShell on Windows, preserving normal quoted and escaped arguments. Withdraw the capability with shell auth --no-remote-start, pause it with shell daemon stop, and check it with shell daemon status. Remove that service with shell service uninstall, and put it back with shell service install."
-        ],
-        [
-          "Organizations and collaboration",
-          "Signing up creates an organization and invite links add people to it. Everyone inside sees every member's sessions, each session has an owner and multiple assignees, and the owner can hand a running session to someone else. The audit log opens on the activity itself; search stays visible while session, person, event, and time filters plus charts are revealed only when needed."
-        ],
-        [
-          "Optional personal vault",
-          "The CLI always prints and locally retains an active session's password. After shell auth, it also saves an encrypted copy when that account has enabled its personal vault. The vault is per person, never per team, and unlocks normally with its password or a supported PRF passkey; the recovery key is the last-resort fallback. The service receives only wrapped keys and ciphertext."
+          "Ready for more?",
+          "[Link your machines](/app/) to find sessions in one app. [Connect another agent](/agents/) with a separate MCP grant. If the view is blank or offline, [start here](/reliability/)."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 2,
-          "title": "One command, one live path",
-          "caption": "The process and PTY stay on the machine; browsers receive an encrypted, collaborative view through the relay.",
-          "desktop": "flowchart LR\n  A[Your command] --> B[Local PTY]\n  B -->|encrypted output| C[Relay]\n  C --> D[Browser]\n  D -->|encrypted input| C\n  C --> B",
-          "mobile": "flowchart TD\n  A[Your command] --> B[Local PTY]\n  B -->|encrypted output| C[Relay]\n  C --> D[Browser]\n  D -. encrypted input .-> C\n  C -. input .-> B"
-        }
       ]
     },
-    "app": {
-      "eyebrow": "Web app",
-      "title": "One place for your machines, sessions, and team.",
-      "intro": "The optional app at app.shell.online organizes sessions from linked machines without changing how the CLI, relay, PTY, or end-to-end encryption work. The CLI and anonymous share links remain fully usable without an account.",
+    "platforms": {
+      "eyebrow": "Install & update",
+      "title": "Get shell.online on your computer.",
+      "intro": "Install the CLI on the machine doing the work. Phones and other viewing devices need only a browser. Choose an install method, then start a session.",
       "seo": {
-        "description": "Use the optional shell.online web app to link machines, manage live sessions, collaborate with a team, and keep session passwords in a personal encrypted vault.",
-        "socialTitle": "Web app guide | shell.online",
-        "socialDescription": "Link machines, find live sessions, assign teammates, start approved processes, and use an optional personal password vault."
+        "description": "Install the CLI on the machine doing the work. Phones and other viewing devices need only a browser. Choose an install method, then start a session.",
+        "socialTitle": "Get shell.online on your computer. | shell.online",
+        "socialDescription": "Install the CLI on the machine doing the work. Phones and other viewing devices need only a browser. Choose an install method, then start a session."
       },
       "cards": [
         [
-          "Link a machine",
-          "Run shell auth and finish the approval in your browser. The CLI returns the one-time result through a listener bound to 127.0.0.1; shell auth --no-browser prints the same local approval URL instead of opening it. Linking is optional and does not change normal share behavior.",
+          "Install on macOS, Linux, BSD or Solaris",
+          "The installer selects the right binary and checks its SHA-256 checksum. It does not run sudo or silently change your PATH.",
           [
             [
-              "shell auth",
-              "Link this machine and optionally allow browser-started sessions."
-            ],
-            [
-              "shell whoami",
-              "Show the linked account and machine identity."
-            ],
-            [
-              "shell logout",
-              "Unlink this machine and revoke its account token without stopping local shares."
+              "curl -fsSL https://shell.online/install | sh",
+              "If the installer prints PATH instructions, follow them before opening a session."
             ]
           ]
         ],
         [
-          "Understand the session list",
-          "The app combines account metadata with the relay's current state. Online and Starting mean the relay can still see a live host or startup; Offline and Unavailable never imply that the process is reachable; Finished records a known task exit. Search and access filters narrow the list, the current page stays in the URL, and Clean up removes only finished or relay-confirmed unavailable sessions after confirmation. A temporary disconnect is never cleaned up."
-        ],
-        [
-          "Open and organize sessions",
-          "Opening a session uses its original share URL and browser password. Session-row controls, assignee selectors, and menus are independent from the row link. Multiple terminal tabs stay mounted while you switch between them, so their sockets and scrollback remain live. Owners can assign several teammates or transfer ownership without changing the public bearer link."
-        ],
-        [
-          "Start from the browser",
-          "Remote start is explicit machine consent, not a hidden agent. shell auth can start the local daemon after approval; the app then asks that machine to launch a supported agent preset or a command. shell daemon status, stop, and start manage availability, while the first agreement installs a user service so the machine remains reachable across restarts; shell service uninstall removes it.",
+          "Install on Windows",
+          "Open PowerShell and run the installer. The CLI uses Windows’ native ConPTY terminal support.",
           [
             [
-              "shell auth --no-remote-start",
-              "Link the account without granting browser-start capability."
-            ],
-            [
-              "shell daemon status",
-              "Check whether this machine can accept an approved browser start."
-            ],
-            [
-              "shell service install",
-              "Install persistent machine availability deliberately; it is never implied by login."
+              "irm https://shell.online/install.ps1 | iex",
+              "Works with the published x86, x64 and ARM64 builds."
             ]
           ]
         ],
         [
-          "Personal vault",
-          "The CLI always prints and locally retains an active session password. After shell auth, it also saves an encrypted copy only when that person has enabled their optional vault. The vault is per account, not per organization; teammates do not automatically receive its passwords. Unlock it with its vault password or a supported PRF passkey, and retain the recovery key as the break-glass fallback."
+          "Prefer Homebrew?",
+          "Use the project’s tap. The tap can lag behind the direct installer; check `shell --version` when you need a particular release.",
+          [
+            [
+              "brew tap teoslayer/shell-online https://github.com/TeoSlayer/shell.online",
+              "Add the project’s tap."
+            ],
+            [
+              "brew trust --tap teoslayer/shell-online",
+              "Approve the tap if your Homebrew version requires it."
+            ],
+            [
+              "brew install shell-online",
+              "Install the CLI."
+            ]
+          ]
         ],
         [
-          "Organizations and audit",
-          "An organization groups people, machines, and sessions. Roles govern administrative actions; session ownership and multiple assignees govern responsibility for individual sessions. The audit log records who did what and when. Sensitive recorded input is encrypted to the team's audit key in the browser; ordinary service metadata remains visible to the app. Each member's copy of that key is kept in their vault and sealed to them by a teammate's browser, so an unlocked vault opens the audit log by itself and no key is ever pasted."
+          "Build the CLI from source",
+          "Install Git and Go 1.26.8 first. Clone the release tag, not an unpinned development branch. This builds the CLI only: you do not need Node.js or a local web server to use the hosted service. The Go build downloads the dependencies pinned by go.mod and go.sum.\n\nThe commands below assume a new checkout directory. On macOS, Linux and other Unix systems:",
+          [
+            [
+              "git clone --depth 1 --branch v0.23.0 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.0\" -o shell ./cmd/shell\n./shell --version",
+              "Expect version 0.23.0. Then use ./shell codex, ./shell claude, or your own command from this directory."
+            ],
+            [
+              "git clone --depth 1 --branch v0.23.0 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.0\" -o shell.exe ./cmd/shell\n.\\shell.exe --version",
+              "Windows PowerShell: run these instead. Then use .\\shell.exe codex or another installed command."
+            ],
+            [
+              "Make it available elsewhere",
+              "Move the built binary into a directory on your PATH if you want to type shell from anywhere. No sudo is needed when you choose a user-owned directory. Existing sessions are not restarted by a build."
+            ],
+            [
+              "Develop the website too?",
+              "That is a separate build using Node.js and npm. See the repository’s [development instructions](https://github.com/TeoSlayer/shell.online#development). On MIPS64, keep Go 1.26.8: the repository documents a Go 1.27 runtime regression."
+            ]
+          ]
         ],
         [
-          "Failure and recovery",
-          "A stale app row cannot keep a dead share online: relay reconciliation moves unreachable sessions out of the live state, and a known task exit marks them Finished. Failed list loads preserve the current view and can be retried. If a password is not in your personal vault, retrieve it from the machine with shell password <ID>; the service has no decryption backdoor."
+          "Check or update your version",
+          "Run the same installer again to update an installer-managed copy. For Homebrew, use `brew upgrade shell-online`.\n\nUpdating the binary does not update hosts that are already running. Save your agent’s work and restart its Shell host when safe to use new host features. Do not stop an active task just to update.",
+          [
+            [
+              "shell --version",
+              "Check the executable your terminal is using."
+            ]
+          ]
         ],
         [
-          "Download your data",
-          "Account has a Download my data action. It creates a local JSON export of your account, organization membership, linked machines, sessions you own or are assigned, and the encrypted vault record. It does not include other members' private account data or decrypted terminal contents."
+          "Supported host systems",
+          "These are release targets, not a promise that every device or agent runs on every architecture. Published checksums are in [SHA256SUMS](/downloads/SHA256SUMS).",
+          [
+            [
+              "macOS",
+              "amd64, arm64. Build-verified."
+            ],
+            [
+              "Windows",
+              "386, amd64, arm64. Native runtime checks on amd64; other targets build-verified."
+            ],
+            [
+              "Linux",
+              "386, amd64, armv5/6/7, arm64, loong64, mips, mipsle, mips64, mips64le, ppc64, ppc64le, riscv64, s390x. Runtime checks under QEMU."
+            ],
+            [
+              "FreeBSD",
+              "386, amd64, armv7, arm64. Build-verified."
+            ],
+            [
+              "OpenBSD",
+              "386, amd64, armv7, arm64, ppc64, riscv64. Build-verified."
+            ],
+            [
+              "NetBSD",
+              "386, amd64, armv7, arm64. Build-verified."
+            ],
+            [
+              "DragonFly BSD",
+              "amd64. Build-verified."
+            ],
+            [
+              "Solaris",
+              "amd64. Build-verified."
+            ]
+          ]
         ],
         [
-          "Send feedback",
-          "Send feedback sits in the account menu and on the Account page, and a Tell us link sits where something can go wrong: under the new session form, the session password gate, a session that has ended, error notices, the empty sessions list, the vault screens, and the delete account form. A message carries the page it came from, the app version, the browser name, and a few facts that screen attaches, all shown before you send. Terminal contents, share links, and passwords are never attached. The service keeps each message and forwards it to the team by email; deleting your account keeps the words and removes who sent them."
+          "Routers, small computers and ROS",
+          "A supported binary still needs a working PTY and outbound HTTPS/WebSockets. Vendor firmware, kernel restrictions and storage can affect small Linux devices; QEMU checks do not cover those hardware differences.\n\nFor ROS, first load your usual ROS environment, then put `shell` before its command. Shell’s platform support does not extend ROS’s own support."
         ],
         [
-          "Authentication and hosting",
-          "The hosted app keeps its existing Firebase email and Google sign-in. A self-hosted deployment can instead select any compatible OpenID Connect provider with Authorization Code and PKCE. OIDC activates only when both issuer and client id are configured; partial configuration is rejected during build and deployment. Both modes use the same PostgreSQL account data, and the terminal relay remains independent."
+          "If the command is not found",
+          "Follow the installer’s PATH instructions, open a new terminal, and try `shell --version`. Make sure you installed on the host computer—not on the phone you use to view it. Then [start your first session](/docs/)."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 1,
-          "title": "Link once, keep the terminal boundary",
-          "caption": "The app coordinates identity and metadata. Terminal traffic continues through the independent encrypted relay path.",
-          "desktop": "flowchart LR\n  A[shell auth] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]",
-          "mobile": "flowchart TD\n  A[shell auth] --> B[Browser approval]\n  B --> C[Linked machine]\n  C --> D[App session list]\n  C -. encrypted terminal .-> E[Terminal relay]\n  E -. ciphertext .-> F[Session browser]"
-        }
       ]
     },
     "mobile": {
-      "eyebrow": "Terminal fidelity",
-      "title": "A real terminal, fitted to the device in your hand.",
-      "intro": "A phone is not a smaller desktop. shell.online uses a spacious 120\u00d736 session grid until a phone connects, then atomically switches current hosts to an 80\u00d740 portrait grid and fits it to each browser. Older hosts fall back to 80\u00d724.",
+      "eyebrow": "Use your phone",
+      "title": "Keep work moving from your phone.",
+      "intro": "Open the share link in your phone’s browser. Read output, scroll back, and reply to your agent without moving its work off your computer.",
       "seo": {
-        "description": "How shell.online fits shared terminals to phones with deterministic PTY sizing, touch scrolling, keyboard handling, and bounded paste input.",
-        "socialTitle": "A real terminal on mobile | shell.online",
-        "socialDescription": "Deterministic PTY sizing, touch scrolling, keyboard-aware layout, and bounded paste input."
+        "description": "Open the share link in your phone’s browser. Read output, scroll back, and reply to your agent without moving its work off your computer.",
+        "socialTitle": "Keep work moving from your phone. | shell.online",
+        "socialDescription": "Open the share link in your phone’s browser. Read output, scroll back, and reply to your agent without moving its work off your computer."
       },
       "cards": [
         [
-          "Deterministic sizing",
-          "Viewers never own PTY sizing. Desktop-only sessions use 120\u00d736. Any connected phone selects the session-wide portrait grid before input is forwarded: 80\u00d740 on the current CLI, or 80\u00d724 for an older host. The last phone leaving restores 120\u00d736. Read-only phones count too."
+          "Open your session",
+          "Scan the QR code printed by the CLI. Or open the complete link and enter its password. A signed-in session listing is not a substitute for its terminal password."
         ],
         [
-          "Touch that scrolls",
-          "Single-finger gestures scroll normal terminal history. When an application enables mouse tracking or its alternate screen, the same gesture is translated into terminal wheel input."
+          "Type and use terminal keys",
+          "Tap the terminal to open your keyboard. Use the terminal key controls for keys your phone keyboard lacks. Ctrl-C interrupts the running command; it is not a copy shortcut here.\n\nCtrl-D can end a shell. The browser warns on the first press; repeating it within three seconds deliberately sends EOF."
         ],
         [
-          "Keyboard-aware",
-          "The terminal follows visualViewport changes through keyboard open, dismiss, rotation, and browser chrome movement. On phones, identity and controls occupy separate header rows so status never collides with E2EE, presence, or appearance controls. Ctrl-C, Ctrl-W, selection-copy, and binary terminal replies have dedicated paths. Browser Ctrl-D warns on its first press and sends EOF only when deliberately repeated within three seconds."
+          "Scroll without losing your place",
+          "Drag with one finger to scroll terminal history. In full-screen programs that handle mouse input, gestures are sent as terminal wheel input instead. How that program scrolls depends on the program itself.\n\nIf rendering or input looks wrong, select the default xterm.js renderer and [check the recovery steps](/reliability/)."
         ],
         [
-          "Choose the renderer",
-          "Terminal controls include a persisted renderer dropdown. xterm.js is the default; Refstream is available as an unstable alpha and is labelled accordingly when selected. Refstream mode adds find, command inspection when the process emits shell markers, retained-output download, built-in themes, text sizing, a back-to-live shortcut, and reusable agent handoffs. Switching reopens only the browser view; the process, encryption, permissions, fixed session grid, and relay connection model do not change."
+          "Paste carefully",
+          "Pasting sends text to the terminal; it may contain commands. Check what you are sending. Paste input is split into bounded 16 KiB frames and waits when the connection is busy."
         ],
         [
-          "Large paste, bounded",
-          "Paste input is split into Worker-safe 16 KiB frames and waits for WebSocket backpressure. A browser cannot turn one large paste into an unbounded memory queue."
+          "Why the screen changes size",
+          "Everyone sees one shared terminal grid. Any connected phone selects the portrait grid, including a read-only phone. The grid returns to desktop size when the last phone leaves.",
+          [
+            [
+              "Desktop only",
+              "120 columns × 36 rows."
+            ],
+            [
+              "Phone connected",
+              "80 columns × 40 rows with a current host; older hosts use 80 × 24."
+            ],
+            [
+              "Resizing the browser",
+              "Fits the shared grid to your screen. It does not give each viewer a separate terminal size."
+            ]
+          ]
+        ],
+        [
+          "Close the browser when you’re done",
+          "Closing the tab leaves the task running. Keep the host computer awake and online. A sleeping laptop cannot be controlled until it reconnects. The session ends when its process exits."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 1,
-          "title": "A deterministic shared grid",
-          "caption": "The relay selects one PTY grid for every viewer. Each browser fits that grid locally without fighting over dimensions.",
-          "desktop": "flowchart LR\n  A{Phone connected?}\n  A -->|No| B[120 x 36 grid]\n  A -->|Yes| C[80 x 40 grid]\n  B --> D[Desktop fit]\n  C --> D\n  C --> E[Mobile fit]",
-          "mobile": "flowchart TD\n  A{Phone connected?}\n  A -->|No| B[120 x 36]\n  A -->|Yes| C[80 x 40]\n  B --> D[Fit in each browser]\n  C --> D"
-        }
       ]
     },
-    "refstream": {
-      "eyebrow": "Refstream alpha",
-      "title": "An experimental terminal renderer with agent handoffs.",
-      "intro": "Refstream v0.1.0-alpha.5 is an optional browser renderer. xterm.js remains the default and the compatibility fallback; choosing Refstream changes only the local browser view, never the process, PTY, relay permissions, encryption, or shared terminal grid.",
+    "app": {
+      "eyebrow": "Sessions & teammates",
+      "title": "Find your work in one place.",
+      "intro": "The optional app brings sessions from linked computers into one list. Open a terminal, invite a teammate, and keep control of who gets access.",
       "seo": {
-        "description": "Use the optional Refstream alpha renderer in shell.online for terminal search, command markers, themes, output export, backed file references, and scoped agent handoffs.",
-        "socialTitle": "Refstream alpha in shell.online",
-        "socialDescription": "What Refstream changes, how to select it, how agent handoffs work, and which alpha limitations still apply."
+        "description": "The optional app brings sessions from linked computers into one list. Open a terminal, invite a teammate, and keep control of who gets access.",
+        "socialTitle": "Find your work in one place. | shell.online",
+        "socialDescription": "The optional app brings sessions from linked computers into one list. Open a terminal, invite a teammate, and keep control of who gets access."
       },
       "cards": [
         [
-          "Select it deliberately",
-          "Open Terminal controls on an anonymous share and choose Refstream (unstable alpha), or use the Renderer selector above terminal tabs in the web app. The choice is saved in that browser. Switching rebuilds the visual terminal from the current authoritative snapshot; it does not restart or resize the local process.",
+          "1. Link your computer",
+          "Create or sign into your account at [app.shell.online](https://app.shell.online/), then run this on the host computer. Complete the approval in your browser.",
           [
             [
-              "xterm.js",
-              "Default and recommended renderer for broad TUI compatibility."
+              "shell auth",
+              "Link this machine. Remote start is a separate choice during setup."
             ],
             [
-              "Refstream (unstable alpha)",
-              "Optional renderer for the capabilities described on this page."
+              "shell whoami",
+              "Check the linked account."
             ]
           ]
         ],
         [
-          "What Refstream owns",
-          "Refstream owns its VT parser, normal and alternate screen buffers, bounded scrollback, Unicode cells, selection, input protocols, touch handling, and virtualized browser rows. shell.online still owns the authenticated WebSocket, E2EE framing, input lease, read-only enforcement, collaboration, terminal sizing, and process lifecycle."
-        ],
-        [
-          "Tools enabled by shell.online",
-          "Refstream mode adds literal search, command inspection when OSC 133 shell markers exist, retained-output download, eight built-in themes, text sizing, and a back-to-live shortcut. Command boundaries and exit status cannot be inferred reliably from arbitrary output, so the Commands view remains empty when the process emits no markers."
-        ],
-        [
-          "Connect an agent",
-          "Connect agent creates a private, revocable invitation scoped to this terminal. Read access can inspect the screen, tasks, and changes; control access can additionally submit one complete prompt or command against a recent sequence. The connector returns a session ID that should be reused for requests, status, bounded waits, and collection instead of pairing again for every follow-up.",
+          "2. Open a session",
+          "Sessions started on linked machines appear in the app. Open one to view the same terminal. Tabs stay connected while you switch between them.\n\nTo decrypt a session, unlock your personal vault if it contains the password, or enter the session password. Seeing a listing alone does not reveal its encrypted contents.",
           [
             [
-              "Invitation",
-              "Single-use, private, and short-lived; never place it in command arguments, URLs, or logs."
-            ],
-            [
-              "Read terminal",
-              "Inspect and wait without sending terminal input."
-            ],
-            [
-              "Read and control",
-              "Also submit input and supported key signals; still constrained by draft and sequence guards."
-            ],
-            [
-              "Revoke access",
-              "Disconnect immediately without sending Ctrl-C or stopping the shared process."
+              "shell password <ID>",
+              "Recover an active session password on its host computer. Treat the printed value as a secret."
             ]
           ]
         ],
         [
-          "Tasks and completion",
-          "Each handoff uses a stable task ID. Retrying the same ID and prompt retrieves the existing task rather than submitting it twice. Completion requires a shell marker, a real host callback, or an explicitly labelled agent observation; output, silence, redraws, and background acknowledgements are not completion. Collecting an answer keeps the connection available for another task."
+          "3. Bring in a teammate",
+          "Invite the person to your organization, then assign or share the session as appropriate. Session responsibility, terminal passwords and MCP grants are different kinds of access.\n\nFor a plain browser share, give your teammate the complete link and password. If someone should only watch, create a [read-only session](/security/)."
         ],
         [
-          "Protect local drafts",
-          "Remote writes require the expected sequence from a fresh read. Local keyboard or IME input invalidates stale ownership, and Enter requires an agent-owned draft. A generic TUI does not expose its editor model through terminal cells, so composer state remains unknown unless the owner verifies it is empty or a trusted host integration reports semantic application state. Colors and cursor placement are display evidence, never permission to type."
-        ],
-        [
-          "Backed file references",
-          "Refstream's optional file module can preview or download only paths the host explicitly registered. In shell.online, the host must first opt in with --files or --files-root; merely printing a filename never reads the disk. File authorization remains independent from agent terminal access, and traversal, symlink escape, non-regular files, ambient credentials, and automatic URL fetching stay blocked."
-        ],
-        [
-          "Persistence and privacy",
-          "Task records, answers, parser state, and retained terminal output can survive panel changes. shell.online keeps reload recovery only in the same browser tab for up to four hours; closing the tab forgets that snapshot, and recovery still requires the local PTY process to be alive. The relay stores no terminal output or browser snapshot. Treat any exported or host-saved snapshot like the terminal itself."
-        ],
-        [
-          "Alpha boundaries",
-          "Refstream is not binary-compatible with the xterm addon ecosystem and does not yet implement every private or uncommon xterm behavior. Physical-device and deployment-specific NAT or TURN behavior need separate testing. If a TUI renders or handles input incorrectly, switch back to xterm.js and report a minimal reproduction without private terminal contents.",
+          "Start sessions from the browser",
+          "Only an approved, online machine can accept a browser-start request. The process runs on that machine—not on an app server. Enabling this grants remote execution authority; choose it deliberately.",
           [
             [
-              "Refstream alpha.5 release",
-              "https://github.com/TeoSlayer/refstream.js/releases/tag/v0.1.0-alpha.5"
+              "shell auth --allow-remote-start",
+              "Allow your signed-in browser to start sessions on this machine."
             ],
             [
-              "Persistent agent protocol",
-              "https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md"
+              "shell auth --no-remote-start",
+              "Link the account without allowing remote start, or withdraw that permission."
             ],
             [
-              "Backed files and WebRTC",
-              "https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/files.md"
+              "shell daemon status",
+              "Check the local listener."
+            ],
+            [
+              "shell daemon stop",
+              "Pause the listener. A later Shell command can start it again."
+            ],
+            [
+              "shell service uninstall",
+              "Remove the installed background service. This is separate from account access."
             ]
           ]
+        ],
+        [
+          "Use your personal vault",
+          "The vault is per account, not per organization. It stores encrypted password copies and unlocks in your browser with its password or a supported PRF passkey. Keep your recovery key somewhere safe.\n\nA teammate does not automatically receive your vault. If every owner-held password and recovery copy is lost, the service cannot recover them."
+        ],
+        [
+          "Understand the session state",
+          "A session’s status describes reachability, not whether an agent completed its task.",
+          [
+            [
+              "Online / Starting",
+              "The host is connected or starting."
+            ],
+            [
+              "Offline / Unavailable",
+              "The app cannot currently reach a usable host. Check the machine before assuming the process stopped."
+            ],
+            [
+              "Finished",
+              "A known process exit. It is not proof that the requested work succeeded."
+            ]
+          ]
+        ],
+        [
+          "Automation is a separate permission",
+          "Owners can set team MCP, daily-briefing and briefing-sharing preferences in the app or CLI. The switches are independent.\n\nIn this release, daily-briefing consent can allow an updated host to publish an owner-encrypted title and existing response excerpt for a supported, explicitly resumed OpenCode conversation. It does not prompt an agent or generate a new summary. Team delivery and a team MCP gateway are not implemented. [See the exact limits](https://github.com/TeoSlayer/shell.online/blob/main/docs/session-content.md).",
+          [
+            [
+              "shell permissions <ID>",
+              "Read the session’s automation preferences."
+            ],
+            [
+              "shell permissions <ID> --daily-briefing=true",
+              "Change only daily-briefing consent."
+            ],
+            [
+              "shell briefings on --all",
+              "Set your default and enable it on your existing own sessions—not teammates’ sessions."
+            ]
+          ]
+        ],
+        [
+          "Account actions",
+          "Use the audit log to inspect recorded account activity. It is not a complete terminal transcript. Account settings also include data export and feedback.\n\nFor a machine without a browser, use `shell auth --no-browser` and follow the printed approval instructions. [More account and service commands](/cli/)."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 2,
-          "title": "Renderer boundary",
-          "caption": "Refstream replaces the browser renderer only. shell.online retains transport, permissions, sizing, encryption, and process control.",
-          "desktop": "flowchart LR\n  A[Local process] --> B[shell.online PTY]\n  B --> C[E2EE relay]\n  C --> D{Browser renderer}\n  D --> E[xterm default]\n  D --> F[Refstream alpha]",
-          "mobile": "flowchart TD\n  A[Local process] --> B[shell.online PTY]\n  B --> C[E2EE relay]\n  C --> D{Browser renderer}\n  D --> E[xterm default]\n  D --> F[Refstream alpha]"
-        },
-        {
-          "after": 4,
-          "title": "Scoped agent handoff",
-          "caption": "A single-use invitation creates a reusable connector session. Revocation ends access without stopping the terminal.",
-          "desktop": "flowchart LR\n  A[Private invitation] --> B[Agent connector]\n  B --> C[Stable session ID]\n  C --> D[Read or control task]\n  D --> E[Collect result]\n  C --> F[Revoke]",
-          "mobile": "flowchart TD\n  A[Private invitation] --> B[Agent connector]\n  B --> C[Stable session ID]\n  C --> D[Read or control task]\n  D --> E[Collect result]\n  C --> F[Revoke]"
-        }
+      ]
+    },
+    "agents": {
+      "eyebrow": "Connect an agent · MCP",
+      "title": "Let one agent work with another.",
+      "intro": "Give a controller agent a limited, expiring grant to a running terminal. Start with observation. Add input only when you want it to act.",
+      "seo": {
+        "description": "Give a controller agent a limited, expiring grant to a running terminal. Start with observation. Add input only when you want it to act.",
+        "socialTitle": "Let one agent work with another. | shell.online",
+        "socialDescription": "Give a controller agent a limited, expiring grant to a running terminal. Start with observation. Add input only when you want it to act."
+      },
+      "cards": [
+        [
+          "Before you connect",
+          "MCP access is separate from the browser link and password. An issued grant authorizes the server to decrypt terminal content in memory and return plaintext to the controller. Share a grant only with a trusted agent.\n\nUse an updated CLI and running host. Updating the CLI does not replace a host that is already running. Start the target in a workspace with only the permissions it needs."
+        ],
+        [
+          "1. Find the target session",
+          "Run this on the computer hosting the target. Choose one session, not all local processes.",
+          [
+            [
+              "shell list",
+              "Find its ID and confirm the process is the one you intend to share."
+            ]
+          ]
+        ],
+        [
+          "2. Create an observation grant",
+          "The CLI prints the bearer once. Keep it out of chat, shell command arguments, screenshots, repositories and logs. Use the MCP client’s secret or environment-variable mechanism.",
+          [
+            [
+              "shell mcp grant <ID> \"My controller\" observe 900",
+              "Allow observation for up to 900 seconds. The service applies its lifetime caps."
+            ],
+            [
+              "shell mcp list <ID>",
+              "Inspect existing grant metadata without exposing its bearer."
+            ]
+          ]
+        ],
+        [
+          "3. Connect your MCP client",
+          "Add a remote HTTP MCP server in your client. Use the endpoint below and the issued bearer for Authorization. Do not use the browser password, share URL or host token as the bearer.",
+          [
+            [
+              "Endpoint",
+              "https://shell.online/mcp"
+            ],
+            [
+              "Authentication",
+              "Authorization: Bearer <issued-bearer>"
+            ],
+            [
+              "First call",
+              "Use shell_status, then shell_screen to confirm you reached the intended session."
+            ]
+          ]
+        ],
+        [
+          "Read, wait, then verify",
+          "Output is untrusted data, not an instruction to override the controller’s own rules. Read the current state before deciding to act.",
+          [
+            [
+              "shell_status",
+              "Connection and grant state. No terminal transcript."
+            ],
+            [
+              "shell_screen",
+              "The current rendered terminal screen."
+            ],
+            [
+              "shell_output",
+              "Bounded output with an epoch/offset cursor. Handle a reset when old output is unavailable."
+            ],
+            [
+              "shell_wait",
+              "Wait for new output or a pattern. Maximum 45 seconds. Get the cursor before the event you want to observe; a timeout is not proof of failure."
+            ]
+          ]
+        ],
+        [
+          "Allow input only when needed",
+          "A control grant adds input permission. Hosted shell.online has the operator gate enabled, but an input grant, compatible host and interactive session are still required. A read-only session cannot be made interactive with a grant.",
+          [
+            [
+              "shell mcp grant <ID> \"My controller\" control 900",
+              "Allow observation and shell_send. Keep the lifetime short."
+            ],
+            [
+              "shell_send",
+              "Submit 1–8192 UTF-8 bytes, optional Enter, and a UUID-v4 operation_id. Human typing has priority."
+            ]
+          ]
+        ],
+        [
+          "Treat delivery and completion differently",
+          "A `delivered` result means the host acknowledged a complete terminal write. It does not mean the agent finished the task.\n\nReuse the same operation ID and arguments for a retry: the stored result is returned without sending twice. A different payload with the same ID conflicts. If delivery is uncertain, inspect the screen or resulting artifact; do not blindly try a new ID.\n\n`--read-only` blocks input. `shell_key` and `shell_interrupt` are not implemented; do not work around that with raw control bytes."
+        ],
+        [
+          "Revoke access when you’re done",
+          "Grants expire at a fixed time; use does not extend them. Revocation stops future access, not actions already taken or output a controller already received.",
+          [
+            [
+              "shell mcp revoke <ID> <grant-id>",
+              "Revoke one grant."
+            ],
+            [
+              "shell mcp revoke-all <ID>",
+              "Remove every MCP grant for this session. Browser sharing is separate."
+            ],
+            [
+              "shell password rotate <ID>",
+              "Rotate browser credentials and revoke existing MCP grants without restarting the process."
+            ]
+          ]
+        ],
+        [
+          "Client and hosting limits",
+          "Codex and OpenCode have been exercised with the observation path; OpenCode has also been used in control demonstrations. Do not treat that as a guarantee for every client transition. Claude model-backed behavior remains unverified.\n\nThe native MCP route is implemented by the Worker relay, not the standalone Docker relay. Refstream’s browser invitation is a separate experimental connector. [Operator setup and security details](https://github.com/TeoSlayer/shell.online/blob/main/docs/MCP.md)."
+        ]
       ]
     },
     "reliability": {
-      "eyebrow": "Process continuity",
-      "title": "The link can disappear. Your process should not.",
-      "intro": "The PTY and command live on your machine. Relay and browser failures are treated as recoverable display failures, never as permission to terminate local work.",
+      "eyebrow": "Fix a connection",
+      "title": "Get back to your session.",
+      "intro": "Start with what you can see. A browser disconnect, an offline host and an exited process need different fixes. Check before restarting anything.",
       "seo": {
-        "description": "How shell.online keeps terminal processes alive through relay disconnects, high output, slow browsers, and transient network failures.",
-        "socialTitle": "Terminal process reliability | shell.online",
-        "socialDescription": "Reconnect, bounded queues, screen recovery, and lifecycle behavior for shared terminal processes."
+        "description": "Start with what you can see. A browser disconnect, an offline host and an exited process need different fixes. Check before restarting anything.",
+        "socialTitle": "Get back to your session. | shell.online",
+        "socialDescription": "Start with what you can see. A browser disconnect, an offline host and an exited process need different fixes. Check before restarting anything."
       },
       "cards": [
         [
-          "Automatic reconnect",
-          "The CLI and browser reconnect with bounded backoff. A temporary network failure does not stop the process, and the same ordinary share link remains recoverable for 12 hours after its host disconnects."
+          "The page says offline",
+          "Check that the host computer is awake, online and still running the process. The CLI and browser retry temporary connection failures automatically.\n\nOn the host, use the local session list. A stale app row is not proof that a process is still alive.",
+          [
+            [
+              "shell list",
+              "Check local process and relay state separately."
+            ],
+            [
+              "shell attach <ID>",
+              "If the local session is alive, inspect it without relying on the browser. Detach with Ctrl-X, then D."
+            ]
+          ]
         ],
         [
-          "Screen recovery",
-          "A bounded local ring buffer restores new or returning viewers. If live output outruns either network or rendering, shell.online drops stale display work and sends one authoritative screen snapshot."
+          "The terminal is blank or looks wrong",
+          "Wait for the reconnect snapshot, then try reopening the view. If you selected Refstream, switch back to xterm.js. Check whether the running host predates your installed CLI.\n\nInstalling an update does not restart hosts. Save work and arrange a safe restart if a host update is needed. Never kill all sessions to fix one view."
         ],
         [
-          "Nested terminals and multiplexers",
-          "Snapshot restoration suppresses replies to historical terminal queries, so joining or reconnecting cannot inject capability responses into the live PTY. tmux, Herdr, and mosh-style input, redraw, split-pane, and second-viewer flows are exercised as compatibility checks."
+          "The password no longer works",
+          "Use the complete link, including its `#salt=` fragment, and the current password. Password rotation changes both the salt and password and disconnects old viewers.\n\nIf the app has a sealed copy, unlock your personal vault. Otherwise recover the password on the host.",
+          [
+            [
+              "shell password <ID>",
+              "Print the active password locally. Do not put it in a bug report."
+            ]
+          ]
         ],
         [
-          "Backpressure by design",
-          "PTY reads never wait indefinitely for Cloudflare. WebSocket writes time out, queues are bounded, frames have size and traffic limits, and high-output processes keep running locally."
+          "You cannot type",
+          "Check whether the session was created read-only or another person currently holds input. A read-only session requires a new interactive share if its owner wants typing enabled.\n\nFor MCP, check the grant scope, expiry and host version. [MCP setup](/agents/) explains the additional input requirements."
         ],
         [
-          "Explicit lifecycle",
-          "The URL prints only after a short startup usability handshake. If the task has already exited, shell reports its status without printing a dead link or attach/kill instructions. shell list distinguishes local process liveness from relay status; shell attach rejoins locally and shell kill stops the process. Ordinary shares and server state disappear when the task exits."
+          "A command exits before you get a link",
+          "Very short tasks may finish during startup. The CLI reports their exit status instead of printing a dead link. Try a longer-running process or start a fresh shell.",
+          [
+            [
+              "shell",
+              "Start an interactive shell to test the share path."
+            ]
+          ]
+        ],
+        [
+          "What survives a disconnect",
+          "The process runs on your computer. A temporary browser or network failure does not intentionally stop it. Current hosts keep bounded screen state and restore the screen when viewers return.\n\nAn ordinary disconnected share can recover its link for 12 hours. A known task exit closes the ordinary share. A persistent identity can be reused, but it is not a process checkpoint."
+        ],
+        [
+          "High output and nested terminals",
+          "Display queues are bounded. When output outruns the connection or renderer, stale display work may be replaced by a fresh screen snapshot rather than an unlimited transcript.\n\nCurrent snapshot handling suppresses replies to old terminal queries. It is designed for full-screen programs, tmux and nested terminal use, but a specific application can still expose a compatibility bug."
+        ],
+        [
+          "Report a useful bug",
+          "Include your CLI version, operating system, browser, renderer and a small reproduction that contains no private work. Say whether the problem happens locally, in a browser, or only after reconnecting. Remove share links, passwords, tokens and raw terminal logs before [opening an issue](https://github.com/TeoSlayer/shell.online/issues)."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 2,
-          "title": "Reconnect without touching the process",
-          "caption": "A browser or network failure affects the view only. The local process continues and a bounded snapshot restores the screen.",
-          "desktop": "flowchart LR\n  A[Local process] --> B[Bounded replay]\n  B --> C[Relay]\n  C --> D[Browser]\n  D -. disconnect .-> E[Reconnect]\n  E -->|authoritative snapshot| D",
-          "mobile": "flowchart TD\n  A[Local process] --> B[Bounded replay]\n  B --> C[Relay]\n  C --> D[Browser]\n  D -. disconnect .-> E[Reconnect]\n  E -->|snapshot| D"
-        }
       ]
     },
     "security": {
-      "eyebrow": "Trust model",
-      "title": "Know exactly what the link grants, and what the relay sees.",
-      "intro": "The current CLI encrypts terminal payloads on the machine and decrypts them in the browser by default. Cloudflare routes authenticated ciphertext while explicit metadata and bearer-access limits remain; --no-e2ee deliberately changes that boundary.",
+      "eyebrow": "Share safely",
+      "title": "Choose who can watch. Choose who can type.",
+      "intro": "A shared terminal gives real access to a process on your computer. Keep credentials private, use read-only when possible, and understand the MCP boundary.",
       "seo": {
-        "description": "The shell.online security model: default E2EE, sealed browser passwords, read-only enforcement, Cloudflare metadata, and retention.",
-        "socialTitle": "Security and trust model | shell.online",
-        "socialDescription": "Bearer capabilities, E2EE limits, read-only enforcement, sealed passwords, and retention explained precisely."
+        "description": "A shared terminal gives real access to a process on your computer. Keep credentials private, use read-only when possible, and understand the MCP boundary.",
+        "socialTitle": "Choose who can watch. Choose who can type. | shell.online",
+        "socialDescription": "A shared terminal gives real access to a process on your computer. Keep credentials private, use read-only when possible, and understand the MCP boundary."
       },
       "cards": [
         [
-          "URL plus password is a bearer capability",
-          "Anyone holding both values for an interactive share can view and type with the wrapped process\u2019s operating-system permissions. Share them only with intended collaborators and run with least privilege."
+          "Start with the access you need",
+          "Interactive access is the default. Anyone with the complete link and password can view and type with the wrapped process’s operating-system permissions.\n\nFor demos, reviews or a second screen that only needs to watch, create a read-only session.",
+          [
+            [
+              "shell --read-only claude",
+              "Input is rejected by both the relay and the CLI. A modified browser cannot turn this into an interactive session."
+            ]
+          ]
         ],
         [
-          "Read-only is enforced twice",
-          "With --read-only, ordinary browser input and confirmed EOF are rejected independently by the relay and the CLI before they reach the PTY. DevTools, a modified browser, or handcrafted WebSocket frames cannot turn the link into an interactive session. A read-only viewer may still read files deliberately opted in with --files; file access is a separate, explicit capability."
+          "Keep the link, password and QR private",
+          "The QR code includes the password for one-scan access. Treat it like the link and password together. Do not put it in a public screenshot.\n\nRemoving someone from an account cannot erase a password they already know. Rotate active session credentials when that access must end.",
+          [
+            [
+              "shell password rotate <ID>",
+              "Disconnect old viewers, change the password and salt, and revoke existing MCP grants. The process keeps running."
+            ]
+          ]
         ],
         [
-          "Files are off unless the CLI opts in",
-          "--files scopes on-demand access to the process working directory; --files-root chooses another root. The browser receives no listing or bytes until it asks. Requests and contents use the terminal's E2EE WebSocket, the CLI revalidates every path, and filesystem-rooted opens reject traversal and symlink escapes. Refstream filename detection only creates a backed reference; terminal output alone never grants access outside the opted-in root."
+          "Files require their own opt-in",
+          "Files are not shared by default. `--files` exposes regular files under the working directory; `--files-root` chooses a root. Requests are checked on the host, including traversal and symlink-escape checks.\n\nRead-only terminal access does not cancel file access you explicitly enabled. Choose the root carefully."
         ],
         [
-          "Cloudflare relays ciphertext by default",
-          "The current CLI normally encrypts terminal payloads before the relay. An explicitly issued MCP grant authorizes in-memory server decryption with a host-supplied key and plaintext results to the agent. The visible MCP disclosure lasts until the last grant expires or is revoked. Cloudflare can still observe frame type, encrypted size, timing, connection IP, access mode, command label, and lifecycle metadata. --no-e2ee instead exposes terminal payloads to Cloudflare while retaining HTTPS/WSS transport encryption."
+          "What the service can see",
+          "With default E2EE, the host encrypts terminal payloads before the relay forwards them. The relay carries authenticated ciphertext, plus visible connection metadata.",
+          [
+            [
+              "Visible metadata",
+              "Connection IPs, timing, encrypted sizes, frame types, labels, access mode, lifecycle and terminal grid dimensions."
+            ],
+            [
+              "MCP exception",
+              "Issuing a grant authorizes server-side, in-memory decryption. The controller receives plaintext results. The browser disclosure remains for the grant’s lifetime."
+            ],
+            [
+              "No-E2EE exception",
+              "An explicit --no-e2ee session exposes terminal contents to the relay. HTTPS/WSS still protects the network hop."
+            ]
+          ]
         ],
         [
-          "Captured input cannot be replayed",
-          "Current envelope-v2 frames authenticate their direction, sender stream, and sequence. The CLI accepts limited legitimate reordering but rejects duplicate and stale keystrokes. A relay can still delay or drop ciphertext. Legacy sessions remain viewable for upgrade continuity and gain replay protection when their CLI is updated."
+          "What is retained",
+          "The host keeps bounded screen/replay state. The hosted relay also keeps a bounded last-screen cache for offline viewing: ciphertext in E2EE mode, potentially plaintext with `--no-e2ee`.\n\nMCP’s durable records contain bearer hashes, grant metadata and operation fingerprints/outcomes—not plaintext terminal contents, bearers or frame keys. Ordinary task exit deletes its relay session state. This is not a full-history archive."
         ],
         [
-          "No terminal transcript retained",
-          "The CLI keeps a bounded replay buffer. The hosted relay also retains a bounded last-screen cache for offline viewing: ciphertext for E2EE sessions, potentially plaintext when --no-e2ee was explicitly chosen. MCP adds no durable plaintext or frame keys; its records contain bearer hashes, grant metadata and operation fingerprints/outcomes. Ordinary task exit deletes the session state."
+          "Encryption does not remove every trust",
+          "The browser code served by the website is trusted while you view a terminal or unlock your vault. E2EE does not protect against malicious code on either endpoint, or hide traffic timing.\n\nBrowser-started processes also trust the account service after you explicitly enable remote start. Use a restricted workspace and local permissions appropriate to the task."
         ],
         [
-          "Browser-started passwords stay sealed",
-          "When a session is started from the web app, the browser picks its password and seals it to that one machine using an ephemeral ECDH P-256 key the machine published. The accounts service relays an envelope it cannot open, and a session password is sealed once per organization member so colleagues can open the session without the service reading it."
-        ],
-        [
-          "Hosted application code is trusted",
-          "E2EE keeps ciphertext opaque to a passive relay, but the JavaScript served while you log in or unlock a vault is trusted. Browser-started commands also trust the accounts service after the machine owner explicitly opts in. The security policy names these operator boundaries directly; use shell daemon stop or link without remote start when that capability is not needed."
+          "If you shared too much",
+          "Rotate a leaked browser password; revoke a leaked MCP grant. Stop the specific target if its actions are unsafe. These actions cannot undo earlier commands or remove copies someone already made.\n\n[Encryption details](/e2ee/) explain key derivation and replay protection. [MCP access](/agents/) explains grants and uncertain delivery."
         ]
-      ],
-      "diagrams": [
-        {
-          "after": 4,
-          "title": "Where plaintext ends",
-          "caption": "Password derivation and terminal encryption happen on-device. The relay handles ciphertext plus the documented connection metadata.",
-          "desktop": "flowchart LR\n  A[Password and URL salt] --> B[Local key derivation]\n  B --> C[AES-256-GCM]\n  C -->|ciphertext| D[Cloudflare relay]\n  D -->|ciphertext| E[Browser decrypts]",
-          "mobile": "flowchart TD\n  A[Password and URL salt] --> B[Local key derivation]\n  B --> C[AES-256-GCM]\n  C -->|ciphertext| D[Cloudflare relay]\n  D -->|ciphertext| E[Browser decrypts]"
-        }
       ]
     },
     "e2ee": {
-      "eyebrow": "End-to-end encryption",
-      "title": "Terminal contents only the machine and its browsers can read.",
-      "intro": "E2EE is automatic by default. New shares encrypt terminal payloads with AES-256-GCM before they enter the relay; password derivation happens on-device and URL fragments never reach Cloudflare.",
+      "eyebrow": "Passwords & encryption",
+      "title": "Keep terminal contents private.",
+      "intro": "Encryption is on by default. Your computer encrypts terminal data and authorized browsers decrypt it. MCP grants deliberately add a separate decryption path.",
       "seo": {
-        "description": "Understand shell.online default end-to-end encryption, generated browser passwords, local key derivation, visible metadata, and recovery limits.",
-        "socialTitle": "End-to-end encryption | shell.online",
-        "socialDescription": "How automatic E2EE and browser passwords work, what Cloudflare sees, and where the trust boundary ends."
+        "description": "Encryption is on by default. Your computer encrypts terminal data and authorized browsers decrypt it. MCP grants deliberately add a separate decryption path.",
+        "socialTitle": "Keep terminal contents private. | shell.online",
+        "socialDescription": "Encryption is on by default. Your computer encrypts terminal data and authorized browsers decrypt it. MCP grants deliberately add a separate decryption path."
       },
       "cards": [
         [
-          "Zero-configuration password",
-          "shell <command> generates and prints a cryptographically random ten-character base64url browser password. In an interactive terminal it also renders a one-scan QR containing the salted URL and password; JSON and piped output stay machine-clean."
+          "Use the generated password",
+          "A normal session generates a random ten-character base64url password. The CLI prints it with the share link. The QR code includes it for one-scan access.\n\nFor sensitive or longer-lived work, use a longer unique password through `SHELL_ONLINE_E2EE_PASSWORD`. Do not reuse an account password or put the value in logs."
         ],
         [
-          "Stronger custom password",
-          "Ten generated Base64URL characters provide 60 random bits for convenient task-bound sharing. Password derivation is deliberately expensive, sessions expire, and online endpoints are rate-limited. For sensitive or long-lived work, set a longer unique SHELL_ONLINE_E2EE_PASSWORD and send it separately from the complete URL when appropriate."
+          "Recover an active password",
+          "On the host computer, retrieve the password from its local session record. If you enabled your account’s personal vault, a sealed copy may also be available there.",
+          [
+            [
+              "shell password <ID>",
+              "Reveal one session password deliberately. The service has no recovery backdoor if all owner-held copies are lost."
+            ]
+          ]
         ],
         [
-          "Local key derivation",
-          "The printed URL contains only a random #salt= fragment. The terminal QR adds the password to that fragment for one-scan access. URL fragments never reach Cloudflare; the CLI and browser derive the same AES-256-GCM key locally with PBKDF2-HMAC-SHA256 using 600,000 iterations."
+          "Rotate without restarting the task",
+          "Rotation changes the password, URL salt and cipher generation. Current viewers disconnect, old MCP grants are revoked, and persistent state and the owner’s vault copy are updated.",
+          [
+            [
+              "shell password rotate <ID>",
+              "Share the new complete link and password only with people who should retain access."
+            ]
+          ]
         ],
         [
-          "Protected and visible data",
-          "Terminal input, output, snapshots, and latency probes are authenticated ciphertext. Explicit MCP issuance authorizes the server to decrypt in memory for the grant lifetime. Live password rotation revokes MCP grants; new grants must use the rotated key. Cloudflare can still see connection IPs, timing, encrypted sizes, frame opcodes, access mode, labels, lifecycle metadata, and the terminal grid dimensions carried by plaintext terminal_size control messages. The relay selects that shared grid so desktop and mobile viewers render one deterministic PTY size."
+          "How keys are made",
+          "The link’s `#salt=` fragment contains a random salt. The host and browser derive the AES-256-GCM frame key locally using PBKDF2-HMAC-SHA256 with 600,000 iterations.\n\nURL fragments are not part of HTTP requests. The QR’s password remains sensitive to anyone who sees the QR. Ten random base64url characters provide 60 bits of randomness; a longer unique password is preferable for sensitive, long-lived sessions."
         ],
         [
-          "Limits, recovery, and opt-out",
-          "E2EE cannot hide traffic shape or prevent the relay from dropping or delaying ciphertext. Envelope v2 authenticates direction, sender stream, and sequence so current receivers reject replayed keystrokes and stale frames. Active passwords can be retrieved on their owner machine with shell password <ID>; after login they are also sealed to the user's optional personal vault when one exists. A vault password, supported PRF passkey, and recovery key unwrap the vault only in the browser. If every owner-held copy is lost, the service has no recovery backdoor. shell password rotate <ID> changes the cipher without restarting the task and disconnects current viewers. Removing a team member deletes their sealed copies, but owners must rotate active sessions to revoke a password the former member may already know. Anyone with both the current salted URL and password can decrypt."
+          "Encrypted content and visible metadata",
+          "Terminal input, output, snapshots and latency probes are authenticated ciphertext. Current envelope-v2 frames bind direction, sender stream and sequence so receivers reject duplicate or stale frames.\n\nThe relay can still delay or drop traffic. It sees timing, addresses, encrypted sizes, labels and lifecycle metadata. Grid dimensions travel in plaintext `terminal_size` control messages."
+        ],
+        [
+          "MCP changes who can decrypt",
+          "A host-issued MCP grant supplies the server with the authority to decrypt in memory for that grant’s lifetime. The controller receives plaintext output. This is why the browser visibly says server-side decryption is authorized.\n\nRevoking grants removes future MCP access; it does not erase results already received. [Create or revoke a grant](/agents/)."
+        ],
+        [
+          "Vault and browser storage",
+          "The optional vault keeps encrypted password copies per account. Unlocking happens in the browser. A vault password, supported PRF passkey or recovery key is needed; team membership alone is not enough.\n\nThe current browser password cache is memory-only. A reload needs the vault or password again. A legacy password blob may remain as a read-only migration source until it can be migrated safely; this does not mean new passwords are written there."
+        ],
+        [
+          "Turning encryption off",
+          "`--no-e2ee` is an explicit compatibility/debugging choice, not the default. The relay can then read terminal contents. It conflicts with password overrides and persistence. Avoid it for private work."
+        ]
+      ]
+    },
+    "docker": {
+      "eyebrow": "Keep a Docker workspace",
+      "title": "A workspace with a link you can reuse.",
+      "intro": "Run a shared terminal in a container. Named volumes keep its workspace and session identity across container restarts—not the memory of a running process.",
+      "seo": {
+        "description": "Run a shared terminal in a container. Named volumes keep its workspace and session identity across container restarts—not the memory of a running process.",
+        "socialTitle": "A workspace with a link you can reuse. | shell.online",
+        "socialDescription": "Run a shared terminal in a container. Named volumes keep its workspace and session identity across container restarts—not the memory of a running process."
+      },
+      "cards": [
+        [
+          "1. Get the project",
+          "You need Docker with Compose. Clone the project and use the Compose file in its root. This runs a client of the hosted relay, not your own relay.",
+          [
+            [
+              "git clone https://github.com/TeoSlayer/shell.online.git\ncd shell.online",
+              "Open the repository directory."
+            ]
+          ]
+        ],
+        [
+          "2. Start the container",
+          "The first launch prints the browser link and generated password. The logs contain credentials: read them privately, not in a shared report.",
+          [
+            [
+              "docker compose up --build -d",
+              "Build and start the container."
+            ],
+            [
+              "docker compose logs shell-online",
+              "Read the session link and password."
+            ]
+          ]
+        ],
+        [
+          "3. Open the session",
+          "Open the printed link in your browser and enter the password. The default configuration keeps state and workspace in separate named volumes.",
+          [
+            [
+              "shell-online-state",
+              "Host identity, browser password and encryption material. Protect this volume and its backups as secrets."
+            ],
+            [
+              "shell-online-workspace",
+              "The files you work on inside the container."
+            ]
+          ]
+        ],
+        [
+          "What a restart preserves",
+          "The container reuses its saved link and password, then starts a new terminal process. It does not restore an agent’s in-memory conversation or a running job.\n\nA saved identity can be revived from its state volume after the relay’s offline retention expires. Deleting that volume loses the saved identity. Do not use volume deletion as a routine restart step."
+        ],
+        [
+          "Choose or rotate a password",
+          "You may set a longer `SHELL_ONLINE_E2EE_PASSWORD` before first launch. Restarts reuse saved credentials. To change an active password, run `shell password rotate <ID>` inside the running container; an environment change alone does not rotate stored state."
+        ],
+        [
+          "Want your own server instead?",
+          "The root Compose file connects to hosted shell.online. To run your own relay and domain, follow [Run your own relay](/self-hosting/)."
+        ]
+      ]
+    },
+    "refstream": {
+      "eyebrow": "Try Refstream · alpha",
+      "title": "An optional terminal view.",
+      "intro": "xterm.js is the default. Refstream adds experimental terminal tools and a browser-mediated agent connector. Switch back if your program does not behave correctly.",
+      "seo": {
+        "description": "xterm.js is the default. Refstream adds experimental terminal tools and a browser-mediated agent connector. Switch back if your program does not behave correctly.",
+        "socialTitle": "An optional terminal view. | shell.online",
+        "socialDescription": "xterm.js is the default. Refstream adds experimental terminal tools and a browser-mediated agent connector. Switch back if your program does not behave correctly."
+      },
+      "cards": [
+        [
+          "Choose a renderer",
+          "Open Terminal controls and select Refstream (unstable alpha), or use the Renderer selector in an app terminal tab. The choice is saved for that browser.\n\nSwitching changes the browser view. It does not restart the process, change encryption or grant extra permissions. This build includes Refstream v0.1.0-alpha.5."
+        ],
+        [
+          "Search and inspect output",
+          "Refstream offers literal search, text sizing, themes, a back-to-live shortcut and retained-output download. Command inspection needs OSC 133 shell markers from the program; it cannot reliably infer commands or exit status from arbitrary text."
+        ],
+        [
+          "Connect an agent from the browser",
+          "The Connect agent invitation is private, short-lived and revocable. Choose read access or read-and-control. Reuse the returned connector session for follow-ups instead of pairing again each time.\n\nThis is not the native `/mcp` bearer channel. Its invitation and tools are different. For the host-managed MCP route, use [Connect an agent](/agents/)."
+        ],
+        [
+          "Know when a task is really done",
+          "A stable task ID protects a retry from submitting the same prompt twice. A delivery acknowledgement, output burst or quiet terminal is not proof of completion.\n\nA generic terminal view cannot safely infer an agent’s editor state. Local keyboard activity and stale sequence guards can block remote input; do not bypass them."
+        ],
+        [
+          "Files and saved output",
+          "File access still needs an explicit host `--files` or `--files-root` setting. A filename printed in terminal output does not grant access to it.\n\nCurrent Shell integration keeps terminal recovery state in memory, not new localStorage/sessionStorage snapshots, and purges legacy Refstream cache entries. Reload re-syncs from the host’s live screen. Exported output is a separate copy you must protect."
+        ],
+        [
+          "If something looks wrong",
+          "Switch back to xterm.js. Refstream does not implement every xterm behavior or addon. For a report, include a minimal reproduction without private output or credentials.\n\n[Upstream release](https://github.com/TeoSlayer/refstream.js/releases/tag/v0.1.0-alpha.5) · [Connector protocol](https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md)."
+        ]
+      ]
+    },
+    "self-hosting": {
+      "eyebrow": "Run your own relay",
+      "title": "Use your own server and domain.",
+      "intro": "The standalone relay runs with Docker and Caddy on one host. Your CLI stays the same; point it at your server. Accounts and native MCP are separate deployments.",
+      "seo": {
+        "description": "The standalone relay runs with Docker and Caddy on one host. Your CLI stays the same; point it at your server. Accounts and native MCP are separate deployments.",
+        "socialTitle": "Use your own server and domain. | shell.online",
+        "socialDescription": "The standalone relay runs with Docker and Caddy on one host. Your CLI stays the same; point it at your server. Accounts and native MCP are separate deployments."
+      },
+      "cards": [
+        [
+          "Before you start",
+          "You need Docker with Compose, a domain pointing at the server, and ports 80/443 reachable for HTTPS. The standalone relay is single-node. It is not the optional accounts app or the native Worker MCP implementation."
+        ],
+        [
+          "1. Get the standalone deployment",
+          "Use the `standalone` directory, not the root Compose file. The root file starts a terminal client; this one runs a relay.",
+          [
+            [
+              "git clone https://github.com/TeoSlayer/shell.online.git\ncd shell.online/standalone",
+              "Prepare the relay on your server."
+            ]
+          ]
+        ],
+        [
+          "2. Set your public domain",
+          "Replace the example domain with your own. Caddy obtains HTTPS certificates when DNS and ports are ready.",
+          [
+            [
+              "SHELL_ONLINE_PUBLIC_URL=https://relay.example.com SHELL_ONLINE_SITE=relay.example.com docker compose up -d --build",
+              "Start the relay and HTTPS proxy."
+            ]
+          ]
+        ],
+        [
+          "3. Start a session through it",
+          "On the computer doing the work, select your relay. Keep HTTPS for a real deployment.",
+          [
+            [
+              "shell --server https://relay.example.com claude",
+              "The generated link points at your server."
+            ]
+          ]
+        ],
+        [
+          "Try it locally first",
+          "For a loopback-only trial, the default Compose settings use HTTP localhost. This is not a public deployment configuration.",
+          [
+            [
+              "docker compose up -d --build",
+              "Run from the standalone directory."
+            ],
+            [
+              "curl http://localhost/api/health",
+              "Check the local relay response."
+            ]
+          ]
+        ],
+        [
+          "Protect state and keep one replica",
+          "The `relay-state` volume contains session metadata and host-token hashes, not browser passwords or E2EE frame keys. Back it up. Do not run multiple relay replicas against the same state file.\n\nLive sockets reconnect after a restart. The standalone relay stores metadata, not a terminal transcript. Default E2EE still happens between the host and browser."
+        ],
+        [
+          "Configuration reference",
+          "Trust forwarded addresses only when the relay is behind your own trusted proxy.",
+          [
+            [
+              "SHELL_ONLINE_PUBLIC_URL",
+              "Exact public origin used in links and browser-origin checks."
+            ],
+            [
+              "SHELL_ONLINE_SITE",
+              "Caddy hostname for HTTPS; http://localhost for local tests."
+            ],
+            [
+              "SHELL_ONLINE_STATE_FILE",
+              "Metadata file path. Default /var/lib/shell-online/relay.json."
+            ],
+            [
+              "SHELL_ONLINE_TRUST_PROXY",
+              "Enabled by the supplied proxy deployment. Do not expose that trust directly to untrusted clients."
+            ]
+          ]
+        ],
+        [
+          "Cloudflare and accounts",
+          "The Worker deployment is also available and provides the native MCP channel with its required bindings and keys. An accounts app needs its own identity provider and PostgreSQL.\n\nFollow the [operator guide](https://github.com/TeoSlayer/shell.online/blob/main/docs/self-hosting.md) for these deployments. The terminal relay works without an account."
         ]
       ]
     },
     "cli": {
-      "eyebrow": "CLI reference",
-      "title": "Every command and option, in one place.",
-      "intro": "The shell CLI starts shares, reports their real relay state, attaches to local PTYs, and stops them. Run shell help reference to keep this complete reference available in the terminal too.",
+      "eyebrow": "Command reference",
+      "title": "Find the command you need.",
+      "intro": "A task-first reference for the Shell CLI. Start with the common commands below; flags and technical details follow. Commands run on the host computer.",
       "seo": {
-        "description": "Complete shell.online CLI reference: commands, flags, account linking, the browser-start daemon, environment variables, relay states, and exit status.",
-        "socialTitle": "CLI reference | shell.online",
-        "socialDescription": "Every shell.online command and option, including shell auth and browser-started sessions."
+        "description": "A task-first reference for the Shell CLI. Start with the common commands below; flags and technical details follow. Commands run on the host computer.",
+        "socialTitle": "Find the command you need. | shell.online",
+        "socialDescription": "A task-first reference for the Shell CLI. Start with the common commands below; flags and technical details follow. Commands run on the host computer."
       },
       "cards": [
         [
-          "Start and share",
-          "Wrap a command in a local PTY and run it in the background. The URL prints after the relay exists and the task survives a short usability handshake. Fast exits report their status without a dead URL. With no command, shell starts $SHELL or /bin/sh. Put -- before the command when argument boundaries are ambiguous.",
+          "Start a session",
+          "`shell` starts a process in a local terminal and shares it. Use `--` to separate Shell options from the program’s arguments.",
           [
             [
               "shell <command> [arguments...]",
-              "Share a command in the background."
+              "Share a new process in the background."
             ],
             [
               "shell",
-              "Share a fresh default shell."
+              "Start your default shell. On Windows, PowerShell is preferred, then COMSPEC."
             ],
             [
-              "shell -- <command> [arguments...]",
-              "End shell.online option parsing explicitly."
+              "shell --foreground claude",
+              "Keep local foreground interaction while sharing."
+            ],
+            [
+              "shell --read-only claude",
+              "Allow browser viewing, not input."
+            ],
+            [
+              "shell --name \"Review\" -- codex",
+              "Give the session a readable name."
             ]
           ]
         ],
         [
-          "Start options",
-          "Options apply when a new share is created. E2EE is automatic unless explicitly disabled, and access mode cannot be weakened after creation.",
+          "Find, attach and stop",
+          "Local and account lists are different. Use a full ID or an unambiguous local prefix of at least six characters.",
+          [
+            [
+              "shell list",
+              "Local sessions and relay state."
+            ],
+            [
+              "shell list --json",
+              "Local JSON on stdout. Can contain e2ee_password; treat it as secret."
+            ],
+            [
+              "shell ls",
+              "Open sessions in your linked account."
+            ],
+            [
+              "shell ls --all",
+              "Include ended account sessions."
+            ],
+            [
+              "shell ls --json",
+              "Account metadata as JSON, without session passwords."
+            ],
+            [
+              "shell attach <ID>",
+              "Attach locally. Ctrl-X, then D detaches; Ctrl-] is a legacy alternative."
+            ],
+            [
+              "shell kill -- <ID>",
+              "Stop one session. The -- also handles IDs beginning with a dash."
+            ],
+            [
+              "shell kill --all",
+              "Stops every locally managed session. Do not use it to clean up a single test."
+            ]
+          ]
+        ],
+        [
+          "Passwords",
+          "The complete share link and password grant browser access. Do not print them into shared logs.",
+          [
+            [
+              "shell password <ID>",
+              "Reveal the active browser password locally."
+            ],
+            [
+              "shell password rotate <ID>",
+              "Change password, salt and cipher generation; disconnect viewers and revoke MCP grants without restarting the task."
+            ]
+          ]
+        ],
+        [
+          "Account and remote start",
+          "Account linking is optional. Remote start grants additional authority to run commands on this machine.",
+          [
+            [
+              "shell auth",
+              "Link your machine through browser approval."
+            ],
+            [
+              "shell auth --no-browser",
+              "Print the approval URL and follow the callback instructions."
+            ],
+            [
+              "shell auth --allow-remote-start",
+              "Enable browser-started sessions deliberately."
+            ],
+            [
+              "shell auth --no-remote-start",
+              "Disable that capability."
+            ],
+            [
+              "shell whoami",
+              "Show the linked account."
+            ],
+            [
+              "shell logout",
+              "Unlink and revoke the account token."
+            ],
+            [
+              "shell daemon status",
+              "Check the background listener."
+            ],
+            [
+              "shell daemon start",
+              "Start the listener when authorized."
+            ],
+            [
+              "shell daemon stop",
+              "Stop the listener; a later Shell command may start it again."
+            ],
+            [
+              "shell agent",
+              "Run the listener in the foreground."
+            ],
+            [
+              "shell service install",
+              "Install background service availability."
+            ],
+            [
+              "shell service status",
+              "Inspect the installed service."
+            ],
+            [
+              "shell service uninstall",
+              "Remove the background service."
+            ]
+          ]
+        ],
+        [
+          "MCP grants",
+          "A bearer is not a browser password. The grant permits server-side decryption for the controller. [Read the MCP workflow](/agents/) before granting input.",
+          [
+            [
+              "shell mcp grant <ID> \"Controller\" observe 900",
+              "Create an expiring observation grant; bearer printed once."
+            ],
+            [
+              "shell mcp grant <ID> \"Controller\" control 900",
+              "Add input permission when the host and operator allow it."
+            ],
+            [
+              "shell mcp list <ID>",
+              "List grant metadata."
+            ],
+            [
+              "shell mcp revoke <ID> <grant-id>",
+              "Revoke one grant."
+            ],
+            [
+              "shell mcp revoke-all <ID>",
+              "Revoke this session’s MCP grants."
+            ]
+          ]
+        ],
+        [
+          "Automation preferences",
+          "Only the session owner can change these settings. Unspecified switches are preserved. Consent does not imply a new agent summary or a team MCP gateway is running.",
+          [
+            [
+              "shell permissions <ID>",
+              "Read the three independent preferences."
+            ],
+            [
+              "shell permissions <ID> --daily-briefing=true",
+              "Allow supported daily content publication."
+            ],
+            [
+              "shell permissions <ID> --mcp-team-access=true",
+              "Set team MCP consent; the team gateway is not implemented in this release."
+            ],
+            [
+              "shell permissions <ID> --briefing-team-access=true",
+              "Set separate team-briefing consent; current excerpt delivery remains owner-only."
+            ],
+            [
+              "shell briefings status",
+              "Read your default for new sessions."
+            ],
+            [
+              "shell briefings on --all",
+              "Enable the default and your existing own sessions."
+            ],
+            [
+              "shell briefings off",
+              "Disable the default. Add --all to also update your existing own sessions."
+            ]
+          ]
+        ],
+        [
+          "Start flags",
+          "Put these before the wrapped command. Options that control access are chosen at session creation.",
           [
             [
               "--read-only",
-              "Create an immutable view-only link; the relay rejects browser input."
+              "Reject browser and MCP input."
             ],
             [
               "--name <name>",
-              "Label the session in shell list, shell ls, and the web app, where it can be renamed. One line, up to 120 characters."
-            ],
-            [
-              "--e2ee",
-              "Compatibility flag; every normal share is already E2EE."
-            ],
-            [
-              "--no-e2ee",
-              "Disable payload E2EE for compatibility/debugging; the configured relay can read plaintext. Conflicts with passwords and persistence."
-            ],
-            [
-              "--persistent <state-file>",
-              "Reuse one stable encrypted identity, password, and URL."
-            ],
-            [
-              "--files",
-              "Opt in regular files under the session working directory. Browsers list and read them only on demand. Requires E2EE."
-            ],
-            [
-              "--files-root <directory>",
-              "Opt in a different root. Parent traversal, non-regular files, and symlink escapes are rejected by the CLI."
+              "One-line session label, up to 120 characters."
             ],
             [
               "--foreground",
               "Mirror and control the process in the launching terminal."
             ],
             [
+              "--persistent <state-file>",
+              "Reuse a saved identity, password and URL. Does not restore process memory."
+            ],
+            [
+              "--files",
+              "Allow on-demand regular-file access under the working directory. Requires E2EE."
+            ],
+            [
+              "--files-root <directory>",
+              "Use another explicitly chosen file root."
+            ],
+            [
               "--auto-close <value>",
-              "Add an earlier deadline; task exit remains the maximum lifetime. Missing or invalid values return status 2."
+              "Set an earlier deadline; task exit still closes the share."
             ],
             [
               "--json",
-              "Emit the new-session event as JSON on stderr, including e2ee_password when encrypted."
+              "New-session JSON goes to stderr and includes e2ee_password for encrypted sessions."
             ],
             [
               "--server <URL>",
-              "Override the shell.online service URL."
+              "Override the relay URL."
+            ],
+            [
+              "--e2ee",
+              "Compatibility flag; encryption is already the default."
+            ],
+            [
+              "--no-e2ee",
+              "Disable payload encryption explicitly. Conflicts with password overrides and persistence."
             ],
             [
               "--version",
-              "Print the CLI version and exit."
+              "Print the CLI version."
             ],
             [
               "-h, --help",
-              "Print guided top-level help."
+              "Show help."
             ]
           ]
         ],
         [
-          "Agent connect (Refstream alpha)",
-          "Switch the browser renderer to Refstream (alpha), then choose Connect agent. The copied invitation grants one agent access to only this live terminal. The agent connects once and reuses that connection for follow-ups; stable task IDs, status, partial output, and collected answers survive panel changes and reconnection. The browser owner can revoke access immediately without stopping the process. File access is independent and stays unavailable unless the host used --files or --files-root.",
+          "Set an auto-close deadline",
+          "A deadline cannot keep a task alive after it exits. Missing or invalid values return exit status 2.",
           [
             [
-              "Read terminal",
-              "Read current output, search retained rows, inspect command boundaries, and wait for changes."
+              "shell --auto-close 30m claude",
+              "Close after a relative duration."
             ],
             [
-              "Read and control",
-              "Also type text, execute a command against a recent terminal sequence, and send key combinations such as Ctrl-C."
+              "Relative values",
+              "ms, s, m, h, d, w, mo, y. Examples: 1h30m or 2d 3h."
             ],
             [
-              "Disconnect",
-              "Revoke the agent invitation or active connection without closing the share or local task."
-            ],
-            [
-              "Reload behavior",
-              "Refstream no longer persists terminal state to browser storage; startup purges the legacy shell-online-refstream-session: caches (exact prefix only) from session and local storage. A reload re-syncs from the live relay snapshot while the local shell process is still running. The relay stores no terminal output."
+              "Date and time",
+              "today 18:30, tomorrow 09:00, local ISO-like dates, RFC3339, or the next occurrence of HH:MM."
             ]
           ]
         ],
         [
-          "List sessions",
-          "List locally managed processes and independently check the relay. Wide terminals use a dense table; narrow terminals use one readable card. Human output says whether a password is stored without printing every secret; shell password <ID> reveals one deliberately. JSON retains e2ee_password for explicit agent workflows. States are online, starting, reconnecting, expired, and unknown.",
+          "Environment variables",
+          "Use these only on the host. Password values are secrets; do not include them in bug reports.",
           [
             [
-              "shell list",
-              "Print ID, uptime, relay, closing rule, access, command, URL, and stored-password status in a width-aware table or card layout."
+              "SHELL",
+              "Default command on Unix when no command is supplied."
             ],
             [
-              "shell list --json",
-              "Print a JSON array on stdout with e2ee_password and raw relay_status values: connected, waiting, disconnected, expired, or unknown."
+              "SHELL_ONLINE_SERVER",
+              "Default relay URL; --server overrides it."
             ],
             [
-              "shell ls",
-              "List the open sessions in your linked account from every machine, with name, status, uptime, machine, and command. Ended sessions are counted, not shown."
+              "SHELL_ONLINE_E2EE_PASSWORD",
+              "Choose a unique browser password instead of the generated one."
             ],
             [
-              "shell ls --all",
-              "Include sessions that have ended."
-            ],
-            [
-              "shell ls --json",
-              "Print the account's sessions as a JSON array on stdout, with share_url, status, and raw relay_status. Passwords are never included."
+              "SHELL_ONLINE_INSTALL_DIR",
+              "Installer-only absolute writable destination."
             ]
           ]
         ],
         [
-          "Automation permissions",
-          "Owner-only consent stored on the account, shared by CLI and app. Unnamed switches are preserved. These settings do not start a team MCP gateway or generate briefings in this release; sharing with the team is a separate opt-in.",
-          [
-            ["shell permissions <ID>", "Read all three session automation permissions."],
-            ["shell permissions <ID> --daily-briefing=true", "Change daily-briefing consent only. Also supports --mcp-team-access=true|false and --briefing-team-access=true|false."],
-            ["shell briefings status", "Read your daily-briefing default for new sessions."],
-            ["shell briefings on --all", "Enable the default and apply it to your existing own sessions. Use off to disable; omit --all to change only the default."]
-          ]
-        ],
-        [
-          "Manage passwords",
-          "Retrieve an active password from its owner-only local record, or rotate credentials without restarting the wrapped process. Rotation disconnects current viewers, updates persistent state and the owner's sealed vault copy, and removes stale teammate copies until the new password is shared again.",
+          "Output and exit status",
+          "A fast-exiting task reports its exit status without printing a dead link. New-session JSON is on stderr; list JSON is on stdout. Redirect each deliberately and keep credential-bearing output private.",
           [
             [
-              "shell password <ID>",
-              "Print the current browser password locally."
+              "e2ee_password",
+              "Included in encrypted start/local-list JSON. Not an MCP bearer."
             ],
             [
-              "shell password rotate <ID>",
-              "Generate a new password and URL salt, invalidate the old cipher generation, and keep the same process running."
+              "0",
+              "Successful start, or a fast task that exited successfully."
             ],
             [
-              "SHELL_ONLINE_E2EE_PASSWORD=<new> shell password rotate <ID>",
-              "Choose the replacement instead of generating ten random base64url characters."
-            ]
-          ]
-        ],
-        [
-          "Attach locally",
-          "Attach to an existing local PTY without disabling browser access. IDs may be complete or unambiguous prefixes of at least six characters. Local input and resulting output remain visible online. In a browser, the first Ctrl-D warns; repeat it within three seconds to deliberately send EOF.",
-          [
-            [
-              "shell attach <ID>",
-              "Attach to one local session."
+              "1",
+              "Operational failure."
             ],
             [
-              "Ctrl-X, then D",
-              "Detach while leaving the process and share running."
-            ],
-            [
-              "Ctrl-]",
-              "Legacy detach alternative; Ctrl-Z is not detach."
-            ],
-            [
-              "Browser Ctrl-D twice",
-              "Send a confirmed EOF; the first press alone never reaches the process."
-            ]
-          ]
-        ],
-        [
-          "Stop sessions",
-          "Stopping sends termination to the wrapped process and closes its browser session. Completed tasks already close themselves automatically.",
-          [
-            [
-              "shell kill <ID>",
-              "Stop one session by full ID or unambiguous prefix."
-            ],
-            [
-              "shell kill --all",
-              "Stop every locally managed shell.online process."
-            ],
-            [
-              "shell stop <ID>",
-              "Alias for shell kill."
-            ]
-          ]
-        ],
-        [
-          "Account and machine linking",
-          "Linking is optional and does not change how a share behaves. It publishes each share to your account and, if you agree to it, lets your signed-in browser start sessions on this machine.",
-          [
-            [
-              "shell auth",
-              "Link this machine and open the browser approval screen."
-            ],
-            [
-              "shell auth --no-browser",
-              "Print the sign-in URL instead of opening a browser. Open it on the same machine so its loopback callback can reach the CLI."
-            ],
-            [
-              "shell auth --allow-remote-start",
-              "Agree to browser-started sessions without being asked."
-            ],
-            [
-              "shell auth --no-remote-start",
-              "Withdraw that agreement on this machine."
-            ],
-            [
-              "shell whoami",
-              "Show which account this machine is linked to."
-            ],
-            [
-              "shell logout",
-              "Unlink this machine and revoke its token."
-            ],
-            [
-              "shell daemon status",
-              "Say whether your browser can start sessions here."
-            ],
-            [
-              "shell daemon stop",
-              "Stop accepting browser-started sessions until the next shell command."
-            ],
-            [
-              "shell agent",
-              "Run the same listener in the foreground, printing each session as it starts."
-            ],
-            [
-              "shell service install",
-              "Keep the listener running across restarts; uninstall and status manage it."
+              "2",
+              "Invalid flags or arguments."
             ]
           ]
         ],
         [
           "Help and aliases",
-          "Guided help is built into the executable, including this full reference. Command aliases do not change behavior.",
+          "The executable has an offline reference. Aliases do not change permissions or behavior.",
           [
             [
-              "shell help",
-              "Show the guided workflow and common options."
+              "shell help reference",
+              "Read the full built-in reference."
             ],
             [
               "shell help <topic>",
-              "Topics: start, files, attach, list, ls, password, kill, login, stats, agent, daemon, service, e2ee, docker, platforms, reference."
-            ],
-            [
-              "shell help e2ee",
-              "Explain default encryption, passwords, and visible metadata."
-            ],
-            [
-              "shell help docker",
-              "Explain persistent container state and password rotation."
-            ],
-            [
-              "shell help reference",
-              "Print the complete built-in CLI reference."
+              "Ask about a command or topic, such as start, files, attach, password, e2ee or docker."
             ],
             [
               "shell ps",
               "Alias for shell list."
             ],
             [
-              "shell run / shell share",
-              "Help-topic aliases for start; starting a process remains shell <command>."
+              "shell stop <ID>",
+              "Alias for shell kill."
             ]
           ]
-        ],
-        [
-          "Auto-close grammar",
-          "A share always closes when its task exits. --auto-close requires a value and can only add an earlier deadline. Spaced multi-token dates are accepted directly. A missing or invalid value returns status 2 and never becomes the command.",
-          [
-            [
-              "5m \u00b7 2h \u00b7 3d \u00b7 1w \u00b7 2mo \u00b7 1y",
-              "Relative units: ms, s, m, h, d, w, mo, and y."
-            ],
-            [
-              "1h30m \u00b7 2d 3h",
-              "Compatible relative units can be combined, with or without spaces."
-            ],
-            [
-              "tomorrow 09:00 \u00b7 today 18:30",
-              "Natural local-day forms may be unquoted."
-            ],
-            [
-              "2026-09-01 14:30 \u00b7 RFC3339",
-              "Local ISO-like dates and full RFC3339 timestamps."
-            ],
-            [
-              "HH:MM",
-              "The next occurrence of that local time."
-            ]
-          ]
-        ],
-        [
-          "Environment",
-          "Only public configuration variables are listed here. Private background-handshake variables are internal implementation details and are not supported configuration.",
-          [
-            [
-              "SHELL",
-              "Program used when shell is run without a command on Unix; Windows prefers PowerShell, then COMSPEC."
-            ],
-            [
-              "SHELL_ONLINE_SERVER",
-              "Default relay URL; overridden by --server."
-            ],
-            [
-              "SHELL_ONLINE_E2EE_PASSWORD",
-              "Override the generated ten-character password with a unique password; derivation remains local."
-            ],
-            [
-              "SHELL_ONLINE_INSTALL_DIR",
-              "Installer-only absolute writable destination for the shell binary."
-            ]
-          ]
-        ],
-        [
-          "Output and exit status",
-          "Normal starts show an immediate animated connection state, then print a compact colored card after the task survives the startup handshake. Top-level help shows only the normal start, share, rejoin, and stop lifecycle; shell help reference remains exhaustive. A task that exits during the handshake prints its real status and no URL, attach, or kill instruction. Animation and color are disabled for JSON, pipes, NO_COLOR, and non-TTY output. Structured starts emit one JSON event on stderr so the wrapped process keeps stdout.",
-          [
-            [
-              "e2ee_password",
-              "Present for encrypted sessions; agents must send it with the complete share_url. Omitted for --no-e2ee."
-            ],
-            [
-              "0",
-              "Successful start or a fast task that itself exited successfully."
-            ],
-            [
-              "1",
-              "Operational failure such as relay, process, or local-control failure."
-            ],
-            [
-              "2",
-              "Invalid flags, arguments, or auto-close value."
-            ],
-            [
-              "shell list --json",
-              "Structured session arrays are written to stdout; start --json events are written to stderr."
-            ]
-          ]
-        ]
-      ]
-    },
-    "platforms": {
-      "eyebrow": "Platforms and devices",
-      "title": "From Windows workstations to ARM and MIPS routers.",
-      "intro": "Each advertised target gets a real PTY implementation, background execution, local session management, E2EE, persistent identity, and a SHA-256-verified release artifact. Every Linux artifact executes the full Go and PTY integration suite under QEMU; Windows uses the native ConPTY API.",
-      "seo": {
-        "description": "Supported shell.online platforms: Windows ConPTY, macOS, Linux routers and SBCs, BSD, Solaris, ROS workloads, and checksummed binaries.",
-        "socialTitle": "Platforms and devices | shell.online",
-        "socialDescription": "Windows, macOS, Linux, BSD, Solaris, routers, SBCs, and ROS workloads linked to one account."
-      },
-      "cards": [
-        [
-          "Install",
-          "The POSIX installer selects from the release manifest using uname. Windows uses a checksum-verifying PowerShell installer. Neither installer invokes sudo or silently edits PATH.",
-          [
-            [
-              "curl -fsSL https://shell.online/install | sh",
-              "macOS, Linux, BSD, and Solaris."
-            ],
-            [
-              "irm https://shell.online/install.ps1 | iex",
-              "Windows PowerShell on x86, x64, or ARM64."
-            ],
-            [
-              "https://shell.online/downloads/SHA256SUMS",
-              "Canonical checksums for every binary and installer."
-            ]
-          ]
-        ],
-        [
-          "Support matrix",
-          "Static release artifacts are built from one versioned target manifest and verified before deployment. Linux targets are runtime-tested under QEMU; native Windows amd64 is runtime-tested; the remaining targets are explicitly build-verified.",
-          [
-            [
-              "macOS \u00b7 build-verified",
-              "amd64, arm64"
-            ],
-            [
-              "Windows \u00b7 amd64 native; others build-verified",
-              "386, amd64, arm64"
-            ],
-            [
-              "Linux \u00b7 QEMU runtime-tested",
-              "386, amd64, armv5, armv6, armv7, arm64, loong64, mips, mipsle, mips64, mips64le, ppc64, ppc64le, riscv64, s390x"
-            ],
-            [
-              "FreeBSD \u00b7 build-verified",
-              "386, amd64, armv7, arm64"
-            ],
-            [
-              "OpenBSD \u00b7 build-verified",
-              "386, amd64, armv7, arm64, ppc64, riscv64"
-            ],
-            [
-              "NetBSD \u00b7 build-verified",
-              "386, amd64, armv7, arm64"
-            ],
-            [
-              "DragonFly BSD \u00b7 build-verified",
-              "amd64"
-            ],
-            [
-              "Solaris \u00b7 build-verified",
-              "amd64"
-            ]
-          ]
-        ],
-        [
-          "What QEMU proves",
-          "Every Linux release binary executes its complete Go suite under the corresponding QEMU user-mode emulator. The suite covers executable startup, CLI help, E2EE, networking, persistent state, local session control, and a real PTY round trip with input and resize. QEMU cannot reproduce vendor firmware restrictions, a specific kernel configuration, or physical CPU errata."
-        ],
-        [
-          "Windows is native",
-          "Windows sessions use ConPTY for ANSI/VT fidelity and an owner-restricted named pipe for list, attach, kill, and local takeover. Background startup uses an authenticated loopback handshake. PowerShell is preferred when no command is supplied, then COMSPEC."
-        ],
-        [
-          "Routers and small Linux devices",
-          "The Linux binaries are CGO-free and include ARMv5 through ARM64 plus big- and little-endian MIPS variants. This covers many OpenWrt and Ubiquiti-style devices when their kernel exposes PTYs and outbound HTTPS/WebSockets. Check uname -m and available storage before installing; vendor firmware may still impose its own execution restrictions."
-        ],
-        [
-          "ROS 1 and ROS 2",
-          "shell.online transports terminal bytes, so ROS needs no plugin or protocol shim. Source the ROS environment first, then wrap roscore, roslaunch, ros2 run, ros2 launch, colcon build, or a node with the normal shell command. ROS itself supports fewer OS/architecture pairs than shell.online; follow the compatibility table for the ROS distribution you installed."
-        ],
-        [
-          "One link across restarts",
-          "Normal shares already run in the background. --persistent <state-file> stores an owner-only host identity, password, and E2EE material; rerunning with that file restores the same URL and password. The Docker image combines the same mechanism with restart: unless-stopped for automatic recovery after container or host restart. shell kill stops the current process without deleting the persistent identity file."
-        ]
-      ]
-    },
-    "self-hosting": {
-      "eyebrow": "Standalone relay",
-      "title": "Run the relay on any Docker host.",
-      "intro": "The standalone relay uses ordinary Node.js, WebSockets, local disk state, and Caddy. It needs no Cloudflare account or credentials and carries the same opaque E2EE frames as the hosted service.",
-      "seo": {
-        "description": "Self-host the shell.online relay outside Cloudflare with Docker, Caddy, local state, and the standard shell CLI.",
-        "socialTitle": "Self-host shell.online",
-        "socialDescription": "Run the shell.online relay on a normal Linux server without Cloudflare."
-      },
-      "cards": [
-        [
-          "Deploy",
-          "Point a domain at the host, set SHELL_ONLINE_PUBLIC_URL and SHELL_ONLINE_SITE to its HTTPS URL and hostname, then run docker compose up -d --build in standalone/. Caddy obtains and renews TLS certificates automatically."
-        ],
-        [
-          "Use it",
-          "Set SHELL_ONLINE_SERVER=https://relay.example.com or pass --server https://relay.example.com to the CLI. The generated share URL and WebSocket endpoint stay on that origin."
-        ],
-        [
-          "Security boundary",
-          "Terminal payloads remain end-to-end encrypted by default. The relay stores session metadata and SHA-256 host-token hashes, never browser passwords, E2EE keys, or terminal contents. Same-origin checks, frame limits, viewer limits, rate limits, backpressure and non-root containers remain enforced."
-        ],
-        [
-          "Scale and persistence",
-          "This deployment is deliberately single-node. Session metadata survives restarts in the relay-state volume and persistent clients reconnect with the same URL. Live WebSockets reconnect after a restart. Back up the volume, but do not run multiple relay replicas against one state file."
-        ],
-        [
-          "Optional accounts app",
-          "The terminal relay works without accounts. A self-hosted app deployment lives in app/ and signs people in through any OpenID Connect provider, with PostgreSQL behind it."
-        ],
-        [
-          "Cloudflare deployment remains available",
-          "wrangler.example.jsonc is still the supported global edge deployment. The standalone server is the portable path for one host; it does not include the optional accounts app or hosted analytics dashboard."
-        ]
-      ],
-      "diagrams": [
-        {
-          "after": 1,
-          "title": "Portable single-node relay",
-          "caption": "Caddy terminates HTTPS, the standalone relay coordinates live sockets, and local disk retains metadata—not terminal contents.",
-          "desktop": "flowchart LR\n  A[CLI on your machine] -->|WSS ciphertext| B[Caddy TLS]\n  B --> C[Standalone relay]\n  C -->|WSS ciphertext| D[Browser]\n  C --> E[(Local metadata volume)]",
-          "mobile": "flowchart TD\n  A[CLI on your machine] -->|WSS ciphertext| B[Caddy TLS]\n  B --> C[Standalone relay]\n  C -->|WSS ciphertext| D[Browser]\n  C --> E[(Local metadata volume)]"
-        }
-      ]
-    },
-    "docker": {
-      "eyebrow": "Persistent Docker terminal",
-      "title": "One encrypted shell and one stable link across restarts.",
-      "intro": "The Docker client keeps its workspace, host credential, browser password, E2EE key, and share identity in named volumes. Restart the container and the same browser URL reconnects to the new PTY.",
-      "seo": {
-        "description": "Run the shell.online container with a stable encrypted browser URL, durable workspace, and retained browser password.",
-        "socialTitle": "Persistent Docker terminal | shell.online",
-        "socialDescription": "One stable E2EE browser link and password for a persistent Docker shell and workspace."
-      },
-      "cards": [
-        [
-          "Start once",
-          "Pull ghcr.io/teoslayer/shell.online:0.22.0 or run docker compose up --build -d, then docker compose logs shell-online. First launch prints the stable URL and a generated ten-character password. The tagged amd64/arm64 image includes an SBOM and build provenance."
-        ],
-        [
-          "Two durable volumes",
-          "shell-online-state stores the browser password, host credential, share identity, and E2EE key. shell-online-workspace stores the container workspace. Treat the state volume and its backups as secrets."
-        ],
-        [
-          "Password continuity",
-          "Set a longer SHELL_ONLINE_E2EE_PASSWORD before first launch if desired. Restarts reuse the saved password. While the container is running, shell password rotate <ID> changes the password, salt, and key without restarting the terminal; pass SHELL_ONLINE_E2EE_PASSWORD to that command when you want to choose the replacement."
-        ],
-        [
-          "Restart behavior",
-          "The container reconnects the same relay identity and URL after a restart. Connected browser pages remain open and report offline until the host returns. An unused offline identity expires from the relay after 30 days but can be revived from its state volume."
-        ],
-        [
-          "What persistence is not",
-          "This image is a persistent client for the hosted shell.online relay, not a self-hosted relay. It does not make the container immortal, publish ports, or recover a deleted volume or forgotten password."
         ]
       ]
     }

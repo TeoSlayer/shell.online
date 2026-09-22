@@ -120,7 +120,7 @@ describe("analytics", () => {
     const shown = new Request("https://shell.online/?utm_source=newsletter", {
       headers: { "User-Agent": "Mozilla/5.0", Referer: "https://github.com/TeoSlayer/shell.online" },
     });
-    expect(requestAnalyticsContext(shown).referrer).toBe("github");
+    expect(requestAnalyticsContext(shown).referrer).toBe("newsletter");
   });
 
   it("classifies request context without retaining raw headers", () => {

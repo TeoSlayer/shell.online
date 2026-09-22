@@ -16,11 +16,12 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 	value := func(value string) string { return styleSessionText(color, "38;5;153", value) }
 
 	fmt.Fprintf(writer, "\n  %s  %s\n", brand, spark)
+	fmt.Fprintln(writer, "  Your terminal is ready. Open it in any browser.")
 	fmt.Fprintln(writer)
 	if result.Name != "" {
 		fmt.Fprintf(writer, "  %s %s\n", label("Name"), value(result.Name))
 	}
-	fmt.Fprintf(writer, "  %s %s\n", label("Link"), value(result.ShareURL))
+	fmt.Fprintf(writer, "  %s %s\n", label("Open"), value(result.ShareURL))
 	if result.Password != "" {
 		fmt.Fprintf(writer, "  %s %s\n", label("Password"), styleSessionText(color, "1;38;5;222", result.Password))
 		vault := "not linked · run shell auth"
@@ -35,7 +36,7 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 		fmt.Fprintf(writer, "  %s %s\n", label("Vault"), value(vault))
 	}
 
-	access := "interactive"
+	access := "view and type"
 	if result.ReadOnly {
 		access = "view only"
 	}
@@ -78,8 +79,17 @@ func printSessionCard(writer io.Writer, result backgroundLaunchResult, backgroun
 	if background {
 		fmt.Fprintln(writer)
 		fmt.Fprintf(writer, "  %s %s\n", label("Rejoin"), value("shell attach "+shortSessionID(result.ID)))
-		fmt.Fprintf(writer, "  %s %s\n", label("Stop"), value("shell kill "+shortSessionID(result.ID)))
+		fmt.Fprintf(writer, "  %s %s\n", label("Stop"), value("shell kill -- "+shortSessionID(result.ID)))
+		fmt.Fprintln(writer, "  Run these on this computer. Ctrl-X, then D detaches after rejoining.")
 	}
+	fmt.Fprintln(writer)
+	if result.Password != "" {
+		fmt.Fprintln(writer, "  Open the full link, then enter the password above.")
+		fmt.Fprintln(writer, "  Keep both private. Share them only with people you trust.")
+	} else {
+		fmt.Fprintln(writer, "  Keep this link private. Anyone holding it has the access shown above.")
+	}
+	fmt.Fprintln(writer, "  Keep this computer awake and online. Closing the browser does not stop it.")
 
 	if color {
 		payload, payloadError := sessionQRPayload(result)

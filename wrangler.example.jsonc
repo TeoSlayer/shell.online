@@ -25,6 +25,7 @@
       "/app/*",
       "/cli/*",
       "/refstream/*",
+      "/agents/*",
       "/platforms/*",
       "/mobile/*",
       "/reliability/*",

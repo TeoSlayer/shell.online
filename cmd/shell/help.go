@@ -21,22 +21,29 @@ func helpTopicList() string {
 }
 
 func printShellHelp(writer io.Writer) {
-	fmt.Fprintf(writer, `shell.online — a browser link for a local terminal process
+	fmt.Fprintf(writer, `shell.online — your terminal, open in any browser
 
-Start
+Quick start
+  shell codex                     Start Codex and get a browser link
+  shell claude                    Start Claude Code
+  shell opencode                  Start OpenCode
+  shell -- npm run dev            Or run any terminal command
+
+Open the printed link in any browser and enter the session password.
+Or scan the QR code, which includes both. No account needed.
+Keep this computer awake and online. Closing the browser does not stop the task.
+
+Start options
   shell <command>                  Share it in the background
   shell --read-only <command>      Share it while browser input is blocked
   shell --files <command>          Add on-demand files from this directory
   shell --name <name> <command>    Label it in shell ls and the web app
   shell                            Share a fresh shell
 
-Conversation handoff
-  shell claude                     Share a fork of this Claude conversation
-  shell opencode                   Share a fork of this opencode conversation
-  shell claude                     Share a fork of this conversation
-
-shell prints one URL, a ten-character browser password, and a QR containing
-both. Shares are interactive by default and end-to-end encrypted.
+This starts a new process; it does not attach to an arbitrary running program.
+Inside a supported Claude Code or OpenCode conversation, a bare agent command
+can start a fork instead. See shell help start. Shares are interactive by default
+and end-to-end encrypted. Give the link and password only to people you trust.
 
 Then
   shell list                       See active shares and uptime
@@ -46,10 +53,10 @@ Then
   shell password rotate <ID>       Revoke it and make a fresh password
   shell attach <ID>                Rejoin locally; browser access stays live
   Press Ctrl-X, then D to detach   Leave the process running
-  shell kill <ID>                  Safely stop the process and close its link
+  shell kill -- <ID>               Stop the process and close its link
 
 Your account (optional)
-  shell auth                      Put this machine and its sessions in the web app
+  shell auth                      Find this machine's sessions at app.shell.online
   shell auth --no-browser         Print the approval URL instead of opening it
   shell whoami                     Show the linked account
   shell logout                     Unlink this machine

@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPosthog } from "../shared/posthog";
+import { safeSource } from "../shared/public-attribution";
 import {
   decodeResize,
   decodeSendAck,
@@ -100,7 +101,7 @@ import {
   readGitHubApiStarCount,
 } from "../shared/github";
 import { STATS_PRESENCE_REFRESH_MS } from "../shared/stats-snapshot";
-import { isVersionedDocumentationPath, resolveDocumentationRoute } from "../shared/documentation";
+import { documentationAssetPath, isVersionedDocumentationPath, resolveDocumentationRoute } from "../shared/documentation";
 import {
   fetchStatsSnapshot,
   removeStatsPresence,
@@ -279,6 +280,7 @@ interface CreateSessionBody {
 interface EventBody {
   event?: unknown;
   target?: unknown;
+  source?: unknown;
 }
 
 interface StatsLoginBody {
@@ -415,7 +417,7 @@ export default {
 
     const assetRequest = (request.method === "GET" || request.method === "HEAD") &&
       isVersionedDocumentationPath(url.pathname)
-      ? new Request(new URL("/docs/", url), request)
+      ? new Request(new URL(documentationAssetPath(url.pathname, RELEASE_VERSION), url), request)
       : request;
     let assetResponse = await env.ASSETS.fetch(assetRequest);
     if (downloadAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {
@@ -663,6 +665,7 @@ async function recordAssetAnalytics(
   executionContext: ExecutionContext,
 ): Promise<void> {
   if (request.method !== "GET") return;
+  if (/prefetch|prerender/i.test(`${request.headers.get("Sec-Purpose") ?? ""} ${request.headers.get("Purpose") ?? ""}`)) return;
 
   const context = requestAnalyticsContext(request);
   const withVisitor = async (kind: VisitorKind = "browser"): Promise<AnalyticsContext> => ({
@@ -690,6 +693,8 @@ async function recordAssetAnalytics(
 
   const binaryTarget = binaryDownloadTarget(url.pathname);
   if (binaryTarget) {
+    // A range retry is not another full binary download.
+    if (response.status !== 200 || request.headers.has("Range")) return;
     recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor("machine"));
     return;
   }
@@ -726,7 +731,10 @@ async function recordEvent(
 
   let body: EventBody;
   try {
-    body = (await request.json()) as EventBody;
+    const text = await readLimitedBody(request, 256, request.signal);
+    if (text === null) return json({ error: "request too large" }, 413);
+    body = JSON.parse(text) as EventBody;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "invalid event" }, 400);
   } catch {
     return json({ error: "invalid event" }, 400);
   }
@@ -734,6 +742,7 @@ async function recordEvent(
   const event = body.event;
   const target = body.target;
   const known = typeof target === "string" && (
+    (event === "page_loaded" && (target === "landing" || target === "docs")) ||
     (event === "copy" && COPY_TARGETS.has(target)) ||
     (event === "cta_click" && CTA_TARGETS.has(target))
   );
@@ -741,12 +750,18 @@ async function recordEvent(
     return json({ error: "invalid event" }, 400);
   }
 
+  const source = body.source === undefined ? null : safeSource(body.source);
+  if (body.source !== undefined && source === null) return json({ error: "invalid event" }, 400);
+  if (request.headers.get("Sec-GPC") === "1" || request.headers.get("DNT") === "1") {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+  }
+
   recordAnalytics(
     env,
     executionContext,
     event,
     target,
-    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
+    { ...requestAnalyticsContext(request), ...(source ? { referrer: source } : {}), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
   return new Response(null, {
@@ -3941,16 +3956,22 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
     (connectingIp === "127.0.0.1" || connectingIp === "::1");
 }
 
-function secureAssetResponse(response: Response, pathname: string, hostname: string): Response {
+function isPublicAnalyticsPath(pathname: string): boolean {
+  if (pathname === "/" || pathname === "") return true;
+  return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
+}
+
+export function secureAssetResponse(response: Response, pathname: string, hostname: string): Response {
   const headers = new Headers(response.headers);
   const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
-  const posthogAllowed = isHtmlDocument && hostname === "shell.online" && (isPublicDocumentPath(pathname) || /^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(pathname));
+  const gaAllowed = isHtmlDocument && hostname === "shell.online" && isPublicAnalyticsPath(pathname);
+  const posthogAllowed = gaAllowed || (isHtmlDocument && hostname === "shell.online" && /^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(pathname));
   headers.set("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self'",
+    `script-src 'self'${gaAllowed ? " https://www.googletagmanager.com" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' wss: ws:${posthogAllowed ? " https://us.i.posthog.com" : ""}`,
-    "img-src 'self' data:",
+    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}${posthogAllowed ? " https://us.i.posthog.com" : ""}`,
+    `img-src 'self' data:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",

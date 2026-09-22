@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
+import { Link } from "react-router-dom";
 import type { Member, SessionRecord } from "../lib/api";
 import { verifiedPasswordFor } from "../lib/session-passwords";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
@@ -108,10 +109,11 @@ export function SessionClipboard({
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-haspopup="menu"
-        aria-label="Copy from this session"
-        title="Copy from this session"
+        aria-label="Share session or copy access details"
+        title="Share session or copy access details"
       >
         {anyCopied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
+        <span>Share</span>
         {/* Says it opens something, rather than leaving it to be discovered. */}
         <CaretDown size={10} weight="bold" className="clip-caret" data-open={open} />
       </button>
@@ -135,7 +137,7 @@ export function SessionClipboard({
               <LinkIcon size={16} />
               <span className="clip-text">
                 <b>{copiedKey === "link" ? "Link copied" : "Copy link"}</b>
-                <em>Anyone holding this link and the password can open the session, inside the team or not.</em>
+                <em>{session.encrypted ? "Send the password separately. Anyone with both can open this session." : "Anyone with this link can open this session."}</em>
               </span>
             </button>
 
@@ -149,9 +151,13 @@ export function SessionClipboard({
                 <Lock size={16} />
                 <span className="clip-text">
                   <b>{copiedKey === "password" ? "Password copied" : "Copy password"}</b>
-                  <em>Share it as carefully as the link. Outside the team it is the whole session.</em>
+                  <em>Give it only to people you want to let into this session.</em>
                 </span>
               </button>
+            )}
+
+            {session.encrypted && !password && (
+              <p className="clip-help">Password not available in this browser. <Link to="/account">Unlock your vault</Link>, or ask the session owner.</p>
             )}
 
             {isOwner && (
@@ -164,7 +170,7 @@ export function SessionClipboard({
                 <Terminal size={16} />
                 <span className="clip-text">
                   <b>{copiedKey === "attach" ? "Command copied" : "Copy attach command"}</b>
-                  <em>Runs on the machine that started it, so this one is visible only to you.</em>
+                  <em>Run on the original computer. Ctrl-X, then D leaves it running.</em>
                 </span>
               </button>
             )}
