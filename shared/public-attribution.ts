@@ -85,6 +85,7 @@ export const PUBLIC_CTA_TARGETS = new Set([
   "start_hero",
   "start_footer",
   "demo",
+  "github_star",
   "signup_nav",
   "signup_hero",
   "signup_team",
@@ -96,8 +97,13 @@ export function isPublicEvent(event: unknown, target: unknown): boolean {
     ((event === "page_loaded" && ["landing", "docs"].includes(target)) ||
       (event === "cta_click" && PUBLIC_CTA_TARGETS.has(target)) ||
       (event === "copy" &&
-        ["install", "run", "brew_install", "source_build", "skill"].includes(
-          target,
-        )))
+        [
+          "install",
+          "run",
+          "docs_command",
+          "brew_install",
+          "source_build",
+          "skill",
+        ].includes(target)))
   );
 }

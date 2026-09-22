@@ -24,6 +24,14 @@ describe("isPublicAnalyticsUrl", () => {
     expect(isPublicAnalyticsUrl(new URL("https://shell.online/docs/v0.22.0/"))).toBe(true);
     expect(isPublicAnalyticsUrl(new URL("https://shell.online/docs/v0.22.0/security/"))).toBe(true);
   });
+  it("accepts only bounded section anchors on actual documentation routes", () => {
+    for (const path of ["/docs/#section-1", "/agents/#section-9", "/cli/#guide-content"]) {
+      expect(isPublicAnalyticsUrl(new URL(`https://shell.online${path}`))).toBe(true);
+    }
+    for (const path of ["/#section-1", "/s/private#section-1", "/docs/#section-1&token=private", "/docs/#section-999", "/docs/#salt=private"]) {
+      expect(isPublicAnalyticsUrl(new URL(`https://shell.online${path}`))).toBe(false);
+    }
+  });
 
   it("rejects /docs/PRIVATE_TOKEN (not a valid kind)", () => {
     expect(isPublicAnalyticsUrl(new URL("https://shell.online/docs/PRIVATE_TOKEN"))).toBe(false);

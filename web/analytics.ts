@@ -21,7 +21,9 @@ export function isPublicAnalyticsUrl(url: URL): boolean {
   const allowed = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id", "ref", "twclid"]);
   if ([...url.searchParams.keys()].some(key => !allowed.has(key))) return false;
   // Only known navigation anchors. A credential-like fragment never enables GA.
-  if (url.hash && !["#start", "#choose-agent", "#see-it", "#how", "#agents", "#use-cases", "#benefits", "#specs", "#faq"].includes(url.hash)) return false;
+  const docAnchor = resolveDocumentationRoute(url.pathname, RELEASE_VERSION) !== null &&
+    (url.hash === "#guide-content" || /^#section-(?:[1-9]|[1-5]\d|6[0-4])$/.test(url.hash));
+  if (url.hash && !docAnchor && !["#start", "#choose-agent", "#see-it", "#how", "#agents", "#use-cases", "#benefits", "#specs", "#faq"].includes(url.hash)) return false;
   return isPublicPath(url.pathname);
 }
 

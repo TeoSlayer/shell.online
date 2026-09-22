@@ -12,6 +12,8 @@ application route. Brand artwork is served locally.
 | `page_loaded` | The eligible public page's JavaScript initialized and reported a load. Blocking scripts or analytics can prevent it. |
 | `cta_click` | A particular landing button was clicked, not an account created. |
 | `copy` | The clipboard API reported success for the install or run command, not that the command was executed. |
+| `copy:docs_command` | A docs command was copied. Command text and search queries are not collected. |
+| `cta_click:github_star` | The visitor opened the GitHub star prompt. It does not establish that they starred the project. |
 | `installer_download` | An install script was fetched. |
 | `binary_download` | A complete, non-range binary response was served. Repeated full downloads can count again. |
 | `install_outcome:ok` | The installer reported success. This is not an independently verified installation. |

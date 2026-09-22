@@ -11,6 +11,8 @@ import { viewerAdmission } from "../shared/session-capacity";
 import { disconnectedSessionExpiry, PERSISTENT_TTL_MS, SESSION_TTL_MS } from "../shared/session-lifetime";
 import { persistentSessionID } from "../shared/persistent-session";
 import { terminalGridForDevices } from "../shared/terminal-grid";
+import { documentationAssetPath } from "../shared/documentation";
+import { RELEASE_VERSION } from "../shared/release";
 
 const SESSION_ID = /^[A-Za-z0-9_-]{32}$/;
 const MAX_BODY = 4_096;
@@ -597,7 +599,7 @@ function serveAsset(request: IncomingMessage, response: ServerResponse, root: st
   if (request.method !== "GET" && request.method !== "HEAD") return json(response, 405, { error: "method not allowed" }, { Allow: "GET, HEAD" });
   let decoded: string;
   try { decoded = decodeURIComponent(pathname); } catch { return json(response, 400, { error: "invalid path" }); }
-  const special = decoded.startsWith("/docs/v") ? "/docs/" : decoded;
+  const special = documentationAssetPath(decoded, RELEASE_VERSION);
   const relative = special === "/" || special.startsWith("/s/") || special.endsWith("/") ? `${special.replace(/^\//, "")}index.html` : special.replace(/^\//, "");
   let candidate = resolve(root, normalize(relative));
   if (!candidate.startsWith(`${root}/`) && candidate !== root) return json(response, 404, { error: "not found" });

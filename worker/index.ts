@@ -99,7 +99,7 @@ import {
   readGitHubApiStarCount,
 } from "../shared/github";
 import { STATS_PRESENCE_REFRESH_MS } from "../shared/stats-snapshot";
-import { isVersionedDocumentationPath, resolveDocumentationRoute } from "../shared/documentation";
+import { documentationAssetPath, isVersionedDocumentationPath, resolveDocumentationRoute } from "../shared/documentation";
 import {
   fetchStatsSnapshot,
   removeStatsPresence,
@@ -406,7 +406,7 @@ export default {
 
     const assetRequest = (request.method === "GET" || request.method === "HEAD") &&
       isVersionedDocumentationPath(url.pathname)
-      ? new Request(new URL("/docs/", url), request)
+      ? new Request(new URL(documentationAssetPath(url.pathname, RELEASE_VERSION), url), request)
       : request;
     let assetResponse = await env.ASSETS.fetch(assetRequest);
     if (downloadAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {

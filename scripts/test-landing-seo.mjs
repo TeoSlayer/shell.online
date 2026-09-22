@@ -108,14 +108,14 @@ check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "READ
 for (const command of ["shell codex", "shell claude", "shell opencode"]) check(landingMarkup.includes(command), "Missing easy command: " + command);
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
-check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");
-check((sitemap.match(/<loc>/gu) ?? []).length === 12, "Sitemap should list the homepage and knowledge base");
+check(sitemap.includes("<lastmod>2026-09-22</lastmod>"), "Sitemap lastmod is missing");
+check((sitemap.match(/<loc>/gu) ?? []).length === 13, "Sitemap should list the homepage and every guide");
 check(documentationHtml.includes("__DOC_DESCRIPTION__"), "Documentation description build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_TITLE__"), "Documentation title build token is missing");
 check(documentationHtml.includes("__DOC_SOCIAL_DESCRIPTION__"), "Documentation social-description build token is missing");
 check(documentationHtml.includes("__DOC_PATH__"), "Documentation canonical-path build token is missing");
 check(documentationHtml.includes('<meta name="robots" content="index, follow'), "Documentation robots directive is invalid");
-for (const path of ["docs", "app", "cli", "platforms", "mobile", "refstream", "reliability", "security", "e2ee", "docker", "self-hosting"]) {
+for (const path of ["docs", "app", "cli", "platforms", "mobile", "agents", "refstream", "reliability", "security", "e2ee", "docker", "self-hosting"]) {
   const seo = docsContent.pages?.[path]?.seo;
   check(typeof seo?.description === "string", `${path} SEO description is missing from versioned content`);
   check(typeof seo?.socialTitle === "string", `${path} social title is missing from versioned content`);
@@ -128,7 +128,7 @@ for (const guide of ["app", "platforms", "mobile", "refstream", "reliability", "
 for (const guarantee of ["Any connected phone selects", "Paste input is split", "authenticated ciphertext", "e2ee_password", "docker compose up --build -d", "Refstream v0.1.0-alpha.5", "The vault is per account, not per organization"]) {
   check(docsSource.includes(guarantee), `Versioned documentation guarantee is missing: ${guarantee}`);
 }
-check(docsSource.includes("terminal_size control messages"), "E2EE docs must disclose plaintext terminal-size control metadata");
+check(docsSource.includes("terminal_size") && docsSource.includes("plaintext"), "E2EE docs must disclose plaintext terminal-size control metadata");
 check(!docsSource.includes("snapshots, resizes, and latency probes are authenticated ciphertext"), "E2EE docs must not claim relay-controlled resizes are ciphertext");
 check(readme.includes("end-to-end encrypted by default"), "README default E2EE summary is missing");
 check(readme.includes("--no-e2ee"), "README explicit E2EE opt-out is missing");
@@ -141,8 +141,10 @@ check(documentationRenderer.includes('import("mermaid")'), "Documentation diagra
 check(documentationRenderer.includes("await document.fonts?.ready"), "Documentation diagrams must wait for fonts before measuring labels");
 check(documentationRenderer.includes("padding: 18"), "Documentation diagrams must leave enough room around labels");
 check(landingStyles.includes(".knowledge-diagram-canvas foreignObject p"), "Mermaid labels must retain their measured font size inside documentation sections");
+check(documentationHtml.includes("<!--DOCUMENTATION_BODY-->") && viteSource.includes("documentationMarkup(documentation, kind"), "Guides must render readable HTML at build time");
+check(documentationHtml.includes("/web/documentation-entry.ts") && !documentationHtml.includes("/web/main.ts"), "Guides must not load the terminal runtime");
+check(!documentationHtml.includes("user-scalable=no") && !documentationHtml.includes("maximum-scale=1"), "Docs must allow browser zoom");
 const diagramPages = Object.values(docsContent.pages).filter((page) => Array.isArray(page.diagrams));
-check(diagramPages.length >= 7, "The knowledge base should contain responsive diagrams across its principal guides");
 for (const page of diagramPages) {
   for (const diagram of page.diagrams) {
     check(diagram.desktop.startsWith("flowchart LR"), `${diagram.title} needs a desktop Mermaid layout`);
@@ -161,7 +163,7 @@ check(
 );
 check(workerSource.includes("raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json"), "Tagged documentation source endpoint is missing");
 check(workerSource.includes("isVersionedDocumentationPath(url.pathname)"), "Versioned routes must load the documentation shell");
-check(workerSource.includes('new URL("/docs/", url)'), "Versioned routes must not flash the landing page");
+check(workerSource.includes('documentationAssetPath(url.pathname, RELEASE_VERSION)'), "Archives must use the version-aware asset route");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
 check(

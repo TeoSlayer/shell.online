@@ -174,10 +174,13 @@ describe("landing content and brand assets", () => {
       "start_footer",
       "signup_team",
       "demo",
+      "github_star",
     ]) {
       expect(markup.split(`data-cta="${target}"`)).toHaveLength(2);
     }
     expect(markup).not.toMatch(/<[^>]*data-cta=[^>]*data-cta=/);
+    expect(markup.indexOf('class="setup-love"')).toBeGreaterThan(markup.indexOf("Keep your computer awake"));
+    expect(markup).toContain('rel="noopener noreferrer" data-cta="github_star"');
   });
   it("ships all displayed brand assets locally and covers every published host OS", () => {
     for (const [, file] of [...AGENT_BRANDS, ...PLATFORM_BRANDS]) {

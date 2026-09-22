@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 import worker from "./index";
+import { RELEASE_VERSION } from "../shared/release";
 
 function harness(assetStatus = 200) {
   const records: unknown[] = [];
   const points: unknown[] = [];
   const pending: Promise<unknown>[] = [];
+  const assets: string[] = [];
   const env = {
     ANALYTICS: { writeDataPoint: (point: unknown) => points.push(point) },
     STATS: {
@@ -18,12 +20,25 @@ function harness(assetStatus = 200) {
     },
     EVENT_LIMITER: { limit: async () => ({ success: true }) },
     ASSETS: {
-      fetch: async () => new Response("fixture", { status: assetStatus }),
+      fetch: async (request: Request) => {
+        assets.push(new URL(request.url).pathname);
+        return new Response("fixture", {
+          status: assetStatus,
+          headers: {
+            "Content-Type": new URL(request.url).pathname.startsWith(
+              "/downloads/",
+            )
+              ? "application/octet-stream"
+              : "text/html",
+          },
+        });
+      },
     },
   };
   return {
     records,
     points,
+    assets,
     async fetch(
       path: string,
       body?: string,
@@ -51,6 +66,17 @@ function harness(assetStatus = 200) {
 }
 
 describe("first-party analytics through the real Worker route", () => {
+  it("serves the requested current guide but not current instructions for historical releases", async () => {
+    const h = harness();
+    await h.fetch(`/docs/v${RELEASE_VERSION}/mobile/`);
+    await h.fetch("/docs/v0.6.0/mobile/");
+    const agents = await h.fetch("/agents/");
+    expect(h.assets).toEqual(["/mobile/", "/docs/archive.html", "/agents/"]);
+    expect(agents.status).toBe(200);
+    expect(agents.headers.get("Content-Security-Policy")).toContain(
+      "www.googletagmanager.com",
+    );
+  });
   it("retains only fixed event fields and allowlisted source in both sinks", async () => {
     const h = harness();
     const response = await h.fetch(
@@ -81,6 +107,9 @@ describe("first-party analytics through the real Worker route", () => {
       ["cta_click", "start_hero"],
       ["cta_click", "start_footer"],
       ["cta_click", "demo"],
+      ["cta_click", "github_star"],
+      ["copy", "source_build"],
+      ["copy", "docs_command"],
     ]) {
       expect(
         (
@@ -91,7 +120,7 @@ describe("first-party analytics through the real Worker route", () => {
         ).status,
       ).toBe(204);
     }
-    expect(h.records).toHaveLength(4);
+    expect(h.records).toHaveLength(7);
   });
   it("bounds bodies even without Content-Length, rejects invalid source and malformed JSON", async () => {
     const h = harness();

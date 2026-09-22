@@ -95,7 +95,7 @@ export function installReportOutcome(url: URL): string | null {
 export const CTA_TARGETS: ReadonlySet<string> = PUBLIC_CTA_TARGETS;
 
 /** What the landing page reports when a command or link is copied. */
-export const COPY_TARGETS: ReadonlySet<string> = new Set(["install", "brew_install", "source_build", "run", "share", "skill"]);
+export const COPY_TARGETS: ReadonlySet<string> = new Set(["install", "brew_install", "source_build", "run", "docs_command", "share", "skill"]);
 
 /** A share page: /s/ and a session id. */
 const SESSION_PATH = /^\/s\/[A-Za-z0-9_-]{32}\/?$/;

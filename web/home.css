@@ -390,6 +390,85 @@ html.home-root #app {
   min-height: 22px;
   margin-bottom: 0;
 }
+.source-install {
+  border-top: 1px solid #dce3d4;
+  margin-top: 16px;
+  padding-top: 6px;
+  min-width: 0;
+}
+.source-install summary {
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 11px 0;
+}
+.source-install p {
+  font-size: 14px;
+}
+.source-install .copy-command {
+  align-items: flex-start;
+  max-width: 100%;
+}
+.source-install pre {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: auto;
+}
+.source-install pre code {
+  display: block;
+  white-space: pre !important;
+  word-break: normal !important;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.setup-love {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 4px 0;
+  margin-top: 24px;
+  border-top: 1px solid #dce3d4;
+}
+.setup-love strong {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.setup-love p {
+  font-size: 14px;
+  color: #65715b;
+  margin: 5px 0 0;
+}
+.setup-love .button {
+  white-space: nowrap;
+  font-size: 14px;
+  gap: 9px;
+  min-height: 46px;
+  background: #fffefa;
+}
+.setup-love .button svg {
+  color: #9b772d;
+  flex: none;
+}
+@media (max-width: 650px) {
+  .setup-love {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
+    padding-top: 20px;
+  }
+  .setup-love .button {
+    width: 100%;
+    justify-content: center;
+  }
+  .setup-love strong {
+    font-size: 18px;
+  }
+}
 .home-team {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -899,9 +978,89 @@ html.home-root #app {
   gap: 9px;
 }
 .art-team {
-  background: #f3ecd9;
-  flex-direction: column;
-  gap: 12px;
+  background: #e5eae4;
+  padding: 16px;
+}
+.shared-demo {
+  width: 100%;
+  border: 1px solid #3b4940;
+  border-radius: 9px;
+  background: #1c2520;
+  color: #eef4e9;
+  box-shadow: 0 10px 22px #20362a1c;
+  overflow: hidden;
+}
+.shared-demo-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #2a352d;
+  border-bottom: 1px solid #3d4b40;
+  font-size: 10px;
+}
+.shared-demo-bar b {
+  font-weight: 500;
+  margin-left: 5px;
+}
+.shared-demo-bar small {
+  font-size: 8px;
+  color: #b1c0af;
+}
+.shared-demo-code {
+  display: grid;
+  gap: 7px;
+  padding: 13px 12px;
+  font:
+    10px/1.5 ui-monospace,
+    monospace;
+}
+.shared-demo-path {
+  color: #9aaa9d;
+  font-size: 9px;
+}
+.shared-demo-code i {
+  font-style: normal;
+  color: #b9d893;
+}
+.shared-demo-cursor {
+  height: 11px;
+  width: 5px;
+  background: #bad597;
+}
+.shared-demo-users {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid #39463c;
+  background: #242f27;
+  font-size: 9px;
+}
+.shared-demo-users > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.shared-demo-users i {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: #b7cf99;
+  color: #263221;
+  font: 600 9px/1 system-ui;
+}
+.shared-demo-users > span + span i {
+  background: #b7c9dc;
+  color: #283446;
+}
+.shared-demo-users small {
+  font-size: 8px;
+  color: #abb9a8;
 }
 .mini-terminal {
   width: 100%;
@@ -970,34 +1129,6 @@ html.home-root #app {
 }
 .mini-bubble b {
   margin-left: 4px;
-}
-.mini-people {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  font-size: 12px;
-}
-.mini-people span {
-  display: grid;
-  place-items: center;
-  min-height: 50px;
-  padding: 12px;
-  border-radius: 50%;
-  background: #fefbf3;
-  border: 1px solid #ddcf9c;
-}
-.mini-people i {
-  font-style: normal;
-  color: #9d8d5f;
-}
-.mini-shared {
-  font-size: 12px;
-  padding: 9px 17px;
-  background: white;
-  border-radius: 5px;
-}
-.mini-shared > span {
-  margin-right: 4px;
 }
 @media (max-width: 1000px) {
   .agent-brand-grid {
@@ -1132,17 +1263,22 @@ html.home-root #app {
     font-size: 9px;
     padding: 9px 10px;
   }
-  .mini-people {
-    font-size: 9px;
-    gap: 5px;
+  .benefit-grid .benefit-team {
+    display: block;
   }
-  .mini-people span {
-    min-height: 36px;
-    padding: 6px;
+  .benefit-team .art-team {
+    height: 190px;
+    padding: 18px;
+    margin-bottom: 18px;
   }
-  .mini-shared {
-    font-size: 9px;
-    padding: 5px 10px;
+  .benefit-team .shared-demo-code {
+    font-size: 11px;
+  }
+  .benefit-team .shared-demo-bar {
+    font-size: 11px;
+  }
+  .benefit-team .shared-demo-users {
+    font-size: 10px;
   }
   .platform-picker button,
   .agent-picker button {

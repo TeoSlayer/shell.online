@@ -69,7 +69,7 @@ try {
       }
       const interactive = [
         ...document.querySelectorAll(
-          ".agent-picker button,.platform-picker button,.proof-switch button,[data-copy],.home-actions .button",
+          ".agent-picker button,.platform-picker button,.proof-switch button,[data-copy],.home-actions .button,.setup-love .button",
         ),
       ].filter((n) => n.getClientRects().length > 0);
       return {
@@ -122,6 +122,19 @@ try {
     assert.equal(expanded.count, 20);
     assert.equal(expanded.overflow, false);
     assert.equal(expanded.small, 0);
+    const source = await browser.call(() => {
+      document.querySelector(".source-install").open = true;
+      const result = {
+        overflow: document.documentElement.scrollWidth > innerWidth,
+        height: document
+          .querySelector("[data-copy=source_build]")
+          .getBoundingClientRect().height,
+      };
+      document.querySelector(".source-install").open = false;
+      return result;
+    });
+    assert(!source.overflow, "Expanded source build must not overflow");
+    assert(source.height >= 44);
     assert.equal(
       state.heavyRuntime,
       false,
@@ -186,7 +199,16 @@ try {
     await new Promise((r) => setTimeout(r, 30));
     document.querySelector("[data-copy=run]").click();
     await new Promise((r) => setTimeout(r, 30));
-    result.copied = copied;
+    result.copied = [...copied];
+    document.querySelector(".source-install").open = true;
+    const sourceCopies = [];
+    for (const platform of ["macos", "windows"]) {
+      document.querySelector(`[data-platform=${platform}]`).click();
+      document.querySelector("[data-copy=source_build]").click();
+      await new Promise((r) => setTimeout(r, 10));
+      sourceCopies.push(copied.at(-1));
+    }
+    result.sourceCopies = sourceCopies;
     document.querySelector("[data-agent=opencode]").click();
     result.customHidden = document.querySelector(".custom-agent").hidden;
     Object.defineProperty(navigator, "clipboard", {
@@ -252,6 +274,12 @@ try {
     "shell npm run dev",
   ]);
   assert.match(interaction.failure, /Could not copy/);
+  assert(interaction.sourceCopies[0].includes("./shell --version"));
+  assert(interaction.sourceCopies[1].includes(".\\shell.exe --version"));
+  for (const recipe of interaction.sourceCopies) {
+    assert(recipe.includes("git clone --depth 1 --branch v"));
+    assert(recipe.includes("go build -buildvcs=false -trimpath"));
+  }
   assert.match(interaction.proof, /codex-complete-mobile\.png$/);
   assert.equal(interaction.proofSelected, "true");
   assert.equal(interaction.proofBottom, true);

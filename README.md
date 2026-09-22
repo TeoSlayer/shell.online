@@ -180,7 +180,27 @@ installers, and test caveats.
 | [Containers](https://shell.online/docker/) | [Reliability](https://shell.online/reliability/) | [Refstream alpha](https://shell.online/refstream/) |
 | [Self-hosting](https://shell.online/self-hosting/) | [Platforms](https://shell.online/platforms/) | [Contributing](.github/CONTRIBUTING.md) |
 
+[Connect an agent through MCP](https://shell.online/agents/) walks through a scoped
+grant, first read, safe input, verification and revocation.
+
 ## Development
+
+### Build just the CLI
+
+Install Git and Go 1.26.8. Node.js is not needed to build the CLI or use the hosted service.
+
+```sh
+git clone --depth 1 --branch v0.22.0 https://github.com/TeoSlayer/shell.online.git
+cd shell.online
+go build -buildvcs=false -trimpath -ldflags="-X main.version=0.22.0" -o shell ./cmd/shell
+./shell --version
+```
+
+In Windows PowerShell, use `-o shell.exe` and `.\shell.exe --version` instead.
+Run `./shell codex` (Windows: `.\shell.exe codex`) from this directory, or move
+the binary into a directory on your PATH. This does not restart existing sessions.
+
+### Work on the website and app
 
 Requires Go 1.26.8, Node.js 22, and npm.
 

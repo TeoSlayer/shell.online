@@ -1,6 +1,8 @@
 import { initAnalytics, trackPublicEvent } from "./analytics";
 import "./home.css";
 import { agentCommand, PLATFORM_BRANDS } from "./landing-brands";
+import { RELEASE_VERSION } from "../shared/release";
+import { sourceBuildCommands } from "../shared/source-build";
 
 const commands = {
   unix: "curl -fsSL https://shell.online/install | sh",
@@ -34,11 +36,26 @@ export function initLanding(): void {
   const feedback = document.querySelector<HTMLElement>(".copy-feedback");
   const install = document.querySelector<HTMLElement>("#install-command");
   const run = document.querySelector<HTMLElement>("#run-command");
+  const sourceBuild = document.querySelector<HTMLElement>(
+    "#source-build-command",
+  );
   const platformButtons = [
     ...document.querySelectorAll<HTMLButtonElement>("[data-platform]"),
   ];
   const setPlatform = (platform: string) => {
     if (!PLATFORM_BRANDS.some(([, , key]) => key === platform)) return;
+    if (sourceBuild)
+      sourceBuild.textContent = sourceBuildCommands(
+        RELEASE_VERSION,
+        platform === "windows",
+      );
+    const sourceNote =
+      document.querySelector<HTMLElement>("#source-build-note");
+    if (sourceNote)
+      sourceNote.innerHTML =
+        platform === "windows"
+          ? 'Use <code>.\\shell.exe codex</code> in PowerShell from this folder, or put the binary on your PATH. <a href="/platforms/#section-4">Full source-build guide</a>.'
+          : 'Use <code>./shell codex</code> from this folder, or put the binary on your PATH. <a href="/platforms/#section-4">Full source-build guide</a>.';
     if (install)
       install.textContent =
         commands[platform === "windows" ? "windows" : "unix"];
@@ -48,10 +65,10 @@ export function initLanding(): void {
     const note = document.querySelector<HTMLElement>("#platform-note");
     if (note && platform === "windows")
       note.innerHTML =
-        'Run in PowerShell. <a href="/cli/">Other install methods</a>.';
+        'Run in PowerShell. <a href="/platforms/">Other install methods</a>.';
     else if (note)
       note.innerHTML =
-        'Or use <a href="/cli/">Homebrew or another install method</a>.';
+        'Prefer a package manager? <a href="/platforms/">Install with Homebrew</a>.';
   };
   setPlatform(
     /Windows/i.test(navigator.userAgent)
@@ -108,13 +125,24 @@ export function initLanding(): void {
       button.addEventListener("click", async () => {
         const current = ++serial;
         const target = button.dataset.copy;
-        if (target !== "install" && target !== "run") return;
+        if (
+          target !== "install" &&
+          target !== "run" &&
+          target !== "source_build"
+        )
+          return;
         if (
           target === "run" &&
           agentCommand(selectedAgent, customAgent?.value) === null
         )
           return;
-        const value = (target === "install" ? install : run)?.textContent;
+        const value = (
+          target === "install"
+            ? install
+            : target === "source_build"
+              ? sourceBuild
+              : run
+        )?.textContent;
         if (!value) return;
         try {
           if (!navigator.clipboard?.writeText)
@@ -126,7 +154,9 @@ export function initLanding(): void {
             feedback.textContent =
               target === "install"
                 ? "Copied. Paste it into a terminal on your computer."
-                : "Copied. Run it on your computer, then open the link on your phone.";
+                : target === "source_build"
+                  ? "Copied. Run these commands where you want the new source checkout."
+                  : "Copied. Run it on your computer, then open the link on your phone.";
           trackPublicEvent("copy", target);
         } catch {
           if (serial !== current) return;

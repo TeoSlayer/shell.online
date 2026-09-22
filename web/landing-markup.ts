@@ -1,4 +1,5 @@
 import { RELEASE_VERSION } from "../shared/release";
+import { sourceBuildCommands } from "../shared/source-build";
 import {
   AGENT_BRANDS,
   agentGrid,
@@ -45,7 +46,7 @@ export function landingMarkup(): string {
         <div class="benefit-grid">
           <article><div class="benefit-art art-progress" aria-hidden="true"><div class="mini-terminal"><div class="mini-dots"><i></i><i></i><i></i></div><span><b>✓</b> Reading files</span><span><b>✓</b> Making changes</span><span class="mini-active"><i></i> Running checks</span></div><span class="art-caption">Example workflow</span></div><h3>See what’s happening.</h3><p>Your terminal, live on your phone.</p></article>
           <article><div class="benefit-art art-reply" aria-hidden="true"><span class="mini-bubble">Shall I continue?</span><span class="mini-bubble reply">Yes, go ahead. <b>↗</b></span><span class="art-caption">Example interaction</span></div><h3>Keep things moving.</h3><p>A quick reply. Back to your day.</p></article>
-          <article><div class="benefit-art art-team" aria-hidden="true"><div class="mini-people"><span>You</span><i>↔</i><span>Teammate</span></div><div class="mini-shared"><span>&gt;_</span> Same terminal</div><span class="art-caption">You choose who gets access</span></div><h3>Bring someone in.</h3><p>A link and password. Help is there.</p></article>
+          <article class="benefit-team"><div class="benefit-art art-team" aria-hidden="true"><div class="shared-demo"><div class="shared-demo-bar"><span>&gt;_ <b>Shared terminal</b></span><small>Illustration</small></div><div class="shared-demo-code"><span class="shared-demo-path">~/your-project</span><span><i>❯</i> Review this change with me.</span><span class="shared-demo-cursor"></span></div><div class="shared-demo-users"><span><i>Y</i> You <small>typing</small></span><span><i>T</i> Teammate <small>viewing</small></span></div></div></div><h3>Work in the same terminal.</h3><p>Invite a teammate to watch or type—with the link and password.</p></article>
         </div>
       </section>
 
@@ -59,7 +60,8 @@ export function landingMarkup(): string {
             <li><div class="step-title"><span>1</span><h3>Install shell.online</h3></div><p>Choose your computer. Then open its terminal and run:</p>
               ${platformPicker()}
               <div class="copy-command"><code id="install-command">curl -fsSL https://shell.online/install | sh</code><button type="button" data-copy="install" aria-label="Copy install command">Copy</button></div>
-              <p class="step-note" id="platform-note">Or use <a href="/cli/">Homebrew or another install method</a>.</p>
+              <p class="step-note" id="platform-note">Prefer a package manager? <a href="/platforms/">Install with Homebrew</a>.</p>
+              <details class="source-install"><summary>Build the CLI from source</summary><p>Have Git and Go 1.26.8 installed? Build the current release yourself. No Node.js or web build needed.</p><div class="copy-command"><pre><code id="source-build-command">${sourceBuildCommands(RELEASE_VERSION)}</code></pre><button type="button" data-copy="source_build" aria-label="Copy source build commands">Copy</button></div><p class="step-note" id="source-build-note">Use <code>./shell codex</code> from this folder, or put the binary on your PATH. <a href="/platforms/#section-4">Full source-build guide</a>.</p></details>
             </li>
             <li id="choose-agent"><div class="step-title"><span>2</span><h3>Start your agent with <code>shell</code></h3></div><p>Choose an agent you already have installed:</p>
               ${agentPicker()}
@@ -68,6 +70,7 @@ export function landingMarkup(): string {
             </li>
             <li><div class="step-title"><span>3</span><h3>Open the link on your phone</h3></div><p>Your terminal prints a link, password and QR code. Scan the QR code, or open the link and enter the password.</p><div class="setup-result"><span aria-hidden="true">↗</span><strong>Same session. Now anywhere you can open a browser.</strong></div><p class="step-note">Keep your computer awake and connected to the internet.</p></li>
           </ol>
+          <aside class="setup-love" aria-labelledby="setup-love-title"><div><strong id="setup-love-title">A little star goes a long way.</strong><p>Enjoying shell.online? Help more people find it.</p></div><a class="button secondary" href="https://github.com/TeoSlayer/shell.online" target="_blank" rel="noopener noreferrer" data-cta="github_star"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2L3.2 9.6l6-.9Z"/></svg>Star us on GitHub <span aria-hidden="true">↗</span></a></aside>
           <p class="copy-feedback" role="status" aria-live="polite"></p>
           <noscript><p>You can select and copy the commands above. Windows PowerShell: <code>irm https://shell.online/install.ps1 | iex</code>. Prefer Claude Code or OpenCode? Run <code>shell claude</code> or <code>shell opencode</code>.</p></noscript>
         </div>
