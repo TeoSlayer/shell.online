@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   isPublicAnalyticsUrl,
-  readConsentCookie,
   gtagConfig,
   isGpcOrDnt,
 } from "../web/analytics";
@@ -99,39 +98,6 @@ describe("isPublicAnalyticsUrl", () => {
   });
 });
 
-describe("readConsentCookie", () => {
-  it("returns null when no cookie present", () => {
-    expect(readConsentCookie("")).toBe(null);
-    expect(readConsentCookie("other=value")).toBe(null);
-  });
-
-  it("returns 'accepted' for valid cookie", () => {
-    expect(readConsentCookie("shell_analytics_consent=accepted")).toBe("accepted");
-  });
-
-  it("returns 'declined' for valid cookie", () => {
-    expect(readConsentCookie("shell_analytics_consent=declined")).toBe("declined");
-  });
-
-  it("returns null for invalid value", () => {
-    expect(readConsentCookie("shell_analytics_consent=maybe")).toBe(null);
-  });
-
-  it("handles multiple cookies", () => {
-    expect(readConsentCookie("a=1; shell_analytics_consent=accepted; b=2")).toBe("accepted");
-  });
-
-  it("handles whitespace", () => {
-    expect(readConsentCookie("  shell_analytics_consent=accepted  ")).toBe("accepted");
-  });
-
-  it("stores only enum choice, no personal data", () => {
-    const cookie = "shell_analytics_consent=accepted";
-    expect(cookie).not.toContain("@");
-    expect(cookie).not.toContain("uid");
-  });
-});
-
 describe("isGpcOrDnt", () => {
   it("returns false when neither is set", () => {
     const origDnt = navigator.doNotTrack;
@@ -212,16 +178,5 @@ describe("gtagConfig", () => {
     expect(keys).not.toContain("user_id");
     expect(keys).not.toContain("search");
     expect(keys).not.toContain("terminal");
-  });
-});
-
-describe("consent cookie format", () => {
-  it("stores only an enum choice, no personal data", () => {
-    expect(readConsentCookie("shell_analytics_consent=accepted")).toBe("accepted");
-    expect(readConsentCookie("shell_analytics_consent=declined")).toBe("declined");
-    const cookie = "shell_analytics_consent=accepted";
-    expect(cookie).not.toContain("@");
-    expect(cookie).not.toContain("uid");
-    expect(cookie).not.toContain("session");
   });
 });

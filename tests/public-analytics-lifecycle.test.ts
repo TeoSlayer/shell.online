@@ -55,7 +55,7 @@ function installDom(url: string, cookies: CookieJar) {
   return dom;
 }
 
-describe("loadGtag / acceptAnalytics / withdrawAnalytics lifecycle", () => {
+describe("initAnalytics automatic public-page analytics", () => {
   let cookies: CookieJar;
   let dom: ReturnType<typeof makeDom>;
 
@@ -65,15 +65,20 @@ describe("loadGtag / acceptAnalytics / withdrawAnalytics lifecycle", () => {
     dom = installDom("https://shell.online/", cookies);
   });
 
-  it("loadGtag queues standard Arguments commands in correct order", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+  it("initializes automatically on fresh visit without prior cookies", async () => {
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
     const dataLayer = dom.window.dataLayer as unknown[];
     expect(dataLayer).toBeDefined();
     expect(dataLayer.length).toBe(4);
+  });
 
+  it("queues standard Arguments commands in correct order", async () => {
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+
+    const dataLayer = dom.window.dataLayer as unknown[];
     for (const entry of dataLayer) {
       expect(Object.prototype.toString.call(entry)).toBe("[object Arguments]");
     }
@@ -89,10 +94,9 @@ describe("loadGtag / acceptAnalytics / withdrawAnalytics lifecycle", () => {
   });
 
   it("sends exactly one config and one page_view (idempotent)", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
-    loadGtag();
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+    initAnalytics();
 
     const dataLayer = dom.window.dataLayer as unknown[];
     const configs = dataLayer.filter((e) => (e as IArguments)[0] === "config");
@@ -101,125 +105,101 @@ describe("loadGtag / acceptAnalytics / withdrawAnalytics lifecycle", () => {
     expect(pageViews.length).toBe(1);
   });
 
-  it("sets ga-disable flag to false on load", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+  it("does not render any banner, dialog, or preferences DOM controls", async () => {
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
-    expect(dom.window["ga-disable-G-101HMD03VD"]).toBe(false);
+    expect(dom.bodyChildren.length).toBe(0);
   });
 
-  it("withdraw sets ga-disable true and sends consent denial", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag, withdrawAnalytics } = await import("../web/analytics");
-    loadGtag();
-    withdrawAnalytics();
+  it("does not write any consent or preferences cookie", async () => {
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
-    expect(dom.window["ga-disable-G-101HMD03VD"]).toBe(true);
+    expect(cookies.has("shell_analytics_consent")).toBe(false);
+  });
+
+  it("does not emit analytics_storage granted (no fake consent)", async () => {
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
     const dataLayer = dom.window.dataLayer as unknown[];
-    const updates = dataLayer.filter((e) => (e as IArguments)[0] === "consent" && (e as IArguments)[1] === "update") as IArguments[];
-    expect(updates.length).toBe(1);
-    const consentState = updates[0][2] as Record<string, string>;
-    expect(consentState.analytics_storage).toBe("denied");
+    const consentCmd = (dataLayer[0] as IArguments);
+    const consentState = consentCmd[2] as Record<string, string>;
+    expect(consentState).not.toHaveProperty("analytics_storage");
     expect(consentState.ad_storage).toBe("denied");
+    expect(consentState.ad_user_data).toBe("denied");
+    expect(consentState.ad_personalization).toBe("denied");
   });
 
-  it("withdraw removes only shell_public_ga cookies, preserves consent and unrelated", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    cookies.set("shell_public_ga", "ABC123");
-    cookies.set("shell_public_ga0", "XYZ789");
-    cookies.set("unrelated_cookie", "value");
-    cookies.set("session_token", "secret");
-
-    const { loadGtag, withdrawAnalytics } = await import("../web/analytics");
-    loadGtag();
-    withdrawAnalytics();
-
-    expect(cookies.has("shell_public_ga")).toBe(false);
-    expect(cookies.has("shell_public_ga0")).toBe(false);
-    expect(cookies.get("shell_analytics_consent")).toBe("declined");
-    expect(cookies.get("unrelated_cookie")).toBe("value");
-    expect(cookies.get("session_token")).toBe("secret");
-  });
-
-  it("accept after withdraw re-enables and sends consent granted", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag, withdrawAnalytics, acceptAnalytics } = await import("../web/analytics");
-    loadGtag();
-    withdrawAnalytics();
-    acceptAnalytics();
-
-    expect(dom.window["ga-disable-G-101HMD03VD"]).toBe(false);
-    expect(cookies.get("shell_analytics_consent")).toBe("accepted");
-
-    const dataLayer = dom.window.dataLayer as unknown[];
-    const updates = dataLayer.filter((e) => (e as IArguments)[0] === "consent" && (e as IArguments)[1] === "update") as IArguments[];
-    expect(updates.length).toBe(2);
-    expect((updates[1][2] as Record<string, string>).analytics_storage).toBe("granted");
-  });
-
-  it("does not load gtag on private session paths even with saved accept", async () => {
-    vi.resetModules();
-    cookies = new Map([["shell_analytics_consent", "accepted"]]);
-    dom = installDom("https://shell.online/s/abcdefghijklmnopqrstuvwxyz012345/", cookies);
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+  it("stays off when legacy explicit decline cookie exists", async () => {
+    cookies.set("shell_analytics_consent", "declined");
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
     expect(dom.window.dataLayer).toBeUndefined();
   });
 
-  it("does not load gtag on URLs with query strings", async () => {
-    vi.resetModules();
-    cookies = new Map([["shell_analytics_consent", "accepted"]]);
-    dom = installDom("https://shell.online/?ref=google", cookies);
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+  it("stays off when GPC is set", async () => {
+    Object.defineProperty(navigator, "globalPrivacyControl", { value: true, configurable: true });
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+    Object.defineProperty(navigator, "globalPrivacyControl", { value: undefined, configurable: true });
 
     expect(dom.window.dataLayer).toBeUndefined();
   });
 
-  it("does not load gtag on URLs with fragments", async () => {
-    vi.resetModules();
-    cookies = new Map([["shell_analytics_consent", "accepted"]]);
-    dom = installDom("https://shell.online/#e2ee=secret", cookies);
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+  it("stays off when existing ga-disable flag is true", async () => {
+    dom.window["ga-disable-G-101HMD03VD"] = true;
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
     expect(dom.window.dataLayer).toBeUndefined();
   });
 
-  it("does not load gtag on other hosts even with saved accept", async () => {
-    vi.resetModules();
-    cookies = new Map([["shell_analytics_consent", "accepted"]]);
-    dom = installDom("https://app.shell.online/", cookies);
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
-
-    expect(dom.window.dataLayer).toBeUndefined();
-  });
-
-  it("acceptAnalytics fails closed when cookie readback returns empty", async () => {
+  it("does not load on private session paths", async () => {
     vi.resetModules();
     cookies = new Map();
-    dom = installDom("https://shell.online/", cookies);
-    // Override cookie getter to always return empty (simulates blocked cookies)
-    Object.defineProperty(dom.document, "cookie", {
-      get: () => "",
-      set: (_v: string) => {},
-      configurable: true,
-    });
-    const { acceptAnalytics } = await import("../web/analytics");
-    acceptAnalytics();
+    dom = installDom("https://shell.online/s/abcdefghijklmnopqrstuvwxyz012345/", cookies);
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
-    expect(dom.window["ga-disable-G-101HMD03VD"]).toBeUndefined();
+    expect(dom.window.dataLayer).toBeUndefined();
+  });
+
+  it("does not load on URLs with query strings", async () => {
+    vi.resetModules();
+    cookies = new Map();
+    dom = installDom("https://shell.online/?ref=google", cookies);
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+
+    expect(dom.window.dataLayer).toBeUndefined();
+  });
+
+  it("does not load on URLs with fragments", async () => {
+    vi.resetModules();
+    cookies = new Map();
+    dom = installDom("https://shell.online/#e2ee=secret", cookies);
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+
+    expect(dom.window.dataLayer).toBeUndefined();
+  });
+
+  it("does not load on other hosts", async () => {
+    vi.resetModules();
+    cookies = new Map();
+    dom = installDom("https://app.shell.online/", cookies);
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
+
     expect(dom.window.dataLayer).toBeUndefined();
   });
 
   it("script element has referrerPolicy no-referrer and correct src", async () => {
-    cookies.set("shell_analytics_consent", "accepted");
-    const { loadGtag } = await import("../web/analytics");
-    loadGtag();
+    const { initAnalytics } = await import("../web/analytics");
+    initAnalytics();
 
     expect(dom.headChildren.length).toBe(1);
     const script = dom.headChildren[0] as { tagName: string; referrerPolicy: string; src: string };
