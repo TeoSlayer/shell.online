@@ -1,40 +1,78 @@
 name: Bug report
-description: Report a reproducible shell.online problem.
+description: Something did not work as expected.
 title: "bug: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
-      value: Do not include active share URLs, terminal transcripts, credentials, or security vulnerabilities. Use the private security-reporting link for vulnerabilities.
+      value: |
+        Please use a small, synthetic example. Do not include share links, QR codes,
+        passwords, MCP bearers, private terminal content or deployment secrets.
+        Report vulnerabilities [privately](https://github.com/TeoSlayer/shell.online/security/advisories/new).
+  - type: dropdown
+    id: component
+    attributes:
+      label: Where did it happen?
+      options:
+        - Install or update
+        - CLI or host process
+        - Browser terminal or sharing
+        - Accounts app or vault
+        - MCP
+        - Docker or self-hosting
+        - Game
+        - Website or documentation
+        - Not sure
+    validations:
+      required: true
   - type: input
     id: version
     attributes:
       label: Version
-      description: Output of `shell --version`.
-      placeholder: shell 0.3.9
+      description: Output of shell --version, or a source commit. For browser-only reports, say hosted or self-hosted and when it happened.
+      placeholder: "shell 0.22.0; hosted app; 2026-09-23 10:00 UTC"
     validations:
       required: true
   - type: dropdown
     id: platform
     attributes:
-      label: Platform
+      label: Host operating system
       options:
-        - macOS arm64
-        - macOS amd64
-        - Linux arm64
-        - Linux amd64
-        - Browser/mobile UI
+        - macOS
+        - Windows
+        - Linux
+        - FreeBSD
+        - OpenBSD
+        - NetBSD
+        - DragonFly BSD
+        - Solaris
+        - Browser-only report or host unknown
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS version, CPU architecture, terminal, agent/program and browser version where relevant. No machine names or private paths needed.
+      placeholder: "macOS arm64 host; Codex; Safari on iPhone"
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we reproduce it?
+      description: Numbered steps and a harmless sample command help. Say whether it happens with a simple process too.
     validations:
       required: true
   - type: textarea
-    id: behavior
+    id: expected
     attributes:
-      label: What happened?
-      description: Include minimal reproduction steps, expected behavior, and sanitized output.
+      label: What should happen?
     validations:
       required: true
   - type: textarea
-    id: checks
+    id: actual
     attributes:
-      label: Additional context
-      description: Browser/terminal name, process type, and whether the issue reproduces with a simple command.
+      label: What happened instead?
+      description: Include only sanitized errors or screenshots from synthetic sessions. For a stopped session, say whether the host was asleep or disconnected.
+    validations:
+      required: true

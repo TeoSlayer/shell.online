@@ -1,15 +1,23 @@
-## What changed
+## What changes for the user?
 
-<!-- Describe the user-visible behavior and why this is the smallest useful change. -->
+<!-- Explain the problem and outcome. Link the issue if there is one. -->
 
 ## Verification
 
-- [ ] Added or updated regression tests where behavior changed
-- [ ] Ran `npm run check` and `npm run build:web`
-- [ ] Ran `go test -race ./...` and `go vet ./...`
-- [ ] Considered bearer-link, terminal-input, secret, and privacy implications
-- [ ] Did not include real share links, terminal contents, credentials, or Cloudflare configuration
+<!-- List exact commands and results. For a bug fix, name the regression and
+     whether it fails without the fix. For UI, include synthetic mobile/desktop
+     screenshots. Explain any relevant checks not run; see CONTRIBUTING.md. -->
 
-## Changelog
+## Access and privacy
 
-<!-- Add a concise user-visible entry to CHANGELOG.md, or explain why this change has no user-visible effect. -->
+<!-- Note any effect on authorization, terminal input, passwords, encryption,
+     logging or stored content. “No change” is useful when accurate. -->
+
+- [ ] No real share links, credentials, private terminal content or deployment secrets are included.
+- [ ] User-facing docs and the changelog are updated, or I explain why no update is needed.
+
+## Rollout
+
+<!-- State whether this is source-only or requires a CLI/host update, migration,
+     feature gate or deployment. Do not describe unexecuted checks or undeployed
+     features as live. App/game paths can trigger deployment when merged. -->

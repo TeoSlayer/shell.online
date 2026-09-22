@@ -6,6 +6,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Changed
 
+- Reorganized the GitHub README and guide index around getting started, daily
+  commands, source builds and finding the right reference. Clarified release
+  versus deployment status and refreshed contribution and issue templates.
 - The chat renderer reads as a conversation rather than as terminal output
   with a border drawn round it. A command's output arrives as the paragraphs
   it was written in, one message each, instead of a single block; sentences

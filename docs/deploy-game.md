@@ -1,7 +1,9 @@
-# Deploying the game
+# Optional separate game deployment
 
-The game skin ships as its own Cloudflare Worker, separately from the console.
-This says what that buys, what is already wired, and the one decision left.
+This is an operator reference for splitting the game into its own Cloudflare
+Worker. It is **not required for normal app setup**. The repository includes
+the build and workflow, but the separate Worker's route is disabled by default.
+Do not interpret a successful build as a live routing change.
 
 ## Why it is split at all
 

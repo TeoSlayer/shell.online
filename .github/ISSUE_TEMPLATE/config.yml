@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Setup and troubleshooting
+    url: https://shell.online/docs/
+    about: Start a session, connect from a browser, or find the right guide.
   - name: Security vulnerability
     url: https://github.com/TeoSlayer/shell.online/security/advisories/new
     about: Report security issues privately; never include them in a public issue.
