@@ -70,7 +70,7 @@ This is terminal output from the host computer, not a second copy of the agent.
 | Check progress and reply away from your desk | [Use your phone](https://shell.online/mobile/) |
 | Let someone watch without typing | `shell --read-only <command>` |
 | Work together in the same terminal | Share the link and password with an intended teammate |
-| Find sessions across your machines | `shell auth`, then [open the optional app](https://app.shell.online/) |
+| Find sessions across your machines | `shell auth`, then follow the [optional app guide](https://shell.online/app/) |
 | Let another agent inspect or control a session | [Create a scoped MCP grant](https://shell.online/agents/) |
 | Keep files and reuse a Docker session link | [Docker workspace guide](https://shell.online/docker/) |
 | Run the relay on your own server | [Self-hosting guide](docs/self-hosting.md) |
@@ -89,13 +89,14 @@ This is terminal output from the host computer, not a second copy of the agent.
 | `shell help` | See built-in help |
 
 [Full command reference](https://shell.online/cli/) ·
-[Connection troubleshooting](https://shell.online/reliability/)
+[Connection troubleshooting](https://shell.online/reliability/) ·
+[Alternative renderer (Refstream alpha)](https://shell.online/refstream/)
 
 ## Know what you are sharing
 
 - **The process stays on your computer.** This is terminal sharing, not remote desktop or a cloud machine. A sleeping or offline host cannot be controlled.
 - **The link and password are access credentials.** An interactive share lets its holder type with the process's permissions. Use `--read-only` when viewing is enough; keep QR codes private too.
-- **Terminal content is encrypted by default.** Native MCP grants explicitly authorize server-side decryption for the authorized MCP client. A browser password is not an MCP bearer.
+- **Terminal traffic is end-to-end encrypted by default.** Only an explicit `--no-e2ee` disables this protection. Native MCP grants authorize server-side decryption for the authorized MCP client. A browser password is not an MCP bearer.
 - **File access is off by default.** `--files` or `--files-root` deliberately exposes a selected directory.
 - **A saved link is not a saved process.** Persistence can reuse credentials and files; it cannot restore process memory.
 
