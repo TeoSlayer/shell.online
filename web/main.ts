@@ -17,7 +17,6 @@ import {
 } from "../shared/session-capacity";
 import { RELEASE_CHECKSUMS_PATH, RELEASE_VERSION } from "../shared/release";
 import {
-  GITHUB_REPOSITORY_URL,
 } from "../shared/github";
 import { TerminalWriteQueue } from "./terminal-writes";
 import {
