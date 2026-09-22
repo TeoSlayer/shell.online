@@ -300,3 +300,67 @@ describe("a command entered somewhere else", () => {
     expect(transcript.messages.map((m) => m.kind)).toEqual(["received"]);
   });
 });
+
+describe("a command whose echo never arrives", () => {
+  /*
+   * The regression this covers: the pending echoes used to be tried oldest
+   * first and only oldest, so one command that never echoed -- a password, a
+   * line a program read and swallowed -- sat at the head of the queue and
+   * every command sent after it was compared against the wrong text. For the
+   * forty lines that took to expire, each real echo failed to match and
+   * arrived in the conversation as output, so what was typed appeared twice:
+   * once as the message, once again inside the answer under it.
+   */
+  it("does not make the next command appear twice", () => {
+    const transcript = new Transcript();
+    transcript.submitted("secret", 1000);
+    /* The program read it without echoing, and printed nothing about it. */
+    transcript.submitted("ls", 1001);
+    transcript.output([plainLine("~/work ❯ ls"), plainLine("a.txt")], 1010);
+
+    expect(texts(transcript)).toEqual(["secret", "ls", "a.txt"]);
+  });
+
+  it("retires the commands sent before the one that matched", () => {
+    const transcript = new Transcript();
+    transcript.submitted("one", 1000);
+    transcript.submitted("two", 1001);
+    transcript.output([plainLine("$ two"), plainLine("output of two")], 1010);
+    /* "one" is gone, so a later line that happens to end in it is kept. */
+    transcript.output([plainLine("this line mentions one")], 1020);
+
+    expect(texts(transcript)).toEqual(["one", "two", "output of two\nthis line mentions one"]);
+  });
+
+  it("matches an echo of a command typed with a trailing space", () => {
+    const transcript = new Transcript();
+    transcript.submitted("ls ", 1000);
+    transcript.output([plainLine("~/work ❯ ls"), plainLine("a.txt")], 1010);
+
+    expect(texts(transcript)).toEqual(["ls ", "a.txt"]);
+  });
+});
+
+describe("an answer with no blank line in it", () => {
+  it("is cut into messages on its own shape rather than arriving as one wall", () => {
+    const transcript = new Transcript();
+    transcript.submitted("npm test", 1000);
+    transcript.output(
+      [
+        plainLine("$ npm test"),
+        plainLine("Ran every suite against the staging cluster."),
+        plainLine("Two of them needed a retry before they settled."),
+        plainLine("NAME      READY   STATUS"),
+        plainLine("api       1/1     Running"),
+      ],
+      1010,
+    );
+
+    expect(texts(transcript)).toEqual([
+      "npm test",
+      "Ran every suite against the staging cluster.\nTwo of them needed a retry before they settled.",
+      "NAME      READY   STATUS\napi       1/1     Running",
+    ]);
+    expect(received(transcript).map((message) => message.preformatted)).toEqual([false, true]);
+  });
+});

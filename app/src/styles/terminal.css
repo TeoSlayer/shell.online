@@ -568,12 +568,35 @@ button.tab {
    * what the visual viewport has left below this element; see keyboard-inset.
    */
   .panes {
+    /*
+     * The pane is the child of the session column that takes what is left of
+     * the screen; shell.css sets the column's height and reserves the strip
+     * the bottom bar is holding. Nothing here measures anything, which is the
+     * point: the pane's top edge moves whenever a tab line wraps, a notice
+     * appears or a summary line is added, and a height measured once in
+     * JavaScript was stale from the next layout onwards -- the conversation
+     * in a short box with a strip of dead page under it.
+     *
+     * --pane-height is what is left for the widths the column rule does not
+     * cover: a tablet, wide enough to miss the phone breakpoint and with the
+     * same on-screen keyboard, where the shell is still a document that
+     * scrolls and the pane has to be told how much of it the keyboard left.
+     */
     height: var(--pane-height, 60dvh);
     min-height: 0;
   }
 
   .pane {
     padding: 18px 0 12px;
+  }
+
+  /*
+   * A conversation has no grid hanging off a tab in the corner, so it does
+   * not need the padding that keeps the renderer tab off the first row of
+   * output -- and on a phone that padding is a message's worth of screen.
+   */
+  .pane[data-renderer="chat"] {
+    padding: 4px 0 0;
   }
 
   .renderer-warning {
@@ -585,6 +608,20 @@ button.tab {
   .tab-label,
   button.tab {
     max-width: 190px;
+  }
+}
+
+/*
+ * On a phone with a session open the shell is a column exactly one screen
+ * tall (shell.css), and the pane is the row of it that takes what is left.
+ * Measuring a height in JavaScript is then not only unnecessary but wrong: it
+ * is taken once, and the pane's top edge moves every time a tab line wraps or
+ * a line of session summary appears above it.
+ */
+@media (max-width: 760px) {
+  :root[data-pane="open"] .panes {
+    height: auto;
+    flex: 1;
   }
 }
 

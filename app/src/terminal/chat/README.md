@@ -107,9 +107,34 @@ cannot fall out of step with the session, and there is no second emulator.
 
 A command's output is not one utterance. `git status` says which branch you
 are on, then what is staged, then what is not, and a person reading that in a
-chat reads three things. Output is cut on blank lines -- the one separator
-every program agrees on -- and each paragraph is its own message.
-`paragraphs.ts` also decides how each one is shown: sentences wrap as text,
+chat reads three things.
+
+`paragraphs.ts` decides where one stops. A blank line is the first rule: it is
+the one separator every program agrees on and the one a person already reads
+as a break. It is not the only rule, because a great deal of output has no
+blank line in it anywhere -- a stack trace, an `npm ERR!` block, a help
+screen, an agent's own notes -- and split on blank lines alone all of that
+arrives as the single wall this renderer exists to replace. Two more rules
+catch it, and both are about shape rather than content, because shape is what
+the process controls deliberately:
+
+- **Back to the margin.** A line at column zero after a run of indented ones
+  is the next item in whatever list this is: the next error and its frames,
+  the next command in a help screen. Safe in every output, because a table
+  never changes indent halfway down and a wrapped sentence never un-indents.
+- **A change of shape, confirmed.** Sentences followed by columns are two
+  things, and no program reliably prints a blank line between them. The run
+  being left has to be at least two lines of one kind, so one indented line
+  inside a paragraph of prose does not cut it in half -- and so a table's own
+  heading row, which is one prose-looking line above the columns, stays
+  attached to its table.
+
+The same predicate is used twice. `startsNewParagraph` answers it one line at
+a time, which is what the transcript works with as output streams in;
+`intoParagraphs` applies it to a finished block, and neither can drift from
+the other because there is only one of it.
+
+`paragraphs.ts` also decides how each message is shown: sentences wrap as text,
 while anything whose spacing is load-bearing (columns, indentation, box
 drawing) is kept exactly as written in a monospace block that scrolls. It is
 the distinction every messaging application makes between a message and a
@@ -128,36 +153,98 @@ becomes a message from the other side. Without markers there is no safe way to
 tell a command from a log line that landed on the prompt, so only local
 commands appear — and nothing is invented.
 
+## Sending
+
+Two things went wrong between pressing send and the command arriving, and both
+looked like the session rather than like the box.
+
+**The return key did nothing, sometimes.** A phone's keyboard with predictive
+text on does not say which key was pressed: iOS reports every keydown as the
+composition placeholder, keyCode 229 with key `Unidentified`, Return included.
+The rule that sends on Return therefore never fired, the command stayed in the
+box, and trying again usually worked because the prediction had settled by
+then -- which is exactly what makes a bug feel like an unreliable network. So
+the box also listens for `beforeinput`, which says what the browser is about
+to do rather than which key asked for it. "Insert a line break" is the one
+thing a box that sends on Return must not do. Every engine fires it, the
+keydown rule cancels it first on a desktop, and what is left is precisely the
+case the keydown rule could not see.
+
+**What was typed appeared twice.** Once as the message, and again inside the
+answer under it. The echo of a command is dropped on the way in, and the
+commands waiting for their echo used to be tried oldest first and only oldest.
+One command that never echoes -- a password, a line a program read and
+swallowed -- then sat at the head of that queue for forty lines, and for those
+forty lines every real echo was compared against the wrong command, failed,
+and arrived as output. Every pending command is tried now, and a match retires
+the ones in front of it, because they were sent earlier and their echo cannot
+still be coming.
+
 ## Phones
 
-Four things are different below the phone breakpoint, and all four were bugs
-before they were rules.
+Everything here was a bug before it was a rule.
+
+**A session is one screen tall and does not scroll.** Every other page on a
+phone is a document -- a list of sessions, an audit log, a settings sheet --
+and the page carries it. A session is not: it has one thing that scrolls, the
+conversation, and a box at the foot of the screen that is typed into. While
+the page could also move, the box was wherever the page had been left rather
+than under the thumb.
+
+So `keyboard-inset.ts` marks the root `data-pane="open"` while a pane is the
+page, and `shell.css` turns the shell into a column exactly one screen tall,
+less whatever the keyboard is covering. The bottom bar is a row of that column
+rather than something fixed on top of it, and the pane is the row that takes
+what is left. **Nothing measures a height.** It used to: the pane was given
+one worked out in JavaScript from where its top edge was, taken once, and
+stale from the next layout onwards -- a tab line wrapping or a notice
+appearing above it left the conversation in a short box in the middle of the
+screen with a strip of dead page underneath. A flex row is the same answer,
+recomputed by the browser on every layout.
+
+**The composer sits on the foot of the pane, and that is the foot of the
+screen.** `--chat-dock` is 8px and does not change, because the pane's own
+foot is the top of the bar -- or the top of the keyboard, once the keyboard
+has taken the bar away. There is exactly one place the clearance is decided.
+There used to be two, and the two added up: a composer a bar's height above a
+pane that had already stopped a bar's height above the screen.
+
+**The bar leaves when the keyboard arrives**, because nobody navigates to
+another page in the middle of typing and the space it holds is space the thing
+being typed into wants. `keyboard-inset.ts` publishes `--keyboard-inset` and
+`data-keyboard="open"` on the root; `shell.css` takes the bar's row out on
+that, and the column settles onto the keyboard in the same movement.
+
+**The composer is docked with a transform**, not with `bottom`. The dock used
+to animate as a layout property, which re-laid out the thread behind it on
+every frame of the keyboard arriving. A transform is composited and moves
+nothing else.
+
+**The control keys are only there when they are wanted**: while the box has
+focus, while something is still being written back, and for as long as a
+full-screen program is reading keys. Three chips at a finger's height are half
+the composer, and standing over the conversation at all times they spent a
+message's worth of screen on controls wanted twice a session.
+
+**Nothing zooms the session by accident.** The composer is 16px wherever there
+is a coarse pointer, because Safari on iOS zooms the whole page in when a
+smaller field is focused and then leaves it zoomed. The composer refuses
+double-tap zoom. The two blocks wide enough to be swiped sideways -- a
+preformatted listing, and a full-screen program's mirror -- allow panning and
+refuse pinch, so a swipe along a table is not read as a pinch on the page.
 
 **The surface is the pane's screen element**, not a box of its own: the
 renderer is handed that element to open into and marks it. So it inherits
 `.pane-screen`, which aligns to `flex-start` because a terminal grid is
 exactly as wide as its columns and must not be stretched. A conversation is
 the opposite. Left on `flex-start` every child was shrink-to-fit and the
-thread took its own 940px max line length as a width — fine by coincidence on
+thread took its own 940px max line length as a width -- fine by coincidence on
 a desktop, two thirds off the right edge of a phone.
-
-**The composer clears one thing at a time.** The bottom navigation bar when
-the keyboard is down, the keyboard when it is up, never both. `--chat-dock`
-holds the distance and transitions between them.
-
-**The bar leaves when the keyboard arrives.** It is fixed to the window, so
-it does not move for a keyboard: it stays underneath it, holding space the
-thing being typed into cannot have. `keyboard-inset.ts` publishes
-`--keyboard-inset` and `data-keyboard="open"` on the root, and `shell.css`
-slides the bar out on that.
-
-**The composer is 16px.** Safari on iOS zooms the whole page in when a
-smaller field is focused and then leaves it zoomed, so a session became a
-magnified corner of itself on every tap into the box.
 
 Viewport units do not follow the root zoom the phone breakpoint applies, so
 anything measured in `vh`/`dvh` down here divides by `--zoom`. `scripts/
-test-mobile-controls.mjs` guards the touch targets, the 16px and the bar.
+test-mobile-controls.mjs` guards the touch targets, the 16px, the zoom
+refusals, the column and the bar.
 
 ## The files
 
@@ -165,10 +252,12 @@ test-mobile-controls.mjs` guards the touch targets, the 16px and the bar.
 |---|---|
 | `chat-terminal.ts` | The `TerminalSurface`. Owns the emulator, the reader, the transcript and the redraw schedule. |
 | `screen-reader.ts` | Finished rows out of the grid, with their colours. Pure, apart from the emulator interface it reads. |
+| `paragraphs.ts` | Where one message stops and the next starts, and how each is shown. Pure. |
 | `transcript.ts` | Rows and submissions into messages. No DOM, no emulator, no clock of its own. |
-| `chat-view.ts` | The thread and the floating box. Renders by difference. |
+| `chat-view.ts` | The thread and the box at the foot of it. Renders by difference. |
 | `keys.ts` | A key press into the bytes a terminal expects, and which control chips belong to which mode. |
 | `preview.ts` | A scripted session, at `/chat-preview.html` under `npm run dev`. Development only. |
 
-`transcript.ts`, `screen-reader.ts` and `keys.ts` are tested without a browser,
-which is most of why they are separate from the two files that need one.
+`transcript.ts`, `paragraphs.ts`, `screen-reader.ts` and `keys.ts` are tested
+without a browser, which is most of why they are separate from the two files
+that need one.

@@ -61,13 +61,40 @@ if (!appChatStylesheet.includes(".chat-send {\n    width: 44px;\n    height: 44p
  * and leaves it zoomed. The composer is the only field in a session, so this
  * one declaration is the difference between typing a command and pinching
  * back out afterwards.
+ *
+ * Keyed to the pointer rather than to the width. It used to live in the phone
+ * breakpoint, which meant a tablet -- wide enough to miss the breakpoint, and
+ * with exactly the same on-screen keyboard -- zoomed itself in on every tap
+ * into the box.
  */
-if (!appChatStylesheet.includes(".chat-input {\n    padding: 8px 2px 8px 4px;\n    font-size: 16px;")) {
-  throw new Error("The chat composer must be 16px on a phone, or iOS zooms the session in");
+if (!/@media \(pointer: coarse\), \(max-width: 760px\)\s*\{\s*\.chat-input\s*\{\s*font-size: 16px;/.test(appChatStylesheet)) {
+  throw new Error("The chat composer must be 16px wherever there is a finger, or iOS zooms the session in");
 }
-/* The bottom bar is fixed over the window, so it has to be told to leave. */
-if (!readFileSync(new URL("../app/src/styles/shell.css", import.meta.url), "utf8")
-  .includes(':root[data-keyboard="open"] .rail')) {
+
+/*
+ * Nothing in the composer waits for a double tap, and a double tap without
+ * this is the browser zooming the page in on the box somebody was aiming at.
+ * The two blocks in a conversation wide enough to be swiped sideways need the
+ * same, or the second finger of a swipe is read as a pinch.
+ */
+if (!/\.chat-composer \{[^}]*touch-action: manipulation;/s.test(appChatStylesheet)) {
+  throw new Error("The chat composer must refuse double-tap zoom");
+}
+if (!/\.chat-screen-host \{\s*touch-action: pan-x pan-y;/.test(appChatStylesheet)) {
+  throw new Error("Blocks that scroll sideways must refuse pinch zoom");
+}
+
+/*
+ * A session is one screen tall and does not scroll, so the composer's foot is
+ * the foot of the screen rather than the foot of whatever box the pane was
+ * measured into. This is what keeps it out of the middle of the page.
+ */
+const appShellStylesheet = readFileSync(new URL("../app/src/styles/shell.css", import.meta.url), "utf8");
+if (!appShellStylesheet.includes(':root[data-pane="open"] .shell')) {
+  throw new Error("A session on a phone must be a column one screen tall, not a page that scrolls");
+}
+/* The bar holds a row of the session column, so it has to be told to leave. */
+if (!appShellStylesheet.includes(':root[data-keyboard="open"] .rail')) {
   throw new Error("The bottom navigation bar must give way to the on-screen keyboard");
 }
 

@@ -24,8 +24,35 @@ const INSET_PROPERTY = "--keyboard-inset";
 /* Set on the root element while the keyboard is up, so CSS can react to it. */
 const STATE_ATTRIBUTE = "data-keyboard";
 
-/* Room under the pane for the bottom bar and the page's own padding. */
-const GAP = 16;
+/*
+ * Set on the root element while a session pane is the page, on a phone.
+ *
+ * It is what lets the stylesheet turn the shell from a page that scrolls into
+ * a column that does not. Every other page on a phone -- the session list,
+ * the account sheet, the audit log -- is a document and has to scroll; a
+ * session is an application and must not, because a terminal that scrolls the
+ * page under itself puts the thing being typed into wherever the page happens
+ * to be rather than at the foot of the screen.
+ */
+const SURFACE_ATTRIBUTE = "data-pane";
+
+/*
+ * Room left under the pane, in viewport pixels.
+ *
+ * None, on purpose. What has to be cleared below a pane on a phone is the
+ * bottom navigation bar, and the bar's height is a fact about the stylesheet:
+ * it is the bar's own padding, its safe-area inset and the size of a touch
+ * target, all written in shell.css. Guessing at it again here is how the
+ * clearance came to be counted twice -- once as sixteen pixels of gap, once
+ * as the composer's own dock -- and the composer ended up floating a finger
+ * and a half above the foot of the screen with nothing under it.
+ *
+ * So this measures to the bottom of what is visible. On a phone with a
+ * session open the stylesheet does not use the answer at all: the shell is a
+ * column exactly one screen tall, the bar is a row of it, and the pane is the
+ * row that takes what is left. This is the fallback for everything else.
+ */
+const GAP = 0;
 const MINIMUM = 180;
 
 /**
@@ -43,7 +70,13 @@ export function paneHeight(input: {
   viewportHeight: number;
   /** How far the visual viewport has been scrolled inside the layout one. */
   offsetTop: number;
-  /** The pane's top edge, in layout coordinates. */
+  /**
+   * The pane's top edge, measured from the top of the layout viewport, which
+   * is what `getBoundingClientRect` reports and the space the two viewport
+   * figures above are in. Not a document offset: adding the page's scroll
+   * position to it mixes two coordinate systems, and the pane was then sized
+   * as though the whole page above it were still on screen.
+   */
   paneTop: number;
   /** Space to leave below the pane. */
   gap?: number;
@@ -136,6 +169,7 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(INSET_PROPERTY);
     root.removeAttribute(STATE_ATTRIBUTE);
+    root.removeAttribute(SURFACE_ATTRIBUTE);
   };
 
   const apply = () => {
@@ -143,8 +177,19 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
       clear();
       return;
     }
+    root.setAttribute(SURFACE_ATTRIBUTE, "open");
     const zoom = rootZoom(root);
-    const paneTop = node.getBoundingClientRect().top + window.scrollY;
+    /*
+     * Viewport-relative, and left that way. `visualViewport.height` and
+     * `.offsetTop` describe the visible part of the layout viewport, so the
+     * pane's top has to be in the same space for the subtraction to mean
+     * anything. Adding `window.scrollY` put it in document coordinates
+     * instead: on a session page that scrolled at all, the pane was handed
+     * the room it would have had at the top of the document, which on a phone
+     * is a couple of hundred pixels short -- and a couple of hundred pixels
+     * short is a conversation in a box in the middle of the screen.
+     */
+    const paneTop = node.getBoundingClientRect().top;
     root.style.setProperty(
       PROPERTY,
       `${paneHeight({

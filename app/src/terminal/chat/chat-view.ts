@@ -78,6 +78,13 @@ export class ChatView {
   private history: string[] = [];
   private historyAt = -1;
   private draft = "";
+  /*
+   * Set by a keydown that asked for a line break on purpose, so the
+   * beforeinput below lets that one through instead of sending. See onInsert.
+   */
+  private breaking = false;
+  /** Whether the session is mid-answer, which is when Ctrl-C is worth a tap. */
+  private running = false;
   private disposed = false;
   private readonly resizes: ResizeObserver | null;
 
@@ -122,6 +129,7 @@ export class ChatView {
     this.composer = el("form", "chat-composer") as HTMLFormElement;
     this.chips = el("div", "chat-keys");
     this.drawChips();
+    this.composer.dataset.keys = "hidden";
 
     const row = el("div", "chat-row");
     this.input = el("textarea", "chat-input") as HTMLTextAreaElement;
@@ -188,8 +196,11 @@ export class ChatView {
     this.resizes?.observe(this.composer);
 
     this.scroller.addEventListener("scroll", this.onScroll);
+    this.composer.addEventListener("focusin", this.onFocus);
+    this.composer.addEventListener("focusout", this.onFocus);
     this.composer.addEventListener("submit", this.onSubmit);
     this.input.addEventListener("keydown", this.onKeyDown);
+    this.input.addEventListener("beforeinput", this.onInsert);
     this.input.addEventListener("input", this.onInput);
   }
 
@@ -230,6 +241,11 @@ export class ChatView {
     }
 
     this.history = messages.filter((m) => m.kind === "sent" && m.text).map((m) => m.text);
+    const running = messages.length > 0 && messages[messages.length - 1].open === true;
+    if (running !== this.running) {
+      this.running = running;
+      this.showKeys();
+    }
     if (wasAtBottom) {
       this.scroller.scrollTop = this.scroller.scrollHeight;
       this.jump.hidden = true;
@@ -262,6 +278,7 @@ export class ChatView {
     this.input.value = "";
     this.autosize();
     this.drawChips();
+    this.showKeys();
     this.setDisabled(this.disabled);
   }
 
@@ -274,8 +291,11 @@ export class ChatView {
     this.resizes?.disconnect();
     this.root.style.removeProperty("--chat-composer-height");
     this.scroller.removeEventListener("scroll", this.onScroll);
+    this.composer.removeEventListener("focusin", this.onFocus);
+    this.composer.removeEventListener("focusout", this.onFocus);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
+    this.input.removeEventListener("beforeinput", this.onInsert);
     this.input.removeEventListener("input", this.onInput);
     this.nodes.clear();
     this.order = [];
@@ -506,14 +526,77 @@ export class ChatView {
     if (!existing) node.el.querySelector(".chat-bubble")?.append(chip);
   }
 
+  /**
+   * Whether the control keys are worth the room they take.
+   *
+   * On a phone they are a whole finger's height standing above the box at all
+   * times, which is a message's worth of the conversation given to three
+   * chips that are wanted twice a session. They are wanted at exactly two
+   * moments, though, and both are knowable: while somebody is typing, and
+   * while something is running -- which is when Ctrl-C is the only control
+   * that matters and having to open the keyboard to reach it would be absurd.
+   *
+   * The stylesheet decides what to do with the answer, and only the phone
+   * breakpoint does anything: on a pointer the row costs nothing.
+   */
+  private showKeys(): void {
+    const wanted = this.direct || this.running || this.composer.contains(document.activeElement);
+    this.composer.dataset.keys = wanted ? "shown" : "hidden";
+  }
+
+  private readonly onFocus = (): void => {
+    this.showKeys();
+  };
+
   private readonly onScroll = (): void => {
     const distance = this.scroller.scrollHeight - this.scroller.scrollTop - this.scroller.clientHeight;
     this.sticking = distance <= STICK_SLACK_PX;
     this.jump.hidden = this.sticking;
   };
 
+  /**
+   * Sending, for the keyboards that do not report which key was pressed.
+   *
+   * A phone's keyboard with predictive text on does not say. iOS reports
+   * every key as the composition placeholder -- keyCode 229, key
+   * "Unidentified" -- including Return, and the keydown rule below therefore
+   * never fires: the return key did nothing, the command stayed in the box,
+   * and it looked exactly like a message that failed to send. Trying again
+   * usually worked, because the second attempt often came after the
+   * prediction had settled, which is what made it intermittent.
+   *
+   * `beforeinput` says what the browser is about to do rather than which key
+   * asked for it, and "insert a line break" is the one thing a box that sends
+   * on Return must not do. Every engine fires it, the keydown rule cancels
+   * the event before it on a desktop, and what is left is exactly the case
+   * the keydown rule could not see.
+   */
+  private readonly onInsert = (event: InputEvent): void => {
+    if (event.inputType !== "insertLineBreak" && event.inputType !== "insertParagraph") return;
+    /* Shift-Return asked for a line break and is allowed to have one. */
+    if (this.breaking) {
+      this.breaking = false;
+      return;
+    }
+    event.preventDefault();
+    if (this.disabled) return;
+    /*
+     * Direct mode is a program reading keys, so Return is a byte rather than
+     * a line. The keydown rule normally turns it into one and cancels this
+     * event before it ever fires; on the keyboards that do not say which key
+     * was pressed it does not, and this is the same key arriving by the only
+     * route left.
+     */
+    if (this.direct) {
+      this.options.onKeys("\r");
+      return;
+    }
+    this.submit();
+  };
+
   private readonly onInput = (): void => {
     this.historyAt = -1;
+    this.breaking = false;
     this.autosize();
   };
 
@@ -576,7 +659,18 @@ export class ChatView {
      */
     if (event.isComposing || event.keyCode === COMPOSING) return;
 
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (event.key === "Enter") {
+      if (event.shiftKey) {
+        /* The beforeinput that follows is a line break somebody asked for. */
+        this.breaking = true;
+        return;
+      }
+      /*
+       * Cleared here as well as when the line break lands, so a Shift-Return
+       * whose beforeinput never arrived cannot leave the flag set and swallow
+       * the next Return.
+       */
+      this.breaking = false;
       event.preventDefault();
       this.submit();
       return;
@@ -626,9 +720,24 @@ export class ChatView {
     return true;
   }
 
+  /**
+   * Grows the box with what is being typed, between two limits.
+   *
+   * The floor is the send button beside it, measured rather than written
+   * down. The row aligns to its bottom so that a box three lines tall keeps
+   * the button on the last one, and with an empty box shorter than the button
+   * that same rule left the line somebody was typing floating above the
+   * button's centre, which on a phone is the composer looking assembled
+   * rather than designed. Measured, because the button is one size for a
+   * pointer and another for a finger.
+   *
+   * The ceiling is about six lines, after which the box scrolls: past that it
+   * is eating the conversation it is being typed into.
+   */
   private autosize(): void {
     this.input.style.height = "auto";
-    this.input.style.height = `${Math.min(this.input.scrollHeight, 168)}px`;
+    const floor = this.send.offsetHeight;
+    this.input.style.height = `${Math.min(Math.max(this.input.scrollHeight, floor), 168)}px`;
   }
 }
 

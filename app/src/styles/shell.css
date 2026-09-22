@@ -620,6 +620,92 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /*
+   * A session is an application, so it is exactly one screen tall and does
+   * not scroll.
+   *
+   * Everything else on a phone is a document: a list of sessions, an audit
+   * log, a settings sheet. Those are as long as they are and the page carries
+   * them. A session is not. It has one thing that scrolls -- the conversation,
+   * or the terminal's own scrollback -- and a box at the foot of the screen
+   * that is typed into, and if the page itself can also move then the box
+   * moves with it and is wherever the page was left rather than under the
+   * thumb.
+   *
+   * The height is the screen, less whatever an on-screen keyboard is
+   * covering. `--keyboard-inset` is already in this element's own units (see
+   * keyboard-inset.ts), and `100dvh` is not, so only the viewport measurement
+   * is divided by the zoom.
+   *
+   * Everything below is then an ordinary flex column: the pane is the child
+   * that takes what is left, which is a fact the browser works out on every
+   * layout, rather than a number measured once in JavaScript and left behind
+   * the first time a tab line wrapped or a notice appeared above it.
+   */
+  :root[data-pane="open"] .shell {
+    height: calc(100dvh / var(--zoom) - var(--keyboard-inset, 0px));
+    min-height: 0;
+    overflow: hidden;
+    /*
+     * The session, then the bar. Named rows rather than source order,
+     * because the rail is the shell's first child: it is the left-hand
+     * column on a desktop and it stays there in the markup.
+     */
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  :root[data-pane="open"] .shell-main {
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  :root[data-pane="open"] .shell-content {
+    min-height: 0;
+    /*
+     * The padding a document needs here is dead space in a session.
+     *
+     * The rule further down leaves a bar's height plus a safe-area inset at
+     * the foot of every phone page, so the last row of a list is not under
+     * the bar. In a session the bar is a row of the column rather than a
+     * thing on top of it, so nothing is under it -- and that padding was a
+     * hundred pixels of nothing between the composer and the bar, which is
+     * most of what "the box floats in the middle of the screen" was.
+     *
+     * The top comes in too. A session has a tab line telling you which one
+     * you are looking at; it does not need a page's worth of air above that.
+     */
+    padding-top: 8px;
+    padding-bottom: 0;
+  }
+
+  /*
+   * The bar takes its own space instead of lying over the foot of the screen.
+   *
+   * Everywhere else on a phone it is fixed to the window, which is right for
+   * a page that scrolls underneath it. In a session the shell is exactly one
+   * screen tall, so a bar on top of it is a bar covering the bottom of the
+   * conversation -- and anything that wanted to sit above the bar had to know
+   * how tall the bar is. Nothing can know that: it is a touch target plus a
+   * home-indicator inset plus whatever the type scale came out at, and every
+   * number written down for it here was wrong on some phone. As a row it
+   * measures itself.
+   */
+  :root[data-pane="open"] .rail {
+    position: static;
+    grid-row: 2;
+  }
+
+  /*
+   * The keyboard takes the bar with it, and takes the space back too. There
+   * is no transition on this: the visual viewport reports the keyboard's own
+   * animation frame by frame, and a transition on top of that is a second
+   * animation running against the first, which is a composer that lags the
+   * keyboard up the screen and then overshoots it.
+   */
+  :root[data-pane="open"][data-keyboard="open"] .rail {
+    display: none;
+  }
+
   .rail {
     position: fixed;
     z-index: 40;

@@ -80,3 +80,60 @@ describe("a whole answer", () => {
     ).toEqual(["prose:1", "pre:3", "prose:1"]);
   });
 });
+
+describe("output with no blank line in it", () => {
+  /*
+   * Plenty of programs never print one. Split only on blank lines, the whole
+   * of an `npm ERR!` block, a stack trace or a help screen arrives as a
+   * single bubble, which is the wall of terminal output this renderer exists
+   * to replace.
+   */
+  it("starts a new message where a list returns to the margin", () => {
+    /*
+     * Each failure keeps the frames hanging off it and lets go of the next
+     * one, which is how a person reads a log with two errors in it.
+     */
+    expect(
+      shapes([
+        "Error: connect ECONNREFUSED 127.0.0.1:5432",
+        "    at TCPConnectWrap.afterConnect (node:net:1595:16)",
+        "    at process.processTicksAndRejections (node:internal:82:21)",
+        "Warning: retrying the connection in five seconds",
+        "    at Timeout._onTimeout (/app/db.js:22:9)",
+      ]),
+    ).toEqual(["pre:3", "pre:2"]);
+  });
+
+  it("separates sentences from the table that follows them", () => {
+    expect(
+      shapes([
+        "Ran 3 suites against the staging cluster.",
+        "Two of them needed a retry before they settled.",
+        "NAME      READY   STATUS",
+        "api       1/1     Running",
+        "worker    1/1     Running",
+      ]),
+    ).toEqual(["prose:2", "pre:3"]);
+  });
+
+  it("keeps a table's own heading row attached to the table", () => {
+    expect(
+      shapes([
+        "Results",
+        "pass    41    0.4s",
+        "fail     1    5.6s",
+      ]),
+    ).toEqual(["pre:3"]);
+  });
+
+  it("does not cut a paragraph in half around one odd line", () => {
+    expect(
+      shapes([
+        "Cloning into 'api'...",
+        "remote: Enumerating objects",
+        "  resolving deltas",
+        "done.",
+      ]),
+    ).toEqual(["prose:2", "prose:1", "prose:1"]);
+  });
+});

@@ -806,19 +806,13 @@ export function Workspace() {
       )}
 
       {/*
-        * Chat reads the session rather than drawing it, so it is worth saying
-        * what it does with the parts of a terminal a conversation has no place
-        * for. Nothing is hidden from the session itself: the same bytes go
-        * over the same socket, and switching back to xterm.js shows the grid.
-        */}
-      {state.tabs.length > 0 && terminalRenderer === "chat" && (
-        <p className="renderer-warning" role="status">
-          Chat reads this session as messages: what you send, and what the process writes back.
-          Full-screen programs appear as a live screen inside the thread.
-        </p>
-      )}
+        Chat used to explain itself here, in a notice above the thread. It is
+        gone: a conversation is self-evident, and the notice was not free.
+        Three lines of standing text at the top of every session is a
+        message's worth of a phone screen spent on something nobody reads
+        twice, and it started the thread a third of the way down the glass.
+        What it said is in the renderer's own README.
 
-      {/*
         Every open pane stays mounted. Hiding rather than unmounting is what
         makes switching tabs instant, and keeps each socket and its scrollback
         alive while another tab is in front.

@@ -163,6 +163,50 @@ shell.append(rail);
 const main = document.createElement("div");
 main.className = "shell-main";
 
+/*
+ * Everything the workspace puts between the top of the window and the pane.
+ *
+ * It is not decoration here. On a phone the pane is sized to the room left
+ * below its own top edge, so the height of this chrome is an input to the
+ * layout being worked on: a harness that starts the pane at the top of the
+ * window measures a session that does not exist, and the composer ending up
+ * halfway down a real screen is invisible in it. The topbar, the tab line and
+ * the renderer notice are all present in a real session with a chat tab open.
+ */
+const topbar = document.createElement("header");
+topbar.className = "topbar";
+const topbarInner = document.createElement("div");
+topbarInner.className = "topbar-inner";
+const topbarHeading = document.createElement("div");
+topbarHeading.className = "topbar-heading";
+const topbarTitle = document.createElement("h1");
+topbarTitle.className = "topbar-title";
+topbarTitle.textContent = "Sessions";
+topbarHeading.append(topbarTitle);
+topbarInner.append(topbarHeading);
+topbar.append(topbarInner);
+main.append(topbar);
+
+const content = document.createElement("div");
+content.className = "shell-content";
+
+const terminalBar = document.createElement("div");
+terminalBar.className = "terminal-bar";
+const tabs = document.createElement("div");
+tabs.className = "tabs";
+for (const [index, label] of ["All sessions", "api ~ zsh"].entries()) {
+  const tab = document.createElement("span");
+  tab.className = index === 1 ? "tab is-active" : "tab";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tab-label";
+  button.textContent = label;
+  tab.append(button);
+  tabs.append(tab);
+}
+terminalBar.append(tabs);
+content.append(terminalBar);
+
 const panes = document.createElement("div");
 panes.className = "panes";
 
@@ -175,7 +219,8 @@ const screen = document.createElement("div");
 screen.className = "pane-screen";
 page.append(screen);
 panes.append(page);
-main.append(panes);
+content.append(panes);
+main.append(content);
 shell.append(main);
 root.append(shell);
 

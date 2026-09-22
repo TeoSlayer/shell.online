@@ -415,7 +415,16 @@
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: var(--chat-dock);
+  /*
+   * Docked with a transform rather than with `bottom`.
+   *
+   * The dock changes while a phone's keyboard is arriving, and a changing
+   * `bottom` is a layout change: the browser re-lays out the composer, and
+   * with it the thread behind it, on every frame of the animation. That is
+   * the stutter the box had on the way up. A transform is composited, moves
+   * nothing else, and gets the same 200ms for free.
+   */
+  bottom: 0;
   left: 0;
   display: flex;
   max-width: 720px;
@@ -427,9 +436,19 @@
   box-shadow: 0 10px 34px rgb(26 31 22 / 13%), 0 1px 2px rgb(26 31 22 / 7%);
   flex-direction: column;
   gap: 6px;
+  transform: translateY(calc(-1 * var(--chat-dock)));
+  /*
+   * Nothing in here waits for a double tap, and a double tap on a phone
+   * without this is the browser zooming the page in on the box somebody was
+   * trying to type in.
+   */
+  touch-action: manipulation;
   /* Output scrolling underneath stays readable, and stays out of the way. */
   backdrop-filter: blur(14px) saturate(140%);
-  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
+  transition:
+    transform 200ms var(--ease),
+    border-color 160ms var(--ease),
+    box-shadow 160ms var(--ease);
 }
 
 .chat-composer:focus-within {
@@ -459,6 +478,27 @@
 }
 
 .chat-input:focus { outline: none; }
+
+/*
+ * 16px, and not a pixel less, wherever there is a finger.
+ *
+ * Safari on iOS zooms the whole page in when a text field smaller than this
+ * is focused, and then leaves it zoomed: the session went from readable to a
+ * magnified corner of itself on every tap into the box, and the only way back
+ * was to pinch out.
+ *
+ * Either test is enough. It used to be the phone breakpoint alone, which is a
+ * width, and the thing that decides this is a touch screen: a tablet in
+ * landscape is wide and has exactly the same keyboard. The width is kept as
+ * well because `pointer` is not always reported honestly -- the headless
+ * browser the harness drives says `fine` -- and a rule the harness cannot see
+ * is a rule nobody looks at until it is wrong on somebody's phone.
+ */
+@media (pointer: coarse), (max-width: 760px) {
+  .chat-input {
+    font-size: 16px;
+  }
+}
 
 .chat-input::placeholder { color: var(--faint); }
 
@@ -530,7 +570,7 @@
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: 96px;
+  bottom: calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 10px);
   left: 0;
   width: fit-content;
   padding: 5px 13px;
@@ -550,40 +590,38 @@
 /* --- phones ------------------------------------------------------ */
 
 /*
- * The phone breakpoint matches the one that moves the navigation to a fixed
- * bottom bar and zooms the root (shell.css). Below it the composer has two
- * things to stay clear of, and only ever one at a time: the bottom bar when
- * the keyboard is down, the keyboard when it is up.
+ * The phone breakpoint matches the one that moves the navigation to a bottom
+ * bar and zooms the root (shell.css). Below it the composer sits on the foot
+ * of the pane, and the pane is the last row of a column exactly one screen
+ * tall, so its foot is the top of the bar -- or the top of the keyboard, once
+ * the keyboard has taken the bar away.
  */
 @media (max-width: 760px) {
   .chat-surface {
     /*
-     * How far the composer floats above the foot of the pane. The bar is
-     * roughly a finger tall and is only there while the keyboard is not, so
-     * the two never have to be cleared at once.
+     * How far the composer floats above the foot of the pane -- and that is
+     * all it is now.
+     *
+     * It used to be a finger's height, so that the composer could clear the
+     * bottom navigation bar. The pane is the thing that clears the bar now --
+     * the bar is a row of the same column the pane is the last row of -- so
+     * doing it again here counted the same distance twice: the composer sat a
+     * bar's height above a pane that had already stopped a bar's height above
+     * the screen, which is the strip of dead page under the box and the box
+     * itself halfway up the screen.
+     *
+     * The pane's foot is the top of the bar, or the top of the keyboard when
+     * the keyboard has taken the bar away. Either way the composer belongs on
+     * it, with enough room not to touch.
      */
-    --chat-dock: calc(58px + env(safe-area-inset-bottom));
-  }
-
-  /*
-   * Keyboard up: the bar has gone, and the pane has already been resized to
-   * the space above the keyboard (see keyboard-inset), so the composer only
-   * has to settle back down onto the foot of it.
-   */
-  :root[data-keyboard="open"] .chat-surface {
     --chat-dock: 8px;
   }
 
   .chat-composer {
     right: 8px;
-    bottom: var(--chat-dock);
     left: 8px;
     padding: 8px 8px 8px 12px;
     border-radius: 24px;
-    transition:
-      bottom 200ms var(--ease),
-      border-color 160ms var(--ease),
-      box-shadow 160ms var(--ease);
   }
 
   .chat-scroll {
@@ -593,29 +631,15 @@
      * into the bezel, and on a phone that reads as the layout being broken
      * rather than as a deliberately full-width message.
      *
-     * The foot clears the composer and whatever the composer is clearing.
+     * The foot clears the composer, whose height the view measures and
+     * publishes as it changes.
      */
     padding: 2px 10px calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
-    transition: padding-bottom 200ms var(--ease);
   }
 
-  .chat-jump {
-    bottom: calc(var(--chat-dock) + 78px);
-    transition: bottom 200ms var(--ease);
-  }
-
-  /*
-   * 16px, and not a pixel less.
-   *
-   * Safari on iOS zooms the whole page in when a text field smaller than this
-   * is focused, and then leaves it zoomed: the session went from readable to a
-   * magnified corner of itself on every tap into the box, and the only way
-   * back was to pinch out. The size of this one field is what decides that, so
-   * it is set here rather than inherited.
-   */
+  /* The size of the field is set by the touch rule above, not by the width. */
   .chat-input {
     padding: 8px 2px 8px 4px;
-    font-size: 16px;
   }
 
   /*
@@ -639,6 +663,22 @@
     gap: 7px;
     /* Room for the chips to be swiped without catching the thread behind them. */
     padding: 2px 2px 1px;
+  }
+
+  /*
+   * Three chips at a finger's height are half the composer, standing over the
+   * conversation whether or not anybody wants them. The view says when they
+   * are wanted -- while the box has focus, while something is running, and
+   * for as long as a full-screen program is reading keys -- and the rest of
+   * the time the composer is one row and the thread has the difference. See
+   * ChatView.showKeys.
+   */
+  .chat-composer[data-keys="hidden"] .chat-keys {
+    display: none;
+  }
+
+  .chat-composer[data-keys="hidden"] {
+    padding-top: 8px;
   }
 
   .chat-bubble {
@@ -681,9 +721,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .chat-composer,
-    .chat-scroll,
-    .chat-jump {
+    .chat-composer {
       transition: none;
     }
   }
@@ -703,4 +741,17 @@
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/*
+ * The two things in a conversation wide enough to be swiped sideways: a
+ * listing kept exactly as it was written, and the mirror of a full-screen
+ * program. A swipe across either of them starts as two points on the glass,
+ * and without this the browser reads the second one as a pinch and zooms the
+ * whole session instead of scrolling the block. Panning in both directions is
+ * still allowed; only the zoom is refused.
+ */
+.chat-body[data-shape="pre"],
+.chat-screen-host {
+  touch-action: pan-x pan-y;
 }

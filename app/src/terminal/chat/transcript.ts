@@ -25,7 +25,7 @@
  * that the command exited, or the process simply going quiet.
  */
 
-import { looksPreformatted } from "./paragraphs";
+import { looksPreformatted, startsNewParagraph } from "./paragraphs";
 
 export type MessageKind = "sent" | "received" | "notice" | "screen";
 
@@ -235,8 +235,15 @@ export class Transcript {
   /** A line the viewer entered and submitted. */
   submitted(text: string, at: number): Message {
     this.close(at);
-    if (text) {
-      this.echoes.push({ text, patience: ECHO_PATIENCE_LINES });
+    /*
+     * Trailing spaces are dropped from what is looked for, because the line
+     * it will be compared against has had its own taken off: a terminal pads
+     * every row out to its width, and a command that differs from its echo by
+     * a space nobody can see is the same command.
+     */
+    const looked = text.trimEnd();
+    if (looked) {
+      this.echoes.push({ text: looked, patience: ECHO_PATIENCE_LINES });
       if (this.echoes.length > MAX_PENDING_ECHOES) this.echoes.shift();
     }
     return this.push({ kind: "sent", at, text, lines: [], open: false });
@@ -426,24 +433,39 @@ export class Transcript {
   }
 
   /**
-   * Whether a line is the terminal echoing back what was just typed.
+   * Whether a line is the terminal echoing back something that was typed, and
+   * is therefore already in the conversation as the message that caused it.
    *
-   * The echoed line is the prompt and the command together, because the shell
-   * draws the prompt first and the command after it on the same row. So the
-   * test is a suffix, not equality, and it also removes the prompt from the
-   * conversation, which is the right answer twice over: a prompt is chrome,
-   * and it usually carries a directory and a hostname nobody asked to publish.
+   * `echoMatches` below holds what counts as an echo of one command. This
+   * holds which commands are still worth asking about.
    */
   private consumedAsEcho(line: TranscriptLine): boolean {
-    const first = this.echoes[0];
-    if (!first) return false;
+    if (this.echoes.length === 0) return false;
     const text = line.text.trimEnd();
-    if (text.endsWith(first.text)) {
-      this.echoes.shift();
+
+    /*
+     * Every command still waiting for its echo is tried, not only the oldest.
+     *
+     * The oldest is the usual answer and used to be the only one, which made
+     * one unmatched command poison every command after it: a line that never
+     * echoes -- a password, something a program read and swallowed, a session
+     * joined mid-command -- sat at the head of the queue for forty lines, and
+     * for those forty lines every real echo was compared against the wrong
+     * command, failed, and arrived in the conversation as output. That is the
+     * duplicate: the command in its own bubble, and the same text again in
+     * the answer underneath it.
+     *
+     * A match therefore also retires the commands in front of it. They were
+     * sent before this one and their echo cannot still be coming.
+     */
+    for (let index = 0; index < this.echoes.length; index += 1) {
+      if (!echoMatches(text, this.echoes[index].text)) continue;
+      this.echoes.splice(0, index + 1);
       return true;
     }
-    first.patience -= 1;
-    if (first.patience <= 0) this.echoes.shift();
+
+    for (const echo of this.echoes) echo.patience -= 1;
+    this.echoes = this.echoes.filter((echo) => echo.patience > 0);
     return false;
   }
 
@@ -451,6 +473,19 @@ export class Transcript {
     let target = this.open;
     if (target && target.kind !== "received") target = null;
     if (target && target.lines.length >= MAX_LINES_PER_MESSAGE) {
+      target.open = false;
+      this.touch(target);
+      target = null;
+    }
+    /*
+     * A blank line is not the only place one thing stops being said and the
+     * next starts. Plenty of output has no blank line in it anywhere -- a
+     * stack trace, an `npm ERR!` block, a help screen -- and shown as one
+     * message it is the wall of terminal output a conversation is supposed to
+     * replace. paragraphs.ts owns which shapes are a boundary; this is where
+     * the answer is acted on as the lines arrive.
+     */
+    if (target && startsNewParagraph(target.lines, line)) {
       target.open = false;
       this.touch(target);
       target = null;
@@ -493,6 +528,24 @@ export class Transcript {
     message.revision += 1;
     this.rev += 1;
   }
+}
+
+/**
+ * Whether a released line is the terminal echoing back the given command.
+ *
+ * A suffix rather than an equality, because the shell draws its prompt first
+ * and the command after it on the same row, so the echoed line is the two
+ * together. That also takes the prompt out of the conversation, which is the
+ * right answer twice over: a prompt is chrome, and it usually carries a
+ * directory and a hostname nobody asked to publish.
+ *
+ * Both sides have their trailing spaces taken off first. The released line
+ * has them because a terminal pads a row to its width; the command has them
+ * because somebody can type one, and a command that differs from its own echo
+ * by a space nobody can see is the same command.
+ */
+function echoMatches(line: string, command: string): boolean {
+  return command !== "" && line.endsWith(command);
 }
 
 function lastScreen(items: readonly Message[]): Message | null {

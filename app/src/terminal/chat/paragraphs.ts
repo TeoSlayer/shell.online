@@ -10,9 +10,15 @@
  * Two decisions live here, and both are about what the process meant rather
  * than what it printed.
  *
- * Where one paragraph ends: a blank line. It is the one separator every
- * program agrees on, from a commit message to a test summary, and it is the
- * separator a person already reads as a break.
+ * Where one paragraph ends. A blank line is the separator every program
+ * agrees on and the one a person already reads as a break, so it is the first
+ * rule. It is not the only one, because plenty of output has no blank line in
+ * it at all: `npm ERR!` blocks, a stack trace, a help screen and an agent's
+ * own notes are all several things said in a row with nothing between them,
+ * and shown as one message they are the wall this renderer exists to avoid.
+ * Two more rules catch those, and both are about shape rather than content,
+ * because shape is the thing the process controls deliberately. See
+ * `startsNewParagraph`.
  *
  * How a paragraph should be shown: prose is prose and a table is a table.
  * Terminal output is a mix of the two, and treating all of it as preformatted
@@ -46,8 +52,68 @@ const COLUMN_GAP = /\S {2,}\S/u;
 /** A line that is only punctuation and spaces, such as a rule under a heading. */
 const RULE = /^[\s\-=_*~#+.]+$/u;
 
+/** Leading whitespace: a line that belongs under the one above it. */
+const INDENTED = /^\s{2,}\S/u;
+
 /**
- * Splits committed output on blank lines.
+ * Whether a line's shape is carrying meaning on its own.
+ *
+ * The same three tests `looksPreformatted` weighs over a whole paragraph,
+ * asked of one line, which is what a streaming reader has to work with.
+ */
+function structural(line: TranscriptLine): boolean {
+  const text = line.text;
+  if (DRAWING.test(text)) return true;
+  if (COLUMN_GAP.test(text)) return true;
+  if (INDENTED.test(text)) return true;
+  return RULE.test(text) && text.trim().length > 2;
+}
+
+/**
+ * Whether `next` begins a new message rather than continuing the one whose
+ * lines are given.
+ *
+ * This is the streaming form of the rules `intoParagraphs` applies in bulk,
+ * and both use it, so the two cannot drift apart. It is asked once per line
+ * of output, so it looks at the tail of the open message and never at all of
+ * it.
+ *
+ * Three rules, in the order they fire.
+ *
+ * **A blank line.** Handled by the caller, which drops the blank rather than
+ * keeping it, so it does not reach here.
+ *
+ * **Back to the margin.** A line at column zero after a run of indented ones
+ * is the next item in whatever list this is: the next `npm ERR!` block, the
+ * next frame's heading in a stack trace, the next command in a help screen.
+ * It is the one boundary that is safe in every output, because a table never
+ * changes indent halfway down and a wrapped sentence never un-indents.
+ *
+ * **A change of shape, confirmed.** Sentences followed by columns are two
+ * things, and no program prints a blank line between them reliably. The
+ * confirmation matters: the run being left has to be at least two lines of
+ * one kind, so a single indented line inside a paragraph of prose, or one
+ * sentence inside a listing, does not cut the message in half. It is also
+ * what keeps a table's own heading row attached to the table: one prose line
+ * followed by columns is a heading, not a paragraph that ended.
+ */
+export function startsNewParagraph(open: readonly TranscriptLine[], next: TranscriptLine): boolean {
+  if (open.length === 0) return false;
+  const previous = open[open.length - 1];
+
+  /* Back to the margin, after something that was hanging off it. */
+  if (INDENTED.test(previous.text) && !INDENTED.test(next.text) && next.text.trim() !== "") return true;
+
+  /* A change of shape, once the run being left is long enough to be a run. */
+  if (open.length < 2) return false;
+  const before = open[open.length - 2];
+  const settled = structural(previous);
+  if (structural(before) !== settled) return false;
+  return structural(next) !== settled;
+}
+
+/**
+ * Splits committed output into the messages it is made of.
  *
  * Runs of blank lines collapse: two blank lines between paragraphs is
  * typography, not two separators, and an empty message is not worth showing.
@@ -63,8 +129,12 @@ export function intoParagraphs(lines: readonly TranscriptLine[]): Paragraph[] {
   };
 
   for (const line of lines) {
-    if (line.text.trim() === "") flush();
-    else current.push(line);
+    if (line.text.trim() === "") {
+      flush();
+      continue;
+    }
+    if (startsNewParagraph(current, line)) flush();
+    current.push(line);
   }
   flush();
   return paragraphs;
@@ -98,7 +168,7 @@ export function looksPreformatted(lines: readonly TranscriptLine[]): boolean {
       continue;
     }
     /* Indentation that is not the second line of a wrapped sentence. */
-    if (/^\s{2,}\S/u.test(text)) {
+    if (INDENTED.test(text)) {
       structured += 1;
       continue;
     }
