@@ -669,6 +669,40 @@
     overscroll-behavior: contain;
   }
 
+  /*
+   * A session's column is the visible page, measured once, from one source.
+   *
+   * Everywhere else on a phone the shell is `--app-height` less
+   * `--keyboard-inset`, which is correct arithmetic between two numbers that
+   * only agree if every engine means the same thing by `window.innerHeight`
+   * while a keyboard is up. They do not, and the two are published by two
+   * modules listening to the same event, so a frame can be laid out with a
+   * new value of one and a stale value of the other. When they disagree the
+   * column is short by exactly their difference, which is the bottom bar
+   * lifted off the foot of the screen with a strip of dead page beneath it
+   * and the conversation squeezed into what is left.
+   *
+   * `--visible-height` is `visualViewport.height` and nothing else: whatever
+   * is covering the bottom of the screen is already not in it. Nothing is
+   * subtracted, so there is nothing to disagree with. See keyboard-inset.ts.
+   */
+  :root[data-pane="open"] .shell {
+    height: var(--visible-height, calc(100dvh / var(--zoom)));
+  }
+
+  /*
+   * And nothing outside the column scrolls, which is what keeps that
+   * measurement true. The visible viewport can be scrolled inside the layout
+   * one, and a phone does exactly that when it decides a focused field would
+   * be covered: the page slides up and takes the column with it. A document
+   * with nothing to scroll cannot be scrolled, so it does not.
+   */
+  :root[data-pane="open"],
+  :root[data-pane="open"] body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   :root[data-pane="open"] .shell-content {
     /*
      * The padding a document needs at its foot is dead space in a session: the

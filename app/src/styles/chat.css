@@ -690,7 +690,7 @@
      * The foot clears the composer, whose height the view measures and
      * publishes as it changes.
      */
-    padding: 2px 10px calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
+    padding: 2px 16px calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
   }
 
   /*
@@ -737,9 +737,20 @@
     gap: 9px;
   }
 
+  /*
+   * A message has to stop short of the far side, or it is not a message.
+   *
+   * The surface went full-bleed so the composer could meet both edges, and
+   * the thread took the width with it: a bubble at ninety-four percent of a
+   * phone runs from one bezel almost to the other, which reads as a panel
+   * with text in it and not as something somebody said. What makes a
+   * conversation legible at a glance is the gutter on the opposite side --
+   * the thing that says which way a message is facing -- so the bubbles give
+   * that back while the bar below them keeps the full width.
+   */
   .chat-sent .chat-bubble,
   .chat-received .chat-bubble {
-    max-width: 94%;
+    max-width: 84%;
   }
 
   /*

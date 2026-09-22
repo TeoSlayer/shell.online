@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keyboardInset, keyboardIsOpen, paneHeight } from "./keyboard-inset";
+import { keyboardInset, keyboardIsOpen, paneHeight, visibleHeight } from "./keyboard-inset";
 
 /*
  * A phone covers the bottom of the page with its keyboard rather than making
@@ -97,5 +97,47 @@ describe("telling a keyboard from a toolbar", () => {
 
   it("calls a keyboard a keyboard", () => {
     expect(keyboardIsOpen(292)).toBe(true);
+  });
+});
+
+/*
+ * A session's column is sized from this and from nothing else. It used to be
+ * `--app-height` less `--keyboard-inset`, which is correct arithmetic between
+ * two numbers that only agree if every engine means the same thing by
+ * `window.innerHeight` while a keyboard is up -- and they are published by two
+ * modules listening to the same event, so a frame can be laid out with a new
+ * value of one and a stale value of the other. When they disagree the column
+ * is short by their difference: the bottom bar lifted off the foot of the
+ * screen with dead page beneath it.
+ */
+describe("how tall the visible page is", () => {
+  it("is the whole of what is visible, with nothing taken off it", () => {
+    expect(visibleHeight({ viewportHeight: 844 })).toBe(844);
+  });
+
+  it("does not subtract a keyboard that is already not in the measurement", () => {
+    /* 844 with a 336px keyboard up is 508 visible, not 508 less 336 again. */
+    expect(visibleHeight({ viewportHeight: 508 })).toBe(508);
+  });
+
+  it("answers the same whether a toolbar or a keyboard covered the bottom", () => {
+    /* It cannot tell, and does not have to: both are already out of it. */
+    expect(visibleHeight({ viewportHeight: 754 })).toBe(754);
+  });
+
+  it("never consults the layout viewport, so the two cannot disagree", () => {
+    /* The only input is the visible height; there is no second term. */
+    expect(visibleHeight({ viewportHeight: 508 })).toBe(visibleHeight({ viewportHeight: 508 }));
+  });
+
+  it("answers in the space the stylesheet reads it in", () => {
+    expect(visibleHeight({ viewportHeight: 844, zoom: 1.15 })).toBe(Math.round(844 / 1.15));
+    expect(Math.round(visibleHeight({ viewportHeight: 844, zoom: 1.15 }) * 1.15)).toBe(844);
+  });
+
+  it("treats an unzoomed page, and a browser that does not report one, as 1", () => {
+    for (const zoom of [1, 0, Number.NaN, undefined]) {
+      expect(visibleHeight({ viewportHeight: 844, zoom })).toBe(844);
+    }
   });
 });

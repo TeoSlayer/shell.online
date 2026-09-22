@@ -21,6 +21,30 @@ const PROPERTY = "--pane-height";
 /* Read by anything that has to sit clear of the keyboard; see chat.css. */
 const INSET_PROPERTY = "--keyboard-inset";
 
+/**
+ * How tall the part of the page a person can actually see is.
+ *
+ * One number, from one source, and that is the whole point of it. A session's
+ * column is sized from this and from nothing else.
+ *
+ * The column used to be `--app-height` less `--keyboard-inset`, which is
+ * correct arithmetic and still went wrong, because the two terms come from
+ * different places and are only equal to the visible height if every engine
+ * agrees about what `window.innerHeight` means while a keyboard is up. They
+ * do not: Safari holds it at the layout viewport, a page saved to the home
+ * screen shrinks it, and the two properties are published by two modules
+ * listening to the same event, so a frame can be laid out with a new value of
+ * one and a stale value of the other. When the two disagree the column is the
+ * wrong height by exactly their difference -- which is the bar lifted off the
+ * foot of the screen with a strip of dead page under it.
+ *
+ * `visualViewport.height` is already the answer, on every engine, whatever is
+ * covering the bottom of the screen and whatever `innerHeight` happens to
+ * think. Nothing is subtracted from it and nothing else is consulted, so
+ * there is nothing left to disagree with.
+ */
+const VISIBLE_PROPERTY = "--visible-height";
+
 
 /**
  * The smallest change worth writing, in the units the properties are in.
@@ -136,6 +160,20 @@ export function keyboardIsOpen(inset: number): boolean {
   return inset >= KEYBOARD_MINIMUM;
 }
 
+/**
+ * How tall the visible part of the page is, in the units the stylesheet reads
+ * the answer in.
+ *
+ * The whole of it. Whatever is covering the bottom of the screen -- a
+ * keyboard, a browser toolbar, both -- is already not in this number, which
+ * is why nothing is taken off it. Every time this layout has been wrong, it
+ * has been wrong by taking something off it twice.
+ */
+export function visibleHeight(input: { viewportHeight: number; zoom?: number }): number {
+  const zoom = input.zoom && input.zoom > 0 ? input.zoom : 1;
+  return Math.round(input.viewportHeight / zoom);
+}
+
 
 /**
  * Sizes the element to the space the keyboard has left it, on phones only.
@@ -183,15 +221,16 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
    * layout in CSS and means this hook reads the DOM without reshaping it.
    */
   /** What was last written, so an unchanged measurement costs no layout. */
-  let published = { pane: -1, inset: -1 };
+  let published = { visible: -1, pane: -1, inset: -1 };
   let frame = 0;
 
   const clear = () => {
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(INSET_PROPERTY);
+    root.style.removeProperty(VISIBLE_PROPERTY);
     root.removeAttribute(STATE_ATTRIBUTE);
     root.removeAttribute(SURFACE_ATTRIBUTE);
-    published = { pane: -1, inset: -1 };
+    published = { visible: -1, pane: -1, inset: -1 };
   };
 
   const measure = () => {
@@ -212,6 +251,12 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
      * short is a conversation in a box in the middle of the screen.
      */
     const paneTop = node.getBoundingClientRect().top;
+
+    const visible = visibleHeight({ viewportHeight: viewport.height, zoom });
+    if (moved(visible, published.visible)) {
+      published.visible = visible;
+      root.style.setProperty(VISIBLE_PROPERTY, `${visible}px`);
+    }
 
     const pane = paneHeight({
       viewportHeight: viewport.height,

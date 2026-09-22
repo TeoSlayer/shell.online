@@ -130,6 +130,30 @@ if (!appShellStylesheet.includes(':root[data-pane="open"] .shell')) {
 if (!/\.shell \{\s*height: calc\(var\(--app-height/.test(appShellStylesheet)) {
   throw new Error("The phone shell must be sized from --app-height, with dvh only as the fallback");
 }
+
+/*
+ * A session goes further: one measurement, from one source.
+ *
+ * `--app-height` less `--keyboard-inset` is correct arithmetic between two
+ * numbers that only agree if every engine means the same thing by
+ * `window.innerHeight` while a keyboard is up, and the two are published by
+ * two modules listening to the same event. When they disagree the column is
+ * short by their difference, which is the bottom bar lifted off the foot of
+ * the screen with dead page beneath it.
+ */
+if (!/:root\[data-pane="open"\] \.shell \{\s*height: var\(--visible-height/.test(appShellStylesheet)) {
+  throw new Error("A session column must be sized from --visible-height alone, not from two terms that can disagree");
+}
+
+/*
+ * And a message has to stop short of the far side, or it is not a message.
+ * The surface is full-bleed so the composer can meet both edges; the bubbles
+ * are not, because the gutter opposite them is what says which way a message
+ * is facing.
+ */
+if (!/\.chat-sent \.chat-bubble,\s*\.chat-received \.chat-bubble \{\s*max-width: 8[0-9]%/.test(appChatStylesheet)) {
+  throw new Error("Message bubbles need a gutter on the far side, or they read as panels");
+}
 /*
  * A full-screen program is the ordinary case on this product, not the
  * exception: every agent it runs draws one. The card that mirrors an
