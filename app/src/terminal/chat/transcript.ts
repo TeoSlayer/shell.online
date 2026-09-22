@@ -26,8 +26,15 @@
  */
 
 import { looksPreformatted, startsNewParagraph } from "./paragraphs";
+import type { AgentUtterance } from "./agents/types";
 
-export type MessageKind = "sent" | "received" | "notice" | "screen";
+/**
+ * "tool" is an agent running something rather than saying something: a file
+ * read, a command run. It is in the conversation because leaving it out makes
+ * an agent look as though it sat thinking for two minutes, and it is its own
+ * kind rather than a message because it is shown as one line and a result.
+ */
+export type MessageKind = "sent" | "received" | "notice" | "screen" | "tool";
 
 /** A run of characters that share one appearance, as the process painted it. */
 export interface StyleRun {
@@ -150,6 +157,18 @@ export class Transcript {
   private rev = 0;
   /** Set while a snapshot is being replayed, so the view redraws once at the end. */
   private replaying = false;
+  /**
+   * Whether the open message is an agent's rather than a shell's.
+   *
+   * The two are closed by different things. A shell's answer ends when the
+   * process goes quiet, because nothing else says so. An agent's paragraph
+   * ends when the adapter reading its screen says it does, and the adapter
+   * has something the clock has not: the rest of the paragraph, held back
+   * because the row looked as though it were still being written. Left to the
+   * clock, the paragraph was closed a few hundred milliseconds before its
+   * last line arrived, and the line was then lost.
+   */
+  private agentOwned = false;
 
   get messages(): readonly Message[] {
     return this.items;
@@ -169,6 +188,7 @@ export class Transcript {
    * nothing is open. The caller owns the timer; this module owns the rule.
    */
   get quietDeadline(): number | null {
+    if (this.agentOwned) return null;
     return this.open && this.open.kind === "received" ? this.lastGrewAt + IDLE_CLOSE_MS : null;
   }
 
@@ -205,6 +225,53 @@ export class Transcript {
     this.awaitingCommand = false;
   }
 
+  /**
+   * Something read out of an agent's own interface.
+   *
+   * Everything else here is told what happened by the session: a line this
+   * browser submitted, rows a terminal finished writing. An agent draws a
+   * screen instead, so what it said has to be read off that screen, and this
+   * is where the reading arrives. See agents/types.ts for what that costs.
+   *
+   * A prompt recovered this way is not given an echo to look for. The echo
+   * rule exists because a shell prints back what it was sent; an agent's
+   * interface is not echoing anything, it is drawing its own record of the
+   * conversation, and there is no second copy coming.
+   */
+  fromAgent(utterance: AgentUtterance, at: number): Message {
+    if (utterance.kind !== "received") this.close(at);
+    if (utterance.kind === "sent") {
+      return this.push({ kind: "sent", at, text: utterance.text, lines: [], open: false });
+    }
+    if (utterance.kind === "tool") {
+      return this.push({
+        kind: "tool",
+        at,
+        text: utterance.text,
+        lines: utterance.lines.slice(),
+        open: false,
+      });
+    }
+    /*
+     * The same paragraph arrives on every frame while the agent is writing
+     * it, and once more when it ends. So it is updated where it already
+     * exists rather than pushed again: what the adapter offers is always the
+     * whole of the paragraph as it stands, never the part that is new.
+     */
+    const growing = this.open?.kind === "received" ? this.open : null;
+    this.agentOwned = true;
+    const target =
+      growing ??
+      this.push({ kind: "received", at, text: "", lines: [], open: true });
+    if (!growing) this.open = target;
+    target.lines = utterance.lines.slice();
+    target.preformatted = utterance.preformatted;
+    this.touch(target);
+    this.lastGrewAt = at;
+    if (!utterance.open) this.close(at);
+    return target;
+  }
+
   /** Forgets everything. Used when the relay replays a session from the top. */
   clear(): void {
     this.items = [];
@@ -212,6 +279,7 @@ export class Transcript {
     this.echoes = [];
     this.prompt = "";
     this.awaitingCommand = false;
+    this.agentOwned = false;
     this.rev += 1;
   }
 
@@ -423,6 +491,7 @@ export class Transcript {
 
   /** Closes whatever is open, without ending the session. */
   close(at: number): void {
+    this.agentOwned = false;
     if (!this.open) return;
     /* A live screen card is closed by the program exiting, not by a pause. */
     if (this.open.kind === "screen" && this.open.live) return;

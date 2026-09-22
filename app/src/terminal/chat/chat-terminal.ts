@@ -24,7 +24,8 @@ import { Terminal as XtermTerminal, type ITerminalInitOnlyOptions, type ITermina
 import { InputLog } from "../../lib/input-log";
 import { ChatView } from "./chat-view";
 import { ScreenReader, paletteFromTheme, type ReaderTerminal } from "./screen-reader";
-import { Transcript } from "./transcript";
+import { Transcript, type TranscriptLine } from "./transcript";
+import { adapterFor, type AgentAdapter } from "./agents";
 
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -37,6 +38,16 @@ type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
  * keeps its own, longer history in the transcript.
  */
 const PARSE_SCROLLBACK = 1000;
+
+/**
+ * How long an agent's screen has to hold still before the row it stopped on
+ * is taken to be finished rather than half-written.
+ *
+ * Longer than a repaint and shorter than a person notices. An agent redraws
+ * several times a second while it is working, so this only ever elapses once
+ * it has actually stopped.
+ */
+const AGENT_QUIET_MS = 400;
 
 /** The shell integration sequence terminals agree on for command boundaries. */
 const SEMANTIC_PROMPT = 133;
@@ -58,6 +69,16 @@ export class ChatTerminal {
   /** Set while the alternate screen has repainted since the last frame. */
   private screenDirty = false;
   private lastCommand = "";
+  /**
+   * The reader for the program on the alternate screen, when one recognises
+   * it. Null means the screen is mirrored as a grid instead, which is the
+   * honest answer for an editor, a pager, or an agent nobody has written an
+   * adapter for.
+   */
+  private agent: AgentAdapter | null = null;
+  /** Set once per full-screen program, so the search is not run per frame. */
+  private looked = false;
+  private agentQuiet: ReturnType<typeof setTimeout> | null = null;
   /** Set by the shell's own markers; once seen, the timing rule steps aside. */
   private semantic = false;
   private disposed = false;
@@ -85,7 +106,7 @@ export class ChatTerminal {
      */
     this.inner.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
       if (this.onScreen && params.some(isAltScreen)) {
-        this.transcript.screenPainted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), Date.now());
+        this.painted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), Date.now());
         /* This is the last frame; a mirror still queued would paint a blank grid. */
         this.screenDirty = false;
       }
@@ -106,6 +127,7 @@ export class ChatTerminal {
       onSubmit: (text) => this.submit(text),
       onKeys: (bytes) => this.type(bytes),
     });
+    this.view.setColumns(this.inner.cols);
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
   }
@@ -124,6 +146,18 @@ export class ChatTerminal {
 
   /** The relay is about to replay the session from the top. */
   reset(): void {
+    /*
+     * Every timer as well as every buffer. A quiet timer armed before a
+     * replay fires afterwards and closes whatever is open by then, which
+     * after a reset is something else entirely.
+     */
+    if (this.quiet) clearTimeout(this.quiet);
+    this.quiet = null;
+    if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    this.agentQuiet = null;
+    this.agent?.reset();
+    this.agent = null;
+    this.looked = false;
     this.replaying = true;
     this.transcript.beginReplay();
     this.reader.rewind();
@@ -136,6 +170,7 @@ export class ChatTerminal {
 
   resize(cols: number, rows: number): void {
     this.inner.resize(cols, rows);
+    this.view?.setColumns(cols);
     this.schedule();
   }
 
@@ -151,6 +186,7 @@ export class ChatTerminal {
     this.disposed = true;
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.quiet) clearTimeout(this.quiet);
+    if (this.agentQuiet) clearTimeout(this.agentQuiet);
     this.listeners.clear();
     this.reader.dispose();
     this.view?.dispose();
@@ -239,7 +275,15 @@ export class ChatTerminal {
 
     if (alternate && !this.onScreen) {
       this.onScreen = true;
-      this.transcript.screenOpened(this.lastCommand || "Full-screen program", now);
+      this.looked = false;
+      this.agent = null;
+      /*
+       * The shell's quiet rule does not apply to a screen. Left armed, it
+       * fires a few hundred milliseconds in and closes whatever the program
+       * has started saying.
+       */
+      if (this.quiet) clearTimeout(this.quiet);
+      this.quiet = null;
       this.view?.setDirect(true);
     }
 
@@ -256,8 +300,16 @@ export class ChatTerminal {
 
     if (this.onScreen) {
       this.onScreen = false;
-      /* Null keeps the frame the exit handler caught on the way out. */
-      this.transcript.screenClosed(null, now);
+      if (this.agent) {
+        /* Whatever it finished on, before it gave the screen back. */
+        for (const utterance of this.agent.flush()) this.transcript.fromAgent(utterance, now);
+        this.agent.reset();
+        this.agent = null;
+      } else {
+        /* Null keeps the frame the exit handler caught on the way out. */
+        this.transcript.screenClosed(null, now);
+      }
+      this.looked = false;
       this.view?.setDirect(false);
       /*
        * Reading resumes where it stopped. The alternate screen is a second
@@ -271,6 +323,69 @@ export class ChatTerminal {
     if (lines.length > 0) this.transcript.output(lines, now);
     this.armQuiet();
     this.schedule();
+  }
+
+  /**
+   * A frame of whatever has taken the alternate screen.
+   *
+   * The first one decides how the rest are treated, because the program
+   * drawing them does not change while it is running. If an adapter
+   * recognises it, the conversation it is drawing is read out of it and
+   * arrives as messages. If none does -- an editor, a pager, `top`, an agent
+   * nobody has written an adapter for -- the screen is mirrored as a grid,
+   * which is what this renderer did for everything before.
+   */
+  private painted(lines: TranscriptLine[], now: number): void {
+    if (!this.looked) {
+      this.looked = true;
+      this.agent = adapterFor(lines.map((line) => line.text));
+      if (this.agent) {
+        /*
+         * Said out loud, and said differently when the reading is built on
+         * the shape this family of programs share rather than on a captured
+         * frame of this one. Somebody looking at a conversation that has gone
+         * wrong should be able to see why from the thread rather than from
+         * the source. The renderer menu on the pane is the way back to the
+         * screen itself.
+         */
+        this.transcript.noticed(
+          this.agent.confident
+            ? `Reading ${this.agent.title} as messages.`
+            : `Reading ${this.agent.title} as messages, from a shared layout. Switch renderer to see the screen itself.`,
+          now,
+        );
+      }
+      else this.transcript.screenOpened(this.lastCommand || "Full-screen program", now);
+    }
+
+    if (!this.agent) {
+      this.transcript.screenPainted(lines, now);
+      return;
+    }
+
+    for (const utterance of this.agent.read(lines)) this.transcript.fromAgent(utterance, now);
+    this.armAgentQuiet();
+  }
+
+  /**
+   * An agent holds back the row it looks to be part-way through writing, so
+   * the row it finished on needs somebody to say the writing stopped. Nothing
+   * else can: the two are identical in a single frame, and the difference is
+   * only whether another frame follows.
+   */
+  private armAgentQuiet(): void {
+    if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    this.agentQuiet = setTimeout(() => {
+      this.agentQuiet = null;
+      if (!this.agent) return;
+      const now = Date.now();
+      let changed = false;
+      for (const utterance of this.agent.flush()) {
+        this.transcript.fromAgent(utterance, now);
+        changed = true;
+      }
+      if (changed) this.schedule();
+    }, AGENT_QUIET_MS);
   }
 
   /**
@@ -328,10 +443,7 @@ export class ChatTerminal {
       if (this.screenDirty) {
         this.screenDirty = false;
         if (this.onScreen) {
-          this.transcript.screenPainted(
-            this.reader.snapshot(this.inner as unknown as ReaderTerminal),
-            Date.now(),
-          );
+          this.painted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), Date.now());
         }
       }
       this.view?.render(this.transcript.messages, this.transcript.revision);

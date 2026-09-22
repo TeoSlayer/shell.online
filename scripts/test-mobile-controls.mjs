@@ -93,6 +93,38 @@ const appShellStylesheet = readFileSync(new URL("../app/src/styles/shell.css", i
 if (!appShellStylesheet.includes(':root[data-pane="open"] .shell')) {
   throw new Error("A session on a phone must be a column one screen tall, not a page that scrolls");
 }
+
+/*
+ * Sized from a measurement, with `dvh` only as the fallback for the frame
+ * before it lands.
+ *
+ * `100dvh` alone is not the same number on every engine or at every moment:
+ * iOS resolves it against the large viewport while the toolbar is expanded,
+ * so the first paint puts the bar below the fold, and a toolbar collapsing
+ * mid-scroll moves it again. `--app-height` is the layout viewport, measured;
+ * `--keyboard-inset` is what the keyboard covers of it. See lib/app-height.ts.
+ */
+if (!/\.shell \{\s*height: calc\(var\(--app-height/.test(appShellStylesheet)) {
+  throw new Error("The phone shell must be sized from --app-height, with dvh only as the fallback");
+}
+/*
+ * A full-screen program is the ordinary case on this product, not the
+ * exception: every agent it runs draws one. The card that mirrors an
+ * unadapted one must not keep a screenful and scroll the rest on a phone,
+ * because that is two nested scrollers and the outer one moves the thing
+ * being read.
+ */
+if (!/\.chat-screen-host \{\s*max-height: none;/.test(appChatStylesheet)) {
+  throw new Error("A mirrored program must not nest a second vertical scroller inside the thread on a phone");
+}
+/*
+ * And it is sized so the session's whole width is on the screen where that is
+ * possible at a legible size; see ChatView.fitMirrors.
+ */
+if (!appChatStylesheet.includes("font-size: var(--chat-mirror-size")) {
+  throw new Error("A mirrored program must be fitted to the session's columns, not drawn at a fixed size");
+}
+
 /* The bar holds a row of the session column, so it has to be told to leave. */
 if (!appShellStylesheet.includes(':root[data-keyboard="open"] .rail')) {
   throw new Error("The bottom navigation bar must give way to the on-screen keyboard");

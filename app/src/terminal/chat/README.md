@@ -180,9 +180,80 @@ and arrived as output. Every pending command is tried now, and a match retires
 the ones in front of it, because they were sent earlier and their echo cannot
 still be coming.
 
+## Agents
+
+Almost no session on this product is a shell. They are coding agents -- Claude
+Code, Codex, Hermes, OpenClaw -- and an agent does not print lines. It takes
+the alternate screen and draws an interface on it, so everything above, which
+is about reading finished rows out of a scrolling buffer, does not apply to
+the case that actually happens.
+
+For a long time the answer was to mirror that grid in a card. On a phone that
+is unreadable, and not for a reason a stylesheet can fix: the session's grid is
+eighty columns wide and shared with every other viewer, so it cannot be
+reflowed, and eighty columns across a phone is under five pixels a character.
+The only way to put an agent on a phone is to stop showing it as a grid, which
+means reading it.
+
+`agents/` is that reading, in three parts.
+
+`stream.ts` turns a screen that is repainted into a log that is appended to.
+Each frame is compared against what has already been given out, and the longest
+tail of that which is also the head of this frame is what they have in common;
+everything after it is new. One rule covers a screen that has not moved, a
+screen that has scrolled, and a screen that has started again. The last row of
+a frame is never given out, because it is the row being written -- and `flush`
+exists for the row a program *finished* on, which looks identical and is only
+distinguishable by the fact that no frame follows it.
+
+`boxed-agent.ts` is the shape these interfaces share: a header box, prompts
+marked `>`, tool calls marked with a bullet and their result indented under
+them, prose, and the box you type into at the foot. Everything a border is
+drawn around is furniture and is dropped; the last box on the screen is
+dropped by position, because what is inside it is a line somebody is part-way
+through typing. Prose is put back together after the terminal broke it at
+eighty columns -- a row that ran to the edge is a continuation, a row that
+stopped short of it stopped on purpose -- so it reflows to the phone instead
+of keeping a ragged edge across the middle of it. A block whose spacing is
+carrying meaning is left exactly as it was.
+
+`known.ts` says which agent each adapter is for, and how sure it is. Claude
+Code was written against its screen. The other three were written against the
+shared shape and not against a captured frame of their own, and that is
+recorded rather than left to be discovered: the conversation says so in its
+first line, and the renderer menu on the pane is the way back to the screen
+itself.
+
+Every adapter is gated on its own program's name, because the shape cannot
+tell them apart and must not be asked to. A line the shape does not recognise
+is prose, which is the failure worth having: an agent laid out differently is
+read as its own text, wrapped to the phone. What is lost is the structure.
+Nothing that was on the screen is lost.
+
+A program no adapter claims -- an editor, a pager, `top` -- is still mirrored
+as a grid, and the grid is now sized so the session's whole width is on the
+screen wherever that is possible at a legible size. On a phone eighty columns
+is not, so it keeps a legible size and scrolls sideways; on a tablet it fits.
+
 ## Phones
 
 Everything here was a bug before it was a rule.
+
+**The viewport is measured, not asked for.** The shell is `--app-height` less
+`--keyboard-inset` (see `lib/app-height.ts`), because `100dvh` is not the same
+number on every engine or at every moment. That arithmetic is the shell's
+rather than this renderer's; what matters here is that a phone's visible area
+*moves* -- a keyboard covers it, a browser toolbar slides in and out of it --
+and a desktop browser's never does, so a layout bug that only exists while it
+moves cannot be seen in a desktop browser at all. One shipped that way: the bar
+settled a hundred and eighty pixels up the screen and swept that distance
+whenever anybody scrolled, and a static page measured on a desktop said the
+layout was correct, because for the one frame it was. `viewport-theatre.ts`
+replaces `window.visualViewport` in the preview with one that can be driven, so
+a toolbar and a keyboard are both reproducible here. The measurements are also
+coalesced to one write a frame and skipped when the answer has not moved a
+pixel, because a browser reports the viewport in fractional pixels and reports
+it often.
 
 **A session is one screen tall and does not scroll.** Every other page on a
 phone is a document -- a list of sessions, an audit log, a settings sheet --
@@ -220,6 +291,14 @@ to animate as a layout property, which re-laid out the thread behind it on
 every frame of the keyboard arriving. A transform is composited and moves
 nothing else.
 
+**A full-screen program still composes a line.** Direct mode forwards each key
+as it is pressed, which is right on a keyboard and was the worst thing in this
+renderer on a phone: the box stayed empty while what you typed was painted
+into the program's own input box, somewhere inside a grid that does not fit
+the screen. You typed a prompt to an agent and could not see it. A touch
+screen composes and sends a line; what it gives up is the arrow keys, which a
+phone keyboard does not have.
+
 **The control keys are only there when they are wanted**: while the box has
 focus, while something is still being written back, and for as long as a
 full-screen program is reading keys. Three chips at a finger's height are half
@@ -256,7 +335,11 @@ refusals, the column and the bar.
 | `transcript.ts` | Rows and submissions into messages. No DOM, no emulator, no clock of its own. |
 | `chat-view.ts` | The thread and the box at the foot of it. Renders by difference. |
 | `keys.ts` | A key press into the bytes a terminal expects, and which control chips belong to which mode. |
+| `agents/stream.ts` | A repainted screen as a log that is appended to. Pure. |
+| `agents/boxed-agent.ts` | The shape a coding agent's interface has, read as utterances. Pure. |
+| `agents/known.ts` | Which agents are read, and which were written against a real frame. |
 | `preview.ts` | A scripted session, at `/chat-preview.html` under `npm run dev`. Development only. |
+| `viewport-theatre.ts` | A phone's viewport, driveable from a desktop. Development only. |
 
 `transcript.ts`, `paragraphs.ts`, `screen-reader.ts` and `keys.ts` are tested
 without a browser, which is most of why they are separate from the two files

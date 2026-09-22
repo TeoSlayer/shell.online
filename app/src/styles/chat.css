@@ -338,6 +338,46 @@
   color: var(--danger);
 }
 
+/* --- an agent running something --------------------------------- */
+
+/*
+ * Not a bubble. A tool call is not something anybody said, and dressed as a
+ * message it competes with the sentences either side of it for the same
+ * attention. It is a line in the margin of the conversation: what was run,
+ * and what came back, on one row that wraps only when it has to.
+ */
+.chat-tool {
+  display: flex;
+  max-width: 100%;
+  padding: 3px 0 3px 10px;
+  border-left: 2px solid var(--line-strong);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+
+.chat-tool-name {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-detail {
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-detail:empty {
+  display: none;
+}
+
+.chat-msg[data-kind="tool"] {
+  align-items: flex-start;
+}
+
 /* --- a full-screen program -------------------------------------- */
 
 /*
@@ -394,7 +434,14 @@
   padding: 10px 13px 12px;
   color: var(--terminal-ink);
   font-family: var(--mono);
-  font-size: 12px;
+  /*
+   * Sized so the session's whole width is on the screen; see ChatView's
+   * fitMirrors. It was a fixed size, which on a phone put a third of an
+   * eighty-column program on the glass and the rest past the right edge. The
+   * fallback is the size it always was, for the frame before the first
+   * measurement and for anything that is not a phone.
+   */
+  font-size: var(--chat-mirror-size, 12px);
   line-height: 1.42;
   scrollbar-width: thin;
   white-space: pre;
@@ -695,10 +742,25 @@
     max-width: 94%;
   }
 
+  /*
+   * One scroller, not two.
+   *
+   * The card used to keep a screenful and scroll the rest, which on a desktop
+   * is a reasonable way to stop an editor pushing the conversation off the
+   * top. On a phone it was two nested scrollers: a 352px grid inside a 338px
+   * box inside a thread that also scrolled, so the thing you were reading
+   * moved whichever one you caught. The card is now as tall as the program it
+   * is mirroring and the thread is the only thing that scrolls vertically.
+   *
+   * Sideways is still the card's own, because 80 columns of monospace in 390
+   * pixels is under five pixels a character and there is no font size that
+   * fixes that. That is what the agent parsers are for; until one covers a
+   * given program, its grid is a grid.
+   */
   .chat-screen-host {
-    /* A viewport measurement, so divided by the zoom; see shell.css. */
-    max-height: calc(46vh / var(--zoom));
-    font-size: 11px;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   /*

@@ -21,6 +21,17 @@ const PROPERTY = "--pane-height";
 /* Read by anything that has to sit clear of the keyboard; see chat.css. */
 const INSET_PROPERTY = "--keyboard-inset";
 
+
+/**
+ * The smallest change worth writing, in the units the properties are in.
+ *
+ * A browser reports the viewport in fractional pixels and reports it often.
+ * Writing a property the layout depends on for a third of a pixel costs a
+ * layout and moves nothing anybody can see, and a run of them is the flicker
+ * this is here to avoid.
+ */
+const SIGNIFICANT_PX = 1;
+
 /* Set on the root element while the keyboard is up, so CSS can react to it. */
 const STATE_ATTRIBUTE = "data-keyboard";
 
@@ -125,6 +136,7 @@ export function keyboardIsOpen(inset: number): boolean {
   return inset >= KEYBOARD_MINIMUM;
 }
 
+
 /**
  * Sizes the element to the space the keyboard has left it, on phones only.
  *
@@ -139,6 +151,11 @@ export function keyboardIsOpen(inset: number): boolean {
  * shrunk to fit. Browsers without `zoom`, and every width above that
  * breakpoint, report something that is not a number, which is 1.
  */
+/** Whether a new measurement is far enough from the last to be worth a layout. */
+function moved(next: number, last: number): boolean {
+  return last < 0 || Math.abs(next - last) >= SIGNIFICANT_PX;
+}
+
 function rootZoom(root: HTMLElement): number {
   const value = Number.parseFloat(window.getComputedStyle(root).zoom);
   return Number.isFinite(value) && value > 0 ? value : 1;
@@ -165,14 +182,19 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
    * the element. The stylesheet decides what to do with it, which keeps the
    * layout in CSS and means this hook reads the DOM without reshaping it.
    */
+  /** What was last written, so an unchanged measurement costs no layout. */
+  let published = { pane: -1, inset: -1 };
+  let frame = 0;
+
   const clear = () => {
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(INSET_PROPERTY);
     root.removeAttribute(STATE_ATTRIBUTE);
     root.removeAttribute(SURFACE_ATTRIBUTE);
+    published = { pane: -1, inset: -1 };
   };
 
-  const apply = () => {
+  const measure = () => {
     if (!phone.matches) {
       clear();
       return;
@@ -190,15 +212,17 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
      * short is a conversation in a box in the middle of the screen.
      */
     const paneTop = node.getBoundingClientRect().top;
-    root.style.setProperty(
-      PROPERTY,
-      `${paneHeight({
-        viewportHeight: viewport.height,
-        offsetTop: viewport.offsetTop,
-        paneTop,
-        zoom,
-      })}px`,
-    );
+
+    const pane = paneHeight({
+      viewportHeight: viewport.height,
+      offsetTop: viewport.offsetTop,
+      paneTop,
+      zoom,
+    });
+    if (moved(pane, published.pane)) {
+      published.pane = pane;
+      root.style.setProperty(PROPERTY, `${pane}px`);
+    }
     /*
      * Published as well as used, because the pane is not the only thing that
      * has to know. The bottom navigation bar is fixed to the window rather
@@ -211,16 +235,37 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
       offsetTop: viewport.offsetTop,
       zoom,
     });
-    root.style.setProperty(INSET_PROPERTY, `${inset}px`);
+    if (moved(inset, published.inset)) {
+      published.inset = inset;
+      root.style.setProperty(INSET_PROPERTY, `${inset}px`);
+    }
     if (keyboardIsOpen(inset)) root.setAttribute(STATE_ATTRIBUTE, "open");
     else root.removeAttribute(STATE_ATTRIBUTE);
   };
 
-  apply();
+  /*
+   * One write per frame, however many events landed in it.
+   *
+   * A keyboard opening is not one event. Both `resize` and `scroll` fire, and
+   * they fire again for every frame of the animation, so a single gesture
+   * arrives as a burst. Measuring and writing on each of them lays the page
+   * out several times per frame to reach a position it was going to reach
+   * anyway, which is work that can only be seen as stutter.
+   */
+  const apply = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      measure();
+    });
+  };
+
+  measure();
   viewport.addEventListener("resize", apply);
   viewport.addEventListener("scroll", apply);
   phone.addEventListener("change", apply);
   return () => {
+    if (frame) cancelAnimationFrame(frame);
     viewport.removeEventListener("resize", apply);
     viewport.removeEventListener("scroll", apply);
     phone.removeEventListener("change", apply);

@@ -8,6 +8,7 @@
  * Reached at /chat-preview.html while `npm run dev` is running.
  */
 
+import { installViewportTheatre } from "./viewport-theatre";
 import "@xterm/xterm/css/xterm.css";
 import "../../styles/tokens.css";
 import "../../styles/base.css";
@@ -19,6 +20,19 @@ import { watchKeyboardInset } from "../keyboard-inset";
 import { fittedTerminal } from "../terminal-fit";
 import { cellMeasurer, terminalBox } from "../terminal-metrics";
 import { DESKTOP_TERMINAL_GRID } from "../terminal-grid";
+
+/*
+ * Before anything reads the viewport, which is why it is the first statement
+ * rather than an import: imports are hoisted and this is a side effect that
+ * has to happen in a known order. Nothing captures `window.visualViewport` at
+ * module scope, so installing it here is early enough for every reader.
+ *
+ * A phone's visible area moves -- a keyboard covers it, a browser toolbar
+ * slides in and out of it -- and a desktop browser's never does, so the layout
+ * bugs that only exist when it moves are invisible here without this. See
+ * viewport-theatre.ts.
+ */
+installViewportTheatre();
 
 const PROMPT = "\x1b[38;2;66;103;245m~/work/api\x1b[0m \x1b[1m❯\x1b[0m ";
 
@@ -316,6 +330,8 @@ function typeAndSend(text: string): void {
  */
 let scripted = true;
 let pending = "";
+/* Set by takeOver, so a case being set up is not typed over by the tour. */
+let abandoned = false;
 
 terminal.onData((data) => {
   if (scripted) return;
@@ -389,11 +405,13 @@ function reply(line: string): string {
 
 async function play(): Promise<void> {
   for (const step of SESSION) {
+    if (abandoned) return;
     if (step.typed) {
       typeAndSend(step.typed);
       await wait(120);
     }
     for (const chunk of step.writes) {
+      if (abandoned) return;
       terminal.write(chunk);
       await wait(40);
     }
@@ -404,6 +422,29 @@ async function play(): Promise<void> {
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/*
+ * A handle on the session, so a case can be driven from the console or by
+ * whatever is checking the page, rather than only by the script above.
+ *
+ * The scripted session is a tour of the cases the renderer has to get right;
+ * it is not every case, and the ones that matter most are the ones nobody
+ * thought to script. A full-screen agent interface is the example that cost
+ * the most: it is what almost every real session is, and it could not be
+ * reached here without typing a command into a stand-in shell that has never
+ * heard of it.
+ */
+(window as unknown as { session: unknown }).session = {
+  write: (data: string) => terminal.write(data),
+  /* The renderer itself, so its state can be inspected while a case is open. */
+  inside: terminal,
+  reset: () => terminal.reset(),
+  /* Stops the scripted tour, so a case can be set up without it typing over. */
+  takeOver: () => {
+    abandoned = true;
+    scripted = false;
+  },
+};
 
 void play().then(() => {
   scripted = false;

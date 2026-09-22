@@ -29,8 +29,53 @@ export interface ChatViewOptions {
  */
 const COMPOSING = 229;
 
+/**
+ * Whether this is being read with a finger.
+ *
+ * It decides one thing, and it is the difference between a usable session and
+ * an unusable one: whether a full-screen program gets the keys as they are
+ * pressed, or gets a line when it is finished. See `composes`.
+ *
+ * Both tests, for the reason the stylesheet uses both: `pointer` is not
+ * always reported honestly, and a phone-width window is a phone often enough
+ * to be worth catching.
+ */
+function touchScreen(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 760px)").matches;
+}
+
 /** Rows a finished answer shows before it is folded. */
 const COLLAPSE_AFTER = 40;
+
+/**
+ * The sizes a mirrored grid is allowed to be drawn at.
+ *
+ * A program nobody has written an adapter for is shown as the grid it is: an
+ * editor, a pager, `top`. The grid's width is the session's and is shared
+ * with every other viewer, so it cannot be reflowed to a phone -- which
+ * leaves the font as the only thing that can make eighty columns fit a
+ * screen a third of that wide.
+ *
+ * The floor is where it stops trying, and it is set by legibility rather than
+ * by fitting. Eighty columns only fit a phone at about six pixels, which is
+ * not small text but absent text; a legible strip that can be swiped is worth
+ * more than an illegible page that cannot. So under the floor the card keeps
+ * the floor's size and scrolls sideways, and the fitting is what takes a
+ * tablet, a landscape phone and a narrower grid from clipped to whole.
+ */
+const MIRROR_MAX_PX = 12;
+const MIRROR_MIN_PX = 9;
+
+/**
+ * How wide a character is as a fraction of its font size, for the monospace
+ * faces this app ships. Close enough to choose a size with; the grid is
+ * measured by the browser afterwards either way.
+ */
+const MONO_ADVANCE = 0.6;
+
+/** What the card spends on its own border and padding, either side. */
+const MIRROR_GUTTER_PX = 28;
 
 /** A pause long enough that the next message deserves a time of its own. */
 const TIME_BREAK_MS = 5 * 60_000;
@@ -74,6 +119,8 @@ export class ChatView {
   /** Follows the newest message until the reader scrolls away from it. */
   private sticking = true;
   private direct = false;
+  /** Columns the session's grid is, for sizing a mirrored program to fit. */
+  private columns = 0;
   private disabled: string | null = null;
   private history: string[] = [];
   private historyAt = -1;
@@ -85,6 +132,8 @@ export class ChatView {
   private breaking = false;
   /** Whether the session is mid-answer, which is when Ctrl-C is worth a tap. */
   private running = false;
+  /** Decided once: a pointer does not become a finger while a session is open. */
+  private readonly touch = touchScreen();
   private disposed = false;
   private readonly resizes: ResizeObserver | null;
 
@@ -190,6 +239,7 @@ export class ChatView {
                 );
               }
             }
+            this.fitMirrors();
             if (this.sticking) this.scroller.scrollTop = this.scroller.scrollHeight;
           });
     this.resizes?.observe(this.scroller);
@@ -260,7 +310,13 @@ export class ChatView {
     this.input.disabled = reason !== null;
     this.send.disabled = reason !== null;
     this.composer.dataset.disabled = reason === null ? "false" : "true";
-    this.input.placeholder = reason ?? (this.direct ? "Keys go straight to the program" : "Run a command");
+    this.input.placeholder =
+      reason ??
+      (this.composes()
+        ? this.direct
+          ? "Message the program"
+          : "Run a command"
+        : "Keys go straight to the program");
   }
 
   /**
@@ -275,11 +331,58 @@ export class ChatView {
     if (this.direct === on) return;
     this.direct = on;
     this.root.dataset.direct = on ? "true" : "false";
-    this.input.value = "";
+    /*
+     * Only where the box is about to stop being a box. Where it still
+     * composes, a program taking the screen is no reason to throw away the
+     * line somebody is halfway through typing into it.
+     */
+    if (!this.composes()) this.input.value = "";
     this.autosize();
     this.drawChips();
     this.showKeys();
     this.setDisabled(this.disabled);
+  }
+
+  /**
+   * Whether the box composes a line, or forwards each key as it is pressed.
+   *
+   * A full-screen program reads keys, so forwarding them is right -- on a
+   * keyboard. On a phone it was the single worst thing in this renderer: the
+   * box stayed empty while what you typed was painted into the program's own
+   * input box, which is somewhere inside an eighty-column grid that does not
+   * fit the screen. You typed a prompt to an agent and could not see it.
+   *
+   * So a touch screen composes even in direct mode. What it gives up is the
+   * arrow keys, which a phone keyboard does not have, and the control keys,
+   * which are the chips above the box and were already the only way to reach
+   * them here.
+   */
+  private composes(): boolean {
+    return !this.direct || this.touch;
+  }
+
+  /**
+   * How wide the session's grid is, so a program drawn as a grid can be
+   * sized to fit rather than clipped at the edge of the screen.
+   */
+  setColumns(columns: number): void {
+    if (this.columns === columns) return;
+    this.columns = columns;
+    this.fitMirrors();
+  }
+
+  /**
+   * Picks a font size at which the whole width of the grid is on the screen.
+   *
+   * Only ever smaller than the size it would otherwise be drawn at, and never
+   * smaller than the floor: past that, sideways is the honest answer.
+   */
+  private fitMirrors(): void {
+    const room = this.scroller.clientWidth - MIRROR_GUTTER_PX;
+    if (this.columns <= 0 || room <= 0) return;
+    const fitted = room / this.columns / MONO_ADVANCE;
+    const size = Math.max(MIRROR_MIN_PX, Math.min(MIRROR_MAX_PX, Math.floor(fitted * 10) / 10));
+    this.root.style.setProperty("--chat-mirror-size", `${size}px`);
   }
 
   focus(): void {
@@ -290,6 +393,7 @@ export class ChatView {
     this.disposed = true;
     this.resizes?.disconnect();
     this.root.style.removeProperty("--chat-composer-height");
+    this.root.style.removeProperty("--chat-mirror-size");
     this.scroller.removeEventListener("scroll", this.onScroll);
     this.composer.removeEventListener("focusin", this.onFocus);
     this.composer.removeEventListener("focusout", this.onFocus);
@@ -337,7 +441,7 @@ export class ChatView {
     const grouped =
       previous !== null &&
       previous.kind === message.kind &&
-      (message.kind === "sent" || message.kind === "received") &&
+      (message.kind === "sent" || message.kind === "received" || message.kind === "tool") &&
       message.at - previous.at <= GROUP_WINDOW_MS;
     el.dataset.grouped = grouped ? "true" : "false";
 
@@ -353,6 +457,9 @@ export class ChatView {
     }
     if (message.kind === "notice") {
       return { el, body: this.noticeCard(el, message), message, revision: -1, lines: 0 };
+    }
+    if (message.kind === "tool") {
+      return { el, body: this.toolCard(el, message), message, revision: -1, lines: 0 };
     }
 
     const bubble = document.createElement("div");
@@ -399,6 +506,27 @@ export class ChatView {
     return chip;
   }
 
+  /**
+   * An agent running something rather than saying something.
+   *
+   * One line for what it ran and one for what came back, because that is what
+   * a person scanning a conversation wants from it: that the agent read a
+   * file, and roughly what it found. The whole of a tool's output is the
+   * session's, and the session is a tap away in the terminal renderer.
+   */
+  private toolCard(el: HTMLElement, message: Message): HTMLElement {
+    const card = document.createElement("div");
+    card.className = "chat-tool";
+    const name = document.createElement("span");
+    name.className = "chat-tool-name";
+    name.textContent = message.text;
+    const detail = document.createElement("span");
+    detail.className = "chat-tool-detail";
+    card.append(name, detail);
+    el.append(card);
+    return card;
+  }
+
   private screenCard(el: HTMLElement, message: Message): HTMLElement {
     const card = document.createElement("div");
     card.className = "chat-screen";
@@ -426,6 +554,15 @@ export class ChatView {
 
     if (message.kind === "sent" || message.kind === "notice") {
       if (body.textContent !== message.text) body.textContent = message.text;
+      return;
+    }
+
+    if (message.kind === "tool") {
+      const name = body.querySelector<HTMLElement>(".chat-tool-name");
+      if (name && name.textContent !== message.text) name.textContent = message.text;
+      const detail = body.querySelector<HTMLElement>(".chat-tool-detail");
+      const said = message.lines.map((line) => line.text).join(" · ");
+      if (detail && detail.textContent !== said) detail.textContent = said;
       return;
     }
 
@@ -465,8 +602,20 @@ export class ChatView {
     node.el.dataset.copyable =
       message.preformatted || message.lines.length > 2 ? "true" : "false";
 
-    /* A growing answer only pays for the lines it gained. */
-    if (message.lines.length < node.lines) {
+    /*
+     * A growing answer only pays for the lines it gained.
+     *
+     * The test is "no more lines than last time" rather than "fewer",
+     * because not every change is a line arriving at the end. An agent's
+     * paragraph is re-read from its screen on every frame and put back
+     * together as it grows, so the same line comes back longer than it was;
+     * rendered by appending, the row already on screen was never touched and
+     * the paragraph stopped one row short of what the agent had written. A
+     * message whose line count has not gone up is rebuilt, which costs
+     * nothing on the short messages that is true of and never happens to the
+     * long ones, where lines only ever arrive at the end.
+     */
+    if (message.lines.length <= node.lines) {
       body.innerHTML = "";
       node.lines = 0;
     }
@@ -587,7 +736,7 @@ export class ChatView {
      * was pressed it does not, and this is the same key arriving by the only
      * route left.
      */
-    if (this.direct) {
+    if (!this.composes()) {
       this.options.onKeys("\r");
       return;
     }
@@ -639,7 +788,7 @@ export class ChatView {
   private readonly onKeyDown = (event: KeyboardEvent): void => {
     if (this.disabled) return;
 
-    if (this.direct) {
+    if (!this.composes()) {
       /*
        * Every key belongs to the program, except the ones that belong to the
        * browser. bytesForKey returns null for those, and the default action
