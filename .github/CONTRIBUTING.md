@@ -17,6 +17,9 @@ Run commands from the repository root. Go work uses the version in `go.mod`
 (currently 1.26.8). JavaScript work uses Node.js 22+ and npm; install the locked
 dependencies with `npm ci`, or `npm --prefix app ci` for the app.
 
+For README changes, also run `node scripts/test-landing-seo.mjs`: it checks
+guide discovery and security wording without installing dependencies.
+
 | You changed… | Local verification |
 | --- | --- |
 | Markdown or issue templates only | Check relative links, render the Markdown, and validate any YAML forms. No runtime build is needed for prose-only changes. |

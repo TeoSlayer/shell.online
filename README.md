@@ -35,12 +35,12 @@ The installers check release checksums. Prefer another method?
 
 Choose one agent you already have installed:
 
-```sh
-shell claude
-shell codex
-shell opencode
-shell muse
-```
+| Agent | Command |
+| --- | --- |
+| Claude Code | `shell claude` |
+| Codex | `shell codex` |
+| OpenCode | `shell opencode` |
+| Muse | `shell muse` |
 
 Other terminal programs work too: `shell -- npm run dev`,
 `shell -- python script.py`, or just `shell` for a fresh shell.
