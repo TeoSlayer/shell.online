@@ -9,6 +9,8 @@
  * covers a navigation started by a form), and the hidden iframe that renews a
  * session loads the callback on this origin (`frame-src 'self'`).
  */
+import { POSTHOG_ORIGIN } from "../../../shared/posthog.ts";
+
 function policy(issuer?: string): string {
   const provider = originOf(issuer);
   if (!provider) {
@@ -22,12 +24,12 @@ function policy(issuer?: string): string {
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self' data:",
       "img-src 'self' data: https:",
-      "connect-src 'self' wss: https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseinstallations.googleapis.com",
+      `connect-src 'self' wss: ${POSTHOG_ORIGIN} https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseinstallations.googleapis.com`,
       "frame-src https://*.firebaseapp.com https://*.web.app https://accounts.google.com",
       "form-action 'self'",
     ].join("; ");
   }
-  const connect = ["'self'", "wss:", provider].filter(Boolean).join(" ");
+  const connect = ["'self'", "wss:", POSTHOG_ORIGIN, provider].filter(Boolean).join(" ");
   const form = ["'self'", provider].filter(Boolean).join(" ");
   const frame = ["'self'", provider].filter(Boolean).join(" ");
   return [

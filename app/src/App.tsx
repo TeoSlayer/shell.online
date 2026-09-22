@@ -22,6 +22,7 @@ import { VaultProvider } from "./vault/VaultProvider";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 import { FeedbackProvider } from "./feedback/FeedbackProvider";
 import { Feedback } from "./routes/Feedback";
+import { ProductAnalytics } from "./components/ProductAnalytics";
 
 /*
  * The game skin, and the only reference to it anywhere outside src/game.
@@ -160,6 +161,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <ProductAnalytics />
         <SignedInApp />
       </AuthProvider>
     </BrowserRouter>

@@ -1,6 +1,7 @@
 import type { FeedbackPayload } from "./feedback";
 import { auth } from "./firebase";
 import { oidcConfigured, userManager } from "./oidc";
+import { trackAppAction } from "../../../web/posthog";
 
 /**
  * The ID token for the current session, or nothing when there is none.
@@ -340,6 +341,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       },
     });
   } catch {
+    trackAppAction(path, init.method ?? "GET", false);
     throw new ApiError(NETWORK_FAILURE);
   }
 
@@ -357,8 +359,10 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     }
   }
   if (!response.ok) {
+    trackAppAction(path, init.method ?? "GET", false);
     throw new ApiError(typeof body.error === "string" ? body.error : SERVER_FAILURE);
   }
+  trackAppAction(path, init.method ?? "GET", true);
   return body as T;
 }
 

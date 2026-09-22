@@ -66,6 +66,14 @@ import {
 import "./style.css";
 import "./relay-files.css";
 import "./landing.css";
+import { observeProductPage, trackProduct } from "./posthog";
+
+observeProductPage();
+document.addEventListener("click", (event) => {
+  if (event.target instanceof Element && event.target.closest("#issue-open")) {
+    trackProduct("report_opened", { target: "feedback" });
+  }
+});
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -641,6 +649,7 @@ function trackCopy(target: CopyTarget): void {
 }
 
 function trackEvent(event: "copy" | "cta_click", target: CopyTarget | CtaTarget): void {
+  trackProduct(event === "copy" ? "command_copy" : "landing_cta", { target });
   void fetch("/api/events", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1563,7 +1572,12 @@ function renderTerminal(sessionId: string): void {
       if (!waitingForCapacity && !compactSessionQuery.matches && !readOnly) terminal.focus();
     });
 
+    let analyticsConnected = false;
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
+      if (!analyticsConnected) {
+        analyticsConnected = true;
+        trackProduct("terminal_connected");
+      }
       if (typeof event.data === "string") {
         handleControlMessage(event.data);
         return;

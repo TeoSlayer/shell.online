@@ -9,7 +9,7 @@ describe("the browser security policy", () => {
   it("lets the browser reach the configured provider", () => {
     const csp = policy("https://auth.example.test/realms/shell");
     /* Discovery, JWKS and the token endpoint are ordinary fetches. */
-    expect(csp).toContain("connect-src 'self' wss: https://auth.example.test");
+    expect(csp.split("; ").find(rule => rule.startsWith("connect-src "))?.split(" ")).toContain("https://auth.example.test");
     /* The authorization request is a navigation away from this origin. */
     expect(csp).toContain("form-action 'self' https://auth.example.test");
     /* Silent renewal navigates a hidden iframe to the provider first. */
@@ -18,6 +18,16 @@ describe("the browser security policy", () => {
 
   it("names the origin only, never the realm path", () => {
     expect(policy("https://auth.example.test/realms/shell")).not.toContain("/realms/shell");
+  });
+
+  it("allows PostHog ingestion but never remote scripts, frames or replay", () => {
+    for (const csp of [policy(), policy("https://auth.example.test")]) {
+      const rules = csp.split("; ").filter(rule => rule.includes("posthog"));
+      expect(rules).toHaveLength(1);
+      expect(rules[0]).toMatch(/^connect-src /);
+      expect(rules[0]).toContain("https://us.i.posthog.com");
+      expect(csp).not.toContain("unsafe-eval");
+    }
   });
 
   it("allows this origin to frame itself for OIDC silent renew", () => {

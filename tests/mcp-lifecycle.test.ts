@@ -18,6 +18,29 @@ vi.mock("cloudflare:workers", () => ({
 import worker, { TerminalSession } from "../worker/index";
 import { setMcpTelemetrySink } from "../shared/mcp-status";
 
+describe("PostHog relay milestones", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([true, false])("mirrors bounded install outcomes only when enabled=%s", async (enabled) => {
+    const fetcher = vi.fn(async () => new Response("1"));
+    vi.stubGlobal("fetch", fetcher);
+    const tasks: Promise<unknown>[] = [];
+    const env = { ...makeEnv("unused", "unused"), POSTHOG_ENABLED: enabled ? "1" : undefined };
+    const response = await worker.fetch(new Request("https://shell.online/install/report?outcome=ok&secret=PRIVATE_CONTENT", {
+      headers: { "User-Agent": "curl/8", "Authorization": "Bearer PRIVATE_CREDENTIAL", "CF-Connecting-IP": "192.0.2.42" },
+    }) as never, env as never, { waitUntil: (p: Promise<unknown>) => tasks.push(p) } as never);
+    expect(response.status).toBe(204);
+    await Promise.all(tasks);
+    expect(fetcher).toHaveBeenCalledTimes(enabled ? 1 : 0);
+    if (enabled) {
+      const calls = vi.mocked(fetch).mock.calls;
+      const payload = JSON.parse(String(calls[0][1]?.body));
+      expect(payload).toMatchObject({ event: "install_outcome", properties: { surface: "relay", outcome: "ok" } });
+      expect(JSON.stringify(calls)).not.toContain("PRIVATE_");
+      expect(JSON.stringify(calls)).not.toContain("192.0.2.42");
+    }
+  });
+});
+
 // --- helpers -----------------------------------------------------------------------------
 
 async function sha256Hex(value: string): Promise<string> {

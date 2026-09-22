@@ -7,6 +7,7 @@ import {
   type TerminalGrid,
 } from "./terminal-grid";
 import type { HostPresence } from "./host-presence";
+import { trackProduct } from "../../../web/posthog";
 
 export type ConnectionStatus =
   | "connecting"
@@ -226,8 +227,13 @@ export class TerminalConnection {
       }
     });
 
+    let analyticsConnected = false;
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
       if (this.stopped || this.socket !== socket) return;
+      if (!analyticsConnected) {
+        analyticsConnected = true;
+        trackProduct("terminal_connected");
+      }
       this.markAdmitted();
       if (typeof event.data === "string") {
         this.handleControl(event.data);

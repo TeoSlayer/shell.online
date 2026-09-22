@@ -21,6 +21,8 @@ on:
     # the site reaches people another way and must not redeploy this.
     paths:
       - "app/**"
+      - "shared/posthog.ts"
+      - "web/posthog.ts"
       - ".github/workflows/deploy-app.yml"
   workflow_dispatch:
     inputs:

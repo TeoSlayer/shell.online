@@ -334,9 +334,23 @@ export function Privacy() {
 
         <Section id="analytics">
           <p>
-            The web app runs no analytics of its own; the days your account
-            used it are account data, described above, and leave the app only
-            as counts. The shell.online site and the relay count events such as
+            The public site, web app, game and shared-terminal viewer use
+            PostHog (US hosting) for page views and explicit product actions.
+            Routes are reduced to fixed categories; session IDs, share links,
+            passwords, email addresses, commands and terminal content are not
+            included. There is no automatic form capture, session replay or
+            analytics recording of terminal contents. A host-only, anonymous
+            session cookie connects actions on the same site; it is not stored
+            in localStorage, shared across subdomains or linked to your account.
+            Browser Do Not Track, Global Privacy Control and saved analytics
+            opt-outs disable this browser tracking. Foreground time is measured
+            on navigation, not by artificial engagement pings. Collection
+            requests reach PostHog, but IP-based enrichment is disabled.
+          </p>
+          <p>
+            The shell.online site also uses Google Analytics on its public
+            landing and documentation pages, never on account or terminal pages.
+            Our own site and relay statistics count events such as
             page views, installer downloads and sessions opened, with a device
             class, a client name and the referring site. To tell one visitor
             from another they keep, for 120 days, a keyed hash of the network
