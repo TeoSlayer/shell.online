@@ -67,7 +67,7 @@ describe("the dashboard's copy", () => {
     const snapshot = buildStatsSnapshot(rows(), "7d", now, rangeStart);
     expect(funnelInsight(snapshot)).toBe(
       "8 views by people from 7 visitors, and 2 by crawlers kept out. 3 copied an install command. " +
-      "4 installer runs, 1 completed (25%). 1 more was created but never connected. " +
+      "4 install-script fetches, 1 binary download, 0 reported successful installs. These are separate event counts, not a matched conversion rate. 1 more was created but never connected. " +
       "5 sessions started on 3 machines; 40% were opened in a browser, and 50% of those were typed into.",
     );
   });

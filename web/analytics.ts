@@ -1,5 +1,6 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
+import { campaignMedium, isPublicEvent, publicSource } from "../shared/public-attribution";
 
 const GA_ID = "G-101HMD03VD";
 const LEGACY_CONSENT_COOKIE = "shell_analytics_consent";
@@ -16,8 +17,11 @@ export function isPublicAnalyticsUrl(url: URL): boolean {
   if (url.protocol !== "https:") return false;
   if (url.hostname !== PUBLIC_HOST) return false;
   if (url.port !== "") return false;
-  if (url.search !== "") return false;
-  if (url.hash !== "") return false;
+  if (url.username || url.password) return false;
+  const allowed = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "utm_id", "ref", "twclid"]);
+  if ([...url.searchParams.keys()].some(key => !allowed.has(key))) return false;
+  // Only known navigation anchors. A credential-like fragment never enables GA.
+  if (url.hash && !["#start", "#choose-agent", "#see-it", "#how", "#agents", "#use-cases", "#benefits", "#specs", "#faq"].includes(url.hash)) return false;
   return isPublicPath(url.pathname);
 }
 
@@ -52,13 +56,19 @@ function canonicalPageLocation(url: URL): string {
 }
 
 function pageTitleFor(pathname: string): string {
-  if (pathname === "/" || pathname === "") return "Share a Live Terminal in Any Browser | shell.online";
+  if (pathname === "/" || pathname === "") return "Your Coding Agent. On Your Phone. | shell.online";
   if (resolveDocumentationRoute(pathname, RELEASE_VERSION)) return "Documentation | shell.online";
   return "shell.online";
 }
 
 export function gtagConfig(url: URL): Record<string, unknown> {
+  const source = publicSource(url, typeof document === "undefined" ? null : document.referrer);
+  const medium = campaignMedium(url);
   return {
+    campaign_source: source === "direct" || source === "internal" ? "(direct)" : source,
+    campaign_medium: medium ?? (source === "direct" || source === "internal" ? "(none)" : "referral"),
+    // Suppress automatic extraction of arbitrary UTM labels from the browser URL.
+    campaign_name: "(not set)", campaign_id: "", campaign_content: "", campaign_term: "",
     cookie_domain: "none",
     cookie_prefix: GA_COOKIE_PREFIX,
     cookie_expires: GA_COOKIE_MAX_AGE,
@@ -73,6 +83,7 @@ export function gtagConfig(url: URL): Record<string, unknown> {
 }
 
 let gtagLoaded = false;
+let publicLoaded = false;
 
 type GtagFn = (...args: unknown[]) => void;
 
@@ -86,6 +97,11 @@ export function initAnalytics(): void {
     if (hasLegacyDecline()) return;
   } catch {
     return;
+  }
+
+  if (!publicLoaded) {
+    publicLoaded = true;
+    sendPublicEvent("page_loaded", url.pathname === "/" ? "landing" : "docs", url);
   }
 
   gtagLoaded = true;
@@ -112,4 +128,23 @@ export function initAnalytics(): void {
   script.referrerPolicy = "no-referrer";
   script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
   document.head.appendChild(script);
+}
+
+function sendPublicEvent(event: string, target: string, url: URL): void {
+  const source = publicSource(url, document.referrer);
+  void fetch("/api/events", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event, target, source }), credentials: "same-origin", keepalive: true,
+  }).catch(() => {});
+}
+
+export function trackPublicEvent(event: string, target: string): void {
+  const url = new URL(window.location.href);
+  if (!isPublicAnalyticsUrl(url) || !isPublicEvent(event, target) || isGpcOrDnt() || hasGaDisableFlag()) return;
+  try { if (hasLegacyDecline()) return; } catch { return; }
+  sendPublicEvent(event, target, url);
+  if (gtagLoaded) {
+    const gtag = (window as unknown as { gtag: GtagFn }).gtag;
+    gtag("event", event === "copy" ? "command_copy" : "landing_cta", { target, ...gtagConfig(url) });
+  }
 }

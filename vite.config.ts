@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite";
 import { resolve } from "node:path";
 import documentationSource from "./docs/content.json" with { type: "json" };
+import { landingMarkup } from "./web/landing-markup.ts";
 import {
   DOCUMENTATION_KINDS,
   type DocumentationContent,
@@ -55,7 +56,12 @@ function escapeHtml(value: string): string {
 }
 
 export default defineConfig({
-  plugins: [documentationPages()],
+  plugins: [documentationPages(), {
+    name: "public-landing-html",
+    transformIndexHtml(html) {
+      return html.replace("<!--PUBLIC_LANDING-->", landingMarkup());
+    },
+  }],
   build: {
     target: "es2022",
     sourcemap: true,

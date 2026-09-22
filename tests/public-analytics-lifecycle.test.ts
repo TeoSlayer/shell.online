@@ -167,14 +167,17 @@ describe("initAnalytics automatic public-page analytics", () => {
     expect(dom.window.dataLayer).toBeUndefined();
   });
 
-  it("does not load on URLs with query strings", async () => {
+  it("loads on a supported campaign URL with a canonical location", async () => {
     vi.resetModules();
     cookies = new Map();
     dom = installDom("https://shell.online/?ref=google", cookies);
     const { initAnalytics } = await import("../web/analytics");
     initAnalytics();
 
-    expect(dom.window.dataLayer).toBeUndefined();
+    expect(dom.window.dataLayer).toBeDefined();
+    const config = (dom.window.dataLayer as IArguments[])[2][2];
+    expect(config.page_location).toBe("https://shell.online/");
+    expect(config.campaign_source).toBe("google");
   });
 
   it("does not load on URLs with fragments", async () => {

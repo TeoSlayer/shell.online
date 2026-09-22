@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { safeSource } from "../shared/public-attribution";
 import {
   decodeResize,
   decodeSendAck,
@@ -268,6 +269,7 @@ interface CreateSessionBody {
 interface EventBody {
   event?: unknown;
   target?: unknown;
+  source?: unknown;
 }
 
 interface StatsLoginBody {
@@ -645,6 +647,7 @@ async function recordAssetAnalytics(
   executionContext: ExecutionContext,
 ): Promise<void> {
   if (request.method !== "GET") return;
+  if (/prefetch|prerender/i.test(`${request.headers.get("Sec-Purpose") ?? ""} ${request.headers.get("Purpose") ?? ""}`)) return;
 
   const context = requestAnalyticsContext(request);
   const withVisitor = async (kind: VisitorKind = "browser"): Promise<AnalyticsContext> => ({
@@ -672,6 +675,8 @@ async function recordAssetAnalytics(
 
   const binaryTarget = binaryDownloadTarget(url.pathname);
   if (binaryTarget) {
+    // A range retry is not another full binary download.
+    if (response.status !== 200 || request.headers.has("Range")) return;
     recordAnalytics(env, executionContext, "binary_download", binaryTarget, await withVisitor("machine"));
     return;
   }
@@ -708,7 +713,10 @@ async function recordEvent(
 
   let body: EventBody;
   try {
-    body = (await request.json()) as EventBody;
+    const text = await readLimitedBody(request, 256, request.signal);
+    if (text === null) return json({ error: "request too large" }, 413);
+    body = JSON.parse(text) as EventBody;
+    if (!body || typeof body !== "object" || Array.isArray(body)) return json({ error: "invalid event" }, 400);
   } catch {
     return json({ error: "invalid event" }, 400);
   }
@@ -716,6 +724,7 @@ async function recordEvent(
   const event = body.event;
   const target = body.target;
   const known = typeof target === "string" && (
+    (event === "page_loaded" && (target === "landing" || target === "docs")) ||
     (event === "copy" && COPY_TARGETS.has(target)) ||
     (event === "cta_click" && CTA_TARGETS.has(target))
   );
@@ -723,12 +732,18 @@ async function recordEvent(
     return json({ error: "invalid event" }, 400);
   }
 
+  const source = body.source === undefined ? null : safeSource(body.source);
+  if (body.source !== undefined && source === null) return json({ error: "invalid event" }, 400);
+  if (request.headers.get("Sec-GPC") === "1" || request.headers.get("DNT") === "1") {
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+  }
+
   recordAnalytics(
     env,
     executionContext,
     event,
     target,
-    { ...requestAnalyticsContext(request), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
+    { ...requestAnalyticsContext(request), ...(source ? { referrer: source } : {}), visitor: await requestVisitor(env.STATS_VISITOR_SALT, request) },
   );
 
   return new Response(null, {

@@ -141,6 +141,10 @@ and `sqlite3` executable are required. See [setup, delivery, and privacy limits]
 | Plain transport mode | Explicit `--no-e2ee` only |
 | Public-page analytics | Automatic Google Analytics on `shell.online` landing/docs only; never on viewer, app, or stats pages. Sanitized canonical URL, no session or terminal data. Respects GPC/DNT and existing opt-out. |
 
+See [measurement definitions and attribution limits](docs/analytics.md): script
+fetches, binary downloads and reported successful installs are distinct counts,
+not interchangeable measures of conversion.
+
 In v0.21.2 the browser's session-password cache is memory-only: after a reload a
 session recovers from the account's encrypted vault, or requires the share
 password (or host-side recovery with `shell password`). The legacy v3

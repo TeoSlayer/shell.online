@@ -18,3 +18,4 @@ Repository guides that are not tied to a release live here too:
 - `third-party-notices.md`
 - `MCP.md`
 - `session-content.md` (passive pulse and owner-encrypted excerpts, v0.22.0+)
+- `analytics.md` (public-page events, attribution and measurement limits)

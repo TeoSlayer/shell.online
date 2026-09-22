@@ -5,7 +5,7 @@ const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
 const [indexHtml, documentationHtml, landingSource, landingStyles, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
   readSource("index.html"),
   readSource("web/documentation.html"),
-  readSource("web/main.ts"),
+  readSource("web/landing-markup.ts"),
   readSource("web/landing.css"),
   readSource("web/documentation.ts"),
   readSource("shared/documentation.ts"),
@@ -25,7 +25,7 @@ const check = (condition, message) => {
 
 const title = indexHtml.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
 const description = indexHtml.match(/<meta name="description" content="([^"]+)"/u)?.[1] ?? "";
-const landingMarkup = landingSource.match(/function renderLanding\(\): void \{([\s\S]*?)\n\}\n\nasync function wireGitHubStarCount/u)?.[1] ?? "";
+const landingMarkup = landingSource;
 const manifest = JSON.parse(manifestSource);
 const docsContent = JSON.parse(docsSource);
 const packageMetadata = JSON.parse(packageSource);
@@ -37,43 +37,30 @@ check(
   `Structured data advertises ${advertisedVersion} but package.json says ${packageMetadata.version}`,
 );
 
-check(indexHtml.includes('<html lang="en">'), "Document language is missing");
+check(indexHtml.includes('<html lang="en"'), "Document language is missing");
 check(indexHtml.includes('<meta charset="UTF-8"'), "UTF-8 declaration is missing");
 check(indexHtml.includes('<meta name="viewport"'), "Responsive viewport is missing");
-check(title === "Share a Live Terminal in Any Browser | shell.online", "Unexpected landing title");
+check(title === "Your Coding Agent. On Your Phone. | shell.online", "Unexpected landing title");
 check(description.length >= 120 && description.length <= 170, "Meta description should be specific and concise");
 check(indexHtml.includes('<meta name="robots" content="index, follow, max-image-preview:large"'), "Homepage robots directive is invalid");
 check(indexHtml.includes('<link rel="canonical" href="https://shell.online/"'), "Canonical URL is missing");
 check((indexHtml.match(/rel="canonical"/gu) ?? []).length === 1, "Homepage must have exactly one canonical URL");
 check(!indexHtml.includes("seo-fallback"), "Landing content must not use visually hidden SEO fallback text");
-check(indexHtml.includes("coding agents, builds, servers, remote shells"), "Visible loading copy should describe real use cases");
-check(indexHtml.includes("read-only browser link"), "Read-only access should be present in crawlable copy");
-check(indexHtml.includes("<noscript>"), "Crawlable no-script product summary is missing");
-check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Landing page must have exactly one primary heading");
-check(landingMarkup.includes('id="use-cases"'), "Visible use-case section is missing");
-
-/*
- * app.shell.online is the other front door, and it is easy to lose in a
- * refactor because the install one-liner reads like the only call to action.
- * Pin both buttons and the no-script link so the account cannot go quiet.
- */
-check(landingMarkup.includes('class="hero-signup" href="${SIGNUP_URL}"'), "Hero account button is missing");
-check(landingMarkup.includes('class="nav-signup" href="${SIGNUP_URL}"'), "Header account button is missing");
-check(indexHtml.includes("https://app.shell.online/signup"), "No-script account link is missing");
-check(
-  landingMarkup.includes('class="hero-step hero-step-account"') && landingMarkup.includes('class="hero-step hero-step-cli"'),
-  "Hero must number the account and CLI steps",
-);
-check(
-  landingMarkup.includes("You will also need to install the shell CLI for terminal creation."),
-  "Hero must say the CLI is still needed after signing up",
-);
+check(indexHtml.includes('<!--PUBLIC_LANDING-->') && viteSource.includes('landingMarkup()'), "Public copy must be rendered into the build, not only client-side");
+check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Exactly one primary heading");
+check(landingMarkup.includes('No account needed to try it.'), "First session must not require signup");
+check(landingMarkup.includes('https://app.shell.online/signup'), "Optional account link missing");
+check(landingMarkup.includes('<noscript>'), "Setup must remain usable without JavaScript");
+check(landingMarkup.indexOf('id="start"') < landingMarkup.indexOf('home-specs'), "Easy setup must precede specs");
+check(landingMarkup.includes('data-copy="install"') && landingMarkup.includes('data-copy="run"'), "Both setup commands need copy controls");
+check(landingMarkup.includes('/screenshots/codex-working-mobile.png'), "Real product proof missing");
+check(!landingMarkup.includes('22ms') && !landingMarkup.includes('42 tests passed'), "Do not fabricate performance or proof");
 
 for (const metadata of [
   '<meta property="og:type" content="website"',
   '<meta property="og:site_name" content="shell.online"',
   '<meta property="og:url" content="https://shell.online/"',
-  '<meta property="og:title" content="Share a live terminal in any browser"',
+  '<meta property="og:title" content="Your coding agent. On your phone. | shell.online"',
   '<meta property="og:description"',
   '<meta property="og:image" content="https://shell.online/social-card.png"',
   '<meta property="og:image:width" content="1200"',
@@ -113,29 +100,12 @@ check(application?.sameAs === "https://github.com/TeoSlayer/shell.online", "Sour
 check(application?.image === "https://shell.online/social-card.png", "Application image is missing from schema");
 check(application?.screenshot === "https://shell.online/screenshots/codex-working-mobile.png", "Application screenshot is missing from schema");
 check(landingSource.includes("Developed by"), "Visible Pilot Protocol attribution is missing");
-check(
-  /const PILOT_PROTOCOL_URL = ["']https:\/\/pilotprotocol\.network\/["']/.test(landingSource) &&
-    landingSource.includes('href="${PILOT_PROTOCOL_URL}"'),
-  "Visible Pilot Protocol link is missing",
-);
-check(landingSource.includes("shell --read-only python train.py"), "Visible read-only example is missing");
+check(landingSource.includes('href="https://pilotprotocol.network/"'), "Visible attribution missing");
+check(landingSource.includes('shell --read-only &lt;command&gt;'), "Read-only example missing");
 check(landingSource.includes("v${RELEASE_VERSION} · SHA-256"), "Visible release integrity link is missing");
 check(readme.includes("[Pilot Protocol](https://pilotprotocol.network/)"), "README Pilot Protocol link is missing");
 
-const useCaseCards = landingSource.match(/class="use-case-card"/gu) ?? [];
-check(useCaseCards.length === 4, `Expected 4 focused use-case cards, found ${useCaseCards.length}`);
-for (const example of [
-  "shell codex",
-  "shell go test -race ./...",
-  "shell python train.py",
-  "shell docker compose up",
-  "shell terraform apply",
-  "shell ssh my-server",
-  "shell htop",
-  "shell bash",
-]) {
-  check(landingSource.includes(example), `Missing use-case example: ${example}`);
-}
+for (const command of ["shell codex", "shell claude", "shell opencode"]) check(landingMarkup.includes(command), "Missing easy command: " + command);
 
 check(sitemap.includes("<loc>https://shell.online/</loc>"), "Homepage is missing from sitemap");
 check(sitemap.includes("<lastmod>2026-09-02</lastmod>"), "Sitemap lastmod is missing");

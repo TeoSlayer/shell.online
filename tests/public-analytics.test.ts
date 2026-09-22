@@ -73,8 +73,8 @@ describe("isPublicAnalyticsUrl", () => {
     expect(isPublicAnalyticsUrl(new URL("https://shell.online/game"))).toBe(false);
   });
 
-  it("rejects URLs with query strings", () => {
-    expect(isPublicAnalyticsUrl(new URL("https://shell.online/?ref=google"))).toBe(false);
+  it("accepts recognized campaign parameters without passing their raw values onward", () => {
+    expect(isPublicAnalyticsUrl(new URL("https://shell.online/?ref=google"))).toBe(true);
   });
 
   it("rejects URLs with secret query params", () => {
@@ -154,7 +154,7 @@ describe("gtagConfig", () => {
   });
 
   it("uses fixed public page title for landing", () => {
-    expect(gtagConfig(url).page_title).toBe("Share a Live Terminal in Any Browser | shell.online");
+    expect(gtagConfig(url).page_title).toBe("Your Coding Agent. On Your Phone. | shell.online");
   });
 
   it("uses fixed public page title for docs", () => {
