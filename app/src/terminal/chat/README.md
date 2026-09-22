@@ -155,8 +155,19 @@ commands appear — and nothing is invented.
 
 ## Sending
 
-Two things went wrong between pressing send and the command arriving, and both
-looked like the session rather than like the box.
+Three things went wrong between pressing send and the command arriving, and
+all three looked like the session rather than like the box.
+
+**The line and the Return have to be two events.** They were one chunk,
+`text\r`, and a program that reads its own input -- which every agent here
+does -- treats a burst of characters ending in a carriage return as pasted
+text and deliberately does not submit on it, because pasting a paragraph that
+happens to contain a newline must not send half of it. So the prompt arrived
+in the agent's box and stayed there: a send button that does nothing. The text
+goes first, marked as a paste where the program asked for pastes to be marked,
+and the Return follows a frame later on its own. They are queued rather than
+timed separately, because a paste is several lines and each of them is a line
+and a Return.
 
 **The return key did nothing, sometimes.** A phone's keyboard with predictive
 text on does not say which key was pressed: iOS reports every keydown as the
@@ -299,11 +310,24 @@ the screen. You typed a prompt to an agent and could not see it. A touch
 screen composes and sends a line; what it gives up is the arrow keys, which a
 phone keyboard does not have.
 
-**The control keys are only there when they are wanted**: while the box has
-focus, while something is still being written back, and for as long as a
-full-screen program is reading keys. Three chips at a finger's height are half
-the composer, and standing over the conversation at all times they spent a
-message's worth of screen on controls wanted twice a session.
+**The composer is a bar across the foot of the surface**, not a card floating
+inside it. It floated with eighteen pixels of page either side of the pane and
+another eight inside that, so its background stopped well short of both edges
+and the conversation showed past it -- a blurred panel cut off down both
+sides. The surface is full-bleed now and the composer goes with it; what is
+rounded is the field inside it, where a rounded thing belongs.
+
+**There are no buttons in it.** A row of control-key chips used to stand above
+the box: on a phone it was half the composer's height, at all times, for
+controls wanted twice a session. A keyboard has the keys themselves. What a
+touch screen has lost with them is any way to interrupt a running program, and
+that wants somewhere of its own rather than a row inside the thing you type
+into.
+
+**The field is 16px and cannot be smaller.** Safari on iOS zooms the whole
+page in when a field under that is focused and then leaves it zoomed. What can
+come down is everything around the text, and has: the leading, the padding,
+and the row of chips that is gone.
 
 **Nothing zooms the session by accident.** The composer is 16px wherever there
 is a coarse pointer, because Safari on iOS zooms the whole page in when a

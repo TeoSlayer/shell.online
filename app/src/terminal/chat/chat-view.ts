@@ -13,7 +13,7 @@
  * changes nothing touches no nodes at all.
  */
 
-import { bytesForKey, chipsFor } from "./keys";
+import { bytesForKey } from "./keys";
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
 
 export interface ChatViewOptions {
@@ -109,7 +109,6 @@ export class ChatView {
   private readonly composer: HTMLFormElement;
   private readonly input: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
-  private readonly chips: HTMLElement;
   private readonly jump: HTMLButtonElement;
   private readonly options: ChatViewOptions;
 
@@ -130,8 +129,6 @@ export class ChatView {
    * beforeinput below lets that one through instead of sending. See onInsert.
    */
   private breaking = false;
-  /** Whether the session is mid-answer, which is when Ctrl-C is worth a tap. */
-  private running = false;
   /** Decided once: a pointer does not become a finger while a session is open. */
   private readonly touch = touchScreen();
   private disposed = false;
@@ -176,9 +173,6 @@ export class ChatView {
     });
 
     this.composer = el("form", "chat-composer") as HTMLFormElement;
-    this.chips = el("div", "chat-keys");
-    this.drawChips();
-    this.composer.dataset.keys = "hidden";
 
     const row = el("div", "chat-row");
     this.input = el("textarea", "chat-input") as HTMLTextAreaElement;
@@ -200,7 +194,7 @@ export class ChatView {
     this.send.innerHTML = arrowSvg();
     ChatView.keepsFocus(this.send);
     row.append(this.input, this.send);
-    this.composer.append(this.chips, row);
+    this.composer.append(row);
 
     root.append(this.scroller, this.jump, this.composer);
 
@@ -246,8 +240,6 @@ export class ChatView {
     this.resizes?.observe(this.composer);
 
     this.scroller.addEventListener("scroll", this.onScroll);
-    this.composer.addEventListener("focusin", this.onFocus);
-    this.composer.addEventListener("focusout", this.onFocus);
     this.composer.addEventListener("submit", this.onSubmit);
     this.input.addEventListener("keydown", this.onKeyDown);
     this.input.addEventListener("beforeinput", this.onInsert);
@@ -291,11 +283,6 @@ export class ChatView {
     }
 
     this.history = messages.filter((m) => m.kind === "sent" && m.text).map((m) => m.text);
-    const running = messages.length > 0 && messages[messages.length - 1].open === true;
-    if (running !== this.running) {
-      this.running = running;
-      this.showKeys();
-    }
     if (wasAtBottom) {
       this.scroller.scrollTop = this.scroller.scrollHeight;
       this.jump.hidden = true;
@@ -338,8 +325,6 @@ export class ChatView {
      */
     if (!this.composes()) this.input.value = "";
     this.autosize();
-    this.drawChips();
-    this.showKeys();
     this.setDisabled(this.disabled);
   }
 
@@ -395,8 +380,6 @@ export class ChatView {
     this.root.style.removeProperty("--chat-composer-height");
     this.root.style.removeProperty("--chat-mirror-size");
     this.scroller.removeEventListener("scroll", this.onScroll);
-    this.composer.removeEventListener("focusin", this.onFocus);
-    this.composer.removeEventListener("focusout", this.onFocus);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
     this.input.removeEventListener("beforeinput", this.onInsert);
@@ -408,24 +391,6 @@ export class ChatView {
   }
 
   /* ----------------------------------------------------------------- */
-
-  /** The control keys for the mode the composer is in. */
-  private drawChips(): void {
-    this.chips.replaceChildren();
-    for (const chip of chipsFor(this.direct)) {
-      const button = el("button", "chat-key") as HTMLButtonElement;
-      button.type = "button";
-      button.textContent = chip.label;
-      button.title = chip.title;
-      ChatView.keepsFocus(button);
-      button.addEventListener("click", () => {
-        if (this.disabled) return;
-        this.options.onKeys(chip.bytes);
-        this.input.focus();
-      });
-      this.chips.append(button);
-    }
-  }
 
   private create(message: Message, previous: Message | null): Rendered {
     const el = document.createElement("div");
@@ -674,28 +639,6 @@ export class ChatView {
     chip.textContent = `exit ${message.exitCode}`;
     if (!existing) node.el.querySelector(".chat-bubble")?.append(chip);
   }
-
-  /**
-   * Whether the control keys are worth the room they take.
-   *
-   * On a phone they are a whole finger's height standing above the box at all
-   * times, which is a message's worth of the conversation given to three
-   * chips that are wanted twice a session. They are wanted at exactly two
-   * moments, though, and both are knowable: while somebody is typing, and
-   * while something is running -- which is when Ctrl-C is the only control
-   * that matters and having to open the keyboard to reach it would be absurd.
-   *
-   * The stylesheet decides what to do with the answer, and only the phone
-   * breakpoint does anything: on a pointer the row costs nothing.
-   */
-  private showKeys(): void {
-    const wanted = this.direct || this.running || this.composer.contains(document.activeElement);
-    this.composer.dataset.keys = wanted ? "shown" : "hidden";
-  }
-
-  private readonly onFocus = (): void => {
-    this.showKeys();
-  };
 
   private readonly onScroll = (): void => {
     const distance = this.scroller.scrollHeight - this.scroller.scrollTop - this.scroller.clientHeight;

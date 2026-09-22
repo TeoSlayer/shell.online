@@ -675,9 +675,28 @@
      * composer is the last thing in the column and the bar is directly under
      * it. The top comes in too -- a session has a tab line telling you which
      * one you are looking at; it does not need a page's worth of air above it.
+     *
+     * And the sides go entirely. A document is a column of text with a margin;
+     * a session is a surface, and eighteen pixels either side of it is
+     * eighteen pixels a conversation does not get and the reason the composer
+     * stopped short of both edges with the page showing past it. What needs a
+     * margin in here asks for one; see .terminal-bar.
      */
+    padding-inline: 0;
     padding-top: 8px;
     padding-bottom: 0;
+    /*
+     * One scroller. A session's scrolling belongs to the pane -- the thread,
+     * or the terminal's own scrollback -- and an `auto` ancestor around it is
+     * a second one for a finger to catch, which on a touch screen is a drag
+     * that moves the wrong thing or nothing at all.
+     */
+    overflow: hidden;
+  }
+
+  /* The tab line still wants the margin the surface under it gave up. */
+  :root[data-pane="open"] .terminal-bar {
+    padding-inline: 18px;
   }
 
   .rail {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KEY_CHIPS, bytesForKey, chipsFor } from "./keys";
+import { bytesForKey } from "./keys";
 
 describe("a key pressed while a program is reading keys", () => {
   it("sends the character itself", () => {
@@ -38,36 +38,5 @@ describe("a key pressed while a program is reading keys", () => {
   it("guesses at nothing it does not know", () => {
     expect(bytesForKey({ key: "Shift" })).toBeNull();
     expect(bytesForKey({ key: "AudioVolumeUp" })).toBeNull();
-  });
-});
-
-describe("the control keys offered as buttons", () => {
-  it("sends the same bytes the keyboard would", () => {
-    const chip = (label: string) => KEY_CHIPS.find((entry) => entry.label === label)?.bytes;
-    expect(chip("Ctrl-C")).toBe(bytesForKey({ key: "c", ctrlKey: true }));
-    expect(chip("Tab")).toBe(bytesForKey({ key: "Tab" }));
-    expect(chip("Esc")).toBe(bytesForKey({ key: "Escape" }));
-    expect(chip("↑")).toBe(bytesForKey({ key: "ArrowUp" }));
-  });
-});
-
-describe("which control keys are offered", () => {
-  it("offers the shell's signals while the composer writes lines", () => {
-    expect(chipsFor(false).map((chip) => chip.label)).toEqual(["Ctrl-C", "Ctrl-D", "Esc"]);
-  });
-
-  it("offers the keys a full-screen program reads once one is running", () => {
-    expect(chipsFor(true).map((chip) => chip.label)).toEqual(["Ctrl-C", "Esc", "Tab", "Enter", "↑", "↓"]);
-  });
-
-  /*
-   * The arrows walk the shell's own history, which lands on the prompt row --
-   * the one row a conversation never shows. Offering them while composing
-   * would move a line nobody can see, and the next thing sent would overwrite
-   * it. The composer's own Up and Down walk the thread instead.
-   */
-  it("keeps the arrows out of line mode, where their result would be invisible", () => {
-    expect(chipsFor(false).some((chip) => chip.label === "↑")).toBe(false);
-    expect(chipsFor(false).some((chip) => chip.label === "Tab")).toBe(false);
   });
 });

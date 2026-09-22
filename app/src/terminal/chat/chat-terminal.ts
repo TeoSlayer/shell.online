@@ -49,6 +49,22 @@ const PARSE_SCROLLBACK = 1000;
  */
 const AGENT_QUIET_MS = 400;
 
+/**
+ * How long after a line the Return that submits it is sent.
+ *
+ * They have to be two events, and this is what guarantees it. A program that
+ * reads its own input -- which every agent here does -- treats a burst of
+ * characters with a carriage return at the end of it as pasted text, and
+ * deliberately does not submit on it: pasting a paragraph that happens to
+ * contain a newline must not send half of it. So `text\r` written in one
+ * chunk put the prompt in the agent's box and left it there, which is a send
+ * button that does nothing.
+ *
+ * A frame is long enough for the program to have taken the text and short
+ * enough that nobody sees the difference.
+ */
+const RETURN_AFTER_MS = 16;
+
 /** The shell integration sequence terminals agree on for command boundaries. */
 const SEMANTIC_PROMPT = 133;
 
@@ -79,6 +95,9 @@ export class ChatTerminal {
   /** Set once per full-screen program, so the search is not run per frame. */
   private looked = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
+  /** Lines and Returns waiting to go out as separate events; see `enter`. */
+  private outbox: string[] = [];
+  private sending: ReturnType<typeof setTimeout> | null = null;
   /** Set by the shell's own markers; once seen, the timing rule steps aside. */
   private semantic = false;
   private disposed = false;
@@ -187,6 +206,8 @@ export class ChatTerminal {
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.quiet) clearTimeout(this.quiet);
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    if (this.sending) clearTimeout(this.sending);
+    this.outbox = [];
     this.listeners.clear();
     this.reader.dispose();
     this.view?.dispose();
@@ -230,8 +251,46 @@ export class ChatTerminal {
       this.transcript.submitted(text, Date.now());
       this.lastCommand = text;
     }
-    this.emit(`${text}\r`);
+    this.enter(text);
     this.schedule();
+  }
+
+  /**
+   * A line, and then the Return that submits it, as two separate events.
+   *
+   * The text goes as a paste where the program asked for pastes to be marked,
+   * which is what tells it that a line arriving all at once is one thing
+   * somebody pasted rather than somebody typing impossibly fast -- and, for a
+   * shell, stops the characters in it being taken as editing commands. The
+   * Return follows on its own; see RETURN_AFTER_MS for why it cannot go in
+   * the same chunk.
+   */
+  private enter(text: string): void {
+    if (text !== "") {
+      const bracketed = this.inner.modes.bracketedPasteMode;
+      this.outbox.push(bracketed ? `\x1b[200~${text}\x1b[201~` : text);
+    }
+    this.outbox.push("\r");
+    this.flushOutbox();
+  }
+
+  /**
+   * Sends one queued chunk now and the rest on their own ticks.
+   *
+   * A queue rather than a pair of timers, because a paste is several lines and
+   * each of them is a line and a Return: sent as four timers they interleave,
+   * and the shell receives two commands run together.
+   */
+  private flushOutbox(): void {
+    if (this.sending) return;
+    const next = this.outbox.shift();
+    if (next === undefined) return;
+    this.emit(next);
+    if (this.outbox.length === 0) return;
+    this.sending = setTimeout(() => {
+      this.sending = null;
+      this.flushOutbox();
+    }, RETURN_AFTER_MS);
   }
 
   /** Bytes with no line behind them: a control chip, or a key in direct mode. */

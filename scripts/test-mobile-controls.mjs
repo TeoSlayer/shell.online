@@ -5,6 +5,7 @@ const landingStylesheet = readFileSync(new URL("../web/landing.css", import.meta
 const appBaseStylesheet = readFileSync(new URL("../app/src/styles/base.css", import.meta.url), "utf8");
 const appPeopleStylesheet = readFileSync(new URL("../app/src/styles/people.css", import.meta.url), "utf8");
 const appChatStylesheet = readFileSync(new URL("../app/src/styles/chat.css", import.meta.url), "utf8");
+const appShellStylesheet = readFileSync(new URL("../app/src/styles/shell.css", import.meta.url), "utf8");
 const buttonRules = Array.from(
   stylesheet.matchAll(/\.mobile-terminal-keys button\s*\{([^}]*)\}/g),
   (match) => match[1],
@@ -47,14 +48,37 @@ if (!appPeopleStylesheet.includes("@media (max-width: 1500px)") || !appPeopleSty
 /*
  * The chat renderer draws its own controls rather than using the app's
  * buttons, so the rules that give every other control a finger-sized target
- * do not reach it. These were built at pointer sizes and shipped that way:
- * a 31px send button and 21px key chips, both a miss as often as a hit.
+ * do not reach it. The send button was built at a pointer size and shipped
+ * that way, at 31px, which is a miss as often as a hit. It is also the only
+ * control left in the box -- the row of control-key chips that used to stand
+ * above it is gone -- so there is nothing else in there to protect.
  */
-if (!appChatStylesheet.includes(".chat-key {\n    min-height: 44px;")) {
-  throw new Error("Chat key chips need a coarse-pointer touch target");
-}
-if (!appChatStylesheet.includes(".chat-send {\n    width: 44px;\n    height: 44px;")) {
+if (!/\.chat-send \{\s*width: 44px;\s*height: 44px;/.test(appChatStylesheet)) {
   throw new Error("The chat send button needs a coarse-pointer touch target");
+}
+if (/\.chat-key\b/.test(appChatStylesheet)) {
+  throw new Error("The composer's control-key chips were removed; their rules should go with them");
+}
+
+/*
+ * The composer is a bar across the foot of the surface rather than a card
+ * floating inside it. It floated with eighteen pixels of page either side, so
+ * its background stopped short of both edges and the conversation showed past
+ * it, which is a blurred panel cut off down both sides.
+ */
+if (!/\.chat-composer \{\s*right: 0;\s*left: 0;/.test(appChatStylesheet)) {
+  throw new Error("The composer must meet both edges of the surface on a phone");
+}
+/* And the surface it sits on is full-bleed, so there is nothing to meet past. */
+if (!/:root\[data-pane="open"\] \.shell-content \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
+  throw new Error("A session surface must be full-bleed on a phone");
+}
+/*
+ * One scroller. A session's scrolling belongs to the pane, and an `auto`
+ * ancestor around it is a second one for a finger to catch.
+ */
+if (!/:root\[data-pane="open"\] \.shell-content \{[^}]*overflow: hidden;/s.test(appShellStylesheet)) {
+  throw new Error("A session must not nest its pane inside a second scroller");
 }
 /*
  * Safari on iOS zooms the page in when a field smaller than 16px is focused,
@@ -89,7 +113,6 @@ if (!/\.chat-screen-host \{\s*touch-action: pan-x pan-y;/.test(appChatStylesheet
  * the foot of the screen rather than the foot of whatever box the pane was
  * measured into. This is what keeps it out of the middle of the page.
  */
-const appShellStylesheet = readFileSync(new URL("../app/src/styles/shell.css", import.meta.url), "utf8");
 if (!appShellStylesheet.includes(':root[data-pane="open"] .shell')) {
   throw new Error("A session on a phone must be a column one screen tall, not a page that scrolls");
 }
