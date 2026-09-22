@@ -3858,15 +3858,21 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
     (connectingIp === "127.0.0.1" || connectingIp === "::1");
 }
 
-function secureAssetResponse(response: Response, pathname: string, hostname: string): Response {
+function isPublicAnalyticsPath(pathname: string): boolean {
+  if (pathname === "/" || pathname === "") return true;
+  return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
+}
+
+export function secureAssetResponse(response: Response, pathname: string, hostname: string): Response {
   const headers = new Headers(response.headers);
   const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
+  const gaAllowed = isHtmlDocument && hostname === "shell.online" && isPublicAnalyticsPath(pathname);
   headers.set("Content-Security-Policy", [
     "default-src 'self'",
-    "script-src 'self'",
+    `script-src 'self'${gaAllowed ? " https://www.googletagmanager.com" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "connect-src 'self' wss: ws:",
-    "img-src 'self' data:",
+    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
+    `img-src 'self' data:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
