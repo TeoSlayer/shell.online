@@ -49,7 +49,11 @@ check(!indexHtml.includes("seo-fallback"), "Landing content must not use visuall
 check(indexHtml.includes('<!--PUBLIC_LANDING-->') && viteSource.includes('landingMarkup()'), "Public copy must be rendered into the build, not only client-side");
 check((landingMarkup.match(/<h1[ >]/gu) ?? []).length === 1, "Exactly one primary heading");
 check(landingMarkup.includes('No account needed to try it.'), "First session must not require signup");
-check(landingMarkup.includes('https://app.shell.online/signup'), "Optional account link missing");
+const optionalAccountLink = [...landingMarkup.matchAll(/href="([^"]+)"/gu)].some(([, href]) => {
+  const url = new URL(href, "https://shell.online/");
+  return url.origin === "https://app.shell.online" && url.pathname === "/signup";
+});
+check(optionalAccountLink, "Optional account link missing");
 check(landingMarkup.includes('<noscript>'), "Setup must remain usable without JavaScript");
 check(landingMarkup.indexOf('id="start"') < landingMarkup.indexOf('home-specs'), "Easy setup must precede specs");
 check(landingMarkup.includes('data-copy="install"') && landingMarkup.includes('data-copy="run"'), "Both setup commands need copy controls");

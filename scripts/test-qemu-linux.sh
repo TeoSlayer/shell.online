@@ -87,7 +87,7 @@ run_target() {
   fi
   help=$($emulator "$output" help)
   case "$help" in
-    *'shell.online'*'shell attach <ID>'*'shell kill <ID>'*) ;;
+    *'shell.online'*'shell attach <ID>'*'shell kill -- <ID>'*) ;;
     *)
       printf '%s did not render the expected CLI help.\n' "$artifact" >&2
       exit 1
