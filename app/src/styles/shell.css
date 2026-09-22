@@ -768,6 +768,22 @@
     display: none;
   }
 
+  /*
+   * Except in a session, where nothing moves for a keyboard.
+   *
+   * A document page shrinks to the space above the keyboard, so its bar has
+   * to leave or it would be under one. A session does not shrink -- the
+   * terminal in it is a grid of a fixed number of columns, and a pane that
+   * changes size refits that grid to a different font -- so its bar is simply
+   * behind the keyboard while the keyboard is there, and taking it out of the
+   * layout would resize the pane for no reason anybody can see. That resize,
+   * and the one coming back from it, is the bar arriving a centimetre above
+   * where it started.
+   */
+  :root[data-pane="open"][data-keyboard="open"] .rail {
+    display: flex;
+  }
+
   /* The wordmark, the copy-command hint and the account row all live in the
      topbar or the account sheet on a phone; the bar holds destinations. */
   .rail-head,

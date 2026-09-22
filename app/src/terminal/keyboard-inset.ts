@@ -42,6 +42,16 @@ const INSET_PROPERTY = "--keyboard-inset";
  * covering the bottom of the screen and whatever `innerHeight` happens to
  * think. Nothing is subtracted from it and nothing else is consulted, so
  * there is nothing left to disagree with.
+ *
+ * It is measured only while the keyboard is down, and held at that value
+ * while the keyboard is up. A session must not change size for a keyboard:
+ * the terminal inside it is a grid of a fixed number of columns, so a pane
+ * that shrinks refits the whole grid to a smaller font, which is text that
+ * shrinks as you start typing and a strip of blank screen where the grid no
+ * longer reaches. Coming back it refits again, and anything that did not land
+ * on the same pixel is a bar that has moved. The keyboard is something that
+ * covers the foot of a session, not something that resizes it -- what has to
+ * get out of its way is the composer, which rises by `--keyboard-inset`.
  */
 const VISIBLE_PROPERTY = "--visible-height";
 
@@ -252,10 +262,24 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
      */
     const paneTop = node.getBoundingClientRect().top;
 
-    const visible = visibleHeight({ viewportHeight: viewport.height, zoom });
-    if (moved(visible, published.visible)) {
-      published.visible = visible;
-      root.style.setProperty(VISIBLE_PROPERTY, `${visible}px`);
+    const inset = keyboardInset({
+      layoutHeight: window.innerHeight,
+      viewportHeight: viewport.height,
+      offsetTop: viewport.offsetTop,
+      zoom,
+    });
+    const typing = keyboardIsOpen(inset);
+
+    /*
+     * Measured while the keyboard is down and held while it is up, so the
+     * session is the same size either way; see VISIBLE_PROPERTY.
+     */
+    if (!typing) {
+      const visible = visibleHeight({ viewportHeight: viewport.height, zoom });
+      if (moved(visible, published.visible)) {
+        published.visible = visible;
+        root.style.setProperty(VISIBLE_PROPERTY, `${visible}px`);
+      }
     }
 
     const pane = paneHeight({
@@ -270,21 +294,14 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
     }
     /*
      * Published as well as used, because the pane is not the only thing that
-     * has to know. The bottom navigation bar is fixed to the window rather
-     * than laid out inside the pane, so it sits over the keyboard unless it
-     * is told to get out of the way; see shell.css.
+     * has to know: the composer rises by exactly this much to clear the
+     * keyboard, and the thread makes the same amount of room under itself.
      */
-    const inset = keyboardInset({
-      layoutHeight: window.innerHeight,
-      viewportHeight: viewport.height,
-      offsetTop: viewport.offsetTop,
-      zoom,
-    });
     if (moved(inset, published.inset)) {
       published.inset = inset;
       root.style.setProperty(INSET_PROPERTY, `${inset}px`);
     }
-    if (keyboardIsOpen(inset)) root.setAttribute(STATE_ATTRIBUTE, "open");
+    if (typing) root.setAttribute(STATE_ATTRIBUTE, "open");
     else root.removeAttribute(STATE_ATTRIBUTE);
   };
 

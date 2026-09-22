@@ -92,8 +92,15 @@ export class ChatTerminal {
    * adapter for.
    */
   private agent: AgentAdapter | null = null;
-  /** Set once per full-screen program, so the search is not run per frame. */
-  private looked = false;
+  /**
+   * What the program set the window title to.
+   *
+   * The most reliable thing a full-screen program offers about its own
+   * identity: a header is printed once and scrolls away, and a title stays.
+   */
+  private windowTitle = "";
+  /** Whether a mirror card is open for a program no adapter could read. */
+  private mirroring = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
   /** Lines and Returns waiting to go out as separate events; see `enter`. */
   private outbox: string[] = [];
@@ -112,6 +119,9 @@ export class ChatTerminal {
     this.options = new ChatOptions(this);
 
     this.inner.onWriteParsed(() => this.drain());
+    this.inner.onTitleChange((title) => {
+      this.windowTitle = title;
+    });
     this.inner.parser.registerOscHandler(SEMANTIC_PROMPT, (data) => {
       this.semanticMarker(data);
       /* False, so any handler the emulator has of its own still runs. */
@@ -176,7 +186,7 @@ export class ChatTerminal {
     this.agentQuiet = null;
     this.agent?.reset();
     this.agent = null;
-    this.looked = false;
+    this.mirroring = false;
     this.replaying = true;
     this.transcript.beginReplay();
     this.reader.rewind();
@@ -334,7 +344,7 @@ export class ChatTerminal {
 
     if (alternate && !this.onScreen) {
       this.onScreen = true;
-      this.looked = false;
+      this.mirroring = false;
       this.agent = null;
       /*
        * The shell's quiet rule does not apply to a screen. Left armed, it
@@ -368,7 +378,7 @@ export class ChatTerminal {
         /* Null keeps the frame the exit handler caught on the way out. */
         this.transcript.screenClosed(null, now);
       }
-      this.looked = false;
+      this.mirroring = false;
       this.view?.setDirect(false);
       /*
        * Reading resumes where it stopped. The alternate screen is a second
@@ -395,9 +405,16 @@ export class ChatTerminal {
    * which is what this renderer did for everything before.
    */
   private painted(lines: TranscriptLine[], now: number): void {
-    if (!this.looked) {
-      this.looked = true;
-      this.agent = adapterFor(lines.map((line) => line.text));
+    if (!this.agent) {
+      /*
+       * Asked again on every frame until something answers, rather than once
+       * on the first. The first frame after a program takes the screen is the
+       * one least likely to identify it: an agent draws a splash and then its
+       * conversation, and a session resumed from earlier starts part-way
+       * through one. Asked once, a program that could have been read was not,
+       * and what a phone got instead was its raw grid.
+       */
+      this.agent = adapterFor(lines.map((line) => line.text), this.windowTitle);
       if (this.agent) {
         /*
          * Said out loud, and said differently when the reading is built on
@@ -407,14 +424,17 @@ export class ChatTerminal {
          * the source. The renderer menu on the pane is the way back to the
          * screen itself.
          */
-        this.transcript.noticed(
-          this.agent.confident
-            ? `Reading ${this.agent.title} as messages.`
-            : `Reading ${this.agent.title} as messages, from a shared layout. Switch renderer to see the screen itself.`,
-          now,
-        );
+        /*
+         * The card that was mirroring the grid goes: what it was showing is
+         * about to arrive as messages, and both would be the same thing
+         * twice.
+         */
+        this.transcript.screenClosed(null, now);
+        this.transcript.noticed(`Reading ${this.agent.title} as messages.`, now);
+      } else if (!this.mirroring) {
+        this.mirroring = true;
+        this.transcript.screenOpened(this.lastCommand || "Full-screen program", now);
       }
-      else this.transcript.screenOpened(this.lastCommand || "Full-screen program", now);
     }
 
     if (!this.agent) {

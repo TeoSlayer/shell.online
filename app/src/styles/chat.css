@@ -587,7 +587,7 @@
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 10px);
+  bottom: calc(var(--chat-dock) + var(--keyboard-inset, 0px) + var(--chat-composer-height, 92px) + 10px);
   left: 0;
   width: fit-content;
   padding: 5px 13px;
@@ -655,6 +655,17 @@
     border-radius: 0;
     background: color-mix(in srgb, var(--paper) 92%, transparent);
     box-shadow: none;
+    /*
+     * The one thing that moves for a keyboard.
+     *
+     * The session keeps its size -- a pane that resizes refits the terminal
+     * grid to a smaller font, which is text that shrinks as you start typing
+     * -- so the keyboard simply covers the foot of it, and what has to get
+     * out from under the keyboard is the box being typed into. It rises by
+     * exactly what the keyboard is covering, and the thread makes the same
+     * room under itself so the last message is not behind it.
+     */
+    transform: translateY(calc(-1 * (var(--chat-dock) + var(--keyboard-inset, 0px))));
   }
 
   .chat-composer:focus-within {
@@ -690,7 +701,8 @@
      * The foot clears the composer, whose height the view measures and
      * publishes as it changes.
      */
-    padding: 2px 16px calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
+    padding: 2px 16px
+      calc(var(--chat-dock) + var(--keyboard-inset, 0px) + var(--chat-composer-height, 104px) + 16px);
   }
 
   /*

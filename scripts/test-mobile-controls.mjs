@@ -146,6 +146,21 @@ if (!/:root\[data-pane="open"\] \.shell \{\s*height: var\(--visible-height/.test
 }
 
 /*
+ * A session does not change size for a keyboard, and the bar does not move.
+ *
+ * The terminal in it is a grid of a fixed number of columns, so a pane that
+ * shrinks refits that grid to a smaller font: text that shrinks as you start
+ * typing, blank screen where the grid no longer reaches, and a bar that comes
+ * back a centimetre from where it left. The composer is what rises.
+ */
+if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail \{\s*display: flex;/.test(appShellStylesheet)) {
+  throw new Error("A session's bottom bar must not be taken out of the layout for a keyboard");
+}
+if (!/\.chat-composer \{[^}]*translateY\(calc\(-1 \* \(var\(--chat-dock\) \+ var\(--keyboard-inset/s.test(appChatStylesheet)) {
+  throw new Error("The composer is what rises for the keyboard, by --keyboard-inset");
+}
+
+/*
  * And a message has to stop short of the far side, or it is not a message.
  * The surface is full-bleed so the composer can meet both edges; the bubbles
  * are not, because the gutter opposite them is what says which way a message

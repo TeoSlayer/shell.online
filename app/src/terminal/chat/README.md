@@ -193,6 +193,111 @@ still be coming.
 
 ## Agents
 
+Almost no session on this product is a shell. They are coding agents, and an
+agent does not print lines: it takes the alternate screen and draws an
+interface on it, so everything above -- which is about reading finished rows
+out of a scrolling buffer -- does not apply to the case that actually happens.
+
+Mirroring that grid does not work on a phone, and not for a reason a
+stylesheet can fix: the session's grid is eighty columns, it is shared with
+every other viewer so it cannot be reflowed, and eighty columns across a phone
+is under five pixels a character. The only way to put an agent on a phone is
+to stop showing it as a grid, which means reading it.
+
+**Read it from a captured frame, or do not read it at all.** The first version
+of this was written against a screen somebody imagined, and every detail was
+wrong: the real Claude Code draws nothing in a box, its prompt marker is `❯`
+rather than `>`, `⏺` is the agent speaking rather than a tool it ran, and its
+status lines sit *below* the composer rather than above it. An adapter built
+on a guess recognises nothing, and recognising nothing puts the raw grid back
+on the phone. `fixtures/` holds frames captured from the program with a
+pseudo-terminal and replayed through the same emulator the renderer uses, so
+what the tests read is exactly what the adapter is handed. Re-capture them
+when the interface changes; the tests are the warning that it has.
+
+`stream.ts` turns a screen that is repainted into a log that is appended to.
+Each frame is compared against what has already been given out, and the longest
+tail of that which is also the head of this frame is what they have in common;
+everything after it is new. One rule covers a screen that has not moved, one
+that has scrolled, and one that has started again. The last row is never given
+out because it is the row being written, and `flush` exists for the row a
+program *finished* on, which looks identical and differs only in that no frame
+follows it.
+
+`claude-code.ts` reads the real shape. Everything from the composer down is
+dropped by position, because what is between those rules is a line somebody is
+part-way through typing. `❯` is a prompt somebody sent. `⏺` is the agent
+speaking, and what follows it, indented, is the rest of what it said. An
+indented line *before* the agent has spoken in a turn is a tool and the one
+line it reported -- the two look identical and only their position tells them
+apart. Blank lines cut the rest into messages, the same rule the line-oriented
+half applies, so an agent listing a directory says what it found, then the
+directories, then the pipes, then the sockets, and a person reads five things
+rather than one. Prose is put back together after the terminal broke it at
+eighty columns; a block whose spacing carries meaning is left as written.
+
+**Recognising the program** is its own problem, and the obvious answers are
+both wrong. Its name is in a header that scrolls away after a few exchanges,
+so a session has no name on screen exactly when it has a conversation worth
+reading. Its window title is not its name for long either: it becomes a
+summary of the work, so a session asked to list a directory reported
+`✳ List directory files`. What is stable is the glyph in front of that title,
+with the two markers together as the fallback for a terminal that reports no
+title. And it is asked on every frame until something answers, not once on the
+first -- the first frame after a program takes the screen is the one least
+likely to identify it.
+
+There is one adapter. There were four: the other three were written against
+the shape those programs were assumed to share, and capturing a real screen
+showed the shape was invented. They are gone rather than shipping as reading
+somebody's screen wrongly. Codex needs none in any case -- it draws on the
+normal buffer rather than taking the alternate screen, so its output arrives
+as lines and is cut into messages by `paragraphs.ts` like a shell's.
+
+A program no adapter claims is still mirrored as a grid, sized so the
+session's whole width is on the screen wherever that is possible at a legible
+size.
+
+## Sending
+
+Three things went wrong between pressing send and the command arriving, and
+all three looked like the session rather than like the box.
+
+**The line and the Return have to be two events.** They were one chunk,
+`text\r`, and a program that reads its own input -- which every agent here
+does -- treats a burst of characters ending in a carriage return as pasted
+text and deliberately does not submit on it, because pasting a paragraph that
+happens to contain a newline must not send half of it. So the prompt arrived
+in the agent's box and stayed there: a send button that does nothing. The text
+goes first, marked as a paste where the program asked for pastes to be marked,
+and the Return follows a frame later on its own. They are queued rather than
+timed separately, because a paste is several lines and each of them is a line
+and a Return.
+
+**The return key did nothing, sometimes.** A phone's keyboard with predictive
+text on does not say which key was pressed: iOS reports every keydown as the
+composition placeholder, keyCode 229 with key `Unidentified`, Return included.
+The rule that sends on Return therefore never fired, the command stayed in the
+box, and trying again usually worked because the prediction had settled by
+then -- which is exactly what makes a bug feel like an unreliable network. So
+the box also listens for `beforeinput`, which says what the browser is about
+to do rather than which key asked for it. "Insert a line break" is the one
+thing a box that sends on Return must not do. Every engine fires it, the
+keydown rule cancels it first on a desktop, and what is left is precisely the
+case the keydown rule could not see.
+
+**What was typed appeared twice.** Once as the message, and again inside the
+answer under it. The echo of a command is dropped on the way in, and the
+commands waiting for their echo used to be tried oldest first and only oldest.
+One command that never echoes -- a password, a line a program read and
+swallowed -- then sat at the head of that queue for forty lines, and for those
+forty lines every real echo was compared against the wrong command, failed,
+and arrived as output. Every pending command is tried now, and a match retires
+the ones in front of it, because they were sent earlier and their echo cannot
+still be coming.
+
+## Agents
+
 Almost no session on this product is a shell. They are coding agents -- Claude
 Code, Codex, Hermes, OpenClaw -- and an agent does not print lines. It takes
 the alternate screen and draws an interface on it, so everything above, which
@@ -291,11 +396,24 @@ has taken the bar away. There is exactly one place the clearance is decided.
 There used to be two, and the two added up: a composer a bar's height above a
 pane that had already stopped a bar's height above the screen.
 
-**The bar leaves when the keyboard arrives**, because nobody navigates to
-another page in the middle of typing and the space it holds is space the thing
-being typed into wants. `keyboard-inset.ts` publishes `--keyboard-inset` and
-`data-keyboard="open"` on the root; `shell.css` takes the bar's row out on
-that, and the column settles onto the keyboard in the same movement.
+**A session does not change size for a keyboard.** It is the one thing on a
+phone that must not: the terminal inside it is a grid of a fixed number of
+columns, so a pane that shrinks refits that grid to a smaller font -- text
+that shrinks as you start typing, and a strip of blank screen where the grid
+no longer reaches -- and the refit coming back is a bar that arrives a
+centimetre from where it left. So `--visible-height` is measured while the
+keyboard is down and held while it is up, and the keyboard simply covers the
+foot of the session. What rises is the composer, by exactly `--keyboard-inset`,
+with the thread making the same room under itself. The bar stays where it is,
+behind the keyboard, because taking it out of the layout would resize the pane
+for no reason anybody can see.
+
+**The bar leaves when the keyboard arrives, on every page but a session.** A
+document page does shrink to the space above the keyboard, so its bar has to
+leave or it would be underneath one. `keyboard-inset.ts` publishes
+`--keyboard-inset` and `data-keyboard="open"` on the root, and `shell.css`
+takes the bar's row out on that -- except where a pane is open, for the reason
+above.
 
 **The composer is docked with a transform**, not with `bottom`. The dock used
 to animate as a layout property, which re-laid out the thread behind it on
@@ -360,8 +478,8 @@ refusals, the column and the bar.
 | `chat-view.ts` | The thread and the box at the foot of it. Renders by difference. |
 | `keys.ts` | A key press into the bytes a terminal expects, and which control chips belong to which mode. |
 | `agents/stream.ts` | A repainted screen as a log that is appended to. Pure. |
-| `agents/boxed-agent.ts` | The shape a coding agent's interface has, read as utterances. Pure. |
-| `agents/known.ts` | Which agents are read, and which were written against a real frame. |
+| `agents/claude-code.ts` | Claude Code's screen, read as utterances. Written against captured frames. Pure. |
+| `agents/fixtures/` | Frames captured from the programs themselves. |
 | `preview.ts` | A scripted session, at `/chat-preview.html` under `npm run dev`. Development only. |
 | `viewport-theatre.ts` | A phone's viewport, driveable from a desktop. Development only. |
 

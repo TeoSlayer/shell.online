@@ -71,8 +71,11 @@ export interface AgentAdapter {
    * because what is running inside a session is not always what it was
    * started as: a person opens a shell and runs an agent in it, and the
    * session still says "Terminal process".
+   *
+   * `title` is what the program set the window title to, which is the most
+   * reliable thing on offer: a header scrolls away, and a title does not.
    */
-  matches(frame: readonly string[]): boolean;
+  matches(frame: readonly string[], title?: string): boolean;
 
   /**
    * The utterances this frame added. Stateful: it is given every frame and
