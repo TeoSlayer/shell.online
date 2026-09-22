@@ -1114,6 +1114,7 @@ a {
 }
 
 .settings-button {
+  text-decoration: none;
   display: inline-flex;
   min-width: 84px;
   align-items: center;
