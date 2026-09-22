@@ -21,6 +21,7 @@ import { CliAuthorize } from "./routes/CliAuthorize";
 import { VaultProvider } from "./vault/VaultProvider";
 import { TeamKeyProvider } from "./vault/TeamKeyProvider";
 import { FeedbackProvider } from "./feedback/FeedbackProvider";
+import { Feedback } from "./routes/Feedback";
 
 /*
  * The game skin, and the only reference to it anywhere outside src/game.
@@ -69,6 +70,7 @@ export function SignedInApp() {
             * while nobody is signed in yet, which is the whole point of it.
             */}
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/feedback" element={<RequireAuth><Feedback /></RequireAuth>} />
           {/*
             * Registration and password reset happen at the provider now.
             * The paths are kept because they have been linked and bookmarked;

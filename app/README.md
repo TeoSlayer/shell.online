@@ -102,6 +102,14 @@ forwarded by email; without it, feedback is kept in the `feedback` table only.
 Keep Hyperdrive query caching disabled because the app depends on read-after-write
 consistency.
 
+Shared-terminal viewers use the same form: **Report** opens
+`https://app.shell.online/feedback?from=terminal` in a new tab. Sign-in is
+required, and returns to the form. No session URL, password, or terminal output
+is attached. Submission still uses the authenticated `/api/feedback` endpoint.
+Run `npm run test:feedback` for the browser regression (local Chrome; set
+`SHELL_CHROME_BIN` if Chrome is installed elsewhere). It uses synthetic identity
+and HTTP responses and never sends a live report.
+
 The full relay and app setup is documented in [the self-hosting guide](../docs/self-hosting.md).
 
 ## Structure

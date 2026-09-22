@@ -50,6 +50,8 @@ export interface FeedbackPayload {
  * so the sender can see what "from" will mean.
  */
 const SURFACE_LABELS: Record<string, string> = {
+  "shared-terminal": "a shared terminal",
+  "feedback-page": "the feedback page",
   "account-menu": "the account menu",
   account: "the Account page",
   "new-session": "the new session form",

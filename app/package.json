@@ -22,6 +22,7 @@
     "test": "vitest run && node scripts/check-protocol.mjs && node scripts/check-game-ui.mjs",
     "test:pg": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgres://postgres:dev@localhost:5433/shell_online} vitest run",
     "test:watch": "vitest",
+    "test:feedback": "node scripts/test-feedback-route.mjs",
     "typecheck": "tsc -b --force",
     "verify:bundle": "node scripts/check-bundle.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",

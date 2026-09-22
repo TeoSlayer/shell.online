@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthProvider";
 import { AppShell } from "../components/AppShell";
 import { Booting } from "../components/Booting";
+import { returnToFrom } from "../lib/oidc";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const { user, initializing } = useAuth();
@@ -36,12 +37,16 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 
 export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   const { user, initializing } = useAuth();
+  const location = useLocation();
 
   if (initializing) {
     return <Booting label="Checking your session" />;
   }
   if (user) {
-    return <Navigate to="/sessions" replace />;
+    // An auth listener can publish before SignIn's promise finishes. Preserve
+    // the guarded destination in that case, just as the sign-in handler does.
+    const from = (location.state as { from?: unknown } | null)?.from;
+    return <Navigate to={returnToFrom({ returnTo: from })} replace />;
   }
   return <>{children}</>;
 }

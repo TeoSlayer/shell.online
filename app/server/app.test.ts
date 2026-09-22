@@ -3781,6 +3781,21 @@ describe("team audit key", () => {
 });
 
 describe("feedback", () => {
+  it("stores shared-terminal reports through the same authenticated feedback endpoint", async () => {
+    const body = {
+      kind: "problem", body: "The Report control did not respond.", surface: "shared-terminal",
+      route: "/feedback", app_version: "test", can_reply: false, context: {},
+    };
+    expect((await call("POST", "/api/feedback", { body })).status).toBe(401);
+    expect(await store.feedback()).toEqual([]);
+    const response = await call("POST", "/api/feedback", { auth: await idToken(), body });
+    expect(response.status).toBe(201);
+    expect(await store.feedback()).toEqual([expect.objectContaining({
+      uid: "uid-1", surface: "shared-terminal", route: "/feedback", body: body.body,
+      canReply: false, context: {},
+    })]);
+  });
+
   const message = {
     kind: "problem",
     body: "The gate never opened.",
