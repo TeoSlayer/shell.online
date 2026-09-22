@@ -15,7 +15,12 @@ import (
 )
 
 // LoginTimeout bounds how long the CLI waits for the browser to come back.
-const LoginTimeout = 5 * time.Minute
+//
+// A first link is not only a click: the browser may still have to sign in,
+// create a vault, save its recovery key and confirm it. Five minutes ran out
+// on people partway through that, and the tab they finished it in then
+// landed on a loopback address nothing was listening on any more.
+const LoginTimeout = 15 * time.Minute
 
 // callbackResult carries what the browser handed back on the loopback listener.
 type callbackResult struct {
@@ -299,7 +304,7 @@ func Login(ctx context.Context, client *Client, options Options) (Credentials, e
 			result = candidate
 		case <-waitContext.Done():
 			if errors.Is(waitContext.Err(), context.DeadlineExceeded) {
-				return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser", timeout)
+				return Credentials{}, fmt.Errorf("timed out after %s waiting for the browser; run 'shell auth' again for a fresh link", timeout)
 			}
 			return Credentials{}, waitContext.Err()
 		}
