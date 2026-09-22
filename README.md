@@ -139,6 +139,7 @@ and `sqlite3` executable are required. See [setup, delivery, and privacy limits]
 | Browser input | Runs with the wrapped process's local permissions |
 | Password recovery | Local session or optional personal vault; no service backdoor |
 | Plain transport mode | Explicit `--no-e2ee` only |
+| Public-page analytics | Opt-in Google Analytics on `shell.online` landing/docs only; never on viewer, app, or stats pages. Sanitized canonical URL, no session or terminal data. Withdrawable via on-page preferences. |
 
 In v0.21.2 the browser's session-password cache is memory-only: after a reload a
 session recovers from the account's encrypted vault, or requires the share

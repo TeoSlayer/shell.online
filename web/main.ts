@@ -66,9 +66,12 @@ import {
 import "./style.css";
 import "./relay-files.css";
 import "./landing.css";
+import { initAnalytics } from "./analytics";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
+
+initAnalytics();
 
 type TerminalColorMode = "dark" | "light";
 const TYPING_LEASE_MS = 1_800;
