@@ -97,10 +97,10 @@ describe("public event delivery", () => {
     initAnalytics();
     trackPublicEvent("copy", "install");
     trackPublicEvent("cta_click", "start_hero");
-    expect(vi.mocked(fetch).mock.calls).toHaveLength(3);
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(5);
     const events = vi
       .mocked(fetch)
-      .mock.calls.map(([, options]) => JSON.parse(String(options?.body)));
+      .mock.calls.filter(([url]) => url === "/api/events").map(([, options]) => JSON.parse(String(options?.body)));
     expect(events).toEqual([
       { event: "page_loaded", target: "landing", source: "x" },
       { event: "copy", target: "install", source: "x" },
@@ -115,8 +115,11 @@ describe("public event delivery", () => {
       "landing_cta",
     ]);
     expect(JSON.stringify(commands)).not.toContain("PRIVATE_MARKER");
+    const posthog = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).startsWith("https://us.i.posthog.com/"));
+    expect(posthog.map(([, options]) => JSON.parse(String(options?.body)).event)).toEqual(["command_copy", "landing_cta"]);
+    expect(JSON.stringify(posthog)).not.toContain("PRIVATE_MARKER");
     trackPublicEvent("copy", "PRIVATE_MARKER");
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(5);
   });
   it("honors opt-out for both marketing event destinations", async () => {
     Object.defineProperty(document, "cookie", {

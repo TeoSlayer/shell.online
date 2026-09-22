@@ -58,7 +58,7 @@ describe("secureAssetResponse CSP Google Analytics endpoints", () => {
   it("does NOT allow GA on private session paths", () => {
     const res = secureAssetResponse(htmlResponse(), "/s/abcdefghijklmnopqrstuvwxyz012345/", "shell.online");
     const policy = csp(res);
-    expect(policy).toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+    expect(policy).toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws: https://us.i.posthog.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
   });
 
   it("does NOT allow GA on stats hostname", () => {

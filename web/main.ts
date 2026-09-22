@@ -64,11 +64,16 @@ import "./style.css";
 import "./relay-files.css";
 import "./landing.css";
 import { initAnalytics } from "./analytics";
+import { observeProductPage, trackProduct } from "./posthog";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
 
 initAnalytics();
+observeProductPage();
+document.addEventListener("click", (event) => {
+  if (event.target instanceof Element && event.target.closest("#issue-open")) trackProduct("report_opened", { target: "feedback" });
+});
 
 type TerminalColorMode = "dark" | "light";
 const TYPING_LEASE_MS = 1_800;
@@ -1102,7 +1107,12 @@ function renderTerminal(sessionId: string): void {
       if (!waitingForCapacity && !compactSessionQuery.matches && !readOnly) terminal.focus();
     });
 
+    let analyticsConnected = false;
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
+      if (!analyticsConnected) {
+        analyticsConnected = true;
+        trackProduct("terminal_connected");
+      }
       if (typeof event.data === "string") {
         handleControlMessage(event.data);
         return;

@@ -3,10 +3,12 @@ import {
   resolveCurrentDocumentationRoute,
 } from "./documentation";
 import { initAnalytics } from "./analytics";
+import { observeProductPage } from "./posthog";
 
 const app = document.querySelector<HTMLElement>("#app");
 const route = resolveCurrentDocumentationRoute(location.pathname);
 initAnalytics();
+observeProductPage();
 if (app && route)
   void renderDocumentation(app, route, () => {
     app.innerHTML =

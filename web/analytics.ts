@@ -1,6 +1,7 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
 import { campaignMedium, isPublicEvent, publicSource } from "../shared/public-attribution";
+import { trackProduct } from "./posthog";
 
 const GA_ID = "G-101HMD03VD";
 const LEGACY_CONSENT_COOKIE = "shell_analytics_consent";
@@ -145,6 +146,7 @@ export function trackPublicEvent(event: string, target: string): void {
   if (!isPublicAnalyticsUrl(url) || !isPublicEvent(event, target) || isGpcOrDnt() || hasGaDisableFlag()) return;
   try { if (hasLegacyDecline()) return; } catch { return; }
   sendPublicEvent(event, target, url);
+  trackProduct(event === "copy" ? "command_copy" : "landing_cta", { target, source: publicSource(url, document.referrer) });
   if (gtagLoaded) {
     const gtag = (window as unknown as { gtag: GtagFn }).gtag;
     gtag("event", event === "copy" ? "command_copy" : "landing_cta", { target, ...gtagConfig(url) });

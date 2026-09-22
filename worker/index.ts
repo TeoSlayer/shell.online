@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { sendPosthog } from "../shared/posthog";
 import { safeSource } from "../shared/public-attribution";
 import {
   decodeResize,
@@ -167,6 +168,7 @@ interface WaitUntilContext {
 }
 
 interface Env {
+  POSTHOG_ENABLED?: string;
   SESSIONS: DurableObjectNamespace<TerminalSession>;
   STATS: DurableObjectNamespace<StatsStore>;
   SESSION_CREATION_LIMITER: RateLimitBinding;
@@ -637,6 +639,12 @@ function recordAnalytics(
 ): void {
   writeAnalytics(env.ANALYTICS, event, target, analyticsContext);
   waitUntilContext.waitUntil(submitStatsEvent(env.STATS, event, target, analyticsContext));
+  if (env.POSTHOG_ENABLED === "1" && !["page_view", "page_loaded", "copy", "cta_click", "share_opened", "stats_view"].includes(event)) {
+    waitUntilContext.waitUntil(sendPosthog(event, "00000000-0000-4000-8000-000000000001", {
+      surface: "relay", target, outcome: event === "install_outcome" ? target : undefined,
+      device: analyticsContext.device, source: analyticsContext.referrer,
+    }));
+  }
 }
 
 async function recordAssetAnalytics(
@@ -3882,11 +3890,12 @@ export function secureAssetResponse(response: Response, pathname: string, hostna
   const headers = new Headers(response.headers);
   const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
   const gaAllowed = isHtmlDocument && hostname === "shell.online" && isPublicAnalyticsPath(pathname);
+  const posthogAllowed = gaAllowed || (isHtmlDocument && hostname === "shell.online" && /^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(pathname));
   headers.set("Content-Security-Policy", [
     "default-src 'self'",
     `script-src 'self'${gaAllowed ? " https://www.googletagmanager.com" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
+    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}${posthogAllowed ? " https://us.i.posthog.com" : ""}`,
     `img-src 'self' data:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
     "font-src 'self'",
     "object-src 'none'",
