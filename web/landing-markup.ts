@@ -66,7 +66,7 @@ export function landingMarkup(): string {
               <div class="copy-command"><code id="run-command">shell codex</code><button type="button" data-copy="run" aria-label="Copy start command">Copy</button></div>
               <p class="step-note">This starts a new shared session. It does not attach to a process that is already running.</p>
             </li>
-            <li><div class="step-title"><span>3</span><h3>Open the link on your phone</h3></div><p>Your terminal prints a link, password and QR code. Scan the QR code, or open the link and enter the password.</p><div class="setup-result"><span aria-hidden="true">↗</span><strong>Same session. Now on your phone.</strong></div><p class="step-note">Keep your computer awake and connected to the internet.</p></li>
+            <li><div class="step-title"><span>3</span><h3>Open the link on your phone</h3></div><p>Your terminal prints a link, password and QR code. Scan the QR code, or open the link and enter the password.</p><div class="setup-result"><span aria-hidden="true">↗</span><strong>Same session. Now anywhere you can open a browser.</strong></div><p class="step-note">Keep your computer awake and connected to the internet.</p></li>
           </ol>
           <p class="copy-feedback" role="status" aria-live="polite"></p>
           <noscript><p>You can select and copy the commands above. Windows PowerShell: <code>irm https://shell.online/install.ps1 | iex</code>. Prefer Claude Code or OpenCode? Run <code>shell claude</code> or <code>shell opencode</code>.</p></noscript>
