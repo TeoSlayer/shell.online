@@ -17,6 +17,8 @@ const PHONE = "(max-width: 900px)";
 
 /* Read by .panes; see terminal.css. */
 const PROPERTY = "--pane-height";
+/* A form can scroll in less room than the terminal's minimum usable height. */
+const GATE_PROPERTY = "--pane-gate-height";
 
 /* Read by anything that has to sit clear of the keyboard; see chat.css. */
 const INSET_PROPERTY = "--keyboard-inset";
@@ -125,6 +127,8 @@ export function paneHeight(input: {
   paneTop: number;
   /** Space to leave below the pane. */
   gap?: number;
+  /** Unlock overlays use zero; the terminal retains its usable minimum. */
+  minimum?: number;
   /**
    * The zoom the answer will be read under. Everything measured here is in
    * viewport pixels, but the property is read inside a zoomed subtree, where
@@ -137,7 +141,7 @@ export function paneHeight(input: {
   const gap = input.gap ?? GAP;
   const zoom = input.zoom && input.zoom > 0 ? input.zoom : 1;
   const available = input.viewportHeight + input.offsetTop - input.paneTop - gap;
-  return Math.max(MINIMUM, Math.round(available / zoom));
+  return Math.max(input.minimum ?? MINIMUM, Math.round(available / zoom));
 }
 
 /**
@@ -231,16 +235,17 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
    * layout in CSS and means this hook reads the DOM without reshaping it.
    */
   /** What was last written, so an unchanged measurement costs no layout. */
-  let published = { visible: -1, pane: -1, inset: -1 };
+  let published = { visible: -1, pane: -1, gate: -1, inset: -1 };
   let frame = 0;
 
   const clear = () => {
     root.style.removeProperty(PROPERTY);
+    root.style.removeProperty(GATE_PROPERTY);
     root.style.removeProperty(INSET_PROPERTY);
     root.style.removeProperty(VISIBLE_PROPERTY);
     root.removeAttribute(STATE_ATTRIBUTE);
     root.removeAttribute(SURFACE_ATTRIBUTE);
-    published = { visible: -1, pane: -1, inset: -1 };
+    published = { visible: -1, pane: -1, gate: -1, inset: -1 };
   };
 
   const measure = () => {
@@ -291,6 +296,14 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
     if (moved(pane, published.pane)) {
       published.pane = pane;
       root.style.setProperty(PROPERTY, `${pane}px`);
+    }
+    const gate = paneHeight({
+      viewportHeight: viewport.height, offsetTop: viewport.offsetTop,
+      paneTop, zoom, minimum: 0,
+    });
+    if (moved(gate, published.gate)) {
+      published.gate = gate;
+      root.style.setProperty(GATE_PROPERTY, `${gate}px`);
     }
     /*
      * Published as well as used, because the pane is not the only thing that

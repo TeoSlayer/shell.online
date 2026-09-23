@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { Check, Copy, DownloadSimple, Fingerprint, Key, LockKey, ShieldCheck, Warning } from "@phosphor-icons/react";
 import { Wordmark } from "../components/Wordmark";
 import { Button } from "../components/Button";
@@ -263,8 +263,9 @@ export function VaultSetup({ reset, onDone }: { reset: boolean; onDone?: () => v
 }
 
 /** Opens an existing vault in a browser that has not opened it before. */
-export function VaultUnlock() {
+export function VaultUnlock({ compact = false, allowReset = true }: { compact?: boolean; allowReset?: boolean } = {}) {
   const vault = useVault();
+  const inputId = useId();
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"password" | "recovery">(
     vault.unlockMethods.password ? "password" : "recovery",
@@ -272,6 +273,7 @@ export function VaultUnlock() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [resetting, setResetting] = useState(false);
+  const Heading = compact ? "h2" : "h1";
 
   if (resetting) return <VaultSetup reset />;
 
@@ -291,12 +293,13 @@ export function VaultUnlock() {
 
   return (
     <>
-      <span className="consent-mark" aria-hidden="true">
+      {!compact && <span className="consent-mark" aria-hidden="true">
         <LockKey size={22} />
-      </span>
-      <h1>Unlock your session vault</h1>
+      </span>}
+      <Heading>{compact ? "Unlock your vault" : "Unlock your session vault"}</Heading>
       <p>
-        Use your vault password or passkey. Recovery is only for when both are unavailable.
+        {compact ? "Use your vault password, passkey or recovery key."
+          : "Use your vault password or passkey. Recovery is only for when both are unavailable."}
       </p>
 
       {error && <Alert tone="error">{error}</Alert>}
@@ -339,7 +342,7 @@ export function VaultUnlock() {
       </div>
 
       <form className="vault-form" onSubmit={handleSubmit}>
-        <label className="vault-label" htmlFor="vault-recovery">
+        <label className="vault-label" htmlFor={inputId}>
           {mode === "password" ? "Vault password" : "Recovery key"}
         </label>
         {/*
@@ -348,7 +351,7 @@ export function VaultUnlock() {
         */}
         {mode === "password" ? (
           <input
-            id="vault-recovery"
+            id={inputId}
             className="vault-input"
             type="password"
             value={text}
@@ -358,7 +361,7 @@ export function VaultUnlock() {
           />
         ) : (
         <textarea
-          id="vault-recovery"
+          id={inputId}
           className="vault-input vault-input-wide"
           rows={2}
           value={text}
@@ -381,7 +384,7 @@ export function VaultUnlock() {
         </div>
       </form>
 
-      <details className="vault-lost">
+      {allowReset && <details className="vault-lost">
         <summary>Cannot use any unlock method?</summary>
         <p>
           If your password, passkeys and recovery key are all unavailable, you
@@ -392,7 +395,7 @@ export function VaultUnlock() {
         <Button type="button" variant="ghost" onClick={() => setResetting(true)}>
           Make a new vault
         </Button>
-      </details>
+      </details>}
     </>
   );
 }

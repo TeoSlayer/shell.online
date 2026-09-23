@@ -713,9 +713,9 @@ export function Workspace() {
     <AppShell
       title="Sessions"
       aside={
-        <button type="button" className="new-session" onClick={() => setComposing(true)}>
+        <button type="button" className="new-session" aria-label="New session" title="New session" onClick={() => setComposing(true)}>
           <Plus size={16} weight="bold" />
-          Session
+          <span className="new-session-label">Session</span>
         </button>
       }
     >

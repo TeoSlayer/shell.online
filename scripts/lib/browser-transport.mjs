@@ -159,6 +159,7 @@ export async function launchChromeTransport({ profile }) {
     },
     setViewport: async ({ width, height, dpr, mobile }) => {
       await request('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: dpr, mobile });
+      await request('Emulation.setTouchEmulationEnabled', { enabled: Boolean(mobile) });
       return { width, height, dpr };
     },
     // Trusted touch input, as a phone's finger produces it. type is
@@ -172,6 +173,17 @@ export async function launchChromeTransport({ profile }) {
     flick: ({ x, y, yDistance, speed }) => request('Input.synthesizeScrollGesture', {
       x, y, yDistance, speed, gestureSourceType: 'touch', preventFling: false,
     }),
+    // Trusted browser input, not a scripted scrollTop change. Only available
+    // in Chrome; Safari still checks real native layout/scroll reachability.
+    swipe: async ({ x, y, deltaY }) => {
+      await request('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+      for (let step = 1; step <= 8; step++) {
+        await request('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y + deltaY * step / 8 }] });
+        await delay(35);
+      }
+      await request('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await delay(250);
+    },
     setEmulatedTheme: (theme) => request('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-color-scheme', value: theme }],
     }),

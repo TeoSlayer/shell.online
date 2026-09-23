@@ -6,6 +6,10 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Locked-terminal forms scroll within the app on short phone screens, keeping
+  password submission and help reachable above navigation. The same prompt offers
+  vault unlock or a session password; unlocking retries a saved password without
+  reconnecting. New session is a compact, labelled touch target on phones.
 - Tablet navigation no longer consumes the app's terminal workspace. Short
   landscape windows keep terminal rows and overflow tabs reachable.
 - Shared-session headers keep Controls, Report, connection state and the MCP
