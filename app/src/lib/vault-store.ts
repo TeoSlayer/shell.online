@@ -73,20 +73,60 @@ export async function loadLocalVault(uid: string): Promise<LocalVault | null> {
   }
 }
 
-/** Keeps the unlocked vault. False when this browser cannot keep it. */
-export async function saveLocalVault(vault: LocalVault): Promise<boolean> {
+/**
+ * Keeps the unlocked vault. False when this browser cannot keep it.
+ *
+ * The optional `isCurrent` predicate is checked before the database opens
+ * and again immediately before the write. A stale save held behind a slow
+ * openDatabase() that resolves after a lock or a newer unlock must not
+ * overwrite the newer valid key.
+ */
+export async function saveLocalVault(vault: LocalVault, isCurrent?: () => boolean): Promise<boolean> {
   try {
-    await run("readwrite", (store) => store.put(vault));
-    return true;
+    if (isCurrent && !isCurrent()) return false;
+    const database = await openDatabase();
+    try {
+      if (isCurrent && !isCurrent()) return false;
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE, "readwrite");
+        transaction.objectStore(STORE).put(vault);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+      return true;
+    } finally {
+      database.close();
+    }
   } catch {
     return false;
   }
 }
 
-/** Locks the vault in this browser. The vault itself is untouched. */
-export async function clearLocalVault(uid: string): Promise<void> {
+/**
+ * Locks the vault in this browser. The vault itself is untouched.
+ *
+ * The optional `isCurrent` predicate is checked before the database opens
+ * and again immediately before the delete. A stale clear held behind a slow
+ * openDatabase() that resolves after a newer valid unlock must not erase
+ * the newer key.
+ */
+export async function clearLocalVault(uid: string, isCurrent?: () => boolean): Promise<void> {
   try {
-    await run("readwrite", (store) => store.delete(uid));
+    if (isCurrent && !isCurrent()) return;
+    const database = await openDatabase();
+    try {
+      if (isCurrent && !isCurrent()) return;
+      await new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(STORE, "readwrite");
+        transaction.objectStore(STORE).delete(uid);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    } finally {
+      database.close();
+    }
   } catch {
     /* nothing kept, nothing to clear */
   }
