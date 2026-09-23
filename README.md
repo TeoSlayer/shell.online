@@ -105,7 +105,7 @@ This is terminal output from the host computer, not a second copy of the agent.
 
 ## Install or build the version you mean to use
 
-The latest published CLI release is **v0.23.0**. `main` also contains newer app
+The latest published CLI release is **v0.23.1**. `main` also contains newer app
 and integration work; a merged change is not proof that every hosted component
 or running CLI host has been updated. Check the [changelog](CHANGELOG.md) and
 [release notes](https://github.com/TeoSlayer/shell.online/releases).
@@ -122,9 +122,9 @@ DragonFly BSD and Solaris. Phones need only a browser.
 Install **Git and Go 1.26.8**. Node.js is not needed to build the CLI or use the hosted relay.
 
 ```sh
-git clone --depth 1 --branch v0.23.0 https://github.com/TeoSlayer/shell.online.git
+git clone --depth 1 --branch v0.23.1 https://github.com/TeoSlayer/shell.online.git
 cd shell.online
-go build -buildvcs=false -trimpath -ldflags="-X main.version=0.23.0" -o shell ./cmd/shell
+go build -buildvcs=false -trimpath -ldflags="-X main.version=0.23.1" -o shell ./cmd/shell
 ./shell --version
 ```
 

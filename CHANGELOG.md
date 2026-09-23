@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.23.1] — 2026-09-23
+
 ### Added
 
 - Teammates can ask a session's owner for its password from the unlock prompt.
@@ -20,6 +22,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Looking up local sessions no longer deletes their control sockets or saved
+  credentials when a connection is denied, times out or answers unexpectedly.
+  A healthy host remains discoverable even if an older CLI marked it abandoned.
+- Automatic account cleanup no longer closes a session by ID alone, which could
+  mistake a resumed run for its predecessor. Explicit stop and normal process
+  exit still work; an unreported end may remain in the app until relay expiry.
 - Chat no longer treats wrapped, unsent Claude Code input as a submitted message
   or repeats a prompt sent from the same browser. Unchanged frames avoid redraws,
   while terminal colour and formatting changes are still rendered.
