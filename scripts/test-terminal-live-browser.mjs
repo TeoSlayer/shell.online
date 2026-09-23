@@ -232,8 +232,16 @@ function auditExpression({ rootKey, roi, base64, greenRow, blackRow, statusRow }
     const cols = term.cols, rows = term.rows;
     const cellW = sr.width / cols, cellH = sr.height / rows;
     const cellHasInk = (r, c) => {
-      const from = sr.left + c * cellW - 0.5, to = sr.left + (c + 1) * cellW + 0.5;
-      for (const dy of [0.35, 0.5, 0.65]) { const y = sr.top + (r + dy) * cellH; for (let x = from; x <= to; x += 0.25) if (ink(sample(x, y))) return true; }
+      // Inspect every pixel centre inside the cell, not three scanlines that
+      // can miss a one-pixel box border with Linux's tiny-font rasterization.
+      const x0 = Math.max(0, Math.ceil((sr.left + c * cellW - ${JSON.stringify(roi.x)}) * sx - 0.5));
+      const x1 = Math.min(cv.width, Math.ceil((sr.left + (c + 1) * cellW - ${JSON.stringify(roi.x)}) * sx - 0.5));
+      const y0 = Math.max(0, Math.ceil((sr.top + r * cellH - ${JSON.stringify(roi.y)}) * sy - 0.5));
+      const y1 = Math.min(cv.height, Math.ceil((sr.top + (r + 1) * cellH - ${JSON.stringify(roi.y)}) * sy - 0.5));
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = (y * cv.width + x) * 4;
+        if (ink([px[i], px[i + 1], px[i + 2]])) return true;
+      }
       return false;
     };
     const toolsEl = pane.querySelector('.pane-tools');
@@ -310,7 +318,7 @@ async function auditReport(rootKey, { label, greenRow, blackRow, statusRow }) {
 
 function assertAudit(report, label, statusRow) {
   check(report.vt.topLeft && report.vt.topRight && report.vt.bottomLeft && report.vt.bottomRight, `${label}: VT border cells`);
-  check(report.paint.rowsWithoutInk.length === 0, `${label}: every row painted`);
+  check(report.paint.rowsWithoutInk.length === 0, `${label}: every row painted (missing: ${report.paint.rowsWithoutInk.join(',') || 'none'})`);
   check(report.paint.borderGaps.length === 0, `${label}: both border columns painted`);
   check(report.paint.greenCoverage >= 0.8, `${label}: green block painted`);
   check(report.paint.blackCoverage >= 0.5, `${label}: black block painted`);
@@ -414,6 +422,23 @@ try {
   const rows = first.rows;
   const greenRow = Math.floor(rows / 2), blackRow = 1, statusRow = rows - 3;
   await audit("a", { label: `${browser}-frozen`, greenRow, blackRow, statusRow });
+
+  // Keep the actual host paused and hide only a paint row. The audit must
+  // catch missing pixels even though the decrypted VT border still exists.
+  await transport.call(async () => {
+    const style = document.createElement('style');
+    style.id = 'negative-paint-control';
+    style.textContent = '[data-live-root="a"] .xterm-rows > div:last-child { visibility: hidden !important; }';
+    document.head.append(style);
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  try {
+    const missing = await auditReport("a", { label: `${browser}-missing-bottom-row`, greenRow, blackRow, statusRow });
+    check(missing.vt.bottomLeft && missing.vt.bottomRight, "negative control retains actual VT border");
+    check(JSON.stringify(missing.paint.rowsWithoutInk) === JSON.stringify([rows - 1]), "negative control detects exactly the unpainted row");
+  } finally {
+    await evaluate(`document.getElementById('negative-paint-control').remove()`);
+  }
 
   stage = "live streaming and tiny pane";
   rmSync(pauseFile, { force: true });
