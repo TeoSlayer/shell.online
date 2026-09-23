@@ -525,14 +525,18 @@ try {
   // first so its viewers cannot impose a competing canonical grid.
   await transport.navigate(browserShareUrl(session));
   await waitForPage(() => evaluate(`!!document.querySelector('#terminal .xterm-screen') && document.querySelector('#session-status').classList.contains('connected')`), "public viewer decrypted");
-  for (const [width, height] of [[1440,900],[901,768],[900,768],[761,700],[760,700],[561,700],[560,700],[481,700],[480,700],[371,700],[370,700],[320,640],[390,844],[850,480],[600,480],[1024,480],[1440,900]]) {
+  for (const theme of ["light", "dark"]) {
+  await evaluate(`(() => {document.getElementById('settings-open').click();document.querySelector('#theme-options [data-theme="${theme}"]').click();document.getElementById('settings-close').click();})()`);
+  const colors = await evaluate(`(() => {const page=document.querySelector('.session-page'),header=document.querySelector('.session-header'),button=document.getElementById('settings-open');return {scheme:getComputedStyle(page).colorScheme,paper:getComputedStyle(page).backgroundColor,header:getComputedStyle(header).backgroundColor,button:getComputedStyle(button).color,saved:localStorage.getItem('shell-online-terminal-theme')};})()`);
+  check(colors.scheme===theme && colors.saved===theme && colors.paper===colors.header && colors.paper===(theme==='dark'?'rgb(22, 25, 20)':'rgb(243, 241, 233)'), `${browser} public ${theme}: real preference and shared brand palette`);
+  for (const [width, height] of [[1440,900],[901,768],[900,768],[761,700],[760,700],[561,700],[560,700],[481,700],[480,700],[371,700],[370,700],[320,640],[390,844],[850,480],[600,480],[844,390],[667,375],[1024,480],[1440,900]]) {
     await transport.setViewport({ width, height, dpr: 1, mobile: false });
     await delay(350);
     const layout = await evaluate(`(() => {
       const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,b:r.bottom}};
       return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,page:rect('.session-page'),header:rect('.session-header'),identity:rect('.session-identity'),actions:rect('.session-actions'),screen:rect('#terminal .xterm-screen'),wrap:rect('#terminal-wrap'),settings:rect('#settings-open'),report:rect('#issue-open')};
     })()`);
-    writeFileSync(join(shots, `${browser}-public-${layout.width}-${layout.height}.png`), Buffer.from(await transport.screenshot(), "base64"));
+    writeFileSync(join(shots, `${browser}-public-${theme}-${layout.width}-${layout.height}.png`), Buffer.from(await transport.screenshot(), "base64"));
     check(!layout.overflow, `${browser} public ${layout.width}x${layout.height}: no page overflow`);
     check(layout.page.b <= layout.height + 2 && layout.screen.b <= layout.wrap.b + 2 && layout.screen.right <= layout.wrap.right + 2, `${browser} public ${layout.width}: complete terminal fits`);
     check(layout.settings.x >= 0 && layout.settings.right <= layout.width && layout.report.x >= 0 && layout.actions.b <= layout.header.b + 2, `${browser} public ${layout.width}: header actions fit`);
@@ -551,7 +555,15 @@ try {
       return {open:d.open,x:r.x,y:r.y,right:r.right,b:r.bottom,width:innerWidth,height:innerHeight,lastVisible:last.bottom<=box.bottom+2};
     })()`);
     check(dialog.open && dialog.x >= 0 && dialog.y >= 0 && dialog.right <= dialog.width + 2 && dialog.b <= dialog.height + 2 && dialog.lastVisible, `${browser} public ${layout.width}: controls dialog fits and scrolls`);
+    if (width===390 || width===1440) writeFileSync(join(shots, `${browser}-controls-${theme}-${width}.png`), Buffer.from(await transport.screenshot(), "base64"));
     await evaluate(`document.getElementById('settings-close').click()`);
+  }
+  }
+  await evaluate(`(() => {document.getElementById('settings-open').click();document.querySelector('#theme-options [data-theme="system"]').click();document.getElementById('settings-close').click();})()`);
+  for(const theme of transport.setEmulatedTheme ? ['dark','light'] : [await evaluate(`matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'`)]) {
+    if (transport.setEmulatedTheme) await transport.setEmulatedTheme(theme);
+    await delay(100);
+    check(await evaluate(`document.querySelector('.session-page').classList.contains('theme-${theme}') && localStorage.getItem('shell-online-terminal-theme')===null`), `${browser} public system preference: ${theme}`);
   }
 
   stage = "public password gate responsive layout";
@@ -564,6 +576,9 @@ try {
   await transport.navigate("about:blank");
   await transport.navigate(lockedLink.toString());
   await waitForPage(() => evaluate(`!!document.querySelector('.encryption-gate:not([hidden])')`), "password required on a fresh viewer");
+  for (const theme of ['light','dark']) {
+  // Header switch remains reachable before the password is supplied.
+  await evaluate(`(() => {if(!document.querySelector('.session-page').classList.contains('theme-${theme}'))document.getElementById('theme-toggle').click();})()`);
   for (const [width, height] of [[320,640],[760,480],[1024,768]]) {
     await transport.setViewport({width,height,dpr:1,mobile:false});
     await evaluate(`(() => {const help=document.querySelector('.encryption-help');if(help)help.open=true;})()`);
@@ -575,6 +590,8 @@ try {
       return {top,gateTop:box.top,bottom,gateBottom:box.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};
     })()`);
     check(!gate.overflow && gate.top>=gate.gateTop-1 && gate.bottom<=gate.gateBottom+1, `${browser} password ${width}: expanded help and form are reachable`);
+    writeFileSync(join(shots, `${browser}-password-${theme}-${width}.png`), Buffer.from(await transport.screenshot(), "base64"));
+  }
   }
 
   console.log(`screenshots in ${shots}`);

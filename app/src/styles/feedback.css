@@ -75,7 +75,7 @@
 
 .feedback-sheet {
   width: min(520px, 100%);
-  margin-top: 6vh;
+  margin-top: 0;
 }
 
 .feedback-form {

@@ -63,6 +63,7 @@ import {
 import "./style.css";
 import "./relay-files.css";
 import "./landing.css";
+import "./session-theme.css";
 import { initAnalytics } from "./analytics";
 import { sessionConnectionLabel } from "./session-status";
 import { beginProductOperation, observeProductPage, trackProduct } from "./posthog";
@@ -88,10 +89,10 @@ interface PresenceParticipant {
 
 const terminalThemes: Record<TerminalColorMode, ITheme> = {
   dark: {
-    background: "#0b0d12",
+    background: "#161914",
     foreground: "#eef1f6",
     cursor: "#dce6ff",
-    cursorAccent: "#0b0d12",
+    cursorAccent: "#161914",
     selectionBackground: "#496cae99",
     selectionInactiveBackground: "#36466588",
     black: "#586174",
@@ -112,10 +113,10 @@ const terminalThemes: Record<TerminalColorMode, ITheme> = {
     brightWhite: "#ffffff",
   },
   light: {
-    background: "#f8f9fb",
+    background: "#f3f1e9",
     foreground: "#202633",
     cursor: "#25304a",
-    cursorAccent: "#f8f9fb",
+    cursorAccent: "#f3f1e9",
     selectionBackground: "#7196d34d",
     selectionInactiveBackground: "#8da0be38",
     black: "#303846",
@@ -697,7 +698,7 @@ function renderTerminal(sessionId: string): void {
     sessionPage.classList.toggle("theme-dark", colorMode === "dark");
     sessionPage.classList.toggle("theme-light", colorMode === "light");
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-      ?.setAttribute("content", colorMode === "dark" ? "#11141b" : "#f1f3f7");
+      ?.setAttribute("content", colorMode === "dark" ? "#161914" : "#f3f1e9");
     terminal.options.theme = terminalThemes[colorMode];
     themeButton.classList.toggle("shows-sun", colorMode === "dark");
     themeButton.classList.toggle("shows-moon", colorMode === "light");

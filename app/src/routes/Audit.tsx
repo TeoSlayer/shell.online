@@ -376,9 +376,9 @@ export function Audit() {
     <AppShell
       title="Audit log"
       aside={
-        <Button type="button" onClick={handleExport} busy={exporting} busyLabel="Exporting">
+        <Button className="topbar-compact-action" aria-label="Export CSV" type="button" onClick={handleExport} busy={exporting} busyLabel="Exporting">
           <DownloadSimple size={15} weight="bold" />
-          Export CSV
+          <span>Export CSV</span>
         </Button>
       }
     >

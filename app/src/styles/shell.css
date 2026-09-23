@@ -993,3 +993,28 @@
     padding-left: max(14px, env(safe-area-inset-left));
   }
 }
+/* Short landscape windows need space for the shared terminal grid, not the
+   portrait-only magnification. Keep every destination and 44px touch targets. */
+@media (min-width: 761px) and (max-width: 900px) and (max-height: 450px) {
+  .rail { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px 10px; }
+  .rail-head { padding: 0; }
+  .rail-link { padding-inline: 8px; font-size: 13px; gap: 6px; }
+  .rail-foot { position: static; }
+}
+
+@media (max-width: 760px) and (max-height: 450px) and (min-aspect-ratio: 4/3) {
+  :root { zoom: 1; --zoom: 1; }
+  .shell .rail { padding-block: 2px; }
+  .shell .rail-link { height: 44px; flex-direction: row; gap: 5px; }
+}
+
+@media (max-width: 400px) {
+  .topbar-right .topbar-compact-action { min-width: 38px; padding-inline: 8px; }
+  .topbar-compact-action > span:not(.spinner) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}

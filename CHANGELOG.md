@@ -12,6 +12,11 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   encryption disclosure visible across phone, tablet and desktop widths.
 - Added Chrome CI and Safari-compatible responsive browser checks using real
   terminal rendering and an isolated Go host/relay.
+- Light, dark, and system appearance are selectable under Account. Shared links
+  use the same warm surfaces, readable controls and dialog styling as the app;
+  terminal ANSI colors are preserved.
+- Long team email addresses, comment actions and audit filters stay inside narrow
+  layouts. Compact landscape navigation leaves more room for the terminal.
 
 ## [0.23.0] — 2026-09-23
 

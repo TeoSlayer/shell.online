@@ -1,0 +1,129 @@
+/* Shared-link chrome uses the same warm paper / ink surfaces as the account
+ * app. Scoped to the viewer: never recolor application-supplied ANSI output,
+ * the marketing pages, avatars, or a terminal renderer's content. */
+.session-page.theme-light {
+  --viewer-paper: #f3f1e9;
+  --viewer-surface: #fcfbf7;
+  --viewer-ink: #191b18;
+  --viewer-muted: #686c63;
+  --viewer-line: #d7d5cc;
+  --viewer-line-strong: #c5c2b6;
+  --viewer-accent: #294ec8;
+  --viewer-accent-wash: #edf0fd;
+  --viewer-success: #2f6d4f;
+  --viewer-success-wash: #edf5f0;
+  --viewer-warning: #805617;
+  --viewer-warning-wash: #fbf1e6;
+  --viewer-danger: #a32b1c;
+  --viewer-danger-wash: #fbeeeb;
+  --viewer-primary: #1d201b;
+  --viewer-on-primary: #f4f5ed;
+  --viewer-scrim: rgb(243 241 233 / 85%);
+  --viewer-shadow: rgb(26 31 22 / 18%);
+}
+.session-page.theme-dark {
+  --viewer-paper: #161914;
+  --viewer-surface: #1d201b;
+  --viewer-ink: #f1f2ea;
+  --viewer-muted: #9ca194;
+  --viewer-line: #32362d;
+  --viewer-line-strong: #454a3f;
+  --viewer-accent: #adbcff;
+  --viewer-accent-wash: #1e2333;
+  --viewer-success: #8fd8bb;
+  --viewer-success-wash: #16241d;
+  --viewer-warning: #e8c38a;
+  --viewer-warning-wash: #2d2418;
+  --viewer-danger: #f0a495;
+  --viewer-danger-wash: #2c1a16;
+  --viewer-primary: #eceee2;
+  --viewer-on-primary: #14170f;
+  --viewer-scrim: rgb(22 25 20 / 85%);
+  --viewer-shadow: rgb(0 0 0 / 38%);
+}
+.session-page:is(.theme-light, .theme-dark) {
+  background: var(--viewer-paper);
+  color: var(--viewer-ink);
+  font-family: "Uncut Sans", system-ui, sans-serif;
+  --terminal-ui-surface: var(--viewer-surface);
+  --terminal-ui-fg: var(--viewer-ink);
+  --terminal-ui-line: var(--viewer-line);
+  --terminal-ui-muted: var(--viewer-muted);
+  --terminal-ui-hover: var(--viewer-accent-wash);
+  --terminal-ui-accent: var(--viewer-accent);
+}
+.session-page:is(.theme-light, .theme-dark) :is(.session-header, .terminal-wrap, .mobile-terminal-keys) {
+  background: var(--viewer-paper);
+  border-color: var(--viewer-line);
+  color: var(--viewer-ink);
+}
+.session-page:is(.theme-light, .theme-dark) :is(.session-header .wordmark, .session-header .wordmark span, #session-label, .settings-header h2, .latency-heading h3) { color: var(--viewer-ink); }
+.session-page:is(.theme-light, .theme-dark) :is(.session-header .wordmark i, .session-identity, .status.offline, .typing-status, .settings-kicker, .settings-card-heading, .zoom-ends, .settings-footer, .renderer-card > span, .latency-stats, .latency-stats b, .encryption-panel p, .encryption-panel label) { color: var(--viewer-muted); }
+.session-page:is(.theme-light, .theme-dark) :is(.settings-button, .theme-button, .settings-close, .renderer-card select, .encryption-panel input, .mobile-terminal-keys button) {
+  border-color: var(--viewer-line-strong);
+  border-radius: 10px;
+  background: var(--viewer-surface);
+  color: var(--viewer-ink);
+  box-shadow: none;
+}
+.session-page:is(.theme-light, .theme-dark) :is(.settings-button, .theme-button, .settings-close, .theme-options button, .settings-copy):hover {
+  border-color: var(--viewer-accent);
+  background: var(--viewer-accent-wash);
+  color: var(--viewer-accent);
+}
+.session-page:is(.theme-light, .theme-dark) :is(button, select, input, a, summary):focus-visible {
+  outline: 2px solid var(--viewer-accent);
+  outline-offset: 3px;
+}
+.session-page:is(.theme-light, .theme-dark) :is(.settings-dialog, .encryption-panel) {
+  border-color: var(--viewer-line);
+  border-radius: 18px;
+  background: var(--viewer-surface);
+  color: var(--viewer-ink);
+  box-shadow: 0 24px 80px var(--viewer-shadow);
+}
+.session-page:is(.theme-light, .theme-dark) .settings-dialog::backdrop { background: var(--viewer-scrim); }
+.session-page:is(.theme-light, .theme-dark) .encryption-gate { background: var(--viewer-scrim); }
+.session-page:is(.theme-light, .theme-dark) :is(.settings-header, .settings-footer) { border-color: var(--viewer-line); }
+.session-page:is(.theme-light, .theme-dark) :is(.settings-card, .latency-card, .theme-options) {
+  border-color: var(--viewer-line);
+  background: var(--viewer-paper);
+}
+.session-page:is(.theme-light, .theme-dark) .theme-options button { min-height: 44px; color: var(--viewer-muted); font-size: 11px; }
+.session-page:is(.theme-light, .theme-dark) .settings-card.renderer-card { row-gap: 6px; }
+.session-page:is(.theme-light, .theme-dark) .renderer-card > span { margin-top: 0; font-size: 10px; line-height: 1.4; }
+.session-page:is(.theme-light, .theme-dark) .theme-options button.selected { background: var(--viewer-surface); color: var(--viewer-ink); box-shadow: 0 1px 3px var(--viewer-shadow); }
+.session-page:is(.theme-light, .theme-dark) :is(.settings-copy, .encryption-panel button) {
+  border-color: var(--viewer-primary);
+  border-radius: 10px;
+  background: var(--viewer-primary);
+  color: var(--viewer-on-primary);
+}
+.session-page:is(.theme-light, .theme-dark) :is(.settings-card output, .latency-card, .latency-heading strong, .settings-footer > div a) { color: var(--viewer-accent); }
+.session-page:is(.theme-light, .theme-dark) .latency-grid { stroke: var(--viewer-line); }
+.session-page:is(.theme-light, .theme-dark) .latency-point { fill: var(--viewer-accent); stroke: var(--viewer-paper); }
+.session-page:is(.theme-light, .theme-dark) .session-access { border-color: var(--viewer-line-strong); border-radius: 7px; background: var(--viewer-surface); color: var(--viewer-muted); }
+.session-page:is(.theme-light, .theme-dark) :is(.session-access.encryption, .settings-copy[data-state="copied"]) { border-color: var(--viewer-success); background: var(--viewer-success-wash); color: var(--viewer-success); }
+.session-page:is(.theme-light, .theme-dark) :is(.session-access.encryption.unencrypted, .terminal-input-warning) { border-color: var(--viewer-warning); background: var(--viewer-warning-wash); color: var(--viewer-warning); }
+.session-page:is(.theme-light, .theme-dark) .settings-copy[data-state="failed"] { border-color: var(--viewer-danger); background: var(--viewer-danger-wash); color: var(--viewer-danger); }
+.session-page:is(.theme-light, .theme-dark) .status.connected { color: var(--viewer-success); }
+.session-page:is(.theme-light, .theme-dark) .status.connected i { background: var(--viewer-success); }
+.session-page:is(.theme-light, .theme-dark) .status.state-full { color: var(--viewer-warning); }
+.session-page:is(.theme-light, .theme-dark) .presence-avatar { border-color: var(--viewer-paper); }
+.session-page:is(.theme-light, .theme-dark) .presence-more { background: var(--viewer-surface); color: var(--viewer-muted); }
+.session-page:is(.theme-light, .theme-dark) .presence-agent { border-color: var(--viewer-accent); background: var(--viewer-accent-wash); color: var(--viewer-accent); border-radius: 7px; }
+.session-page:is(.theme-light, .theme-dark) :is(.session-offline, .refstream-alpha-notice) { border-color: var(--viewer-line-strong); background: var(--viewer-surface); color: var(--viewer-ink); }
+.session-page:is(.theme-light, .theme-dark) .session-offline span { color: var(--viewer-muted); }
+.session-page:is(.theme-light, .theme-dark) .session-offline strong { color: var(--viewer-ink); }
+.session-page:is(.theme-light, .theme-dark) :is(.relay-files-button, .relay-files-panel) {
+  --terminal-ui-surface: var(--viewer-surface);
+  --terminal-ui-fg: var(--viewer-ink);
+  --terminal-ui-line: var(--viewer-line);
+  --terminal-ui-muted: var(--viewer-muted);
+  --terminal-ui-hover: var(--viewer-accent-wash);
+  --terminal-ui-accent: var(--viewer-accent);
+  font-family: inherit;
+}
+.session-page:is(.theme-light, .theme-dark) .relay-files-button { border-radius: 10px; }
+.session-page:is(.theme-light, .theme-dark) .relay-files-panel { top: calc(var(--session-header-height) + 8px); border-radius: 18px; }
+.session-page:is(.theme-light, .theme-dark) :is(.terminal .xterm-viewport, .terminal .xterm-scrollable-element) { background-color: var(--viewer-paper) !important; scrollbar-color: var(--viewer-line-strong) transparent; }

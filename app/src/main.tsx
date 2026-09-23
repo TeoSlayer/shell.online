@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { purgeLegacyRefstreamSessionCaches } from "../../web/refstream-session";
 import App from "./App";
+import { initializeAppearance } from "./lib/appearance";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/auth.css";
@@ -16,6 +17,7 @@ import "./styles/vault.css";
 import "./styles/feedback.css";
 
 purgeLegacyRefstreamSessionCaches();
+initializeAppearance();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

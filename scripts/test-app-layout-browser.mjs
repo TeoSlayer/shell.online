@@ -32,7 +32,9 @@ const built = await build({
     import {AuthContext} from './src/auth/AuthProvider';
     import {VaultProvider} from './src/vault/VaultProvider';
     import {TeamKeyProvider} from './src/vault/TeamKeyProvider';
+    import {initializeAppearance,setAppearance} from './src/lib/appearance';
     ${["tokens", "base", "auth", "shell", "terminal", "chat", "people", "collab", "audit", "terms", "vault", "feedback"].map(s => `import './src/styles/${s}.css';`).join("\n")}
+    initializeAppearance();window.layoutTheme=setAppearance;
     const auth={user:{uid:'layout-fixture',email:'fixture@example.test',displayName:'Layout Test'},initializing:false,signOutUser:async()=>{}};
     function Fixture(){
       const panes=useRef(null),[mode,setMode]=useState('terminal');
@@ -90,7 +92,9 @@ try {
   await browser.navigate(origin);
   await until("!!document.querySelector('.xterm-screen') && document.fonts.status==='loaded'", "real terminal mounted");
   // Resize one mounted app across both sides of each breakpoint, including returning.
-  for (const [width, height] of [[845,676],[900,768],[901,768],[1440,900],[1920,1080],[1024,768],[761,700],[760,700],[641,700],[640,700],[561,700],[560,700],[390,844],[320,640],[600,480],[850,480],[1024,480],[845,900],[1440,900]]) {
+  for (const theme of ['light','dark']) {
+  await browser.evaluate(`window.layoutTheme('${theme}')`);
+  for (const [width, height] of [[845,676],[900,768],[901,768],[1440,900],[1920,1080],[1024,768],[761,700],[760,700],[641,700],[640,700],[561,700],[560,700],[390,844],[320,640],[600,480],[850,480],[844,390],[667,375],[1024,480],[845,900],[1440,900]]) {
     if (process.env.APP_LAYOUT_ONLY && String(width) !== process.env.APP_LAYOUT_ONLY) continue;
     await browser.setViewport({ width, height, dpr: 1, mobile: false });
     // Explicit synthetic relay announcements: a handset uses the portrait grid,
@@ -105,7 +109,8 @@ try {
       return {width:innerWidth,height:innerHeight,rail:rect('.rail'),nav:rect('.rail-nav'),main:rect('.shell-main'),content:rect('.shell-content'),panes:rect('.panes'),screen:rect('.xterm-screen'),tabs:rect('.tabs'),overflow:document.documentElement.scrollWidth>innerWidth+1,bodyHeight:document.documentElement.scrollHeight,links:[...document.querySelectorAll('.rail-link')].map(rect),errors:window.fixtureErrors};
     })()`);
     console.log(`LAYOUT ${state.width}x${state.height}: navigation ${Math.round(state.rail.h)}px, pane ${Math.round(state.panes.w)}x${Math.round(state.panes.h)}, terminal ${Math.round(state.screen.w)}x${Math.round(state.screen.h)}`);
-    if (shots) await writeFile(join(shots, `${Math.round(state.width)}-${Math.round(state.height)}.png`), Buffer.from(await browser.screenshot(), "base64"));
+    if (shots) await writeFile(join(shots, `${theme}-${Math.round(state.width)}-${Math.round(state.height)}.png`), Buffer.from(await browser.screenshot(), "base64"));
+    assert.equal(await browser.evaluate(`getComputedStyle(document.querySelector('.xterm-screen').parentElement).backgroundColor`),theme==='dark'?'rgb(22, 25, 20)':'rgb(243, 241, 233)','Mounted terminal follows app theme');
     assert(!state.overflow, "No horizontal document overflow");
     assert.deepEqual(state.errors, [], "No browser rendering errors");
     if (state.width > 760 && state.width <= 900) {
@@ -144,6 +149,7 @@ try {
     }
     await browser.evaluate("(window.layoutMode('terminal'),window.scrollTo(0,0))");
     await until("!!document.querySelector('.xterm-screen')", "terminal remount");
+  }
   }
   console.log("PASS actual app shell and terminal across tablet/phone/desktop boundaries; document scrolling and resize transitions");
 } finally {

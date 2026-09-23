@@ -40,7 +40,7 @@ describe("the sessions toolbar", () => {
 });
 
 describe("the phone bottom bar", () => {
-  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px)"));
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px) {"));
 
   /*
    * A row of the shell, not something fixed over the foot of it. A session was

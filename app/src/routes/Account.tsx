@@ -14,6 +14,7 @@ import { useVault } from "../vault/VaultProvider";
 import { VaultSetup } from "../vault/VaultGate";
 import { VaultPanel } from "../vault/VaultPanel";
 import { useFeedback } from "../feedback/context";
+import { AppearancePicker } from "../components/AppearancePicker";
 
 export function Account() {
   usePageTitle("Account");
@@ -109,6 +110,7 @@ export function Account() {
       {notice && <div className="sessions-alert"><Alert tone="success">{notice}</Alert></div>}
       {error && <div className="sessions-alert"><Alert tone="error">{error}</Alert></div>}
 
+      <AppearancePicker />
       <dl className="account-rows">
         <div className="account-row">
           <dt>Name</dt>

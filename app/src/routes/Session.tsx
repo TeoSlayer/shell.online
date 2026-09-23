@@ -291,9 +291,9 @@ export function Session() {
     <AppShell
       title="Session"
       aside={
-        <Link className="session-action" to="/sessions">
+        <Link className="session-action topbar-compact-action" to="/sessions" aria-label="All sessions">
           <ArrowLeft size={14} weight="bold" />
-          All sessions
+          <span>All sessions</span>
         </Link>
       }
     >

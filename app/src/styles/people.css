@@ -339,6 +339,9 @@
   vertical-align: middle;
 }
 
+/* Long addresses are content, not a minimum width for the whole team table. */
+.table td.table-email { overflow-wrap: anywhere; white-space: normal; }
+
 .table td:first-child,
 .table th:first-child {
   padding-left: 4px;
@@ -826,3 +829,27 @@
     height: 48px;
   }
 }
+.account-appearance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 0 0 24px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 24px;
+}
+.account-appearance h2 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+.account-appearance p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.account-appearance select {
+  min-height: 44px;
+  min-width: 140px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--control);
+  color: var(--ink);
+  font: inherit;
+}
+.account-appearance select:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }

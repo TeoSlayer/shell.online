@@ -41,12 +41,13 @@ installing both sets of dependencies and building the public viewer:
 
 ```sh
 node scripts/test-app-layout-browser.mjs
+node app/scripts/test-appearance-routes.mjs
 SHELL_BROWSER=chrome node scripts/test-terminal-live-browser.mjs
 ```
 
 Set `SHELL_CHROME_BIN` if Chrome is not installed at its standard macOS path.
 On macOS, `APP_LAYOUT_BROWSER=safari` selects Safari for the first check;
-`SHELL_BROWSER=safari` selects it for the second (Safari remote automation must
+`SHELL_BROWSER=safari` selects it for the other two (Safari remote automation must
 be enabled). The tests measure actual browser viewports, sweep both sides of
 layout breakpoints and use synthetic sessions, never your running agents.
 Screenshots and temporary browser profiles stay outside the repository.

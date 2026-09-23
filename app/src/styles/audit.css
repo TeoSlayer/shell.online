@@ -316,7 +316,7 @@
   top: calc(100% + 7px);
   right: 0;
   display: flex;
-  width: min(760px, calc(100vw - 64px));
+  width: min(760px, calc(100vw / var(--zoom) - 64px));
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
@@ -386,6 +386,7 @@
 
 .audit-reading-key {
   display: flex;
+  flex-shrink: 0;
   min-height: 48px;
   padding: 10px 14px;
   border: 1px solid var(--line);

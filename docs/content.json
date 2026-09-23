@@ -262,6 +262,10 @@
           ]
         ],
         [
+          "Choose light or dark",
+          "On a shared link, open Controls → Appearance and choose Light, Dark or System. The sun/moon button switches quickly. In the app, use Account → Appearance. Each site remembers your choice in this browser. System follows your device’s appearance; switching themes does not restart your terminal."
+        ],
+        [
           "Close the browser when you’re done",
           "Closing the tab leaves the task running. Keep the host computer awake and online. A sleeping laptop cannot be controlled until it reconnects. The session ends when its process exits."
         ]

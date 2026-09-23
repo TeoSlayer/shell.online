@@ -300,7 +300,7 @@ export function Team() {
                           </span>
                         </span>
                       </td>
-                      <td className="table-quiet">{member.email}</td>
+                      <td className="table-quiet table-email">{member.email}</td>
                       <td>
                         {you!.role === "owner" && !isYou && member.role !== "owner" ? (
                           <select
