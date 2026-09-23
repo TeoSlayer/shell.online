@@ -157,6 +157,13 @@ export class ChatView {
 
     this.scroller = el("div", "chat-scroll");
     /*
+     * A message arriving must not move what somebody is reading. The browser
+     * will hold the scroll position against content inserted above the
+     * viewport if it is allowed to pick an anchor, and the thread is exactly
+     * the case that is for.
+     */
+    this.scroller.style.overflowAnchor = "auto";
+    /*
      * Something to look at before there is anything to read.
      *
      * A session takes a moment to connect, and an agent takes longer than
@@ -211,6 +218,21 @@ export class ChatView {
     this.send.setAttribute("aria-label", "Send");
     this.send.innerHTML = arrowSvg();
     ChatView.keepsFocus(this.send);
+    /*
+     * Sent by its own handler rather than by submitting the form around it.
+     *
+     * A submit button in a form is supposed to be enough, and on a pointer it
+     * is. On a phone it was not: the thing under the finger is the arrow
+     * inside the button rather than the button, the focus guard above cancels
+     * the default of the press, and between the two the tap stopped producing
+     * a submit -- so the only way to send was the return key. Asking the
+     * button directly removes every step that could go wrong.
+     */
+    this.send.addEventListener("click", (event) => {
+      event.preventDefault();
+      this.submit();
+      this.input.focus();
+    });
     row.append(this.input, this.send);
     this.composer.append(row);
 

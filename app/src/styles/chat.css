@@ -43,8 +43,23 @@
    * and only the composer was centred, so on a wide window the conversation
    * sat against the left edge with a strip of nothing down the right of it
    * and the box underneath lined up with neither side of it.
+   *
+   * It is a cap for a very wide display rather than a width. At 940px a
+   * laptop still showed a strip of paper down both sides of the pane, which
+   * reads as the canvas being padded rather than as a measure -- and the
+   * pane is already inset from the window by the rail. Prose never gets
+   * near it: a bubble has its own maximum, and this only decides when the
+   * column stops growing with the window.
    */
-  --chat-measure: 940px;
+  --chat-measure: 1180px;
+  /*
+   * The distance from the edge of the pane, and the only one. The pane now
+   * starts where the rail ends, so this is the whole of the inset the
+   * conversation has -- an edge rather than a container. Without it a bubble's
+   * rounded corner and the right-hand end of a full-width block are cut off by
+   * the window.
+   */
+  --chat-gutter-x: 12px;
   display: flex;
   width: 100%;
   height: 100%;
@@ -58,6 +73,14 @@
 .chat-scroll {
   display: flex;
   min-width: 0;
+  /*
+   * A flex item's default `min-height: auto` will not let it shrink below its
+   * own content, and the padding that clears the composer counts as content.
+   * On a short pane -- a phone held sideways with the keyboard up is 39px of
+   * surface -- that floored the thread at around 83px and the bottom of it,
+   * where every new message lands, hung below the pane where nothing draws.
+   */
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   flex-direction: column;
@@ -67,7 +90,8 @@
    * one permanently behind the composer.
    */
   /* Clears the composer, whose height is published by the view as it changes. */
-  padding: 4px 2px calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 18px);
+  padding: 4px var(--chat-gutter-x)
+    calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 18px);
   flex: 1;
   scrollbar-width: thin;
 }
@@ -158,6 +182,23 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /*
+   * A message arrives rather than appearing. Eighty milliseconds and four
+   * pixels: enough that the eye follows it to where it landed, short enough
+   * that a build printing forty lines is not forty little animations.
+   */
+  animation: chat-arrive 140ms var(--ease) both;
+}
+
+@keyframes chat-arrive {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg {
+    animation: none;
+  }
 }
 
 /*
@@ -249,10 +290,20 @@
   border-top-left-radius: 7px;
 }
 
-/* A command is code, whichever side of the thread it is on. */
+/*
+ * One face, the app's own, for everything anybody said.
+ *
+ * A command used to be set in the monospace face wherever it appeared, on the
+ * grounds that it is code. In a conversation it is a sentence somebody typed,
+ * and three faces in one thread -- the page's, the terminal's, and the chrome
+ * around them -- read as three different products. The only place the
+ * monospace face survives is where the spacing is the content: a preformatted
+ * block and the mirror of a full-screen program, both of which are drawings
+ * and stop being legible in a proportional face.
+ */
 .chat-sent .chat-body {
-  font-family: var(--mono);
-  font-size: 12.5px;
+  font-family: var(--sans);
+  font-size: 13px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -389,7 +440,7 @@
   margin-top: 6px;
   background: var(--danger-wash);
   color: var(--danger);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 10.5px;
 }
 
@@ -404,7 +455,7 @@
   border-radius: var(--radius-chip);
   background: var(--paper);
   color: var(--muted);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
@@ -435,8 +486,9 @@
 
 .chat-tool-name {
   color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 11.5px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 540;
   overflow-wrap: anywhere;
 }
 
@@ -475,7 +527,7 @@
   padding: 7px 13px;
   border-bottom: 1px solid var(--terminal-line);
   color: var(--terminal-muted);
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 11px;
   align-items: center;
   justify-content: space-between;
@@ -538,7 +590,7 @@
 .chat-composer {
   position: absolute;
   z-index: 6;
-  right: 0;
+  right: var(--chat-gutter-x);
   /*
    * Docked with a transform rather than with `bottom`.
    *
@@ -549,9 +601,9 @@
    * nothing else, and gets the same 200ms for free.
    */
   bottom: 0;
-  left: 0;
+  left: var(--chat-gutter-x);
   display: flex;
-  max-width: var(--chat-measure);
+  max-width: calc(var(--chat-measure) - 2 * var(--chat-gutter-x));
   padding: 7px 7px 7px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
@@ -594,7 +646,7 @@
   background: none;
   color: var(--ink);
   flex: 1;
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 13px;
   line-height: 1.45;
   resize: none;
@@ -664,7 +716,7 @@
   position: absolute;
   z-index: 6;
   right: 0;
-  bottom: calc(var(--chat-dock) + var(--keyboard-inset, 0px) + var(--chat-composer-height, 92px) + 10px);
+  bottom: calc(var(--chat-dock) + var(--chat-composer-height, 92px) + 10px);
   left: 0;
   width: fit-content;
   padding: 5px 13px;
@@ -708,64 +760,58 @@
      * the keyboard has taken the bar away. Either way the composer belongs on
      * it, with enough room not to touch.
      */
-    --chat-dock: 0px;
+    --chat-dock: 10px;
+    /* One distance, used on every side of the send button. */
+    --chat-gutter: 5px;
   }
 
   /*
-   * A bar across the foot of the surface, not a card floating above it.
+   * Floating, and one thing rather than two.
    *
-   * It floated because the pane had eighteen pixels of page either side of it
-   * and the box another eight inside that, so its background stopped well
-   * short of both edges and the conversation showed past it -- which is what
-   * a blurred panel cut off down both sides looks like. The surface is
-   * full-bleed now (shell.css), and the composer goes with it: it meets the
-   * left edge, the right edge, and the foot of the pane, which is the top of
-   * the bottom bar or the top of the keyboard.
-   *
-   * What is rounded is the field inside it, where a rounded thing belongs.
+   * It was a bar across the foot of the surface with a pill inside it: two
+   * containers, two backgrounds, two borders, for one box you type into. The
+   * bar existed because the surface used to stop short of both edges and the
+   * conversation showed past it -- a problem the surface itself fixed. So the
+   * bar is gone and the field floats: one rounded surface, clear of the
+   * edges, with the conversation running under it.
    */
   .chat-composer {
-    right: 0;
-    left: 0;
-    padding: 7px 10px calc(7px + env(safe-area-inset-bottom));
-    border-width: 1px 0 0;
-    border-radius: 0;
-    background: color-mix(in srgb, var(--paper) 92%, transparent);
-    box-shadow: none;
     /*
-     * The one thing that moves for a keyboard.
-     *
-     * The session keeps its size -- a pane that resizes refits the terminal
-     * grid to a smaller font, which is text that shrinks as you start typing
-     * -- so the keyboard simply covers the foot of it, and what has to get
-     * out from under the keyboard is the box being typed into. It rises by
-     * exactly what the keyboard is covering, and the thread makes the same
-     * room under itself so the last message is not behind it.
+     * Symmetric. The send button sits in the corner of the field with the
+     * same distance on every side of it, which is what makes the shape read
+     * as deliberate rather than as a button that happened to fit.
      */
-    transform: translateY(calc(-1 * (var(--chat-dock) + var(--keyboard-inset, 0px))));
+    padding: var(--chat-gutter);
+    border: 1px solid var(--line-strong);
+    border-radius: 26px;
+    background: color-mix(in srgb, var(--white) 92%, transparent);
+    box-shadow: 0 6px 22px rgb(26 31 22 / 10%), 0 1px 2px rgb(26 31 22 / 6%);
+    /*
+     * The dock, and only the dock.
+     *
+     * It used to add `--keyboard-inset` as well, from when the shell stayed
+     * screen-height under an open keyboard and the composer had to climb out
+     * from under it on its own. The shell shrinks to the visible viewport now
+     * (see shell.css), so the bottom of this surface is already the top of the
+     * keyboard -- and adding the inset on top of that lifted the box by the
+     * height of the keyboard twice, which is the composer landing a third of
+     * the way up the screen with the conversation pushed off the top.
+     */
+    transform: translateY(calc(-1 * var(--chat-dock)));
   }
 
   .chat-composer:focus-within {
-    border-color: var(--line-strong);
-    box-shadow: none;
+    border-color: var(--ink-soft);
+    box-shadow: 0 8px 26px rgb(26 31 22 / 13%), 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
   }
 
-  /* The field is the rounded surface now, and the thing that lights up. */
+  .chat-surface[data-direct="true"] .chat-composer {
+    border-color: var(--ink-soft);
+  }
+
   .chat-row {
-    padding: 2px 3px 2px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: 22px;
-    background: var(--white);
-    transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
-  }
-
-  .chat-composer:focus-within .chat-row {
-    border-color: var(--ink-soft);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 9%, transparent);
-  }
-
-  .chat-surface[data-direct="true"] .chat-row {
-    border-color: var(--ink-soft);
+    align-items: center;
+    gap: var(--chat-gutter);
   }
 
   .chat-scroll {
@@ -778,22 +824,25 @@
      * The foot clears the composer, whose height the view measures and
      * publishes as it changes.
      */
-    padding: 2px 16px
-      calc(var(--chat-dock) + var(--keyboard-inset, 0px) + var(--chat-composer-height, 104px) + 16px);
+    padding: 2px var(--chat-gutter-x)
+      calc(var(--chat-dock) + var(--chat-composer-height, 104px) + 16px);
   }
 
   /*
-   * Tighter than it was, and as small as it is allowed to get.
-   *
    * 16px is a floor rather than a choice: Safari on iOS zooms the whole page
    * in when a field smaller than that is focused and then leaves it zoomed,
    * which is the session becoming a magnified corner of itself on every tap
-   * into the box. What can come down is everything around the text, and it
-   * has: the leading, the padding, and the button beside it.
+   * into the box. Everything around the text comes down instead -- the
+   * leading, the padding -- and the placeholder, which is what is on screen
+   * whenever nobody is typing, is set at the size the field would like to be.
    */
   .chat-input {
-    padding: 6px 2px 6px 0;
-    line-height: 1.3;
+    padding: 0 2px 0 12px;
+    line-height: 1.35;
+  }
+
+  .chat-input::placeholder {
+    font-size: 14px;
   }
 
   /*
@@ -804,6 +853,15 @@
   .chat-send {
     width: 44px;
     height: 44px;
+  }
+
+  /*
+   * The arrow is a picture inside the button, not a thing of its own. Left
+   * interactive it is what a finger lands on, and a tap that resolves to the
+   * drawing rather than to the control is a send button that does nothing.
+   */
+  .chat-send svg {
+    pointer-events: none;
   }
 
   /*
@@ -839,7 +897,20 @@
    */
   .chat-sent .chat-bubble,
   .chat-received .chat-bubble {
-    max-width: 84%;
+    max-width: 92%;
+  }
+
+  /*
+   * A block whose spacing carries meaning still keeps it, but it wraps at the
+   * edge of the canvas rather than running past it. Clipped, the half of a
+   * line that is off the screen can only be reached by swiping a box inside a
+   * thread that also scrolls, and most of what arrives in one of these is a
+   * path or a sentence that reads perfectly well on two rows.
+   */
+  .chat-body[data-shape="pre"] {
+    overflow-x: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
   }
 
   /*

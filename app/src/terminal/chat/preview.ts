@@ -17,6 +17,7 @@ import "../../styles/terminal.css";
 import "../../styles/chat.css";
 import { createTerminal, type TerminalSurface } from "../renderer";
 import { watchKeyboardInset } from "../keyboard-inset";
+import { watchAppHeight } from "../../lib/app-height";
 import { fittedTerminal } from "../terminal-fit";
 import { cellMeasurer, terminalBox } from "../terminal-metrics";
 import { DESKTOP_TERMINAL_GRID } from "../terminal-grid";
@@ -239,6 +240,15 @@ shell.append(main);
 root.append(shell);
 
 /* Sizes the pane to what the keyboard has left, exactly as Workspace does. */
+/*
+ * Both of the hooks the real shell installs, because the layout under a
+ * keyboard is the two of them together: `watchAppHeight` shrinks the shell to
+ * the visible viewport and `watchKeyboardInset` lifts the composer inside it.
+ * A preview with only the second one renders a composer in the right place
+ * inside a shell that is still full-screen height -- which is a layout the app
+ * never has, and it hid the bar sliding into mid-canvas for two rounds.
+ */
+watchAppHeight();
 watchKeyboardInset(panes);
 
 /*

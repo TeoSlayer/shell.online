@@ -61,17 +61,22 @@ if (/\.chat-key\b/.test(appChatStylesheet)) {
 }
 
 /*
- * The composer is a bar across the foot of the surface rather than a card
- * floating inside it. It floated with eighteen pixels of page either side, so
- * its background stopped short of both edges and the conversation showed past
- * it, which is a blurred panel cut off down both sides.
+ * The composer floats: one rounded surface clear of both edges, with the
+ * conversation running under it. It was a bar with a pill inside it -- two
+ * containers, two backgrounds, two borders, for one box you type into -- and
+ * the bar only existed because the surface used to stop short of both edges,
+ * which the surface itself fixed.
  */
-if (!/\.chat-composer \{\s*right: 0;\s*left: 0;/.test(appChatStylesheet)) {
-  throw new Error("The composer must meet both edges of the surface on a phone");
+if (!/\.chat-composer \{[^}]*border-radius: 26px;/s.test(appChatStylesheet)) {
+  throw new Error("The composer must float as one rounded surface on a phone");
+}
+/* And the field is symmetric: one distance on every side of the send button. */
+if (!/--chat-gutter:/.test(appChatStylesheet) || !/padding: var\(--chat-gutter\)/.test(appChatStylesheet)) {
+  throw new Error("The composer must use one gutter on every side of the send button");
 }
 /* And the surface it sits on is full-bleed, so there is nothing to meet past. */
-if (!/:root\[data-pane="open"\] \.shell-content \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
-  throw new Error("A session surface must be full-bleed on a phone");
+if (!/\.shell-content:has\(\.panes\) \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
+  throw new Error("A session surface must be full-bleed at every width, not only on a phone");
 }
 /*
  * One scroller. A session's scrolling belongs to the pane, and an `auto`
@@ -146,8 +151,17 @@ if (!/\.shell \{[^}]*height: var\(--visible-height/s.test(appShellStylesheet)) {
  * short by their difference, which is the bottom bar lifted off the foot of
  * the screen with dead page beneath it.
  */
-if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.shell \{\s*height: var\(--typing-height/.test(appShellStylesheet)) {
-  throw new Error("A session must hold its height while the keyboard is up, or the terminal refits");
+/*
+ * A session shrinks for a keyboard like every other page, so nothing is ever
+ * pushed off the bottom of the screen -- and the terminal inside it keeps the
+ * size it had, because the fit is what is frozen rather than the layout. A
+ * grid of a fixed number of columns refitted into a smaller box picks a
+ * smaller font: text that shrinks as you start typing, and a grid that stops
+ * reaching the edge of the pane.
+ */
+const pane = readFileSync(new URL("../app/src/terminal/TerminalPane.tsx", import.meta.url), "utf8");
+if (!/dataset\.keyboard === "open"\) return;/.test(pane)) {
+  throw new Error("The terminal must not refit itself while a keyboard is up");
 }
 
 /*
@@ -175,27 +189,12 @@ for (const accent of ["--blue", "--blue-deep", "--blue-wash", "--acid"]) {
  */
 
 /*
- * Both declarations, and both are load-bearing. `display` restores the row the
- * general rule took away, so the pane keeps its size and the terminal in it
- * does not refit; `visibility` is what stops the bar being drawn -- and it has
- * to, because a session is taller than the visible page while a keyboard is up
- * and a phone scrolls the visible page to follow a focused field, which walked
- * a still-drawn bar up into the middle of the canvas.
- */
-if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail \{[^}]*display: flex;[^}]*visibility: hidden;/s.test(appShellStylesheet)) {
-  throw new Error("A session's bar must keep its row (display) and stop being drawn (visibility)");
-}
-if (!/\.chat-composer \{[^}]*translateY\(calc\(-1 \* \(var\(--chat-dock\) \+ var\(--keyboard-inset/s.test(appChatStylesheet)) {
-  throw new Error("The composer is what rises for the keyboard, by --keyboard-inset");
-}
-
-/*
  * And a message has to stop short of the far side, or it is not a message.
  * The surface is full-bleed so the composer can meet both edges; the bubbles
  * are not, because the gutter opposite them is what says which way a message
  * is facing.
  */
-if (!/\.chat-sent \.chat-bubble,\s*\.chat-received \.chat-bubble \{\s*max-width: 8[0-9]%/.test(appChatStylesheet)) {
+if (!/\.chat-sent \.chat-bubble,\s*\.chat-received \.chat-bubble \{\s*max-width: (?:8[0-9]|9[0-2])%/.test(appChatStylesheet)) {
   throw new Error("Message bubbles need a gutter on the far side, or they read as panels");
 }
 /*
