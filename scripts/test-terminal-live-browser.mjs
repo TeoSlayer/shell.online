@@ -568,6 +568,19 @@ try {
     writeFileSync(join(shots, `${browser}-public-${theme}-${layout.width}-${layout.height}.png`), Buffer.from(await transport.screenshot(), "base64"));
     check(!layout.overflow, `${browser} public ${layout.width}x${layout.height}: no page overflow`);
     check(layout.page.b <= layout.height + 2 && layout.screen.b <= layout.wrap.b + 2 && layout.screen.right <= layout.wrap.right + 2, `${browser} public ${layout.width}: complete terminal fits`);
+    const keyStrip = await evaluate(`(() => {
+      const bar=document.getElementById('mobile-terminal-keys');
+      if(!bar.checkVisibility())return {visible:false};
+      const buttons=[...bar.querySelectorAll('button')], first=buttons[0].getBoundingClientRect();
+      const oneRow=buttons.every(b=>Math.abs(b.getBoundingClientRect().top-first.top)<=1);
+      const targets=buttons.every(b=>{const r=b.getBoundingClientRect();return r.width>=44&&r.height>=44});
+      bar.scrollLeft=bar.scrollWidth;
+      const last=buttons.at(-1).getBoundingClientRect(), bounds=bar.getBoundingClientRect();
+      const reachable=last.left>=bounds.left&&last.right<=bounds.right+1;
+      bar.scrollLeft=0;
+      return {visible:true,oneRow,targets,reachable};
+    })()`);
+    check(!keyStrip.visible || (keyStrip.oneRow && keyStrip.targets && keyStrip.reachable), `${browser} public ${layout.width}: keys stay in one row, finger-sized and scroll-reachable`);
     check(layout.settings.x >= 0 && layout.settings.right <= layout.width && layout.report.x >= 0 && layout.actions.b <= layout.header.b + 2, `${browser} public ${layout.width}: header actions fit`);
     if (layout.width > 760) check(layout.identity.right <= layout.actions.x + 2, `${browser} public ${layout.width}: identity does not overlap controls`);
     const disclosure = await evaluate(`(() => {

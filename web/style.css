@@ -2166,7 +2166,12 @@ a {
     padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     border-top: 1px solid #252a34;
     background: #11141b;
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    /* Keep one row even when actions are added: wrapping steals terminal rows
+       in landscape. Narrow phones can pan the strip without shrinking targets. */
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(44px, 1fr);
+    overflow-x: auto;
     gap: 4px;
     user-select: none;
   }
@@ -2185,6 +2190,9 @@ a {
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
+
+  #terminal-paste-toolbar { display: flex; min-width: 0; }
+  #terminal-paste-toolbar > button { width: 100%; }
 
   .mobile-terminal-keys button:active:not(:disabled) {
     border-color: #66728a;
