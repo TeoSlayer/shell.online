@@ -243,6 +243,15 @@ button.tab {
   justify-content: flex-start;
 }
 
+/*
+ * A finger on an emulator's rows scrolls them through touch-scroll.ts, so the
+ * browser must not pan or zoom them at the same time. The chat renderer is an
+ * ordinary list and never gets the attribute, so it keeps native scrolling.
+ */
+.pane-screen[data-touch-scroll] {
+  touch-action: none;
+}
+
 /* Below the renderer tab, which hangs over the same corner. */
 .pane-tools {
   position: absolute;

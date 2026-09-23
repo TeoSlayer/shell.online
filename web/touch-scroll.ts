@@ -138,6 +138,80 @@ export class TouchWheelGesture {
   }
 }
 
+/**
+ * Carries a flick on after the finger lifts, the way a native scroll view
+ * does. Only the last moments of the drag count: a finger held still before
+ * lifting has no velocity left, so a slow read through scrollback never
+ * coasts. Time is passed in, so the physics is testable without a clock.
+ */
+export class TouchFling {
+  /* Each movement with the time it took, measured from the event before it. */
+  private samples: Array<{ at: number; deltaY: number; duration: number }> = [];
+  private previousAt: number | undefined;
+  private velocity = 0;
+  private lastStep = 0;
+
+  constructor(
+    private readonly timeConstant = 325,
+    private readonly minimumVelocity = 0.3,
+    private readonly maximumVelocity = 6,
+    private readonly sampleWindow = 100,
+  ) {}
+
+  get active(): boolean {
+    return this.velocity !== 0;
+  }
+
+  /** The finger went down: the first movement is timed from here. */
+  begin(at: number): void {
+    this.stop();
+    this.previousAt = at;
+  }
+
+  track(deltaY: number, at: number): void {
+    this.samples.push({ at, deltaY, duration: at - (this.previousAt ?? at) });
+    this.previousAt = at;
+    this.prune(at);
+  }
+
+  /** Starts coasting from the drag's recent velocity. False when too slow to. */
+  release(at: number): boolean {
+    this.prune(at);
+    const recent = this.samples;
+    this.samples = [];
+    this.previousAt = undefined;
+    this.velocity = 0;
+    const duration = recent.reduce((sum, sample) => sum + sample.duration, 0);
+    if (duration <= 0) return false;
+    const velocity = recent.reduce((sum, sample) => sum + sample.deltaY, 0) / duration;
+    if (Math.abs(velocity) < this.minimumVelocity) return false;
+    this.velocity = clamp(velocity, -this.maximumVelocity, this.maximumVelocity);
+    this.lastStep = at;
+    return true;
+  }
+
+  /** The distance to move since the previous step; 0 once it has come to rest. */
+  step(at: number): number {
+    if (!this.velocity) return 0;
+    const elapsed = Math.max(at - this.lastStep, 0);
+    this.lastStep = at;
+    const deltaY = this.velocity * elapsed;
+    this.velocity *= Math.exp(-elapsed / this.timeConstant);
+    if (Math.abs(this.velocity) < 0.02) this.velocity = 0;
+    return deltaY;
+  }
+
+  stop(): void {
+    this.samples = [];
+    this.previousAt = undefined;
+    this.velocity = 0;
+  }
+
+  private prune(at: number): void {
+    while (this.samples.length && at - this.samples[0].at > this.sampleWindow) this.samples.shift();
+  }
+}
+
 /** Owns the full touch-to-wheel path used by the terminal event listeners. */
 export class TerminalTouchScrollBridge {
   private readonly gesture = new TouchWheelGesture();

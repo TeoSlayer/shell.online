@@ -3,6 +3,7 @@ import {
   TerminalLineScroller,
   TerminalPinchZoomGesture,
   TerminalTouchScrollBridge,
+  TouchFling,
   TouchWheelGesture,
   type TouchSample,
   type TouchWheelDelta,
@@ -95,5 +96,61 @@ describe("terminal pinch zoom", () => {
     expect(gesture.move([touch(100, 100, 4), touch(100, 200, 7)])).toBeNull();
     gesture.end();
     expect(gesture.move([touch(100, 100, 4), touch(100, 250, 9)])).toBeNull();
+  });
+});
+
+describe("terminal touch fling", () => {
+  it("coasts in the flick's direction and comes to rest", () => {
+    const fling = new TouchFling();
+    fling.begin(0);
+    fling.track(20, 10);
+    fling.track(20, 20);
+    fling.track(20, 30);
+    expect(fling.release(30)).toBe(true);
+
+    let travelled = 0;
+    let at = 30;
+    for (let frame = 0; frame < 400 && fling.active; frame++) travelled += fling.step((at += 16));
+    expect(fling.active).toBe(false);
+    // 2px/ms decaying over a 325ms time constant: about 650px, all forwards.
+    expect(travelled).toBeGreaterThan(500);
+    expect(travelled).toBeLessThan(700);
+  });
+
+  it("measures a flick the browser delivered as one coalesced move", () => {
+    const fling = new TouchFling();
+    fling.begin(0);
+    fling.track(-135, 100);
+    expect(fling.release(101)).toBe(true);
+    expect(fling.step(117)).toBeCloseTo(-1.35 * 16, 5);
+  });
+
+  it("does not coast after the finger was held still", () => {
+    const fling = new TouchFling();
+    fling.begin(0);
+    fling.track(30, 10);
+    fling.track(30, 20);
+    fling.track(0, 170);
+    expect(fling.release(175)).toBe(false);
+    expect(fling.step(191)).toBe(0);
+  });
+
+  it("does not coast from a slow drag, and stops when touched again", () => {
+    const slow = new TouchFling();
+    slow.begin(0);
+    slow.track(-2, 16);
+    slow.track(-2, 32);
+    slow.track(-2, 48);
+    expect(slow.release(48)).toBe(false);
+
+    const fast = new TouchFling();
+    fast.begin(0);
+    fast.track(-40, 10);
+    fast.track(-40, 20);
+    expect(fast.release(20)).toBe(true);
+    expect(fast.step(36)).toBeLessThan(0);
+    fast.begin(40);
+    expect(fast.active).toBe(false);
+    expect(fast.step(56)).toBe(0);
   });
 });

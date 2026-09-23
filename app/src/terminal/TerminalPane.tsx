@@ -19,6 +19,7 @@ import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { createTerminal, type TerminalRenderer, type TerminalSurface } from "./renderer";
+import { attachTouchScroll } from "./touch-scroll";
 import { TerminalWriteQueue } from "../../../web/terminal-writes";
 import { PulseObserver } from "./pulse-observer";
 import type { SessionPulse } from "./session-pulse";
@@ -335,6 +336,8 @@ export function TerminalPane({
     });
     term.open(node);
     terminal.current = term;
+    /* Phones send no wheel events; a drag stands in for one. */
+    const touchScroll = attachTouchScroll(node, term);
     measure.current = cellMeasurer(FONT_FAMILY);
 
     let connected: TerminalConnection;
@@ -580,6 +583,7 @@ export function TerminalPane({
       observer.disconnect();
       typed.dispose();
       binary?.dispose();
+      touchScroll.dispose();
       sink?.close();
       connected.close();
       fileClient.dispose();
