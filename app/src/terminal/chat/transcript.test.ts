@@ -364,3 +364,26 @@ describe("an answer with no blank line in it", () => {
     expect(received(transcript).map((message) => message.preformatted)).toEqual([false, true]);
   });
 });
+
+describe("a prompt read back off an agent's own screen", () => {
+  /*
+   * An agent draws the conversation it is having, so a prompt sent from this
+   * browser turns up on its screen a moment later. It is already in the
+   * thread as the message that caused it; without the echo rule it arrives a
+   * second time and the conversation stutters.
+   */
+  it("is not added again when this browser is what sent it", () => {
+    const transcript = new Transcript();
+    transcript.submitted("refactor the session store", 1000);
+    transcript.fromAgent({ kind: "sent", text: "refactor the session store", lines: [] }, 1010);
+
+    expect(texts(transcript)).toEqual(["refactor the session store"]);
+  });
+
+  it("is added when somebody typed it on the machine itself", () => {
+    const transcript = new Transcript();
+    transcript.fromAgent({ kind: "sent", text: "typed on the laptop", lines: [] }, 1010);
+
+    expect(texts(transcript)).toEqual(["typed on the laptop"]);
+  });
+});

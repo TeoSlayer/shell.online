@@ -224,9 +224,23 @@ out because it is the row being written, and `flush` exists for the row a
 program *finished* on, which looks identical and differs only in that no frame
 follows it.
 
-`claude-code.ts` reads the real shape. Everything from the composer down is
-dropped by position, because what is between those rules is a line somebody is
-part-way through typing. `❯` is a prompt somebody sent. `⏺` is the agent
+`claude-code.ts` reads the real shape. **The composer is whatever lies between
+the last two rules**, whatever it says and however many rows it has grown to,
+and everything from the first of that pair down is dropped. That is a rule
+about position rather than about content on purpose: what is in there is a
+line somebody is part-way through typing, and it must not be read at all until
+they send it. Read by shape instead -- walk up over anything that looks like
+furniture and drop the first prompt line found -- it works right up until the
+line being typed is long enough to wrap, and then the rows below it are
+ordinary text: the walk stops at the first of them and gives out everything
+below, so half of somebody's half-finished sentence arrives on another device
+as a message they had not sent. It arrives properly the moment they do send
+it, because the program moves it out of the composer and into the conversation
+itself.
+
+A prompt read back that way is dropped when this browser is what sent it: it
+is already in the thread as the message that caused it, and the same echo
+queue the line-oriented half uses recognises it. `❯` is a prompt somebody sent. `⏺` is the agent
 speaking, and what follows it, indented, is the rest of what it said. An
 indented line *before* the agent has spoken in a turn is a tool and the one
 line it reported -- the two look identical and only their position tells them
@@ -350,6 +364,20 @@ A program no adapter claims -- an editor, a pager, `top` -- is still mirrored
 as a grid, and the grid is now sized so the session's whole width is on the
 screen wherever that is possible at a legible size. On a phone eighty columns
 is not, so it keeps a legible size and scrolls sideways; on a tablet it fits.
+
+## Colour
+
+None of its own. This used the app's blue for what the viewer sent and its
+acid green for a program reading keys, and next to a conversation those read
+as two more things asking to be looked at. A chat is mostly other people's
+text, and the only colour it needs is the one that separates what you said
+from what came back -- which the app already has, in the near-black it puts on
+its own primary controls.
+
+Two things keep their colour. Red, because a command that exited non-zero is a
+fact about the session rather than decoration. And whatever a process writes
+its own output in: those are the program's colours, faithfully rendered, and
+they are data.
 
 ## Phones
 

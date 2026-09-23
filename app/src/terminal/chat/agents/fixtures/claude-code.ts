@@ -70,3 +70,27 @@ export const CLAUDE_EXCHANGE = [
 
 /** The title Claude Code sets with OSC 0, which does not scroll away. */
 export const CLAUDE_TITLE = "✳ Claude Code";
+
+/**
+ * Mid-typing, nothing sent. Captured by typing into the program and never
+ * pressing Return.
+ *
+ * The line being written has wrapped onto a second row inside the composer,
+ * which is the case that reached somebody's phone: read by shape, the second
+ * row is ordinary text, so a walk up from the foot of the screen stops there
+ * and gives out everything below it -- half a half-finished sentence arriving
+ * on another device as a message nobody had sent.
+ */
+export const CLAUDE_TYPING = [
+  "",
+  " ▐▛███▛█   Claude Code v2.1.280",
+  "▝▜██████▀  Opus 5.5 (1M context) · Claude Max",
+  "  ▝▝ ▝▝    /private/tmp",
+  "",
+  "────────────────────────────────────────────────────────────────────────────────",
+  "❯ this is a long thought that somebody is still in the middle of writing and",
+  "  it has wrapped onto several rows of the box",
+  "────────────────────────────────────────────────────────────────────────────────",
+  "  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · r…",
+  "  ⏵⏵ auto mode on (shift+tab to cycle)",
+];

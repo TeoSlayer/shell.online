@@ -238,9 +238,18 @@ export class Transcript {
    * interface is not echoing anything, it is drawing its own record of the
    * conversation, and there is no second copy coming.
    */
-  fromAgent(utterance: AgentUtterance, at: number): Message {
+  fromAgent(utterance: AgentUtterance, at: number): Message | null {
     if (utterance.kind !== "received") this.close(at);
     if (utterance.kind === "sent") {
+      /*
+       * A prompt read off an agent's screen is not always news. One sent from
+       * this browser is already in the thread as the message that caused it,
+       * and the agent draws it into its own conversation a moment later --
+       * which without this arrives as the same prompt a second time. It is
+       * the same echo rule the line-oriented half applies, and the same queue
+       * of commands waiting to be recognised.
+       */
+      if (this.consumedAsEcho(plainLine(utterance.text))) return null;
       return this.push({ kind: "sent", at, text: utterance.text, lines: [], open: false });
     }
     if (utterance.kind === "tool") {

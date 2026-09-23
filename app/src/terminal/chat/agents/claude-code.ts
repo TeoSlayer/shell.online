@@ -250,19 +250,45 @@ export class ClaudeCodeAdapter implements AgentAdapter {
  * arrive in the thread as a message.
  */
 export function strip(frame: readonly string[]): string[] {
+  /*
+   * The composer is whatever lies between the last two rules, whatever it
+   * happens to say and however many rows it has grown to. That is the whole
+   * rule, and it is a rule about position rather than about content on
+   * purpose: what is in there is a line somebody is part-way through typing,
+   * and it must not be read at all until they send it.
+   *
+   * It used to be read by shape -- walk up from the foot of the screen over
+   * anything that looked like furniture, and drop the first prompt line found
+   * -- which works right up until the line being typed is long enough to
+   * wrap. Then the rows below the prompt are ordinary text, the walk stops at
+   * the first of them, and everything from there down is given out: half of
+   * somebody's half-finished sentence, arriving on another device as a
+   * message they had not sent and as output they had not asked for.
+   *
+   * The rules are full-width and start at column zero. Anything the agent
+   * draws inside its conversation is indented under a marker, so a rule in
+   * what it said cannot be mistaken for one of these.
+   */
+  const rules: number[] = [];
+  for (let index = 0; index < frame.length; index += 1) {
+    if (RULE.test(frame[index])) rules.push(index);
+  }
+  if (rules.length >= 2) return frame.slice(0, rules[rules.length - 2]);
+  if (rules.length === 1) return frame.slice(0, rules[0]);
+
+  /*
+   * No rules yet: a program part-way through its first paint. Fall back to
+   * walking the furniture off the foot of the screen, and take the prompt
+   * with it.
+   */
   let end = frame.length;
   let droppedPrompt = false;
   for (let index = frame.length - 1; index >= 0; index -= 1) {
     const line = frame[index];
-    if (line.trim() === "" || RULE.test(line) || FURNITURE.test(line)) {
+    if (line.trim() === "" || FURNITURE.test(line)) {
       end = index;
       continue;
     }
-    /*
-     * The last prompt on the screen is the one being typed into. Any earlier
-     * one is a message somebody sent, so only the first found walking up is
-     * taken, and the walk stops at the line above it.
-     */
     if (!droppedPrompt && PROMPT.test(line)) {
       droppedPrompt = true;
       end = index;
