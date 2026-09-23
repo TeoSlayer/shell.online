@@ -162,6 +162,17 @@ export async function launchChromeTransport({ profile }) {
       await request('Emulation.setTouchEmulationEnabled', { enabled: Boolean(mobile) });
       return { width, height, dpr };
     },
+    // Trusted touch input, as a phone's finger produces it. type is
+    // touchStart, touchMove, touchEnd or touchCancel; points are CSS pixels.
+    enableTouch: () => request('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }),
+    touch: (type, points) => request('Input.dispatchTouchEvent', {
+      type, touchPoints: points.map(({ x, y }) => ({ x, y })),
+    }),
+    // A whole finger drag at a real speed (px/s), which one touch event per
+    // round trip is far too slow to produce. yDistance > 0 drags downwards.
+    flick: ({ x, y, yDistance, speed }) => request('Input.synthesizeScrollGesture', {
+      x, y, yDistance, speed, gestureSourceType: 'touch', preventFling: false,
+    }),
     // Trusted browser input, not a scripted scrollTop change. Only available
     // in Chrome; Safari still checks real native layout/scroll reachability.
     swipe: async ({ x, y, deltaY }) => {
