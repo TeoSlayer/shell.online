@@ -45,17 +45,11 @@ const INSET_PROPERTY = "--keyboard-inset";
  * think. Nothing is subtracted from it and nothing else is consulted, so
  * there is nothing left to disagree with.
  *
- * It is measured only while the keyboard is down, and held at that value
- * while the keyboard is up. A session must not change size for a keyboard:
- * the terminal inside it is a grid of a fixed number of columns, so a pane
- * that shrinks refits the whole grid to a smaller font, which is text that
- * shrinks as you start typing and a strip of blank screen where the grid no
- * longer reaches. Coming back it refits again, and anything that did not land
- * on the same pixel is a bar that has moved. The keyboard is something that
- * covers the foot of a session, not something that resizes it -- what has to
- * get out of its way is the composer, which rises by `--keyboard-inset`.
+ * It is published app-wide by lib/app-height.ts rather than from here, so it
+ * is right before a pane exists and cannot be unpublished when one closes.
+ * What is measured here is what only a pane can know: where its own top edge
+ * is, and therefore how much room is left below it.
  */
-const VISIBLE_PROPERTY = "--visible-height";
 
 
 /**
@@ -235,17 +229,16 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
    * layout in CSS and means this hook reads the DOM without reshaping it.
    */
   /** What was last written, so an unchanged measurement costs no layout. */
-  let published = { visible: -1, pane: -1, gate: -1, inset: -1 };
+  let published = { pane: -1, gate: -1, inset: -1 };
   let frame = 0;
 
   const clear = () => {
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(GATE_PROPERTY);
     root.style.removeProperty(INSET_PROPERTY);
-    root.style.removeProperty(VISIBLE_PROPERTY);
     root.removeAttribute(STATE_ATTRIBUTE);
     root.removeAttribute(SURFACE_ATTRIBUTE);
-    published = { visible: -1, pane: -1, gate: -1, inset: -1 };
+    published = { pane: -1, gate: -1, inset: -1 };
   };
 
   const measure = () => {
@@ -274,18 +267,6 @@ export function watchKeyboardInset(node: HTMLElement): () => void {
       zoom,
     });
     const typing = keyboardIsOpen(inset);
-
-    /*
-     * Measured while the keyboard is down and held while it is up, so the
-     * session is the same size either way; see VISIBLE_PROPERTY.
-     */
-    if (!typing) {
-      const visible = visibleHeight({ viewportHeight: viewport.height, zoom });
-      if (moved(visible, published.visible)) {
-        published.visible = visible;
-        root.style.setProperty(VISIBLE_PROPERTY, `${visible}px`);
-      }
-    }
 
     const pane = paneHeight({
       viewportHeight: viewport.height,
