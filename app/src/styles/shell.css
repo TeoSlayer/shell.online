@@ -737,7 +737,9 @@
    * start typing, and blank screen where the grid no longer reaches. Coming
    * back it refits again, and the bar arrives a centimetre from where it
    * left. `--typing-height` is what the visible page was before the keyboard
-   * covered it; see keyboard-inset.ts.
+   * covered it; see lib/app-height.ts, which publishes it app-wide so that it
+   * is right before a pane exists -- a session opened with the keyboard
+   * already up has nothing to hold otherwise.
    *
    * Every other page shrinks, which is the right answer for a document with a
    * form in it, and is what keeps the bar in one place across all of them.

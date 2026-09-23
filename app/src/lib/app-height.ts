@@ -37,6 +37,29 @@ const PROPERTY = "--app-height";
 const VISIBLE = "--visible-height";
 
 /**
+ * How tall the visible page was before a keyboard covered it.
+ *
+ * A session is the one page that must not shrink for a keyboard: the terminal
+ * in it is a grid of a fixed number of columns, so a pane that changes size
+ * refits that grid to a smaller font. This is what it uses instead of
+ * `--visible-height` while somebody is typing.
+ *
+ * Published here rather than from the pane, because it has to be right the
+ * first time. The pane's own watcher mounts and unmounts with the pane, and a
+ * session opened with the keyboard already up -- a locked session with a
+ * password form in it, say -- never saw the page uncovered, so it had nothing
+ * to hold and shrank after all.
+ */
+const TYPING = "--typing-height";
+
+/**
+ * How much of the bottom has to be covered before it counts as a keyboard
+ * rather than a browser toolbar sliding back in. The same threshold the pane
+ * uses; see keyboard-inset.ts.
+ */
+const KEYBOARD_MINIMUM = 120;
+
+/**
  * The zoom the answer will be read under.
  *
  * The phone breakpoint zooms the root, and a length written into a custom
@@ -55,7 +78,7 @@ export function watchAppHeight(): () => void {
   const root = document.documentElement;
 
   /** What was last written, so an unchanged measurement costs no layout. */
-  let published = { app: -1, visible: -1 };
+  let published = { app: -1, visible: -1, typing: -1 };
   let frame = 0;
 
   const measure = () => {
@@ -68,12 +91,24 @@ export function watchAppHeight(): () => void {
         root.style.setProperty(PROPERTY, `${app}px`);
       }
     }
-    const seen = window.visualViewport?.height;
-    if (seen) {
+    const viewport = window.visualViewport;
+    const seen = viewport?.height;
+    if (viewport && seen) {
       const visible = Math.round(seen / zoom);
       if (visible !== published.visible) {
         published.visible = visible;
         root.style.setProperty(VISIBLE, `${visible}px`);
+      }
+      /*
+       * Held at whatever it last was with nothing covering the page. Seeded
+       * on the first measurement either way, so there is always a value to
+       * hold even for a page that opened with a keyboard already up.
+       */
+      const covered = layout ? layout - seen - viewport.offsetTop : 0;
+      const typing = covered >= KEYBOARD_MINIMUM;
+      if ((!typing || published.typing < 0) && visible !== published.typing) {
+        published.typing = visible;
+        root.style.setProperty(TYPING, `${visible}px`);
       }
     }
   };
@@ -110,5 +145,6 @@ export function watchAppHeight(): () => void {
     window.visualViewport?.removeEventListener("scroll", apply);
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(VISIBLE);
+    root.style.removeProperty(TYPING);
   };
 }
