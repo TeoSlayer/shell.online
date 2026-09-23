@@ -12,6 +12,7 @@ import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from 
 import { cachedPassword, forgetUnverified, markVerified, rememberVerified } from "../lib/session-passwords";
 import { isVaultShare } from "../lib/vault-crypto";
 import { useVault } from "../vault/VaultProvider";
+import { VaultUnlock } from "../vault/VaultGate";
 import { useTeamKey } from "../vault/TeamKeyProvider";
 import { AuditSink } from "./audit-sink";
 import { postAudit } from "../lib/api";
@@ -197,6 +198,8 @@ export function TerminalPane({
   const [readOnly, setReadOnly] = useState(false);
   const [password, setPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [unlockMethod, setUnlockMethod] = useState<"vault" | "password" | null>(null);
+  const lastVaultStatus = useRef(vault.status);
 
   /* Ticks only while the machine is away, and only to keep "ago" honest. */
   useEffect(() => {
@@ -610,17 +613,36 @@ export function TerminalPane({
   useEffect(() => {
     const share = shareRef.current;
     const id = sessionIdFromShareUrl(shareUrl);
+    // Opening the vault makes an initially unreadable share eligible again.
+    // Do not tear down the socket or require a tab/page reload to pick it up.
+    const newlyUnlocked = vault.status === "unlocked" && lastVaultStatus.current !== "unlocked";
+    lastVaultStatus.current = vault.status;
+    if (newlyUnlocked && share && isVaultShare(share.sealed)) {
+      tried.current.delete(`${share.senderPublicKey}:${share.sealed}`);
+    }
     if (status !== "needs-password" || !share || !id || attempt.current) return;
+    if (isVaultShare(share.sealed) && vault.status !== "unlocked") return;
     const key = `${share.senderPublicKey}:${share.sealed}`;
     if (tried.current.has(key)) return;
+    const target = connection.current;
+    if (!target) return;
+    let cancelled = false;
+    let submitted = false;
+    const attempts = tried.current;
     tried.current.add(key);
     void vaultRef.current.openShare(id, share).then((password) => {
-      if (!password || !connection.current || attempt.current) return;
+      if (cancelled || !password || connection.current !== target || attempt.current) return;
+      if (isVaultShare(share.sealed) && vaultRef.current.status !== "unlocked") return;
       pending.current = [];
+      submitted = true;
       attempt.current = { source: isVaultShare(share.sealed) ? "vault" : "legacy", password };
-      void connection.current.submitPassword(password);
+      void target.submitPassword(password);
     });
-  }, [sealed, status, shareUrl]);
+    return () => {
+      cancelled = true;
+      if (!submitted) attempts.delete(key);
+    };
+  }, [sealed, status, shareUrl, renderer, vault.status]);
 
   /* A hidden pane measures as zero, so it has to be refitted when it returns. */
   useEffect(() => {
@@ -677,47 +699,62 @@ export function TerminalPane({
 
       {locked && (
         <div className="pane-gate">
-          <form className="pane-gate-card" onSubmit={handleUnlock}>
-            <span className="pane-gate-mark" aria-hidden="true">
-              <LockKey size={20} />
-            </span>
-            <h2>Enter the session password</h2>
-            <p>
-              The password is used on this device to derive the key. Once it
-              opens the session it is sealed into your vault, which shell.online
-              cannot open, and you are not asked for it again.
-            </p>
-            {host && (
-              <p className="pane-gate-hint">
-                Started in a terminal on <b>{host}</b>? Running{" "}
-                <code>shell sessions</code> there shows its password.
-              </p>
+          <div className="pane-gate-card">
+            {vault.status === "locked" && (
+              <>
+                <p>Open this session with your vault or its password.</p>
+                <div className="pane-access-options" role="group" aria-label="Session unlock method">
+                  <Button type="button" variant={unlockMethod !== "password" ? "primary" : "ghost"} onClick={() => setUnlockMethod("vault")}>Unlock vault</Button>
+                  <Button type="button" variant={unlockMethod === "password" ? "primary" : "ghost"} onClick={() => setUnlockMethod("password")}>Session password</Button>
+                </div>
+              </>
             )}
-            {detail && <Alert tone="error">{detail}</Alert>}
-            <label htmlFor={`pw-${shareUrl}`}>Password</label>
-            <input
-              id={`pw-${shareUrl}`}
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              disabled={unlocking}
-              autoFocus={active}
-            />
-            <Button type="submit" busy={unlocking} busyLabel="Decrypting">
-              Decrypt terminal
-            </Button>
-            {/* The password never goes with it; whether a saved one failed does. */}
-            <FeedbackLink
-              surface="session-gate"
-              kind="problem"
-              context={{ host, saved_password_failed: detail ? "yes" : undefined }}
-            >
-              Stuck here? Tell us
-            </FeedbackLink>
-          </form>
+            {vault.status === "locked" && unlockMethod !== "password" ? (
+              <VaultUnlock compact allowReset={false} />
+            ) : (
+              <form className="pane-password-form" onSubmit={handleUnlock}>
+                <span className="pane-gate-mark" aria-hidden="true">
+                  <LockKey size={20} />
+                </span>
+                <h2>Enter the session password</h2>
+                <p>
+                  Use this session’s password, not your account password. It opens
+                  the terminal on this device. An unlocked vault can save it for next time.
+                </p>
+                {vault.status === "error" && <p>Your vault could not be reached. <button type="button" className="vault-link" onClick={vault.retry}>Try the vault again</button>, or enter the session password below.</p>}
+                {host && (
+                  <p className="pane-gate-hint">
+                    Started in a terminal on <b>{host}</b>? Running{" "}
+                    <code>shell sessions</code> there shows its password.
+                  </p>
+                )}
+                {detail && <Alert tone="error">{detail}</Alert>}
+                <label htmlFor={`pw-${shareUrl}`}>Password</label>
+                <input
+                  id={`pw-${shareUrl}`}
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  disabled={unlocking}
+                  autoFocus={active}
+                />
+                <Button type="submit" busy={unlocking} busyLabel="Decrypting">
+                  Decrypt terminal
+                </Button>
+                {/* The password never goes with it; whether a saved one failed does. */}
+                <FeedbackLink
+                  surface="session-gate"
+                  kind="problem"
+                  context={{ host, saved_password_failed: detail ? "yes" : undefined }}
+                >
+                  Stuck here? Tell us
+                </FeedbackLink>
+              </form>
+            )}
+          </div>
         </div>
       )}
 

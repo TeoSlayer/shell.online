@@ -436,16 +436,28 @@ button.tab {
 
 .pane-gate {
   position: absolute;
+  z-index: 8;
   inset: 0;
-  display: grid;
+  bottom: auto;
+  height: 100%;
+  max-height: min(100%, var(--pane-gate-height, 100%));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: color-mix(in srgb, var(--paper) 80%, transparent);
   backdrop-filter: blur(3px);
-  place-items: center;
   padding: 20px;
 }
 
 .pane-gate-card {
+  /* Auto margins center a short card and become zero for an oversized one.
+     The gate, not the fixed terminal or page, owns touch/document scrolling. */
+  flex: none;
+  margin-block: auto;
   width: min(380px, 100%);
+  overflow-wrap: anywhere;
   padding: 26px 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
@@ -498,7 +510,7 @@ button.tab {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: 16px;
   transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 
@@ -515,6 +527,17 @@ button.tab {
   margin-top: 18px;
   margin-bottom: 0;
 }
+
+.pane-access-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.pane-access-options .btn { flex: 1 1 110px; margin-top: 0; padding-inline: 12px; }
+.pane-gate-card .vault-input { width: 100%; }
+.pane-gate-card .vault-unlock-methods { flex-wrap: wrap; }
 
 /* ---------------------------------------------------------------
    Session rows become buttons that open a tab

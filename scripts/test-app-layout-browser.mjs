@@ -31,33 +31,55 @@ const built = await build({
     import {TerminalPane} from './src/terminal/TerminalPane';
     import {useKeyboardInset} from './src/terminal/keyboard-inset';
     import {AuthContext} from './src/auth/AuthProvider';
-    import {VaultProvider} from './src/vault/VaultProvider';
+    import {VaultProvider,useVault} from './src/vault/VaultProvider';
     import {TeamKeyProvider} from './src/vault/TeamKeyProvider';
     import {initializeAppearance,setAppearance} from './src/lib/appearance';
+    import {forgetAll} from './src/lib/session-passwords';
     ${["tokens", "base", "auth", "shell", "terminal", "chat", "people", "collab", "audit", "terms", "vault", "feedback"].map(s => `import './src/styles/${s}.css';`).join("\n")}
-    initializeAppearance();window.layoutTheme=setAppearance;
+    initializeAppearance();window.layoutTheme=setAppearance;window.layoutForgetPasswords=forgetAll;
     const auth={user:{uid:'layout-fixture',email:'fixture@example.test',displayName:'Layout Test'},initializing:false,signOutUser:async()=>{}};
+    let remoteVault=null;
+    const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
+    globalThis.fetch=async(input,init={})=>{
+      const url=new URL(typeof input==='string'?input:input.url,location.origin);
+      if(url.origin!==location.origin)throw Error('Unexpected external fixture API request');
+      const path=url.pathname;
+      if(path==='/api/vault'){
+        if(init.method==='POST'){const b=JSON.parse(init.body);remoteVault={publicKey:b.public_key,encryptedPrivateKey:b.encrypted_private_key,recoveryWrap:b.recovery_wrap,version:1,createdAt:Date.now(),updatedAt:Date.now()};}
+        return json({vault:remoteVault});
+      }
+      if(path==='/api/team-key')return json({teamKey:null,share:null,missing:[]});
+      if(path==='/api/org')return json({organization:{id:'layout-org',name:'Fixture'},you:{uid:'layout-fixture',role:'owner'},members:[],invites:[]});
+      if(path==='/api/sessions')return json({sessions:[]});
+      if(path.endsWith('/keys'))return json({shared:1});
+      if(path==='/api/notifications')return json({notifications:[],unread:0,unreadAssignments:0,members:[]});
+      window.fixtureErrors.push('Unexpected fixture API request');throw Error('Unexpected fixture API request');
+    };
+    function VaultProbe(){window.layoutVault=useVault();return null;}
     function Fixture(){
-      const panes=useRef(null),[mode,setMode]=useState('terminal');
+      const panes=useRef(null),[mode,setMode]=useState('terminal'),[share,setShare]=useState();
+      window.layoutSetShare=setShare;
       window.layoutMode=setMode;
       useKeyboardInset(panes,mode==='terminal');
-      return <AppShell title="Sessions" aside={<button className="new-session"><Plus size={16} weight="bold"/>Session</button>}>
+      return <AppShell title="Sessions" aside={<button className="new-session" aria-label="New session"><Plus size={16} weight="bold"/><span className="new-session-label">Session</span></button>}>
         {mode==='terminal' ? <>
           <div className="terminal-bar"><div className="tabs"><button className="tab">All sessions</button>{Array.from({length:8},(_,i)=><div className="tab is-active" key={i}><button className="tab-label">Synthetic agent {i+1} {'W'.repeat(64)}</button><button className="tab-close" aria-label="Close tab">×</button></div>)}</div><label className="tab-renderer"><span>Renderer</span><select><option>xterm.js</option></select></label></div>
-          <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} renderer="xterm" active canType={false} pulseAllowed={false}/></div>
+          <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} keyShare={share} renderer="xterm" active canType={false} pulseAllowed={false} host={'Synthetic-MacBook-'+ 'W'.repeat(64)}/></div>
         </> : <div>{Array.from({length:mode==='long'?65:1},(_,i)=><p key={i} style={{padding:'12px 0'}}>Synthetic session row {i+1}</p>)}<button id="last-row">Last row</button></div>}
       </AppShell>;
     }
-    createRoot(document.getElementById('root')).render(<BrowserRouter><AuthContext.Provider value={auth}><VaultProvider><TeamKeyProvider><Fixture/></TeamKeyProvider></VaultProvider></AuthContext.Provider></BrowserRouter>);
+    createRoot(document.getElementById('root')).render(<BrowserRouter><AuthContext.Provider value={auth}><VaultProvider><VaultProbe/><TeamKeyProvider><Fixture/></TeamKeyProvider></VaultProvider></AuthContext.Provider></BrowserRouter>);
   ` },
   plugins: [{ name: "synthetic-terminal-transport", setup(b) {
+    b.onResolve({filter:/^\.\/firebase$/},args=>args.importer.endsWith('/lib/api.ts')?{path:join(root,'app/scripts/fixtures/firebase-stub.ts')}:null);
     b.onResolve({ filter: /game\/GameRoute$/ }, () => ({ path: "game", namespace: "fixture" }));
     b.onResolve({ filter: /^\.\/connection$/ }, args => args.importer.endsWith("TerminalPane.tsx") ? { path: "transport", namespace: "fixture" } : null);
     b.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ loader: "js", contents: args.path === "game" ? "export default function Game(){return null}" : `
       export class TerminalConnection {
-        constructor({events}){this.events=events;this.needsPassword=false;window.layoutGrid=grid=>events.onGrid(grid);}
-        async start(){this.events.onGrid({cols:120,rows:36});this.events.onStatus('connected');this.events.onHostState({presence:'connected'});this.events.onMcpAuthorization(true);this.events.onReadOnly(true);this.events.onData(new TextEncoder().encode(Array.from({length:36},(_,i)=>String(i+1).padStart(2,'0')+' '+(i===0?'SYNTHETIC TERMINAL — RESPONSIVE LAYOUT':'Working on a fixture. No real session or credentials.')).join('\\r\\n')),true);}
-        sendFrame(){} send(){} sendBinary(){} requestSnapshot(){} close(){} async submitPassword(){}
+        constructor({events}){this.events=events;this.needsPassword=!!window.layoutStartLocked;window.layoutConnections=(window.layoutConnections||0)+1;window.layoutGrid=grid=>events.onGrid(grid);window.layoutStatus=(status,detail)=>events.onStatus(status,detail);}
+        async start(){this.events.onGrid({cols:120,rows:36});this.events.onStatus(this.needsPassword?'needs-password':'connected');this.events.onHostState({presence:'connected'});this.events.onMcpAuthorization(true);this.events.onReadOnly(true);if(!this.needsPassword)this.events.onData(new TextEncoder().encode(Array.from({length:36},(_,i)=>String(i+1).padStart(2,'0')+' '+(i===0?'SYNTHETIC TERMINAL — RESPONSIVE LAYOUT':'Working on a fixture. No real session or credentials.')).join('\\r\\n')),true);}
+        sendFrame(){} send(){} sendBinary(){} requestSnapshot(){} close(){}
+        async submitPassword(value){(window.layoutSubmitted??=[]).push(value);if(value==='synthetic-session-password'){this.needsPassword=false;this.events.onUnlocked();this.events.onStatus('connected');}else this.events.onStatus('needs-password','Synthetic wrong session password');}
       }
     ` }));
   } }],
@@ -101,7 +123,7 @@ try {
   await browser.evaluate(`document.getElementById('text-audit-fixture').remove()`);
   await until("!!document.querySelector('.xterm-screen') && document.fonts.status==='loaded'", "real terminal mounted");
   // Resize one mounted app across both sides of each breakpoint, including returning.
-  for (const theme of ['light','dark']) {
+  for (const theme of process.env.APP_LAYOUT_GATE_ONLY ? [] : ['light','dark']) {
   await browser.evaluate(`window.layoutTheme('${theme}')`);
   for (const [width, height] of [[845,676],[900,768],[901,768],[1440,900],[1920,1080],[1024,768],[761,700],[760,700],[641,700],[640,700],[561,700],[560,700],[390,844],[320,640],[600,480],[850,480],[844,390],[667,375],[1024,480],[845,900],[1440,900]]) {
     if (process.env.APP_LAYOUT_ONLY && String(width) !== process.env.APP_LAYOUT_ONLY) continue;
@@ -165,6 +187,138 @@ try {
     await until("!!document.querySelector('.xterm-screen')", "terminal remount");
   }
   }
+  // A locked/failed session has a document over the fixed terminal, not terminal
+  // scrollback. Its own scroller must reach every control without moving the grid.
+  for (const theme of ['light','dark']) {
+    await browser.call(theme=>window.layoutTheme(theme),theme);
+    for(const [width,height] of [[393,650],[320,568],[390,360],[844,320],[1024,500],[1440,900]]) {
+      await browser.setViewport({width,height,dpr:1,mobile:width<=393});
+      await delay(150);
+      for(const status of ['needs-password','error']) {
+        await browser.call(status=>window.layoutStatus(status,status==='error'?'Synthetic error '+ 'Long error detail. '.repeat(35):undefined),status);
+        await until("!!document.querySelector('.pane-gate-card')",'session gate');
+        await delay(100);
+        const start=await browser.call(()=>{
+          const gate=document.querySelector('.pane-gate'),card=gate.querySelector('.pane-gate-card');
+          gate.scrollTop=0;
+          return {overflow:getComputedStyle(gate).overflowY,client:gate.clientHeight,total:gate.scrollHeight,horizontal:card.scrollWidth>card.clientWidth+1};
+        });
+        assert(['auto','scroll'].includes(start.overflow),'Session gate owns user scrolling, rather than clipping under navigation');
+        assert(!start.horizontal,'Long host/error text fits the gate');
+        assert(await browser.call(()=>{const g=document.querySelector('.pane-gate').getBoundingClientRect();return !!document.elementFromPoint(g.left+g.width/2,g.top+30)?.closest('.pane-gate');}),'Terminal badges/tools cannot cover the unlock controls');
+        if(browser.swipe && width<=393 && start.total>start.client+1) {
+          const point=await browser.call(()=>{const r=document.querySelector('.pane-gate').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height*0.8,deltaY:-r.height*0.5};});
+          await browser.swipe(point);
+          assert(await browser.call(()=>document.querySelector('.pane-gate').scrollTop>0),'A real touch swipe scrolls the gate');
+        }
+        await browser.call(()=>{const gate=document.querySelector('.pane-gate');gate.scrollTop=gate.scrollHeight;});
+        await delay(80);
+        const end=await browser.call(()=>{
+          const gate=document.querySelector('.pane-gate'),r=gate.getBoundingClientRect();
+          const card=gate.querySelector('.pane-password-form')||gate.querySelector('.pane-gate-card');
+          const last=card.lastElementChild.getBoundingClientRect();
+          return {scroll:gate.scrollTop,reachable:last.bottom<=r.bottom+1&&last.top>=r.top-1};
+        });
+        assert(end.reachable,'Help remains reachable above the bottom navigation');
+        if(start.total>start.client+1)assert(end.scroll>0,'Overflowing gate actually scrolls');
+        if(status==='needs-password') {
+          await browser.call(()=>document.querySelector('.pane-gate button[type="submit"]').scrollIntoView({block:'center'}));
+          await delay(80);
+          assert(await browser.call(()=>{const g=document.querySelector('.pane-gate').getBoundingClientRect(),b=document.querySelector('.pane-gate button[type="submit"]').getBoundingClientRect();return b.top>=g.top&&b.bottom<=g.bottom;}),'Submit independently reachable even in short windows');
+        }
+        await browser.call(()=>{document.querySelector('.pane-gate').scrollTop=0;});
+        await delay(80);
+        const heading=await browser.call(()=>{const gate=document.querySelector('.pane-gate'),g=gate.getBoundingClientRect(),h=document.querySelector('.pane-gate h2').getBoundingClientRect();return {gateTop:g.top,gateBottom:g.bottom,headingTop:h.top,headingBottom:h.bottom,scroll:gate.scrollTop,width:innerWidth,height:innerHeight};});
+        assert(heading.headingTop>=heading.gateTop,'Oversized card never centers its heading above the scroll origin: '+JSON.stringify(heading));
+        await browser.call(()=>document.querySelector('.pane-gate h2').scrollIntoView({block:'center'}));
+        await delay(80);
+        assert(await browser.call(()=>{const g=document.querySelector('.pane-gate').getBoundingClientRect(),h=document.querySelector('.pane-gate h2').getBoundingClientRect();return h.top>=g.top-1&&h.bottom<=g.bottom+1;}),'Heading is fully reachable, including when the viewport is shorter than its decorative header');
+        if(shots)await writeFile(join(shots,`gate-${theme}-${status}-${width}-${height}.png`),Buffer.from(await browser.screenshot(),'base64'));
+        const actual=await browser.call(()=>({width:innerWidth,height:innerHeight}));
+        console.log(`PASS session gate ${browser.name} ${theme} ${status} ${actual.width}x${actual.height} (requested ${width}x${height}): heading, scroll, submit and help`);
+        await browser.call(()=>window.layoutStatus('connected'));
+        await until("!document.querySelector('.pane-gate')",'gate dismissed');
+      }
+    }
+  }
+  // Real VaultProvider + vault crypto + real form handlers, only network and
+  // terminal transport are fixtures. Prove opening a locked vault retries the
+  // existing sealed share, without reconnecting or forwarding the vault secret.
+  await browser.setViewport({width:393,height:650,dpr:1,mobile:true});
+  await until("layoutVault.status==='setup'",'synthetic vault setup');
+  await browser.call(async()=>{
+    const prepared=await layoutVault.prepare(false,'synthetic-vault-password');
+    await layoutVault.commit(prepared);
+  });
+  await until("layoutVault.status==='unlocked'",'vault created');
+  await browser.call(async()=>{
+    const share=await layoutVault.sealTo({uid:'layout-fixture',accountKey:layoutVault.publicKey},'0'.repeat(32),'synthetic-session-password');
+    layoutSetShare(share);await layoutVault.lock();layoutMode('short');layoutForgetPasswords();window.layoutStartLocked=true;
+  });
+  await until("layoutVault.status==='locked' && !document.querySelector('.pane')",'vault locked and terminal unmounted');
+  await browser.call(()=>{window.layoutSubmitted=[];layoutMode('terminal');});
+  await until("!!document.querySelector('.pane-gate .vault-form')",'inline vault choice');
+  const connectionCount=await browser.call(()=>layoutConnections);
+  assert(await browser.call(()=>document.querySelectorAll('[aria-label="Session unlock method"] button').length===2),'Vault and session password are both offered');
+  if(shots)await writeFile(join(shots,'inline-vault-choice.png'),Buffer.from(await browser.screenshot(),'base64'));
+  const typeInto=async(selector,value)=>{
+    await browser.call((selector,value)=>{const input=document.querySelector(selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));},selector,value);
+    await delay(50);
+  };
+  await typeInto('.pane-gate .vault-form input','wrong-vault-password');
+  await browser.call(()=>document.querySelector('.pane-gate .vault-form button[type="submit"]').click());
+  await until("!!document.querySelector('.pane-gate .alert')",'wrong vault password remains actionable');
+  assert(await browser.call(()=>layoutVault.status==='locked'&&layoutSubmitted.length===0),'Vault password never reaches terminal transport');
+  await typeInto('.pane-gate .vault-form input','synthetic-vault-password');
+  await browser.call(()=>document.querySelector('.pane-gate .vault-form button[type="submit"]').click());
+  await until("!document.querySelector('.pane-gate')",'vault unlock opens the existing terminal');
+  assert(await browser.call(count=>layoutConnections===count&&layoutSubmitted.length===1&&layoutSubmitted[0]==='synthetic-session-password',connectionCount),'Saved share retried once without reconnect; only session password submitted');
+  console.log('PASS real inline vault unlock: wrong password, successful crypto unlock, saved-share retry and no reconnect');
+  await browser.call(async()=>{layoutMode('short');layoutForgetPasswords();await layoutVault.lock();});
+  await until("!document.querySelector('.pane') && layoutVault.status==='locked'",'direct-password fixture ready');
+  await browser.call(()=>{window.layoutSubmitted=[];layoutMode('terminal');});
+  await until("!!document.querySelector('.pane-gate .vault-form')",'locked vault prompt again');
+  await browser.call(()=>document.querySelectorAll('[aria-label="Session unlock method"] button')[1].click());
+  await until("!!document.querySelector('.pane-password-form')",'session password choice');
+  if(shots)await writeFile(join(shots,'inline-password-choice.png'),Buffer.from(await browser.screenshot(),'base64'));
+  if(browser.name==='chrome') {
+    // Exercise the real viewport listener with a synthetic keyboard-sized
+    // visual viewport. This is not a claim of attached-iPhone keyboard testing.
+    const before=await browser.call(()=>document.querySelector('.xterm-screen').getBoundingClientRect().height);
+    await browser.call(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:350});visualViewport.dispatchEvent(new Event('resize'));});
+    await until("document.documentElement.dataset.keyboard==='open'",'keyboard viewport update');
+    await delay(150);
+    await browser.call(()=>document.querySelector('.pane-password-form button[type="submit"]').scrollIntoView({block:'center'}));
+    await delay(80);
+    assert(await browser.call(()=>{const r=document.querySelector('.pane-gate').getBoundingClientRect(),b=document.querySelector('.pane-password-form button[type="submit"]').getBoundingClientRect();return r.bottom<=visualViewport.height+visualViewport.offsetTop+1&&b.top>=r.top&&b.bottom<=r.bottom;}),'Unlock submit clears the keyboard, even below the terminal minimum height');
+    assert.equal(await browser.call(()=>document.querySelector('.xterm-screen').getBoundingClientRect().height),before,'Keyboard does not shrink terminal rendering');
+    await browser.call(()=>{delete visualViewport.height;visualViewport.dispatchEvent(new Event('resize'));});
+    await until("!document.documentElement.hasAttribute('data-keyboard')",'keyboard dismissed');
+    console.log('PASS synthetic keyboard viewport: form scrolls, submit reachable, terminal size unchanged');
+  }
+  await typeInto('.pane-password-form input','wrong-session-password');
+  await browser.call(()=>document.querySelector('.pane-password-form button[type="submit"]').click());
+  await until("!!document.querySelector('.pane-password-form .alert')",'wrong session password error');
+  await typeInto('.pane-password-form input','synthetic-session-password');
+  await browser.call(()=>document.querySelector('.pane-password-form button[type="submit"]').click());
+  await until("!document.querySelector('.pane-gate')",'direct session password opens terminal');
+  assert(await browser.call(()=>layoutVault.status==='locked'&&layoutSubmitted.length===2&&layoutSubmitted[1]==='synthetic-session-password'),'Direct password does not require or unlock the vault');
+  assert(await browser.call(()=>document.querySelector('.new-session').getBoundingClientRect().width<65),'New session action is compact on phones');
+  assert.deepEqual(await browser.call(()=>fixtureErrors),[],'No browser or unexpected API errors');
+  console.log('PASS direct session password: wrong/correct password, vault remains locked, compact new-session action');
+  await browser.call(()=>{layoutMode('short');layoutForgetPasswords();layoutSetShare(undefined);});
+  await until("!document.querySelector('.pane')",'no-saved-share fixture ready');
+  await browser.call(()=>{window.layoutSubmitted=[];layoutMode('terminal');});
+  await until("!!document.querySelector('.pane-gate .vault-form')",'vault choice without saved share');
+  await typeInto('.pane-gate .vault-form input','synthetic-vault-password');
+  await browser.call(()=>document.querySelector('.pane-gate .vault-form button[type="submit"]').click());
+  await until("layoutVault.status==='unlocked' && !!document.querySelector('.pane-password-form')",'missing saved share falls back to session password');
+  assert.equal(await browser.call(()=>layoutSubmitted.length),0,'No invented password after vault unlock');
+  await typeInto('.pane-password-form input','synthetic-session-password');
+  await browser.call(()=>document.querySelector('.pane-password-form button[type="submit"]').click());
+  await until("!document.querySelector('.pane-gate')",'missing-share fallback opens terminal');
+  assert.deepEqual(await browser.call(()=>fixtureErrors),[],'No browser or unexpected API errors after fallback');
+  console.log('PASS unlocked vault without saved session password: direct-password fallback works');
   console.log("PASS actual app shell and terminal across tablet/phone/desktop boundaries; document scrolling and resize transitions");
 } finally {
   await browser?.close();

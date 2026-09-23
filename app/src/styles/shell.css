@@ -296,6 +296,11 @@
   transform: translateY(0);
 }
 
+@media (max-width: 760px) {
+  .new-session { width: 44px; height: 44px; padding: 0; justify-content: center; gap: 0; }
+  .new-session-label { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .new-session:hover {
     transform: none;

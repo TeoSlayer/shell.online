@@ -29,6 +29,12 @@ describe("sizing the terminal to what the keyboard has left", () => {
     expect(paneHeight({ viewportHeight: 180, offsetTop: 0, paneTop: 140 })).toBe(180);
   });
 
+  it("lets unlock forms scroll above a keyboard without the terminal minimum", () => {
+    expect(paneHeight({ viewportHeight: 300, offsetTop: 0, paneTop: 160, minimum: 0 })).toBe(140);
+    expect(paneHeight({ viewportHeight: 300, offsetTop: 0, paneTop: 160, zoom: 1.15, minimum: 0 })).toBe(122);
+    expect(paneHeight({ viewportHeight: 150, offsetTop: 0, paneTop: 160, minimum: 0 })).toBe(0);
+  });
+
   /*
    * The phone breakpoint zooms the root, so a length written into a custom
    * property is multiplied before it is drawn. Measuring the room in viewport
