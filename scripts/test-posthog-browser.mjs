@@ -186,4 +186,10 @@ try{
   assert.deepEqual(errors,[]);
   const result={mode:live?'live':'candidate',passed:reports,events:events.length,secretLeak:false,syntheticEventsSent:0};
   console.log(JSON.stringify(result,null,2));
-}finally{socket?.close();await browser?.close();await rm(profile,{recursive:true,force:true});}
+}finally{
+  socket?.close();
+  await browser?.close();
+  // Chrome helpers can briefly finish profile writes after the parent exits.
+  // Retry only this fixture-owned directory; persistent cleanup failure fails.
+  await rm(profile,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+}
