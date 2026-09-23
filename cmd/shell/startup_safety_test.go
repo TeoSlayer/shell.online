@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"shell.online/internal/api"
 )
 
 func startupFixture(t *testing.T) (string, persistentSessionState, string) {
@@ -408,5 +410,80 @@ func TestUpdateCredentialsAfterCloseRefused(t *testing.T) {
 	entries, err := os.ReadDir(directory)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("late rotation recreated local state: entries=%d err=%v", len(entries), err)
+	}
+}
+
+// Exclusive fresh-state publication: exactly one winner, first credentials kept.
+func TestFreshPersistentStateExclusivePersist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "session.json")
+	first := persistentSessionState{Version: 1, HostToken: strings.Repeat("1", 43), Encrypted: false}
+	first.ID = persistentSessionID(first.HostToken)
+	second := persistentSessionState{Version: 1, HostToken: strings.Repeat("2", 43), Encrypted: false}
+	second.ID = persistentSessionID(second.HostToken)
+	if err := writeNewPersistentState(path, first); err != nil {
+		t.Fatalf("first persist: %v", err)
+	}
+	if err := writeNewPersistentState(path, second); err == nil {
+		t.Fatal("second exclusive persist overwrote the first")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	var stored persistentSessionState
+	if err := json.Unmarshal(data, &stored); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if stored.HostToken != first.HostToken || stored.ID != first.ID {
+		t.Fatal("first credentials were clobbered")
+	}
+}
+
+// A control socket replaced before the resume makes check() refuse, so the
+// production pre-resume sequence (check, then resume only on success) makes no
+// remote request. The existing replacement test covers finalize, not resume.
+func TestReplacedSocketBeforeResumeMakesNoRemoteRequest(t *testing.T) {
+	path, _, directory := startupFixture(t)
+	prepared, err := preparePersistentSession(path, false, true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservation, err := reserveLocalSession(prepared.state.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reservation.Close()
+	if err := prepared.persist(path); err != nil {
+		t.Fatal(err)
+	}
+	// Replace the control socket before the resume (as a cooperating launch would).
+	if err := os.Remove(localSessionSocketPath(directory, prepared.state.ID)); err != nil {
+		t.Fatal(err)
+	}
+	replacement, err := net.Listen("unix", localSessionSocketPath(directory, prepared.state.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replacement.Close()
+	checkErr := reservation.check()
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		http.Error(w, "synthetic", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	client := api.NewClient(server.URL, "shell/test")
+	if checkErr == nil {
+		// Production only resumes after a passing check.
+		if _, err := prepared.resume(context.Background(), client, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if checkErr == nil {
+		t.Fatal("check passed with a replaced control socket")
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("replaced socket made %d remote requests", requests.Load())
 	}
 }

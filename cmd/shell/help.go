@@ -354,9 +354,11 @@ your account instead, from every linked machine; see shell help ls.
 
 Reading this machine's sessions is read-only: discovery never removes a session
 record or a control socket, and starting a session does not remove an existing
-control socket. A process that ended without reporting stays listed until the
-relay expires it; the automatic close is disabled until it can be bound to the
-exact run.
+control socket. A process that ended without reporting is omitted from this
+local list; its account row in shell ls may remain until the relay expires it,
+and no row is auto-closed. A crash that leaves a local record or control socket
+blocks resuming that persistent session until you review and recover it
+explicitly; nothing restarts it automatically.
 `)
 	case "ls":
 		fmt.Fprint(stdout, `List your account's sessions
@@ -496,7 +498,9 @@ process, for example:
   shell ros2 launch <package> <launch-file>
 
 Use --persistent <state-file> to restore one URL and password when rerunning a
-process. The Docker image combines it with a restart policy for automatic recovery.
+process after a clean exit. A crash that leaves a local record or control socket
+blocks the resume until you review and recover it explicitly; nothing restarts
+it automatically.
 `)
 	case "reference", "cli", "commands":
 		printCLIReference(stdout)
@@ -553,7 +557,9 @@ START OPTIONS
   --persistent <state-file>
       Reuse a stable session identity, password, and URL. The owner-only state
       file contains host credentials, the browser password, and decryption material.
-      Re-run with the same file after a process or machine restart to restore the link.
+      Re-run with the same file after a clean process or machine restart to restore
+      the link; a crash that leaves a local record or control socket blocks the
+      resume until you review and recover it explicitly.
   --files
       Opt in regular files under the process working directory. The browser
       discovers and reads them only on demand; nothing is shared by default.
