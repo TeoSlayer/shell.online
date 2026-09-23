@@ -380,7 +380,7 @@ try {
   });
   await vite.listen();
   const vitePort = vite.httpServer.address().port;
-  transport = browser === "safari" ? await launchSafariTransport() : await launchChromeTransport({ profileDirectory: undefined, profile: mkdtempSync("/tmp/shell-live-chrome-") });
+  transport = browser === "safari" ? await launchSafariTransport() : await launchChromeTransport({ profile: join(temp, "chrome") });
   evaluate = (expression) => transport.evaluate(expression);
   if (browser === "safari") {
     safariViewport = await transport.setViewport({ width: 1280, height: 820 });
