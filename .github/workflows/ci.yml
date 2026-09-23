@@ -197,6 +197,24 @@ jobs:
         run: node scripts/test-posthog-browser.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - name: Vault lifecycle baseline (real provider, Chrome)
+        run: node app/scripts/test-vault-lifecycle-ui.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - name: Vault async-boundary supplemental baseline (real provider, Chrome)
+        run: node app/scripts/test-vault-async-boundaries-ui.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - name: Vault lifecycle mutations are load-bearing (fingerprint-guard, clear-fifo)
+        run: |
+          if node app/scripts/test-vault-lifecycle-ui.mjs --mutation=fingerprint-guard; then
+            echo "fingerprint-guard mutation did not fail the baseline"; exit 1;
+          fi
+          if node app/scripts/test-vault-lifecycle-ui.mjs --mutation=clear-fifo; then
+            echo "clear-fifo mutation did not fail the baseline"; exit 1;
+          fi
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
       - name: Responsive app shell and terminal regression gate
         run: node scripts/test-app-layout-browser.mjs
         env:

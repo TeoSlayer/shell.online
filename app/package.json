@@ -24,6 +24,7 @@
     "test:watch": "vitest",
     "test:feedback": "node scripts/test-feedback-route.mjs",
     "test:vault-lifecycle": "node scripts/test-vault-lifecycle-ui.mjs",
+    "test:vault-async-boundaries": "node scripts/test-vault-async-boundaries-ui.mjs",
     "typecheck": "tsc -b --force",
     "verify:bundle": "node scripts/check-bundle.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
