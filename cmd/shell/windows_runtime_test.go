@@ -13,7 +13,7 @@ import (
 )
 
 func TestWindowsConPTYRunsInteractiveCommand(t *testing.T) {
-	terminal, err := startTerminalProcess([]string{"cmd.exe", "/d", "/s", "/c", "echo conpty-ready"}, nil)
+	terminal, err := startTerminalProcess([]string{"cmd.exe", "/d", "/s", "/c", "echo conpty-ready"}, nil, defaultTerminalGrid())
 	if err != nil {
 		t.Fatal(err)
 	}

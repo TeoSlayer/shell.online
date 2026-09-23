@@ -208,8 +208,8 @@ func sgr(a xterm.AttributeData) string {
 	return "\x1b[" + strings.Join(parts, ";") + "m"
 }
 
-// ResizeTerminal must accompany the host PTY resize. Keeping the emulator
-// on the canonical grid avoids interpreting old output at a new viewer size.
+// ResizeTerminal must accompany the host PTY resize. The emulator is kept at
+// the session grid, so a snapshot describes the screen the process drew.
 func (buffer *Buffer) ResizeTerminal(cols, rows int) {
 	buffer.mu.Lock()
 	defer buffer.mu.Unlock()

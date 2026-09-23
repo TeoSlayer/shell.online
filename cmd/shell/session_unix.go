@@ -25,19 +25,9 @@ import (
 )
 
 const (
-	outputBatchInterval = 10 * time.Millisecond
-	outputBatchBytes    = 32 * 1024
-	snapshotBytes       = 512 * 1024
-	desktopTerminalCols = 120
-	desktopTerminalRows = 36
-	// The wider desktop grid, offered only to a relay that asked for it. A
-	// terminal shows what fits in its grid and nothing else, and on a wide
-	// screen 120x36 was the amount of work you could see at once.
-	wideDesktopCols        = 160
-	wideDesktopRows        = 48
-	mobileTerminalCols     = 80
-	mobileTerminalRows     = 40
-	legacyMobileRows       = 24
+	outputBatchInterval    = 10 * time.Millisecond
+	outputBatchBytes       = 32 * 1024
+	snapshotBytes          = 512 * 1024
 	backgroundStartupGrace = 250 * time.Millisecond
 	// mcpTypingWindow is the quiescence after the last human PTY write during which an MCP
 	// shell_send is rejected (delivery_uncertain, nothing written) rather than interleaved
@@ -149,7 +139,12 @@ func runSharedProcess(
 		onConnected()
 	}
 
-	outputRing := ringbuffer.NewTerminal(snapshotBytes, desktopTerminalCols, desktopTerminalRows)
+	/*
+	 * The grid is decided before anything is sized from it: the terminal this
+	 * runs in when there is one, else what the launcher handed down.
+	 */
+	initialGrid, localTerminal := initialTerminalGrid(stdout)
+	outputRing := ringbuffer.NewTerminal(snapshotBytes, int(initialGrid.Cols), int(initialGrid.Rows))
 	defer outputRing.Close()
 	frameCipher := newSessionCipher(session.Cipher)
 	if managed, ok := control.(*managedLocalSession); ok {
@@ -169,12 +164,34 @@ func runSharedProcess(
 		defer func() { _ = term.Restore(int(terminal.Fd()), previousState) }()
 	}
 
-	ptmx, err := startTerminalProcess(commandArguments, terminalEnvironment(commandEnvironment))
+	ptmx, err := startTerminalProcess(commandArguments, terminalEnvironment(commandEnvironment), initialGrid)
 	if err != nil {
 		sendFinalState(connection, outputRing, frameCipher, 1, nil)
 		return 1, fmt.Errorf("start %s: %w", commandArguments[0], err)
 	}
 	defer ptmx.Close()
+
+	/*
+	 * One owner resizes the PTY. The relay is told the grid once it has said
+	 * it understands one (relay_features, handled in readRelay), then on every
+	 * change. It keeps nothing about the host across a reconnect, so each new
+	 * socket starts unannounced and the relay's relay_features on it brings
+	 * the grid back. A relay that predates grids never says so, and is never
+	 * sent a message it would close the host over.
+	 */
+	grid := newGridController(initialGrid, localTerminal, ptmx, outputRing, func(next terminalGrid) {
+		_ = connection.Send(relay.TextMessage, terminalGridMessage(next))
+	})
+	connection.SetGreeting(func() []byte {
+		grid.NewSocket()
+		return nil
+	})
+	if localTerminal {
+		if file, ok := stdout.(*os.File); ok {
+			stopWatching := watchTerminalSize(file, grid.SetLocal)
+			defer stopWatching()
+		}
+	}
 
 	// All host-side input (foreground stdin, local attachment, browser viewer, MCP send)
 	// routes through one arbiter so a typing human can never be interleaved by an MCP send.
@@ -195,6 +212,9 @@ func runSharedProcess(
 	}
 	if control != nil {
 		notifyAttachChange := func(attached bool) {
+			if !attached {
+				grid.ClearLocal()
+			}
 			message, _ := json.Marshal(struct {
 				Type     string `json:"type"`
 				Attached bool   `json:"attached"`
@@ -204,7 +224,10 @@ func runSharedProcess(
 		control.BindTerminal(
 			humanPTYWriter{arbiter},
 			outputRing,
-			nil,
+			func(cols, rows uint16) error {
+				grid.SetLocal(int(cols), int(rows))
+				return nil
+			},
 			notifyLocalTyping,
 			notifyAttachChange,
 		)
@@ -307,7 +330,7 @@ func runSharedProcess(
 	exitAcknowledged := make(chan struct{}, 1)
 	var relayWarning sync.Once
 	go func() {
-		err := readRelay(connection, ptmx, arbiter, outputEmitter, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService, flowSink)
+		err := readRelay(connection, grid, arbiter, outputEmitter, frameCipher, session.ReadOnly, exitAcknowledged, rotationAcknowledged, &supportsRotation, fileService, flowSink)
 		select {
 		case <-sharingFinished:
 			return
@@ -677,7 +700,7 @@ func batchOutput(ctx context.Context, kicks <-chan struct{}, emitter *outputEmit
 
 func readRelay(
 	connection *relay.Connection,
-	ptmx sharedTerminalProcess,
+	grid *gridController,
 	arbiter *inputArbiter,
 	emitter *outputEmitter,
 	frameCipher *sessionCipher,
@@ -711,7 +734,9 @@ func readRelay(
 				ViewerID           uint32 `json:"viewerId"`
 				Cols               uint16 `json:"cols"`
 				Rows               uint16 `json:"rows"`
+				Dynamic            bool   `json:"dynamic"`
 				CredentialRotation bool   `json:"credentialRotation"`
+				TerminalGrid       bool   `json:"terminalGrid"`
 			}
 			if json.Unmarshal(message, &event) != nil {
 				continue
@@ -733,6 +758,17 @@ func readRelay(
 				}
 				continue
 			}
+			/*
+			 * The relay understands terminal_grid. It says so before anything
+			 * else on the socket, so the grid reaches it ahead of any snapshot
+			 * and every viewer is told the grid before the screen drawn at it.
+			 */
+			if event.Type == "relay_features" {
+				if event.TerminalGrid && grid != nil {
+					grid.RelayTakesGrid()
+				}
+				continue
+			}
 			if event.Type == "snapshot_request" {
 				// Viewers do not re-request a missing snapshot, so a refused
 				// reply is deferred and retried by the emitter's flush
@@ -740,10 +776,26 @@ func readRelay(
 				// enqueued now.
 				_ = emitter.snapshotFor(event.ViewerID)
 			}
+			/*
+			 * A writer viewer asked for its own grid ("fit the program to my
+			 * screen"). The controller keeps it within a local terminal.
+			 */
+			if event.Type == "grid_request" {
+				if grid != nil {
+					grid.Request(int(event.Cols), int(event.Rows))
+				}
+				continue
+			}
+			/*
+			 * An older relay still chooses a grid from viewer device classes
+			 * and says so with terminal_size. A relay that understands the
+			 * dynamic header marks what it sends with "dynamic": it is this
+			 * host's own grid echoed back, never an instruction, so a stale
+			 * echo racing a local resize cannot undo it.
+			 */
 			if event.Type == "terminal_size" {
-				if isCanonicalTerminalSize(event.Cols, event.Rows) {
-					emitter.output.ResizeTerminal(int(event.Cols), int(event.Rows))
-					_ = ptmx.Resize(int(event.Cols), int(event.Rows))
+				if grid != nil && !event.Dynamic {
+					grid.Request(int(event.Cols), int(event.Rows))
 				}
 				continue
 			}
@@ -779,9 +831,8 @@ func readRelay(
 				}
 			})
 		case protocol.Resize:
-			// A shared PTY keeps one canonical grid. Browser and local viewport
-			// changes are presentation-only so simultaneous viewers cannot
-			// deform each other's TUI.
+			// A viewer's window size is its own business: it lays the grid out
+			// for itself. Only an explicit grid_request can change the PTY.
 		case protocol.Ping:
 			if len(message) == 5 {
 				response := append([]byte(nil), message...)
@@ -916,21 +967,6 @@ func sealFrame(frameCipher *sessionCipher, frame []byte) ([]byte, error) {
 	return frameCipher.Seal(frame)
 }
 
-type terminalGrid struct {
-	Cols uint16
-	Rows uint16
-}
-
-func sharedTerminalSize() terminalGrid {
-	return terminalGrid{Cols: desktopTerminalCols, Rows: desktopTerminalRows}
-}
-
-func isCanonicalTerminalSize(cols, rows uint16) bool {
-	return (cols == desktopTerminalCols && rows == desktopTerminalRows) ||
-		(cols == wideDesktopCols && rows == wideDesktopRows) ||
-		(cols == mobileTerminalCols && (rows == mobileTerminalRows || rows == legacyMobileRows))
-}
-
 func terminalEnvironment(environment []string) []string {
 	environment = removeEnvironmentVariables(
 		environment,
@@ -939,6 +975,7 @@ func terminalEnvironment(environment []string) []string {
 		backgroundReadyAddress,
 		backgroundReadyToken,
 		backgroundParentEnvironment,
+		terminalGridEnvironment,
 	)
 	environment = setEnvironmentValue(environment, "TERM", "xterm-256color")
 	environment = setEnvironmentValue(environment, "COLORTERM", "truecolor")

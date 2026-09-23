@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowClockwise, CheckCircle, HourglassMedium, Key, LockKey } from "@phosphor-icons/react";
+import { ArrowClockwise, ArrowsOut, CheckCircle, HourglassMedium, Key, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/ui.css";
@@ -45,6 +45,19 @@ export interface TerminalPaneProps {
    * the people responsible" means in a terminal.
    */
   canType?: boolean;
+  /**
+   * Whether this viewer may ask the program to run at this pane's size. Only
+   * the session's owner is offered it: it changes what the program is told,
+   * so it is the one thing on this page that another viewer would notice.
+   */
+  canResize?: boolean;
+  /**
+   * Ask the program to run at this pane's size as soon as the host can take
+   * it, once. For a session this browser started, which has no terminal of
+   * its own to take a size from.
+   */
+  fitOnOpen?: boolean;
+  onFitted?: () => void;
   /** The machine running it, named in the hint when no password is at hand. */
   host?: string;
   /** Browser renderer selected for every open session in this workspace. */
@@ -150,6 +163,9 @@ export function TerminalPane({
   active,
   keyShare,
   canType = true,
+  canResize = false,
+  fitOnOpen = false,
+  onFitted,
   host,
   renderer,
   onPulseChange,
@@ -270,6 +286,18 @@ export function TerminalPane({
    * the matter is how large to draw it.
    */
   const grid = useRef<TerminalGrid>(DESKTOP_TERMINAL_GRID);
+  /*
+   * The grid this pane would choose for itself, when the host will take a
+   * request for it and it differs from the session's. Null hides the offer.
+   */
+  const [fitOffer, setFitOffer] = useState<TerminalGrid | null>(null);
+  const resizable = useRef(false);
+  const fitPending = useRef(fitOnOpen);
+  fitPending.current = fitPending.current && fitOnOpen;
+  const onFittedRef = useRef(onFitted);
+  onFittedRef.current = onFitted;
+  const canResizeRef = useRef(canResize);
+  canResizeRef.current = canResize;
   const fontScale = useRef(1);
   const fittedFontSize = useRef(BASE_FONT_SIZE);
 
@@ -311,6 +339,29 @@ export function TerminalPane({
       const box = terminalBox(node);
       if (box.width === 0 || box.height === 0) return;
       const { cols, rows } = grid.current;
+      /*
+       * A renderer that sizes itself is given the box and chooses: the grid
+       * drawn whole where that is legible, laid out at the pane's width where
+       * it is not. Nothing it decides leaves this browser.
+       */
+      if (term.layout) {
+        if (term.cols !== cols || term.rows !== rows) term.resize(cols, rows);
+        term.layout({ box, measure: measureCell, pixelRatio: window.devicePixelRatio || 1 });
+        const natural = term.naturalGrid?.() ?? null;
+        const differs = !!natural && (natural.cols !== cols || natural.rows !== rows);
+        if (fitPending.current && resizable.current && canResizeRef.current && natural) {
+          fitPending.current = false;
+          if (differs) connection.current?.requestGrid(natural);
+          onFittedRef.current?.();
+        }
+        setFitOffer((current) => {
+          const next = resizable.current && differs ? natural : null;
+          if (current === next) return current;
+          if (current && next && current.cols === next.cols && current.rows === next.rows) return current;
+          return next;
+        });
+        return;
+      }
       const fitted = fittedTerminal(box, { cols, rows }, measureCell, {
         pixelRatio: window.devicePixelRatio,
         maxLineHeight: BASE_LINE_HEIGHT,
@@ -356,6 +407,8 @@ export function TerminalPane({
 
     /* A pane reused for another session starts from the default again. */
     grid.current = DESKTOP_TERMINAL_GRID;
+    resizable.current = false;
+    setFitOffer(null);
     fontScale.current = 1;
     fittedFontSize.current = BASE_FONT_SIZE;
 
@@ -533,9 +586,10 @@ export function TerminalPane({
           setReadOnly(value);
           term.options.disableStdin = value || !canTypeRef.current;
         },
-        /* A portrait viewer takes a capable session to 80x40, and back when it leaves. */
-        onGrid: (next) => {
+        /* The host's grid: its own terminal's, or whatever its owner last fitted it to. */
+        onGrid: (next, canResize) => {
           grid.current = next;
+          resizable.current = canResize;
           refit();
         },
       },
@@ -789,6 +843,18 @@ export function TerminalPane({
     <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
       <div className="pane-tools">
         {pulseAllowed && pulse && <SessionPulseBadge pulse={pulse} />}
+        {canResize && canType && !readOnly && fitOffer && status === "connected" && (
+          <button
+            type="button"
+            className="pane-fit"
+            title={`Run the program at ${fitOffer.cols}×${fitOffer.rows}, the size of this screen. Everyone watching sees the program redraw at that size.`}
+            aria-label="Fit to my screen"
+            onClick={() => connection.current?.requestGrid(fitOffer)}
+          >
+            <ArrowsOut size={13} aria-hidden="true" />
+            <span className="pane-fit-label">Fit to my screen</span>
+          </button>
+        )}
         {mcpAuthorized && <span className="pane-mcp-disclosure" role="status"
           title="The host authorizes the server to decrypt terminal frames and send plaintext to MCP agents for the grant lifetime.">
           MCP · server-side decryption authorized

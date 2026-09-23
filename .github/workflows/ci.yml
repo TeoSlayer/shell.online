@@ -219,7 +219,7 @@ jobs:
         run: node app/scripts/test-appearance-routes.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
-      - name: Terminal pixels, cursor, scrollback and refit gates
+      - name: Terminal pixels, cursor, scrollback, refit and adaptive layout gates
         run: |
           node app/scripts/test-chat-renderer-ui.mjs
           node app/scripts/test-terminal-paint-ui.mjs
@@ -228,6 +228,7 @@ jobs:
           node scripts/test-terminal-paste-ui.mjs
           node app/scripts/test-feedback-route.mjs
           node app/scripts/test-password-requests-ui.mjs
+          node app/scripts/test-terminal-adaptive-ui.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
           SHELL_BROWSER: chrome

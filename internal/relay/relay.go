@@ -48,6 +48,20 @@ type Connection struct {
 	close      sync.Once
 	socketMu   sync.Mutex
 	socket     *websocket.Conn
+	// greeting, when set, produces a text frame written first on every new
+	// socket, ahead of anything queued. State the relay forgets across a
+	// reconnect (the host's terminal grid) is restored before any output.
+	greeting atomic.Pointer[func() []byte]
+}
+
+// SetGreeting installs the frame sent first on every socket from now on. It
+// is not sent on the socket already open; send that one explicitly.
+func (connection *Connection) SetGreeting(greeting func() []byte) {
+	if greeting == nil {
+		connection.greeting.Store(nil)
+		return
+	}
+	connection.greeting.Store(&greeting)
 }
 
 // Generation reports how many times the connection has established a socket.
@@ -130,13 +144,15 @@ func (connection *Connection) run(firstResult chan<- error) {
 func (connection *Connection) dial() (*websocket.Conn, *http.Response, error) {
 	header := make(http.Header)
 	header.Set("Authorization", "Bearer "+connection.hostToken)
-	// Every grid this CLI will open a pty at, so the relay can choose one
-	// without sending it to a CLI that would ignore it: an older build knows
-	// only the 80x24 compatibility size, and one older still than that knows
-	// nothing of the wider desktop grid and would keep serving 120x36 while
-	// the app drew 160x48. The value was a single size and reads as a list of
-	// one, which is what keeps those builds working.
-	header.Set("X-Shell-Terminal-Grid", "80x40,160x48")
+	// Every grid this CLI will open a pty at, plus "dynamic": it sizes the PTY
+	// from the terminal that shows it and announces every change with a
+	// terminal_grid message, so a relay that knows the word passes that grid
+	// on instead of choosing one from viewer device classes. A relay that
+	// predates it reads the sizes and treats this as a host that opens 80x40
+	// and 160x48; what it then chooses arrives as terminal_size and is applied
+	// as a request, within any local terminal. The value was a single size and
+	// reads as a list of one, which is what keeps older builds working.
+	header.Set("X-Shell-Terminal-Grid", "80x40,160x48,dynamic")
 	return websocket.Dial(connection.ctx, connection.endpoint, &websocket.DialOptions{HTTPHeader: header})
 }
 
@@ -161,6 +177,17 @@ func (connection *Connection) serve(socket *websocket.Conn) {
 			}
 		}
 	}()
+
+	if greeting := connection.greeting.Load(); greeting != nil {
+		if frame := (*greeting)(); len(frame) > 0 {
+			writeContext, cancelWrite := context.WithTimeout(socketContext, 10*time.Second)
+			err := socket.Write(writeContext, websocket.MessageText, frame)
+			cancelWrite()
+			if err != nil {
+				return
+			}
+		}
+	}
 
 	pingTicker := time.NewTicker(30 * time.Second)
 	defer pingTicker.Stop()

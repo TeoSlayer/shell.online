@@ -51,8 +51,7 @@ import { fittedTerminal } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import {
   DESKTOP_TERMINAL_GRID,
-  LEGACY_MOBILE_TERMINAL_GRID,
-  MOBILE_TERMINAL_GRID,
+  isValidTerminalGrid,
 } from "../shared/terminal-grid";
 import { mcpDisclosure } from "../shared/mcp-disclosure";
 import { renderStatsDashboard } from "./stats";
@@ -1266,16 +1265,13 @@ function renderTerminal(sessionId: string): void {
       // each viewer and never changes the shared PTY.
       return;
     }
-    if (
-      message.type === "terminal_size" &&
-      typeof message.cols === "number" &&
-      typeof message.rows === "number" &&
-      [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID, LEGACY_MOBILE_TERMINAL_GRID].some(
-        (grid) => message.cols === grid.cols && message.rows === grid.rows,
-      )
-    ) {
-      terminalColumns = message.cols;
-      terminalRows = message.rows;
+    /*
+     * Any grid in range: a CLI that owns its grid runs at the size of the
+     * terminal that started it, which is rarely one of the fixed grids.
+     */
+    if (message.type === "terminal_size" && isValidTerminalGrid(message.cols, message.rows)) {
+      terminalColumns = message.cols as number;
+      terminalRows = message.rows as number;
       scheduleFit();
       return;
     }

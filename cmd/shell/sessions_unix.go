@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,9 +39,13 @@ type managedLocalSession struct {
 	terminalOutput localTerminalOutput
 	onLocalInput   func()
 	onAttachChange func(bool)
-	onRotate       func(string) (string, error)
-	attached       net.Conn
-	mcpGrant       func(label string, scopes []string, ttl int) (api.McpGrantCreated, error)
+	// onResize follows the attached local terminal's size. It is only ever
+	// called while a terminal is attached, so the session never keeps a
+	// limit from a terminal that has already gone.
+	onResize func(cols, rows uint16) error
+	onRotate func(string) (string, error)
+	attached net.Conn
+	mcpGrant func(label string, scopes []string, ttl int) (api.McpGrantCreated, error)
 	// mcpTeamGrant mints a grant for a teammate (requesterUID marks it), so the DO
 	// re-authorizes every use against the accounts service, live.
 	mcpTeamGrant func(label string, scopes []string, ttl int, requesterUID string) (api.McpGrantCreated, error)
@@ -163,13 +168,14 @@ func (session *managedLocalSession) StopRequested() <-chan struct{} {
 func (session *managedLocalSession) BindTerminal(
 	input io.Writer,
 	output localTerminalOutput,
-	_ func(cols, rows uint16) error,
+	resize func(cols, rows uint16) error,
 	onInput func(),
 	onAttachChange func(bool),
 ) {
 	session.terminalMu.Lock()
 	session.terminalInput = input
 	session.terminalOutput = output
+	session.onResize = resize
 	session.onLocalInput = onInput
 	session.onAttachChange = onAttachChange
 	session.terminalMu.Unlock()
@@ -290,8 +296,24 @@ func (session *managedLocalSession) handleConnection(connection net.Conn) {
 	case len(fields) == 1 && fields[0] == "stop":
 		session.stopOnce.Do(func() { close(session.stop) })
 	case len(fields) == 3 && fields[0] == "resize":
-		// Accepted for compatibility with older attach clients, but ignored.
-		// The shared PTY grid is deliberately immutable.
+		// The attached terminal's size. It owns the grid while attached; a
+		// resize from anything not attached is acknowledged and ignored, so
+		// an old attach client or a stray caller cannot set a limit that no
+		// detach would ever clear.
+		cols, colsErr := strconv.Atoi(fields[1])
+		rows, rowsErr := strconv.Atoi(fields[2])
+		if colsErr != nil || rowsErr != nil || cols <= 0 || rows <= 0 || cols > 65_535 || rows > 65_535 {
+			response.OK = false
+			response.Error = "invalid terminal size"
+			break
+		}
+		session.terminalMu.Lock()
+		resize := session.onResize
+		attached := session.attached != nil
+		session.terminalMu.Unlock()
+		if attached && resize != nil {
+			_ = resize(uint16(cols), uint16(rows))
+		}
 	case len(fields) == 2 && fields[0] == "rotate":
 		encoded, decodeErr := base64.RawURLEncoding.DecodeString(fields[1])
 		if decodeErr != nil || e2ee.ValidateBrowserPassword(string(encoded)) != nil {

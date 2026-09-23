@@ -74,6 +74,7 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyAddress, listener.Addr().String())
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyToken, token)
 	command.Env = setEnvironmentValue(command.Env, backgroundParentEnvironment, fmt.Sprint(os.Getpid()))
+	command.Env = withLaunchingTerminalGrid(command.Env)
 	command.Stdin, command.Stdout, command.Stderr = null, null, null
 	command.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}
 	if err := command.Start(); err != nil {

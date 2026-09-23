@@ -5,11 +5,18 @@ import {
 } from "@xterm/xterm";
 import { Terminal as RefstreamTerminal } from "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.js";
 import { ChatTerminal } from "./chat/chat-terminal";
+import { AdaptiveTerminal, type AdaptiveLayoutInput } from "./adaptive/adaptive-terminal";
+import type { TerminalGrid } from "./terminal-grid";
 
-export type TerminalRenderer = "xterm" | "refstream" | "chat";
+/*
+ * "adaptive" draws the session's grid whole where that is legible and lays it
+ * out at the pane's width where it is not (see adaptive/). "xterm" is the
+ * session's grid drawn whole at any size, as every pane did before.
+ */
+export type TerminalRenderer = "adaptive" | "xterm" | "refstream" | "chat";
 
-const RENDERERS: readonly TerminalRenderer[] = ["xterm", "refstream", "chat"];
-export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";
+const RENDERERS: readonly TerminalRenderer[] = ["adaptive", "xterm", "refstream", "chat"];
+export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "adaptive";
 type TerminalOptions = ITerminalOptions &
   ITerminalInitOnlyOptions & {
     /**
@@ -46,6 +53,13 @@ export interface TerminalSurface {
    * surface implements it; the others have no binary input path.
    */
   onBinary?(listener: (data: string) => void): { dispose(): void };
+  /**
+   * A renderer that sizes itself. The pane hands it the box and a way to
+   * measure the font, instead of choosing a font size for it.
+   */
+  layout?(input: AdaptiveLayoutInput): void;
+  /** The grid this pane would pick for itself, offered as "fit to my screen". */
+  naturalGrid?(): TerminalGrid | null;
 }
 
 const STORAGE_KEY = "shell-online-terminal-renderer";
@@ -85,6 +99,11 @@ export function createTerminal(renderer: TerminalRenderer, options: TerminalOpti
      */
     if (options.session) chat.rememberAs(options.session.id, options.session.secret);
     return chat as unknown as TerminalSurface;
+  }
+  if (renderer === "adaptive") {
+    /* The session identity is for the chat renderer's history; xterm has no such option. */
+    const { session: _session, ...terminalOptions } = options;
+    return new AdaptiveTerminal(terminalOptions) as unknown as TerminalSurface;
   }
   return new XtermTerminal({ ...options, allowProposedApi: true }) as unknown as TerminalSurface;
 }

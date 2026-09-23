@@ -67,6 +67,7 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	command.Env = setEnvironmentValue(os.Environ(), backgroundChildEnvironment, "1")
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyEnvironment, "3")
 	command.Env = setEnvironmentValue(command.Env, backgroundParentEnvironment, fmt.Sprint(os.Getpid()))
+	command.Env = withLaunchingTerminalGrid(command.Env)
 	command.Stdin = null
 	command.Stdout = null
 	command.Stderr = null

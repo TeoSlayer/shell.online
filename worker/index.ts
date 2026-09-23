@@ -51,7 +51,10 @@ import {
   MOBILE_TERMINAL_GRID,
   WIDE_DESKTOP_TERMINAL_GRID,
   advertisesGrid,
+  isValidTerminalGrid,
+  ownsItsGrid,
   terminalGridForDevices,
+  type TerminalGrid,
 } from "../shared/terminal-grid";
 import { persistentSessionID } from "../shared/persistent-session";
 import {
@@ -144,6 +147,8 @@ function validEncryptedFrameLength(length: number, plaintextLength: number): boo
  */
 const SCREEN_CHUNK_BYTES = 64 * 1024;
 const SCREEN_CHUNK_PREFIX = "screen:";
+/* The same grid asked for again this soon is a repeat, not a request. */
+const GRID_REQUEST_REPEAT_MS = 250;
 const MAX_SCREEN_CHUNKS = 16;
 /* How stale a cached screen may get while a host is connected. */
 const SCREEN_REFRESH_MS = 5 * 60 * 1_000;
@@ -241,6 +246,18 @@ interface SessionMeta {
   /** When the cached screen below was captured, and how many chunks it spans. */
   lastScreenAt?: number;
   lastScreenChunks?: number;
+  /*
+   * Set when the last host to connect owns its grid (`X-Shell-Terminal-Grid:
+   * dynamic`). Such a session is never given a grid by the relay: the host
+   * announces its own with `terminal_grid`, kept here so it survives
+   * hibernation and a viewer arriving while the machine is away still gets it.
+   */
+  dynamicGrid?: boolean;
+  hostCols?: number;
+  hostRows?: number;
+  /* The grid the kept screen was drawn at, for a dynamic session. */
+  lastScreenCols?: number;
+  lastScreenRows?: number;
   // Host capability: true when the host understands the shell_send control protocol (Send/SendAck
   // frames). Older hosts omit it and remain observe-only (shell_send reports disconnected for
   // them even when the gate is on). Defaults to false for sessions created before this field.
@@ -271,6 +288,12 @@ interface SocketAttachment {
   supportsWideGrid?: boolean;
   /** Whether this viewer's window can draw the wider grid; see wide-grid.ts. */
   wide?: boolean;
+  /* A host that owns its grid; see SessionMeta.dynamicGrid. */
+  dynamicGrid?: boolean;
+  /* The last grid request forwarded for this viewer, to drop immediate repeats. */
+  gridRequestAt?: number;
+  gridRequestCols?: number;
+  gridRequestRows?: number;
 }
 
 interface TrafficWindow {
@@ -1723,6 +1746,8 @@ export class TerminalSession extends DurableObject<Env> {
   // same computation the browser is told to scale to). The MCP model follows it so its rendered
   // screen wraps at the real columns rather than a fixed 80x24.
   private mcpTerminalGrid(): { cols: number; rows: number } {
+    const hostGrid = this.dynamicHostGrid();
+    if (hostGrid) return { cols: hostGrid.cols, rows: hostGrid.rows };
     const devices = this.state
       .getWebSockets("viewer")
       .filter((socket) => socket.readyState === 1)
@@ -3062,6 +3087,7 @@ export class TerminalSession extends DurableObject<Env> {
     const viewerContext: AnalyticsContext = role === "viewer"
       ? { ...analyticsContext, visitor: await requestVisitor(this.env.STATS_VISITOR_SALT, request) }
       : analyticsContext;
+    const gridHeader = request.headers.get("X-Shell-Terminal-Grid");
     const attachment: SocketAttachment = {
       role,
       id: role === "viewer" ? randomViewerId() : 0,
@@ -3073,10 +3099,9 @@ export class TerminalSession extends DurableObject<Env> {
       portrait: role === "viewer" && new URL(request.url).searchParams.get("layout") === "portrait",
       /* A viewer that can draw the wider grid; one that cannot says nothing. */
       wide: role === "viewer" && new URL(request.url).searchParams.get("layout") === "wide",
-      supportsPortraitGrid:
-        role === "host" && advertisesGrid(request.headers.get("X-Shell-Terminal-Grid"), MOBILE_TERMINAL_GRID),
-      supportsWideGrid:
-        role === "host" && advertisesGrid(request.headers.get("X-Shell-Terminal-Grid"), WIDE_DESKTOP_TERMINAL_GRID),
+      supportsPortraitGrid: role === "host" && (advertisesGrid(gridHeader, MOBILE_TERMINAL_GRID) || ownsItsGrid(gridHeader)),
+      supportsWideGrid: role === "host" && advertisesGrid(gridHeader, WIDE_DESKTOP_TERMINAL_GRID),
+      dynamicGrid: role === "host" && ownsItsGrid(gridHeader) ? true : undefined,
       connectedAt: Date.now(),
     };
 
@@ -3090,6 +3115,16 @@ export class TerminalSession extends DurableObject<Env> {
       this.meta.hostLastSeenAt = Date.now();
       this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
       delete this.meta.exitCode;
+      if (attachment.dynamicGrid) {
+        this.meta.dynamicGrid = true;
+      } else if (this.meta.dynamicGrid) {
+        /* An older CLI took the session over: the relay picks its grid again. */
+        delete this.meta.dynamicGrid;
+        delete this.meta.hostCols;
+        delete this.meta.hostRows;
+        delete this.meta.lastScreenCols;
+        delete this.meta.lastScreenRows;
+      }
       await this.persistMeta();
       if (firstStart) {
         recordAnalytics(this.env, this.state, "session_started", "cli", analyticsContext);
@@ -3098,6 +3133,18 @@ export class TerminalSession extends DurableObject<Env> {
       await this.scheduleNextAlarm();
       this.broadcastStatus();
 
+      /*
+       * First, before any snapshot is asked for. A host that owns its grid
+       * sends nothing about it until a relay says it understands one: an older
+       * relay closes a host over a control message it does not know. It then
+       * sends its grid, and the relay passes it on before the snapshots it is
+       * about to answer. Credential rotation is announced here too, because a
+       * legacy host learns of it from the terminal_size a dynamic host is
+       * never sent.
+       */
+      if (attachment.dynamicGrid) {
+        sendJson(server, { type: "relay_features", terminalGrid: true, credentialRotation: true });
+      }
       for (const viewer of this.state.getWebSockets("viewer")) {
         const viewerAttachment = readAttachment(viewer);
         if (viewerAttachment) {
@@ -3189,7 +3236,14 @@ export class TerminalSession extends DurableObject<Env> {
       return;
     }
 
-    let event: { type?: unknown; code?: unknown; attached?: unknown; portrait?: unknown };
+    let event: {
+      type?: unknown;
+      code?: unknown;
+      attached?: unknown;
+      portrait?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+    };
     try {
       event = JSON.parse(message) as typeof event;
     } catch {
@@ -3203,6 +3257,10 @@ export class TerminalSession extends DurableObject<Env> {
         attachment.portrait = event.portrait;
         socket.serializeAttachment(attachment);
         this.broadcastTerminalGrid();
+        return;
+      }
+      if (event.type === "grid_request") {
+        this.forwardGridRequest(socket, attachment, event.cols, event.rows);
         return;
       }
       if (event.type === "snapshot_request") {
@@ -3239,6 +3297,11 @@ export class TerminalSession extends DurableObject<Env> {
       attachment.localTypingAt = now;
       socket.serializeAttachment(attachment);
       this.broadcastPresence();
+      return;
+    }
+
+    if (event.type === "terminal_grid") {
+      await this.adoptHostGrid(attachment, event.cols, event.rows);
       return;
     }
 
@@ -3814,6 +3877,14 @@ export class TerminalSession extends DurableObject<Env> {
     }
     this.meta.lastScreenAt = Date.now();
     this.meta.lastScreenChunks = chunkCount;
+    const hostGrid = this.meta.dynamicGrid ? this.dynamicHostGrid() : undefined;
+    if (hostGrid) {
+      this.meta.lastScreenCols = hostGrid.cols;
+      this.meta.lastScreenRows = hostGrid.rows;
+    } else {
+      delete this.meta.lastScreenCols;
+      delete this.meta.lastScreenRows;
+    }
     await this.persistMeta();
   }
 
@@ -3845,7 +3916,18 @@ export class TerminalSession extends DurableObject<Env> {
   private async sendCachedScreen(socket: WebSocket): Promise<void> {
     if (this.hostIsConnected()) return;
     const screen = await this.cachedScreen();
-    if (screen) safeSend(socket, screen);
+    if (!screen) return;
+    /*
+     * A dynamic session's screen is only readable at the grid it was drawn
+     * at, which the host may since have left. The viewer is told that grid
+     * first, so the replay lands in the right shape.
+     */
+    const cols = this.meta?.lastScreenCols;
+    const rows = this.meta?.lastScreenRows;
+    if (this.meta?.dynamicGrid && isValidTerminalGrid(cols, rows)) {
+      this.sendTerminalSize(socket, { cols: cols as number, rows: rows as number });
+    }
+    safeSend(socket, screen);
   }
 
   private isReadOnly(): boolean {
@@ -3944,6 +4026,21 @@ export class TerminalSession extends DurableObject<Env> {
   }
 
   private broadcastTerminalGrid(excluded?: WebSocket): void {
+    if (this.sessionOwnsGrid()) {
+      /*
+       * The host decides. Viewers arriving, leaving, rotating or typing never
+       * change the grid; this only tells a viewer that has not yet heard the
+       * host's grid what it is, before any screen is sent to it.
+       */
+      const hostGrid = this.dynamicHostGrid();
+      if (!hostGrid) return;
+      for (const socket of this.state.getWebSockets("viewer")) {
+        if (socket === excluded) continue;
+        this.sendTerminalSize(socket, hostGrid);
+      }
+      this.mcpUpdateGrid();
+      return;
+    }
     const devices = this.state
       .getWebSockets("viewer")
       .filter((socket) => socket !== excluded && socket.readyState === 1)
@@ -3978,6 +4075,89 @@ export class TerminalSession extends DurableObject<Env> {
     // The negotiated grid may have changed: keep the ephemeral MCP model's VT at the real size so
     // its rendered screen matches what the host is actually producing.
     this.mcpUpdateGrid();
+  }
+
+  /*
+   * Whether this session's grid belongs to its host. True while a dynamic host
+   * is connected, and after it leaves until a legacy host replaces it, so a
+   * viewer arriving while the machine is away is not handed a relay-picked grid.
+   */
+  private sessionOwnsGrid(): boolean {
+    const hosts = this.state.getWebSockets("host").filter((socket) => socket.readyState === 1);
+    if (hosts.length > 0) return hosts.some((socket) => readAttachment(socket)?.dynamicGrid === true);
+    return this.meta?.dynamicGrid === true;
+  }
+
+  private dynamicHostGrid(): TerminalGrid | undefined {
+    const cols = this.meta?.hostCols;
+    const rows = this.meta?.hostRows;
+    if (!this.sessionOwnsGrid() || !isValidTerminalGrid(cols, rows)) return undefined;
+    return { cols: cols as number, rows: rows as number };
+  }
+
+  /* Tells one socket the grid, once per change: the per-socket record is the dedupe. */
+  private sendTerminalSize(socket: WebSocket, grid: TerminalGrid): void {
+    const attachment = readAttachment(socket);
+    if (attachment?.terminalCols === grid.cols && attachment.terminalRows === grid.rows) return;
+    if (attachment) {
+      attachment.terminalCols = grid.cols;
+      attachment.terminalRows = grid.rows;
+      try {
+        socket.serializeAttachment(attachment);
+      } catch {
+        return;
+      }
+    }
+    /* `dynamic` tells the viewer the host owns this grid and will honour a grid_request. */
+    safeSend(socket, JSON.stringify({
+      type: "terminal_size",
+      cols: grid.cols,
+      rows: grid.rows,
+      dynamic: true,
+      credentialRotation: true,
+    }));
+  }
+
+  /* A dynamic host's own grid, announced on connect and on every change. */
+  private async adoptHostGrid(attachment: SocketAttachment, cols: unknown, rows: unknown): Promise<void> {
+    if (!attachment.dynamicGrid || !this.meta) return;
+    if (!isValidTerminalGrid(cols, rows)) return;
+    if (this.meta.hostCols !== cols || this.meta.hostRows !== rows) {
+      this.meta.hostCols = cols as number;
+      this.meta.hostRows = rows as number;
+      await this.persistMeta();
+    }
+    this.broadcastTerminalGrid();
+  }
+
+  /*
+   * A viewer asking the host to run at its grid. Only someone who may type can
+   * ask, since typing `stty` could do the same, and only a host that owns its
+   * grid is asked; everything else is dropped without comment.
+   */
+  private forwardGridRequest(socket: WebSocket, attachment: SocketAttachment, cols: unknown, rows: unknown): void {
+    if (this.isReadOnly() || !isValidTerminalGrid(cols, rows)) return;
+    const hosts = this.state
+      .getWebSockets("host")
+      .filter((host) => host.readyState === 1 && readAttachment(host)?.dynamicGrid === true);
+    if (hosts.length === 0) return;
+    const now = Date.now();
+    if (
+      attachment.gridRequestCols === cols &&
+      attachment.gridRequestRows === rows &&
+      now - (attachment.gridRequestAt ?? 0) < GRID_REQUEST_REPEAT_MS
+    ) {
+      return;
+    }
+    attachment.gridRequestAt = now;
+    attachment.gridRequestCols = cols as number;
+    attachment.gridRequestRows = rows as number;
+    try {
+      socket.serializeAttachment(attachment);
+    } catch {
+      return;
+    }
+    for (const host of hosts) sendJson(host, { type: "grid_request", cols, rows, viewerId: attachment.id });
   }
 
   private broadcastBinary(frame: Uint8Array, role: SocketRole): void {

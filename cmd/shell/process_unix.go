@@ -17,10 +17,10 @@ type unixTerminalProcess struct {
 	command  *exec.Cmd
 }
 
-func startTerminalProcess(arguments, environment []string) (sharedTerminalProcess, error) {
+func startTerminalProcess(arguments, environment []string, grid terminalGrid) (sharedTerminalProcess, error) {
 	command := exec.Command(arguments[0], arguments[1:]...)
 	command.Env = environment
-	terminal, err := pty.StartWithSize(command, &pty.Winsize{Cols: desktopTerminalCols, Rows: desktopTerminalRows})
+	terminal, err := pty.StartWithSize(command, &pty.Winsize{Cols: grid.Cols, Rows: grid.Rows})
 	if err != nil {
 		return nil, err
 	}

@@ -208,6 +208,16 @@ func attachLocalSession(id string, stdout, stderr io.Writer) error {
 		outputDone <- copyError
 	}()
 
+	/*
+	 * This terminal owns the session's grid while it is attached, so the
+	 * program is drawn at this window's size and follows it. The session only
+	 * accepts a size from an attached client, and the attach reply above was
+	 * written under the same lock that marks this client attached, so the
+	 * first request cannot arrive too early to count.
+	 */
+	stopSizing := followAttachedTerminalSize(id, stdin)
+	defer stopSizing()
+
 	detached := false
 	remoteEnded := false
 	buffer := make([]byte, 32*1024)
@@ -299,5 +309,40 @@ func discardPendingTerminalInput(stdin *os.File, stdinFD int) {
 			return
 		}
 		quietDeadline = time.Now().Add(quietPeriod)
+	}
+}
+
+// followAttachedTerminalSize reports this terminal's size to the attached
+// session now and after every window change. Requests go out one at a time
+// and only the newest waiting size is sent, so a burst of window changes
+// cannot arrive out of order.
+func followAttachedTerminalSize(id string, terminal *os.File) (stop func()) {
+	sizes := make(chan terminalGrid, 1)
+	offer := func(cols, rows int) {
+		grid := clampTerminalGrid(cols, rows)
+		select {
+		case <-sizes:
+		default:
+		}
+		sizes <- grid
+	}
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case grid := <-sizes:
+				_ = requestLocalSessionResize(id, int(grid.Cols), int(grid.Rows))
+			case <-done:
+				return
+			}
+		}
+	}()
+	if size, ok := terminalFileGrid(terminal); ok {
+		offer(int(size.Cols), int(size.Rows))
+	}
+	stopWatching := watchTerminalSize(terminal, offer)
+	return func() {
+		stopWatching()
+		close(done)
 	}
 }

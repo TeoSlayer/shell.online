@@ -286,6 +286,47 @@ button.tab {
   color: var(--ink);
 }
 
+/* The owner's one control over the program's size; everyone else's view is their own. */
+.pane-fit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 9px;
+  border: 1px solid var(--terminal-ui-line, var(--line));
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  background: var(--terminal-ui-surface, var(--white));
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* On a phone the label would cover a row of output; the icon and its name stay. */
+@media (max-width: 640px) {
+  .pane-fit {
+    padding: 3px 6px;
+  }
+
+  .pane-fit-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+.pane-fit:hover {
+  border-color: currentColor;
+}
+
+.pane-fit:focus-visible {
+  outline: 2px solid var(--focus, currentColor);
+  outline-offset: 2px;
+}
+
 .pane-refstream-toolbar:empty {
   display: none;
 }

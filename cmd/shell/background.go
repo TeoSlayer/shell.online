@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// withLaunchingTerminalGrid hands the size of the terminal a background
+// launch was typed into down to the detached child, which has no terminal of
+// its own, so the program opens at the size of the window it came from.
+// Launched without a terminal -- by the service, for a browser -- the size
+// that launcher already put in the environment is passed through untouched.
+func withLaunchingTerminalGrid(environment []string) []string {
+	if grid, ok := launchingTerminalGrid(); ok {
+		return setEnvironmentValue(environment, terminalGridEnvironment, grid.String())
+	}
+	return environment
+}
+
 const (
 	backgroundChildEnvironment  = "SHELL_ONLINE_BACKGROUND_CHILD"
 	backgroundReadyEnvironment  = "SHELL_ONLINE_READY_FD"

@@ -1,12 +1,6 @@
 import { Opcode, encodeFrame, isSnapshotOpcode } from "./protocol";
 import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
-import {
-  DESKTOP_TERMINAL_GRID,
-  WIDE_DESKTOP_TERMINAL_GRID,
-  LEGACY_MOBILE_TERMINAL_GRID,
-  MOBILE_TERMINAL_GRID,
-  type TerminalGrid,
-} from "./terminal-grid";
+import { DESKTOP_TERMINAL_GRID, isValidTerminalGrid, type TerminalGrid } from "./terminal-grid";
 import type { HostPresence } from "./host-presence";
 import { beginProductOperation, trackProduct } from "../../../web/posthog";
 import { terminalCloseOutcome, type OperationOutcome } from "../../../shared/analytics-operations";
@@ -45,10 +39,11 @@ export interface ConnectionEvents {
   onReadOnly(readOnly: boolean): void;
   /**
    * The grid the PTY is running at, announced by the relay. It is a property
-   * of the session rather than of this viewer, and it changes when a phone
-   * joins or leaves.
+   * of the session rather than of this viewer. `resizable` is true when the
+   * host owns its grid and will take a `grid_request`, which only a CLI new
+   * enough to size itself from the terminal it runs in does.
    */
-  onGrid(grid: TerminalGrid): void;
+  onGrid(grid: TerminalGrid, resizable: boolean): void;
   /** Decrypted optional file-service frames, kept out of terminal output. */
   onFileFrame?(frame: Uint8Array): void;
   /**
@@ -103,6 +98,7 @@ export class TerminalConnection {
   private proven = false;
   private waitingForCapacity = false;
   private currentGrid: TerminalGrid = DESKTOP_TERMINAL_GRID;
+  private resizable = false;
   private finishConnect: (outcome: OperationOutcome) => void = () => {};
   private finishUnlock: (outcome: OperationOutcome) => void = () => {};
 
@@ -119,6 +115,24 @@ export class TerminalConnection {
    */
   get grid(): TerminalGrid {
     return this.currentGrid;
+  }
+
+  /** Whether the host will run at a grid this viewer asks for. */
+  get canRequestGrid(): boolean {
+    return this.resizable && !this.readOnly;
+  }
+
+  /**
+   * Asks the host to run the session at `grid`: "fit the program to my
+   * screen". Every viewer's own view is unaffected either way; this changes
+   * what the program is told. A relay that predates the request would close
+   * the socket over it, so it is only sent once the host has said it can
+   * take one.
+   */
+  requestGrid(grid: TerminalGrid): void {
+    if (!this.canRequestGrid || !isValidTerminalGrid(grid.cols, grid.rows)) return;
+    if (this.socket?.readyState !== 1) return;
+    this.socket.send(JSON.stringify({ type: "grid_request", cols: grid.cols, rows: grid.rows }));
   }
 
   /** True when the session is encrypted and no working key is held yet. */
@@ -361,6 +375,8 @@ export class TerminalConnection {
       type?: unknown;
       cols?: unknown;
       rows?: unknown;
+      /* On terminal_size: the host owns its grid and takes a grid_request. */
+      dynamic?: unknown;
       hostLastSeenAt?: unknown;
       lastScreenAt?: unknown;
       mcpDecrypt?: unknown;
@@ -388,30 +404,23 @@ export class TerminalConnection {
       this.options.events.onStatus("ended");
     }
     if (message.type === "terminal_size") {
-      this.adoptGrid(message.cols, message.rows);
+      this.adoptGrid(message.cols, message.rows, message.dynamic === true);
     }
   }
 
   /*
-   * Only grids the CLI will actually open a PTY at are honoured. It refuses
-   * anything else (`isCanonicalTerminalSize`), so rendering a size it
-   * would have rejected is how a viewer ends up drawing 94 columns of a
-   * 120-column process.
+   * Any grid within the protocol's bounds is honoured: a host that sizes
+   * itself from its own terminal can run at any of them, and a viewer that
+   * drew some other size would be drawing a shape the process is not writing.
    */
-  private adoptGrid(cols: unknown, rows: unknown): void {
-    if (typeof cols !== "number" || typeof rows !== "number") return;
-    const grid = [
-      DESKTOP_TERMINAL_GRID,
-      WIDE_DESKTOP_TERMINAL_GRID,
-      MOBILE_TERMINAL_GRID,
-      LEGACY_MOBILE_TERMINAL_GRID,
-    ].find(
-      (candidate) => candidate.cols === cols && candidate.rows === rows,
-    );
-    if (!grid) return;
-    if (grid.cols === this.currentGrid.cols && grid.rows === this.currentGrid.rows) return;
+  private adoptGrid(cols: unknown, rows: unknown, resizable: boolean): void {
+    if (!isValidTerminalGrid(cols, rows)) return;
+    const grid = { cols: cols as number, rows: rows as number };
+    const same = grid.cols === this.currentGrid.cols && grid.rows === this.currentGrid.rows;
+    if (same && resizable === this.resizable) return;
     this.currentGrid = grid;
-    this.options.events.onGrid(grid);
+    this.resizable = resizable;
+    this.options.events.onGrid(grid, resizable);
   }
 
   private scheduleRetry(): void {

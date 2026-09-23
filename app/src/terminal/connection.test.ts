@@ -62,6 +62,13 @@ class FakeSocket {
     this.readyState = 3;
     this.emit("close", { code });
   }
+
+  sentControls(type: string) {
+    return this.sent
+      .filter((payload): payload is string => typeof payload === "string")
+      .map((payload) => JSON.parse(payload) as { type?: string })
+      .filter((message) => message.type === type);
+  }
 }
 
 interface Recorded {
@@ -607,18 +614,36 @@ describe("the session grid", () => {
     expect(connection.grid).toEqual(LEGACY_MOBILE_TERMINAL_GRID);
   });
 
-  it("refuses a grid the CLI would reject", async () => {
-    /*
-     * cmd/shell/session_unix.go only resizes the PTY to a canonical grid.
-     * Drawing anything else means rendering a shape the
-     * process is not writing, which is the bug this whole model prevents.
-     */
+  it("follows a host that sizes itself to any grid in range", async () => {
     const { connection, recorded, socket } = await connected();
-    socket.control({ type: "terminal_size", cols: 94, rows: 28 });
+    socket.control({ type: "terminal_size", cols: 94, rows: 28, dynamic: true });
+    expect(connection.grid).toEqual({ cols: 94, rows: 28 });
+    expect(recorded.grids).toEqual([{ cols: 94, rows: 28 }]);
+  });
+
+  it("refuses a grid outside the protocol's bounds", async () => {
+    const { connection, recorded, socket } = await connected();
     socket.control({ type: "terminal_size", cols: 0, rows: 0 });
+    socket.control({ type: "terminal_size", cols: 501, rows: 36 });
+    socket.control({ type: "terminal_size", cols: 94.5, rows: 28 });
     socket.control({ type: "terminal_size", cols: "120", rows: "36" });
     expect(connection.grid).toEqual(DESKTOP_TERMINAL_GRID);
     expect(recorded.grids).toEqual([]);
+  });
+
+  /*
+   * An older relay closes a viewer's socket over a control message it does not
+   * know, so a grid request goes out only after the host has said it takes one.
+   */
+  it("asks for a grid only when the host owns its grid", async () => {
+    const { connection, socket } = await connected();
+    connection.requestGrid({ cols: 50, rows: 30 });
+    expect(socket.sentControls("grid_request")).toEqual([]);
+    socket.control({ type: "terminal_size", ...DESKTOP_TERMINAL_GRID, dynamic: true });
+    expect(connection.canRequestGrid).toBe(true);
+    connection.requestGrid({ cols: 50, rows: 30 });
+    connection.requestGrid({ cols: 5, rows: 30 });
+    expect(socket.sentControls("grid_request")).toEqual([{ type: "grid_request", cols: 50, rows: 30 }]);
   });
 
   it("keeps the grid across a reconnect", async () => {

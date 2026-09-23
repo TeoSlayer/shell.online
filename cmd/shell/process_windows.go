@@ -23,12 +23,12 @@ type windowsTerminalProcess struct {
 	closeError error
 }
 
-func startTerminalProcess(arguments, environment []string) (sharedTerminalProcess, error) {
+func startTerminalProcess(arguments, environment []string, grid terminalGrid) (sharedTerminalProcess, error) {
 	terminal, err := pty.New()
 	if err != nil {
 		return nil, err
 	}
-	if err := terminal.Resize(desktopTerminalCols, desktopTerminalRows); err != nil {
+	if err := terminal.Resize(int(grid.Cols), int(grid.Rows)); err != nil {
 		_ = terminal.Close()
 		return nil, err
 	}

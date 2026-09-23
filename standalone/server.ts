@@ -14,7 +14,10 @@ import {
   MOBILE_TERMINAL_GRID,
   WIDE_DESKTOP_TERMINAL_GRID,
   advertisesGrid,
+  isValidTerminalGrid,
+  ownsItsGrid,
   terminalGridForDevices,
+  type TerminalGrid,
 } from "../shared/terminal-grid";
 import { documentationAssetPath } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
@@ -52,6 +55,10 @@ interface SessionMeta {
   expiresAt: number;
   status: Status;
   exitCode?: number;
+  /* The last host owns its grid and announced this one; see the worker's SessionMeta. */
+  dynamicGrid?: boolean;
+  hostCols?: number;
+  hostRows?: number;
 }
 
 interface Attachment {
@@ -71,6 +78,10 @@ interface Attachment {
   snapshotRequestedAt?: number;
   terminalCols?: number;
   terminalRows?: number;
+  dynamicGrid?: boolean;
+  gridRequestAt?: number;
+  gridRequestCols?: number;
+  gridRequestRows?: number;
 }
 
 interface TrafficWindow { startedAt: number; bytes: number; frames: number }
@@ -185,23 +196,29 @@ class SessionRelay {
     if (role === "host") {
       if (this.host && this.host !== socket) close(this.host, 4001, "host reconnected");
       this.host = socket;
+      const gridHeader = request.headers["x-shell-terminal-grid"] as string | undefined;
+      const dynamicGrid = ownsItsGrid(gridHeader);
       this.hostAttachment = {
         role,
         id: 0,
-        supportsPortraitGrid: advertisesGrid(
-          request.headers["x-shell-terminal-grid"] as string | undefined,
-          MOBILE_TERMINAL_GRID,
-        ),
-        supportsWideGrid: advertisesGrid(
-          request.headers["x-shell-terminal-grid"] as string | undefined,
-          WIDE_DESKTOP_TERMINAL_GRID,
-        ),
+        supportsPortraitGrid: advertisesGrid(gridHeader, MOBILE_TERMINAL_GRID) || dynamicGrid,
+        supportsWideGrid: advertisesGrid(gridHeader, WIDE_DESKTOP_TERMINAL_GRID),
+        dynamicGrid: dynamicGrid || undefined,
       };
       this.meta.status = "connected";
       this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
       delete this.meta.exitCode;
+      if (dynamicGrid) {
+        this.meta.dynamicGrid = true;
+      } else if (this.meta.dynamicGrid) {
+        delete this.meta.dynamicGrid;
+        delete this.meta.hostCols;
+        delete this.meta.hostRows;
+      }
       this.persist();
       this.broadcastStatus();
+      /* First, before any snapshot is asked for; see the same step in worker/index.ts. */
+      if (dynamicGrid) sendJSON(socket, { type: "relay_features", terminalGrid: true });
       for (const viewer of this.viewers.values()) sendJSON(socket, { type: "snapshot_request", viewerId: viewer.id });
       this.broadcastGrid();
       this.bind(socket, this.hostAttachment);
@@ -263,6 +280,10 @@ class SessionRelay {
         this.broadcastGrid();
         return;
       }
+      if (event.type === "grid_request") {
+        this.forwardGridRequest(attachment, event.cols, event.rows);
+        return;
+      }
       if (event.type === "snapshot_request") {
         const now = Date.now();
         if (now - (attachment.snapshotRequestedAt ?? 0) < 1_000) return;
@@ -282,6 +303,16 @@ class SessionRelay {
       return;
     }
     if (event.type === "local_attached" && typeof event.attached === "boolean") return;
+    if (event.type === "terminal_grid") {
+      if (!attachment.dynamicGrid || !isValidTerminalGrid(event.cols, event.rows)) return;
+      if (this.meta.hostCols !== event.cols || this.meta.hostRows !== event.rows) {
+        this.meta.hostCols = event.cols as number;
+        this.meta.hostRows = event.rows as number;
+        this.persist();
+      }
+      this.broadcastGrid();
+      return;
+    }
     if (event.type !== "exit") return close(socket, 4002, "unknown control message");
     if (this.meta.persistent) {
       this.meta.status = "disconnected";
@@ -436,7 +467,38 @@ class SessionRelay {
     for (const socket of this.viewers.keys()) sendJSON(socket, message);
   }
 
+  /* True while a dynamic host is connected, or after one left until a legacy host replaces it. */
+  private sessionOwnsGrid(): boolean {
+    if (this.hasHost() && this.hostAttachment) return this.hostAttachment.dynamicGrid === true;
+    return this.meta.dynamicGrid === true;
+  }
+
+  private forwardGridRequest(attachment: Attachment, cols: unknown, rows: unknown): void {
+    if (this.meta.readOnly || !isValidTerminalGrid(cols, rows)) return;
+    if (!this.host || !this.hasHost() || this.hostAttachment?.dynamicGrid !== true) return;
+    const now = Date.now();
+    if (attachment.gridRequestCols === cols && attachment.gridRequestRows === rows && now - (attachment.gridRequestAt ?? 0) < 250) return;
+    attachment.gridRequestAt = now;
+    attachment.gridRequestCols = cols as number;
+    attachment.gridRequestRows = rows as number;
+    sendJSON(this.host, { type: "grid_request", cols, rows, viewerId: attachment.id });
+  }
+
   private broadcastGrid(): void {
+    if (this.sessionOwnsGrid()) {
+      /* The host decides; viewers are only told its grid, once per change. */
+      const cols = this.meta.hostCols;
+      const rows = this.meta.hostRows;
+      if (!isValidTerminalGrid(cols, rows)) return;
+      const grid: TerminalGrid = { cols: cols as number, rows: rows as number };
+      for (const [socket, attachment] of this.viewers) {
+        if (attachment.terminalCols === grid.cols && attachment.terminalRows === grid.rows) continue;
+        attachment.terminalCols = grid.cols;
+        attachment.terminalRows = grid.rows;
+        sendJSON(socket, { type: "terminal_size", ...grid, dynamic: true });
+      }
+      return;
+    }
     const devices = [...this.viewers.values()].map((viewer) => viewer.portrait ? "portrait" : viewer.device ?? "unknown");
     /*
      * The host has to be able to open the wider grid and every viewer has to

@@ -12,5 +12,5 @@
     "skipLibCheck": true
   },
   "include": ["web/**/*.ts", "shared/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["tests/mcp-lifecycle.test.ts", "tests/mcp-observe.test.ts", "tests/mcp-write-do.test.ts", "tests/csp-ga.test.ts"]
+  "exclude": ["tests/mcp-lifecycle.test.ts", "tests/mcp-observe.test.ts", "tests/mcp-write-do.test.ts", "tests/csp-ga.test.ts", "tests/terminal-grid-relay.test.ts"]
 }

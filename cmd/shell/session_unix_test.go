@@ -170,6 +170,7 @@ func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 		backgroundChildEnvironment + "=1",
 		backgroundReadyEnvironment + "=3",
 		backgroundParentEnvironment + "=12345",
+		terminalGridEnvironment + "=100x30",
 	})
 
 	want := map[string]string{
@@ -195,6 +196,7 @@ func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 		backgroundChildEnvironment,
 		backgroundReadyEnvironment,
 		backgroundParentEnvironment,
+		terminalGridEnvironment,
 	} {
 		if value := environmentValue(environment, name); value != "" {
 			t.Errorf("terminalEnvironment() retained internal %s=%q", name, value)
@@ -206,6 +208,7 @@ func TestTerminalProcessRoundTripsInputAndResize(t *testing.T) {
 	process, err := startTerminalProcess(
 		[]string{"/bin/sh", "-c", `stty -echo; printf 'ready\n'; IFS= read -r line; stty size; printf 'reply:%s\n' "$line"`},
 		terminalEnvironment([]string{"PATH=/usr/bin:/bin"}),
+		defaultTerminalGrid(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -381,9 +384,11 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	}
 	select {
 	case size := <-resizes:
-		t.Fatalf("shared terminal was resized to %v", size)
-	case <-time.After(50 * time.Millisecond):
-		// The compatibility request is acknowledged without deforming the PTY.
+		if size != [2]uint16{120, 42} {
+			t.Fatalf("attached terminal resize = %v, want [120 42]", size)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the attached terminal's size did not reach the session grid")
 	}
 	// The observable contract is the server-side detach below. Some emulated
 	// Unix kernels report EBADF when both ends finish the socket concurrently,
@@ -397,22 +402,15 @@ func TestLocalAttachmentReplaysAndMirrorsTerminal(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("local detachment change was not reported")
 	}
-}
 
-func TestSharedTerminalUsesLargeGridUntilPhoneCompatibilityIsRequested(t *testing.T) {
-	size := sharedTerminalSize()
-	if size.Cols != 120 || size.Rows != 36 {
-		t.Fatalf("shared terminal size = %dx%d, want 120x36", size.Cols, size.Rows)
+	// Nothing is attached now, so a size from anywhere is not a limit.
+	if err := requestLocalSessionResize(id, 60, 20); err != nil {
+		t.Fatal(err)
 	}
-	for _, candidate := range [][2]uint16{{120, 36}, {160, 48}, {80, 40}, {80, 24}} {
-		if !isCanonicalTerminalSize(candidate[0], candidate[1]) {
-			t.Fatalf("canonical terminal size %v was rejected", candidate)
-		}
-	}
-	for _, candidate := range [][2]uint16{{160, 50}, {79, 24}, {80, 25}, {161, 48}} {
-		if isCanonicalTerminalSize(candidate[0], candidate[1]) {
-			t.Fatalf("arbitrary terminal size %v was accepted", candidate)
-		}
+	select {
+	case size := <-resizes:
+		t.Fatalf("a detached caller resized the session to %v", size)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

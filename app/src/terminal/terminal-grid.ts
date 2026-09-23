@@ -32,9 +32,13 @@ export const MOBILE_TERMINAL_GRID: TerminalGrid = { cols: 80, rows: 40 };
  */
 export const WIDE_DESKTOP_TERMINAL_GRID: TerminalGrid = { cols: 160, rows: 48 };
 
-/** What the host advertises on attach: every grid its CLI will open. */
+/**
+ * What the host advertises on attach: every fixed grid its CLI will open, for
+ * a relay that still chooses one, and "dynamic", for a relay that lets the
+ * host own its grid (see DYNAMIC_TERMINAL_GRID_HEADER below).
+ */
 export function terminalGridsHeader(): string {
-  return `${MOBILE_TERMINAL_GRID.cols}x${MOBILE_TERMINAL_GRID.rows},${WIDE_DESKTOP_TERMINAL_GRID.cols}x${WIDE_DESKTOP_TERMINAL_GRID.rows}`;
+  return `${MOBILE_TERMINAL_GRID.cols}x${MOBILE_TERMINAL_GRID.rows},${WIDE_DESKTOP_TERMINAL_GRID.cols}x${WIDE_DESKTOP_TERMINAL_GRID.rows},dynamic`;
 }
 
 /**
@@ -51,6 +55,57 @@ export function advertisesGrid(header: string | null | undefined, grid: Terminal
   return header.split(",").some((entry) => entry.trim() === wanted);
 }
 
+/*
+ * The range a session grid may take. The same bounds are enforced on the
+ * binary Resize frame, by the relay on every size it passes on, and by the CLI
+ * before it resizes a PTY, so no layer can hold a grid another would refuse.
+ */
+export const MIN_TERMINAL_COLS = 10;
+export const MAX_TERMINAL_COLS = 500;
+export const MIN_TERMINAL_ROWS = 4;
+export const MAX_TERMINAL_ROWS = 300;
+
+/*
+ * A CLI that lists this in `X-Shell-Terminal-Grid` owns its grid: it opens the
+ * PTY at the size of the terminal that started it, follows that terminal, and
+ * announces every change with a `terminal_grid` message. The relay then stops
+ * choosing grids from device classes for that session and only passes the
+ * host's grid on. It is one more entry in the list rather than a replacement
+ * for it, so a relay that predates it still reads the sizes around it and
+ * treats the host as one that opens 80x40 and 160x48.
+ */
+export const DYNAMIC_TERMINAL_GRID_HEADER = "dynamic";
+
+/** Whether a host's `X-Shell-Terminal-Grid` says it owns its grid. */
+export function ownsItsGrid(header: string | null | undefined): boolean {
+  if (!header) return false;
+  return header.split(",").some((entry) => entry.trim() === DYNAMIC_TERMINAL_GRID_HEADER);
+}
+
+export function isValidTerminalGrid(cols: unknown, rows: unknown): boolean {
+  return (
+    typeof cols === "number" &&
+    typeof rows === "number" &&
+    Number.isInteger(cols) &&
+    Number.isInteger(rows) &&
+    cols >= MIN_TERMINAL_COLS &&
+    cols <= MAX_TERMINAL_COLS &&
+    rows >= MIN_TERMINAL_ROWS &&
+    rows <= MAX_TERMINAL_ROWS
+  );
+}
+
+/** Pulls any size into range, so a tiny or huge window still yields a grid. */
+export function clampTerminalGrid(cols: number, rows: number): TerminalGrid {
+  const clamp = (value: number, low: number, high: number) =>
+    Math.min(high, Math.max(low, Number.isFinite(value) ? Math.floor(value) : low));
+  return {
+    cols: clamp(cols, MIN_TERMINAL_COLS, MAX_TERMINAL_COLS),
+    rows: clamp(rows, MIN_TERMINAL_ROWS, MAX_TERMINAL_ROWS),
+  };
+}
+
+/** The grid a legacy CLI is given, chosen from what kinds of device are watching. */
 export function terminalGridForDevices(
   devices: readonly string[],
   supportsPortraitGrid: boolean,

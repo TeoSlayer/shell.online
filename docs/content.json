@@ -681,7 +681,7 @@
         ],
         [
           "Encrypted content and visible metadata",
-          "Terminal input, output, snapshots and latency probes are authenticated ciphertext. Current envelope-v2 frames bind direction, sender stream and sequence so receivers reject duplicate or stale frames.\n\nThe relay can still delay or drop traffic. It sees timing, addresses, encrypted sizes, labels and lifecycle metadata. Grid dimensions travel in plaintext `terminal_size` control messages."
+          "Terminal input, output, snapshots and latency probes are authenticated ciphertext. Current envelope-v2 frames bind direction, sender stream and sequence so receivers reject duplicate or stale frames.\n\nThe relay can still delay or drop traffic. It sees timing, addresses, encrypted sizes, labels and lifecycle metadata. Grid dimensions travel in plaintext control messages: `terminal_size` to viewers, the host's own `terminal_grid`, and a viewer's `grid_request`."
         ],
         [
           "MCP changes who can decrypt",

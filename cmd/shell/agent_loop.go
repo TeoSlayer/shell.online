@@ -267,6 +267,12 @@ func performAgentCommand(
 		// shell wrapper above. Without it every browser-started session is
 		// published as `sh -c "..."` and reads as a plain terminal process.
 		launch.Env = append(launch.Env, sessionCommandEnvironment+"="+command.Command)
+		// The grid of the browser that asked, or nothing, so a size left in
+		// this service's own environment is never mistaken for one.
+		launch.Env = removeEnvironmentVariables(launch.Env, terminalGridEnvironment)
+		if validTerminalGrid(command.Cols, command.Rows) {
+			launch.Env = append(launch.Env, fmt.Sprintf("%s=%dx%d", terminalGridEnvironment, command.Cols, command.Rows))
+		}
 		launch.Stdout = io.Discard
 		launch.Stderr = io.Discard
 		if err := launch.Run(); err != nil {

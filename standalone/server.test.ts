@@ -179,3 +179,115 @@ describe("standalone relay", () => {
 function readText(path: string): string {
   return readFileSync(path, "utf8");
 }
+
+/* Records every message from the moment the socket opens, so order can be asserted. */
+function openRecording(url: string, options?: ClientOptions): Promise<{ socket: WebSocket; received: Array<string | Buffer> }> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url, options);
+    const received: Array<string | Buffer> = [];
+    socket.on("message", (value: Buffer, binary: boolean) => received.push(binary ? value : value.toString()));
+    socket.once("open", () => resolve({ socket, received }));
+    socket.once("error", reject);
+  });
+}
+
+function sizes(received: Array<string | Buffer>): Array<Record<string, unknown>> {
+  return received
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => JSON.parse(value) as Record<string, unknown>)
+    .filter((value) => value.type === "terminal_size");
+}
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
+
+describe("standalone relay with a host that owns its grid", () => {
+  test("passes the host's grid on once per change and never resizes for a viewer", async () => {
+    const { base, ws } = await start();
+    const session = await create(base);
+    const url = `${ws}/api/sessions/${session.session_id}/ws`;
+    const host = await openRecording(url, { headers: { Authorization: `Bearer ${session.host_token}`, "X-Shell-Terminal-Grid": "dynamic" } });
+    host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 173, rows: 51 }));
+    await settle();
+    const desk = await openRecording(url, { headers: { Origin: "http://127.0.0.1" } });
+    const phone = await openRecording(`${url}?layout=portrait`, { headers: { Origin: "http://127.0.0.1" } });
+    cleanup.push(() => { host.socket.terminate(); desk.socket.terminate(); phone.socket.terminate(); });
+    await settle();
+    phone.socket.send(JSON.stringify({ type: "viewer_layout", portrait: false }));
+    host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 173, rows: 51 }));
+    await settle();
+    phone.socket.close();
+    await settle();
+
+    expect(sizes(desk.received)).toEqual([{ type: "terminal_size", cols: 173, rows: 51, dynamic: true }]);
+    expect(sizes(host.received)).toEqual([]);
+
+    host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 3, rows: 51 }));
+    host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 90, rows: 30 }));
+    await settle();
+    expect(sizes(desk.received).at(-1)).toEqual({ type: "terminal_size", cols: 90, rows: 30, dynamic: true });
+    expect(sizes(desk.received)).toHaveLength(2);
+  });
+
+  test("tells a joining viewer the grid before its screen", async () => {
+    const { base, ws } = await start();
+    const session = await create(base);
+    const url = `${ws}/api/sessions/${session.session_id}/ws`;
+    const host = await openRecording(url, { headers: { Authorization: `Bearer ${session.host_token}`, "X-Shell-Terminal-Grid": "dynamic" } });
+    host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 140, rows: 40 }));
+    await settle();
+    const requested = message(host.socket, (value) => typeof value === "string" && value.includes("snapshot_request"));
+    const viewer = await openRecording(url, { headers: { Origin: "http://127.0.0.1" } });
+    cleanup.push(() => { host.socket.terminate(); viewer.socket.terminate(); });
+    const { viewerId } = JSON.parse(await requested as string) as { viewerId: number };
+    const header = Buffer.alloc(5);
+    header[0] = Opcode.Snapshot;
+    header.writeUInt32BE(viewerId, 1);
+    host.socket.send(Buffer.concat([header, Buffer.from("screen")]));
+    await settle();
+
+    const sizeAt = viewer.received.findIndex((value) => typeof value === "string" && value.includes("terminal_size"));
+    const screenAt = viewer.received.findIndex((value) => Buffer.isBuffer(value) && value[0] === Opcode.Snapshot);
+    expect(sizeAt).toBeGreaterThanOrEqual(0);
+    expect(screenAt).toBeGreaterThan(sizeAt);
+    expect(JSON.parse(viewer.received[sizeAt] as string)).toEqual({ type: "terminal_size", cols: 140, rows: 40, dynamic: true });
+  });
+
+  test("forwards grid requests only from writers to a dynamic host", async () => {
+    const { base, ws } = await start();
+    const writable = await create(base);
+    const url = `${ws}/api/sessions/${writable.session_id}/ws`;
+    const host = await openRecording(url, { headers: { Authorization: `Bearer ${writable.host_token}`, "X-Shell-Terminal-Grid": "dynamic" } });
+    const viewer = await openRecording(url, { headers: { Origin: "http://127.0.0.1" } });
+    cleanup.push(() => { host.socket.terminate(); viewer.socket.terminate(); });
+    await settle();
+    const welcome = viewer.received.map((value) => JSON.parse(value as string)).find((value) => value.type === "welcome");
+    viewer.socket.send(JSON.stringify({ type: "grid_request", cols: 48, rows: 30 }));
+    viewer.socket.send(JSON.stringify({ type: "grid_request", cols: 48, rows: 30 }));
+    viewer.socket.send(JSON.stringify({ type: "grid_request", cols: 48, rows: 400 }));
+    await settle();
+    const forwarded = host.received
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => JSON.parse(value))
+      .filter((value) => value.type === "grid_request");
+    expect(forwarded).toEqual([{ type: "grid_request", cols: 48, rows: 30, viewerId: welcome.viewerId }]);
+    expect(viewer.socket.readyState).toBe(WebSocket.OPEN);
+
+    const readOnly = await create(base, true);
+    const roUrl = `${ws}/api/sessions/${readOnly.session_id}/ws`;
+    const roHost = await openRecording(roUrl, { headers: { Authorization: `Bearer ${readOnly.host_token}`, "X-Shell-Terminal-Grid": "dynamic" } });
+    const roViewer = await openRecording(roUrl, { headers: { Origin: "http://127.0.0.1" } });
+    const legacy = await create(base);
+    const legacyUrl = `${ws}/api/sessions/${legacy.session_id}/ws`;
+    const legacyHost = await openRecording(legacyUrl, { headers: { Authorization: `Bearer ${legacy.host_token}`, "X-Shell-Terminal-Grid": "80x40" } });
+    const legacyViewer = await openRecording(`${legacyUrl}?layout=portrait`, { headers: { Origin: "http://127.0.0.1" } });
+    cleanup.push(() => { roHost.socket.terminate(); roViewer.socket.terminate(); legacyHost.socket.terminate(); legacyViewer.socket.terminate(); });
+    await settle();
+    roViewer.socket.send(JSON.stringify({ type: "grid_request", cols: 48, rows: 30 }));
+    legacyViewer.socket.send(JSON.stringify({ type: "grid_request", cols: 48, rows: 30 }));
+    await settle();
+    expect(roHost.received.some((value) => typeof value === "string" && value.includes("grid_request"))).toBe(false);
+    expect(legacyHost.received.some((value) => typeof value === "string" && value.includes("grid_request"))).toBe(false);
+    /* The legacy session keeps its device-picked grid, host included. */
+    expect(sizes(legacyHost.received).at(-1)).toEqual({ type: "terminal_size", cols: 80, rows: 40 });
+  });
+});

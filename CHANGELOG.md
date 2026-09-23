@@ -4,6 +4,23 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Changed
+
+- A terminal fills the window it runs in. `shell` in the foreground and
+  `shell attach` size the program to your terminal and follow it as you resize;
+  a background session opens at the size of the terminal that started it. The
+  fixed 120x36 and 80x40 grids are gone for sessions run by this CLI version.
+- Every viewer sizes its own view, and nothing a viewer does changes anyone
+  else's. The new default "Adaptive" renderer draws the session whole where that
+  is legible and otherwise lays it out again at the pane's width, rejoining
+  prose that the program broke at the session's width (Claude Code's replies
+  included). Phones get readable text instead of a scaled-down 80-column grid.
+  "Fixed grid" keeps the previous behaviour.
+- Phones joining, rotating or leaving no longer switch a session to 80x40.
+- The session owner can press "Fit to my screen" to run the program at their
+  pane's size. It never grows past an attached local terminal. A session started
+  from the browser opens at the size of the pane that started it.
+
 ### Fixed
 
 - Locking the app vault, changing accounts or closing its provider invalidates

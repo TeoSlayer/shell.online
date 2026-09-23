@@ -7,6 +7,7 @@ import {
   advertisesGrid,
   terminalGridForDevices,
   terminalGridsHeader,
+  ownsItsGrid,
 } from "../shared/terminal-grid";
 
 /*
@@ -67,6 +68,23 @@ describe("what a host advertises", () => {
 
   /* What the Go CLI sends must be what this reads; see internal/relay/relay.go. */
   it("is the header the CLI actually sets", () => {
-    expect(terminalGridsHeader()).toBe("80x40,160x48");
+    expect(terminalGridsHeader()).toBe("80x40,160x48,dynamic");
+  });
+
+  /*
+   * "dynamic" is one more entry, not a replacement, so a relay that predates
+   * it still reads the sizes around it, and a relay that knows it reads it
+   * wherever it is in the list.
+   */
+  it("says the host owns its grid without hiding the sizes it can open", () => {
+    const header = terminalGridsHeader();
+    expect(ownsItsGrid(header)).toBe(true);
+    expect(advertisesGrid(header, MOBILE_TERMINAL_GRID)).toBe(true);
+    expect(advertisesGrid(header, WIDE_DESKTOP_TERMINAL_GRID)).toBe(true);
+    expect(ownsItsGrid("dynamic")).toBe(true);
+    expect(ownsItsGrid("80x40,160x48")).toBe(false);
+    expect(ownsItsGrid("80x40")).toBe(false);
+    expect(ownsItsGrid("dynamically")).toBe(false);
+    expect(ownsItsGrid(null)).toBe(false);
   });
 });

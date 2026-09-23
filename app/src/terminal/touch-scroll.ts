@@ -51,7 +51,9 @@ export function attachTouchScroll(node: HTMLElement, term: TerminalSurface): { d
   let lastY = 0;
   let frame = 0;
 
-  const rowHeight = () => (node.firstElementChild?.getBoundingClientRect().height ?? 0) / Math.max(term.rows, 1);
+  /* A renderer that shows a different number of rows from the session's says how many. */
+  const shownRows = () => (term as { visibleRows?: number }).visibleRows ?? term.rows;
+  const rowHeight = () => (node.firstElementChild?.getBoundingClientRect().height ?? 0) / Math.max(shownRows(), 1);
   const programOwnsWheel = () =>
     term.buffer.active.type !== "normal" || term.modes.mouseTrackingMode !== "none";
 

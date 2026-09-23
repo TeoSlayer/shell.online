@@ -472,6 +472,11 @@ type AgentCommand struct {
 	// to read the password inside.
 	SenderPublicKey string `json:"senderPublicKey,omitempty"`
 	SealedPassword  string `json:"sealedPassword,omitempty"`
+	// Cols and Rows are the grid of the browser that asked for the session,
+	// so the program opens at the size of the screen that will show it.
+	// Absent or out of range, the session opens at the default grid.
+	Cols int `json:"cols,omitempty"`
+	Rows int `json:"rows,omitempty"`
 }
 
 // PollCommands claims everything queued for this machine, publishing the key
