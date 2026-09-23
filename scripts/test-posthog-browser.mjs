@@ -80,11 +80,14 @@ try{
   phase='landing'; expectedAgents.set(phase, await browser.evaluate('navigator.userAgent')); await browser.navigate(`https://shell.online/?utm_source=x&utm_campaign=${marker}&twclid=${marker}`);
   await wait(()=>events.some(e=>e.phase===phase&&e.payload.event==='$pageview'),'landing capture');
   await browser.call(async()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{}}});document.querySelector('[data-copy=install]').click();document.querySelector('[data-cta=start_hero]').click();});
-  await wait(()=>events.filter(e=>e.phase===phase).length>=3,'copy and CTA');
-  await delay(250); await browser.navigate('about:blank');await delay(150);
+  // Engagement/focus events can arrive before the async clipboard result. Wait
+  // for the actual interactions, not a total that unrelated events can satisfy.
+  await wait(()=>['command_copy','landing_cta'].every(event=>events.some(e=>e.phase==='landing'&&e.payload.event===event)),'copy and CTA');
+  await browser.navigate('about:blank');
+  await wait(()=>events.some(e=>e.phase==='landing'&&e.payload.event==='$pageleave'),'landing pageleave');
   const landing=events.filter(e=>e.phase==='landing');
   assert.equal(landing.filter(e=>e.payload.event==='$pageview').length,1);
-  for(const event of ['command_copy','landing_cta','$pageleave'])assert(landing.some(e=>e.payload.event===event));
+  for(const event of ['command_copy','landing_cta','$pageleave'])assert(landing.some(e=>e.payload.event===event), `landing captured ${event}`);
   assert(landing.every(e=>e.payload.properties.source==='x'));
   reports.push('landing + copy + CTA + pageleave + X attribution');
   phase='docs'; await browser.navigate('https://shell.online/cli/');
