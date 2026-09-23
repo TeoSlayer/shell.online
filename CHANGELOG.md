@@ -4,6 +4,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Locking the app vault, changing accounts or closing its provider invalidates
+  pending unlock, decrypt and share operations. Remembered-key writes and clears
+  stay ordered, and a prepared vault cannot be committed under another account.
+
 ## [0.23.1] — 2026-09-23
 
 ### Added
