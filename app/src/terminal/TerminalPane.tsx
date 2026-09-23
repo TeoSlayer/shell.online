@@ -24,7 +24,6 @@ import { attachTouchScroll } from "./touch-scroll";
 import { TerminalWriteQueue } from "../../../web/terminal-writes";
 import { PulseObserver } from "./pulse-observer";
 import type { SessionPulse } from "./session-pulse";
-import { SessionPulseBadge } from "./SessionPulse";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
 import { mountTerminalPaste } from "../../../web/terminal-paste";
 import "../../../web/terminal-paste.css";
@@ -160,7 +159,6 @@ export function TerminalPane({
 }: TerminalPaneProps) {
   const pasteReady = useRef(onPasteReady);
   pasteReady.current = onPasteReady;
-  const [pulse, setPulse] = useState<SessionPulse | null>(null);
   const pulseObserver = useRef<PulseObserver | null>(null);
   const pulseCallback = useRef(onPulseChange);
   pulseCallback.current = onPulseChange;
@@ -398,7 +396,6 @@ export function TerminalPane({
     const terminalWrites = new TerminalWriteQueue(term, 64 * 1024);
     let snapshotRequestPending = false;
     const observerPulse = new PulseObserver((value) => {
-      setPulse(value);
       pulseCallback.current?.(value);
     });
     pulseObserver.current = observerPulse;
@@ -745,7 +742,14 @@ export function TerminalPane({
   return (
     <div className="pane" data-active={active} data-renderer={renderer} aria-hidden={!active}>
       <div className="pane-tools">
-        {pulseAllowed && pulse && <SessionPulseBadge pulse={pulse} />}
+        {/*
+          * The pulse badge used to sit here: a coloured dot and a word about
+          * whether output was arriving. In a conversation it says nothing the
+          * conversation is not already saying, and it says it in an accent
+          * that competes with the messages for the same attention. What it
+          * reports is still collected -- the pane publishes it upward -- it
+          * simply is not drawn over the session any more.
+          */}
         {mcpAuthorized && <span className="pane-mcp-disclosure" role="status"
           title="The host authorizes the server to decrypt terminal frames and send plaintext to MCP agents for the grant lifetime.">
           MCP · server-side decryption authorized

@@ -29,8 +29,6 @@ import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { TerminalPane } from "../terminal/TerminalPane";
 import { trackProduct } from "../../../web/posthog";
-import type { SessionPulse } from "../terminal/session-pulse";
-import { SessionPulseBadge } from "../terminal/SessionPulse";
 import { EMPTY, reduce, sessionToOpen, tabFor } from "../terminal/tabs";
 import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
 import {
@@ -194,16 +192,6 @@ export function Workspace() {
   const [scope, setScope] = useState("all");
   const [view, setView] = useState<ViewMode>(readViewMode);
   const [terminalRenderer, setTerminalRenderer] = useState<TerminalRenderer>(readTerminalRenderer);
-  /* Never persisted or sent to an API: only already-open viewers contribute. */
-  const [pulses, setPulses] = useState<Record<string, SessionPulse>>({});
-  const receivePulse = useCallback((id: string, value: SessionPulse | null) => {
-    setPulses((old) => {
-      if (!value && !old[id]) return old;
-      const next = { ...old };
-      if (value) next[id] = value; else delete next[id];
-      return next;
-    });
-  }, []);
   const [removing, setRemoving] = useState("");
   const [cleaning, setCleaning] = useState(false);
   const [confirmingCleanup, setConfirmingCleanup] = useState(false);
@@ -775,9 +763,7 @@ export function Workspace() {
                     title={kindForCommand(tab.command).title}
                   />
                   {sessionTitle(sessions?.find(session => session.id === tab.id) ?? {name:tab.label,command:tab.command})}
-                  {pulses[tab.id] && sessions?.some((session) => session.id === tab.id) && (
-                    <SessionPulseBadge pulse={pulses[tab.id]} compact />
-                  )}
+
                 </button>
                 <button
                   type="button"
@@ -870,8 +856,6 @@ export function Workspace() {
                 canType={current ? canEdit(current, you) : tab.canType}
                 renderer={terminalRenderer}
                 onPasteReady={(open) => { if (open) pasteActions.current.set(tab.id, open); else pasteActions.current.delete(tab.id); }}
-                pulseAllowed={!!current}
-                onPulseChange={(value) => receivePulse(tab.id, value)}
                 onRequestPassword={mayAsk && current ? () => handleRequestPassword(current) : undefined}
                 passwordRequest={current?.passwordRequest}
                 ownerName={owner ? displayName(owner) : undefined}

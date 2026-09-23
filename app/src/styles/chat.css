@@ -37,6 +37,14 @@
   position: relative;
   /* How far the composer floats above the foot of the pane; see the phone rules. */
   --chat-dock: 14px;
+  /*
+   * One comfortable line length, shared by the thread and the box that talks
+   * to it. They had two -- 940px for the thread and 720px for the composer --
+   * and only the composer was centred, so on a wide window the conversation
+   * sat against the left edge with a strip of nothing down the right of it
+   * and the box underneath lined up with neither side of it.
+   */
+  --chat-measure: 940px;
   display: flex;
   width: 100%;
   height: 100%;
@@ -72,12 +80,76 @@
 .chat-thread {
   display: flex;
   /* A comfortable line length on a wide pane, never a width to lay out to. */
+  width: 100%;
   min-width: 0;
-  max-width: 940px;
+  max-width: var(--chat-measure);
   flex-direction: column;
   margin-top: auto;
+  margin-inline: auto;
   /* Messages within a turn sit together; turns are separated below. */
-  gap: 3px;
+  gap: 5px;
+}
+
+/* --- before there is anything to read ---------------------------- */
+
+/*
+ * A session takes a moment to connect and an agent longer still to draw its
+ * first screen. An empty thread says nothing about whether anything is
+ * happening: it looks the same as a session that has finished and the same as
+ * one that is broken.
+ */
+.chat-waiting {
+  display: flex;
+  padding: 28px 0;
+  /* Centred in the empty pane rather than hanging from the top of it. */
+  margin-block: auto;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-waiting[hidden] {
+  display: none;
+}
+
+.chat-waiting-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.chat-waiting-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  animation: chat-waiting 1.25s var(--ease) infinite;
+  background: var(--faint);
+}
+
+.chat-waiting-dot:nth-child(2) { animation-delay: 0.16s; }
+
+.chat-waiting-dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes chat-waiting {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 0.9; }
+}
+
+.chat-waiting-label {
+  margin: 0;
+  color: var(--faint);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+/*
+ * Still says which of the three it is, without moving. The dots are the only
+ * thing animating and they are the only thing that has to stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .chat-waiting-dot {
+    animation: none;
+    opacity: 0.55;
+  }
 }
 
 /* --- one message ------------------------------------------------ */
@@ -98,7 +170,7 @@
  * messaging interface does and what this was missing.
  */
 .chat-msg[data-grouped="false"] {
-  margin-top: 13px;
+  margin-top: 18px;
 }
 
 .chat-thread > .chat-msg:first-child {
@@ -116,10 +188,10 @@
 .chat-bubble {
   position: relative;
   max-width: 100%;
-  padding: 8px 13px;
-  border-radius: 19px;
+  padding: 11px 16px;
+  border-radius: 20px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.58;
 }
 
 /*
@@ -479,7 +551,7 @@
   bottom: 0;
   left: 0;
   display: flex;
-  max-width: 720px;
+  max-width: var(--chat-measure);
   padding: 7px 7px 7px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 22px;

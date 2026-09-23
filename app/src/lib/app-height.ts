@@ -21,6 +21,22 @@
 const PROPERTY = "--app-height";
 
 /**
+ * How tall the visible part of the page is, everywhere, on every page.
+ *
+ * The one number the shell is sized from, which is the point of it. The bar
+ * at the foot of a phone is the bottom edge of the shell, so anything that
+ * computes that height a second way puts the bar somewhere else -- and a
+ * session did, which is why its bar sat higher than every other page's, and
+ * why the bar moved once while a page was still loading and then settled.
+ *
+ * `visualViewport.height` already accounts for whatever is covering the
+ * bottom of the screen, so nothing is subtracted from it and nothing else is
+ * consulted. `--app-height` stays for the things that want the layout
+ * viewport rather than the visible one.
+ */
+const VISIBLE = "--visible-height";
+
+/**
  * The zoom the answer will be read under.
  *
  * The phone breakpoint zooms the root, and a length written into a custom
@@ -38,13 +54,44 @@ function rootZoom(root: HTMLElement): number {
 export function watchAppHeight(): () => void {
   const root = document.documentElement;
 
-  const apply = () => {
-    const height = window.innerHeight;
-    if (!height) return;
-    root.style.setProperty(PROPERTY, `${Math.round(height / rootZoom(root))}px`);
+  /** What was last written, so an unchanged measurement costs no layout. */
+  let published = { app: -1, visible: -1 };
+  let frame = 0;
+
+  const measure = () => {
+    const zoom = rootZoom(root);
+    const layout = window.innerHeight;
+    if (layout) {
+      const app = Math.round(layout / zoom);
+      if (app !== published.app) {
+        published.app = app;
+        root.style.setProperty(PROPERTY, `${app}px`);
+      }
+    }
+    const seen = window.visualViewport?.height;
+    if (seen) {
+      const visible = Math.round(seen / zoom);
+      if (visible !== published.visible) {
+        published.visible = visible;
+        root.style.setProperty(VISIBLE, `${visible}px`);
+      }
+    }
   };
 
-  apply();
+  /*
+   * One write per frame, however many events landed in it. A keyboard or a
+   * toolbar arriving is a burst of resize and scroll events, and laying the
+   * page out for each of them is work that can only be seen as stutter.
+   */
+  const apply = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      measure();
+    });
+  };
+
+  measure();
   window.addEventListener("resize", apply);
   window.addEventListener("orientationchange", apply);
   /*
@@ -53,10 +100,15 @@ export function watchAppHeight(): () => void {
    */
   window.visualViewport?.addEventListener("resize", apply);
 
+  window.visualViewport?.addEventListener("scroll", apply);
+
   return () => {
+    if (frame) cancelAnimationFrame(frame);
     window.removeEventListener("resize", apply);
     window.removeEventListener("orientationchange", apply);
     window.visualViewport?.removeEventListener("resize", apply);
+    window.visualViewport?.removeEventListener("scroll", apply);
     root.style.removeProperty(PROPERTY);
+    root.style.removeProperty(VISIBLE);
   };
 }
