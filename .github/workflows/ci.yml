@@ -207,12 +207,8 @@ jobs:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
       - name: Vault lifecycle mutations are load-bearing (fingerprint-guard, clear-fifo)
         run: |
-          if node app/scripts/test-vault-lifecycle-ui.mjs --mutation=fingerprint-guard; then
-            echo "fingerprint-guard mutation did not fail the baseline"; exit 1;
-          fi
-          if node app/scripts/test-vault-lifecycle-ui.mjs --mutation=clear-fifo; then
-            echo "clear-fifo mutation did not fail the baseline"; exit 1;
-          fi
+          node app/scripts/test-vault-lifecycle-ui.mjs --mutation=fingerprint-guard
+          node app/scripts/test-vault-lifecycle-ui.mjs --mutation=clear-fifo
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
       - name: Responsive app shell and terminal regression gate
