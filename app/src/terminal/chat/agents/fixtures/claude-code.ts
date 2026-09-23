@@ -94,3 +94,32 @@ export const CLAUDE_TYPING = [
   "  ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHILD_SESSION marker · r…",
   "  ⏵⏵ auto mode on (shift+tab to cycle)",
 ];
+
+/*
+ * A prompt too long for the terminal, captured the same way as the frames
+ * above: driven into a real `claude` through a pty, read back off a real
+ * emulator. The program wraps what was typed to the width of the screen and
+ * indents the rest of it under the marker, with no blank line between the
+ * rows -- which is the same shape as a tool reporting what it did.
+ */
+export const CLAUDE_WRAPPED_PROMPT: readonly string[] = [
+  "",
+  " \u2590\u259b\u2588\u2588\u2588\u259b\u2588   Claude Code v2.1.280",
+  "\u259d\u259c\u2588\u2588\u2588\u2588\u2588\u2588\u2580  Opus 5.5 (1M context) \u00b7 Claude Max",
+  "",
+  "\u26a0 Your login expires in 2 days \u00b7 run /login to renew",
+  "",
+  "  Get to finished work sooner with Opus 5.5. Switch anytime with /model.",
+  "",
+  "\u276f Please reply with exactly the single word acknowledged and nothing else, no",
+  "  preamble, no explanation, no tool calls, just that one word on its own line",
+  "",
+  "\u23fa acknowledged",
+  "",
+  "\u273b Crunched for 4s \u00b7 done 7:01 PM",
+  "",
+  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+  "\u276f",
+  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+  "  \u23f5\u23f5 auto mode on (shift+tab to cycle)",
+];

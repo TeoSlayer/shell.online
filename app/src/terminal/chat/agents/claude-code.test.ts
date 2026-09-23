@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ClaudeCodeAdapter, dedent, strip, unwrap } from "./claude-code";
-import { CLAUDE_EXCHANGE, CLAUDE_START, CLAUDE_TITLE, CLAUDE_TYPING } from "./fixtures/claude-code";
+import {
+  CLAUDE_EXCHANGE,
+  CLAUDE_START,
+  CLAUDE_TITLE,
+  CLAUDE_TYPING,
+  CLAUDE_WRAPPED_PROMPT,
+} from "./fixtures/claude-code";
 import { adapterFor } from "./index";
 import { plainLine } from "../transcript";
 
@@ -282,5 +288,33 @@ describe("the interface's own indent and wrapping", () => {
         "- cap the pool",
       ]),
     ).toEqual(["There are two things left to do before this can be merged, and they", "- cap the pool"]);
+  });
+});
+
+describe("a prompt the terminal had to wrap", () => {
+  /*
+   * The case somebody reported as "sent messages randomly decompose into
+   * separate markdown-like threads". The rest of the prompt is an indented
+   * line with no marker, arriving before the agent has spoken, which is the
+   * shape this adapter reads as a tool -- so the back half of what they typed
+   * arrived as its own message, and a long enough prompt came apart into
+   * several.
+   */
+  it("arrives as the one message somebody sent", () => {
+    const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_WRAPPED_PROMPT));
+    expect(shaped[0]).toBe(
+      "sent:Please reply with exactly the single word acknowledged and nothing else, no preamble, no explanation, no tool calls, just that one word on its own line",
+    );
+  });
+
+  it("does not leave the rest of it behind as a tool", () => {
+    const said = shape(read(new ClaudeCodeAdapter(), CLAUDE_WRAPPED_PROMPT));
+    expect(said.filter((u) => u.startsWith("tool:"))).toEqual([]);
+    expect(said.join("\n")).not.toContain("received:preamble");
+  });
+
+  it("still reads what the agent said back", () => {
+    const said = shape(read(new ClaudeCodeAdapter(), CLAUDE_WRAPPED_PROMPT)).join("\n");
+    expect(said).toContain("acknowledged");
   });
 });

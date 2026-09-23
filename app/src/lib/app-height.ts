@@ -60,6 +60,23 @@ const TYPING = "--typing-height";
 const KEYBOARD_MINIMUM = 120;
 
 /**
+ * How far down the page the visible viewport starts.
+ *
+ * Normally zero, and on a phone with a keyboard coming up, often not. iOS
+ * scrolls the *visual* viewport to bring the focused field above the keyboard,
+ * which moves the window onto the page without the page itself scrolling: the
+ * top of the document is now above the top of what can be seen. The shell is
+ * sized to the visible height and anchored at the top of the document, so
+ * every one of those pixels is the shell hanging off the top of the screen and
+ * an equal strip of bare page showing under its bottom edge.
+ *
+ * That is the jump, and it is intermittent for the reason it is hard to
+ * reproduce: whether the browser needs to scroll at all depends on where the
+ * caret is when the keyboard arrives.
+ */
+const TOP = "--viewport-top";
+
+/**
  * The zoom the answer will be read under.
  *
  * The phone breakpoint zooms the root, and a length written into a custom
@@ -78,7 +95,7 @@ export function watchAppHeight(): () => void {
   const root = document.documentElement;
 
   /** What was last written, so an unchanged measurement costs no layout. */
-  let published = { app: -1, visible: -1, typing: -1 };
+  let published = { app: -1, visible: -1, typing: -1, top: -1 };
   let frame = 0;
 
   const measure = () => {
@@ -104,6 +121,16 @@ export function watchAppHeight(): () => void {
        * on the first measurement either way, so there is always a value to
        * hold even for a page that opened with a keyboard already up.
        */
+      /*
+       * Written back so the shell can sit where the window actually is. What
+       * the document has scrolled is already taken off, because that part of
+       * the offset the shell gets for free by being in the document.
+       */
+      const above = Math.max(0, Math.round((viewport.offsetTop - window.scrollY) / zoom));
+      if (above !== published.top) {
+        published.top = above;
+        root.style.setProperty(TOP, `${above}px`);
+      }
       const covered = layout ? layout - seen - viewport.offsetTop : 0;
       const typing = covered >= KEYBOARD_MINIMUM;
       if ((!typing || published.typing < 0) && visible !== published.typing) {
@@ -146,5 +173,6 @@ export function watchAppHeight(): () => void {
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(VISIBLE);
     root.style.removeProperty(TYPING);
+    root.style.removeProperty(TOP);
   };
 }

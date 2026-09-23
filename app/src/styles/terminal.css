@@ -659,15 +659,46 @@ button.tab {
   }
 }
 
-/* In a short window the renderer belongs beside the tabs, not hanging over
-   a second row. Reclaim decoration space without changing the shared grid. */
+/*
+ * An open session begins at the tab line.
+ *
+ * Everything between the tabs and the first row of output was decoration: the
+ * workspace's own top padding, the tab line's margin under it, and 28px of
+ * pane padding whose only job was to keep the renderer tab from covering the
+ * first row -- the tab hangs below the tab line's right end, over the corner
+ * of the canvas. Fifty pixels of paper above a conversation on a desktop and
+ * twenty-six on a phone, which reads as the canvas being inset inside a
+ * container rather than being the canvas.
+ *
+ * So the tab stops hanging. It sits in the tab line beside the tabs, which is
+ * what a short window already did with it, and the pane it was hanging over
+ * gets its own top edge back. The rule the padding was protecting still holds
+ * -- the tab never covers a row of output -- because it is not over the
+ * output any more.
+ */
+/*
+ * Keyed on the workspace having a pane in it rather than on `data-pane`.
+ * That attribute is published by the pane's own hook, which a desktop does
+ * not run, so a rule hung off it reached a phone and left a laptop with the
+ * fifty pixels this is removing.
+ */
+.shell-content:has(.panes) { padding-top: 0; }
+.shell-content:has(.panes) .terminal-bar { margin-bottom: 0; }
+.shell-content:has(.panes) .tab-renderer {
+  position: static;
+  height: 44px;
+  padding-left: 6px;
+  border: 0;
+  border-radius: 0;
+  align-self: center;
+}
+.panes .pane { padding: 0; }
+
+/* In a short window the tab line is tighter still. */
 @media (max-width: 900px) and (max-height: 600px) {
   :root[data-pane="open"] .topbar { min-height: calc(48px + env(safe-area-inset-top)); }
-  :root[data-pane="open"] .shell-content { padding-top: 0; }
-  :root[data-pane="open"] .terminal-bar { margin-bottom: 0; padding-inline: 6px; }
-  .tab-renderer { position: static; height: 44px; padding-left: 6px; border: 0; border-radius: 0; }
+  :root[data-pane="open"] .terminal-bar { padding-inline: 6px; }
   .tab-renderer select { max-width: 120px; }
-  .pane { padding: 4px 0; }
 }
 
 /* ---------------------------------------------------------------

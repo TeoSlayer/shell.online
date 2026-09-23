@@ -376,6 +376,23 @@ try {
       assert(!after.gone&&Math.abs(after.rail-before.rail)<1,'Navigation returns after typing');
       assert(Math.abs(after.pane-before.pane)<1,'Pane returns to exactly the original height');
       assert.equal(after.screen,before.screen,'Terminal returns to exactly the original rendering');
+      /*
+       * The renderer picker sits in the tab line now rather than hanging
+       * below its right end over the corner of the canvas, which is what the
+       * pane's old 28px of top padding was there to keep it off. It has to
+       * still be on the screen, and still inside the line.
+       */
+      const picker=await browser.call(()=>{
+        const tab=document.querySelector('.tab-renderer');
+        if(!tab) return null;
+        const box=tab.getBoundingClientRect();
+        const bar=document.querySelector('.terminal-bar').getBoundingClientRect();
+        return {w:box.width,h:box.height,right:box.right,top:box.top,
+          within:box.top>=bar.top-1&&box.bottom<=bar.bottom+1,onScreen:box.right<=innerWidth+1&&box.top>=0};
+      });
+      assert(picker,'The renderer picker is rendered');
+      assert(picker.w>0&&picker.h>0&&picker.onScreen,'The renderer picker is on the screen');
+      assert(picker.within,'The renderer picker sits inside the tab line, not over the canvas');
       console.log(`PASS ${renderer}/${theme}: synthetic keyboard shrinks the pane, holds the terminal and hides/restores navigation`);
     }
   }

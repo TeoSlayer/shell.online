@@ -187,3 +187,80 @@ describe("the width of the conversation", () => {
     expect(css).toMatch(/\.shell-content:has\(\.panes\)\s*\{[\s\S]*?padding-inline:\s*0/);
   });
 });
+
+const terminal = readFileSync(new URL("../src/styles/terminal.css", import.meta.url), "utf8");
+const view = readFileSync(new URL("../src/terminal/chat/chat-view.ts", import.meta.url), "utf8");
+
+describe("the canvas", () => {
+  /*
+   * Fifty pixels of paper above a conversation on a desktop, twenty-six on a
+   * phone: the workspace's top padding, the tab line's margin under it, and
+   * 28px of pane padding whose only job was to stop the renderer tab -- which
+   * hangs below the tab line over the corner of the canvas -- from covering
+   * the first row. It read as the canvas being inset inside a container.
+   */
+  it("begins at the tab line, with the renderer tab in the line rather than over it", () => {
+    expect(terminal).toMatch(/\.shell-content:has\(\.panes\)\s*\{\s*padding-top:\s*0/);
+    expect(terminal).toMatch(/\.shell-content:has\(\.panes\) \.terminal-bar\s*\{\s*margin-bottom:\s*0/);
+    expect(terminal).toMatch(/\.shell-content:has\(\.panes\) \.tab-renderer\s*\{[\s\S]*?position:\s*static/);
+    expect(terminal).toMatch(/\.panes \.pane\s*\{\s*padding:\s*0/);
+  });
+
+  /*
+   * Keyed on the pane being there rather than on `data-pane`, which is
+   * published by the pane's own hook -- a hook a desktop does not run, so the
+   * first version of this reached a phone and left a laptop alone.
+   */
+  it("does not hang the rule off an attribute only a phone publishes", () => {
+    expect(terminal).not.toMatch(/:root\[data-pane="open"\] \.pane\s*\{\s*padding/);
+  });
+});
+
+describe("a keyboard that moves the window rather than the page", () => {
+  /*
+   * iOS scrolls the *visual* viewport to lift a focused field above the
+   * keyboard. The page does not move, so a shell anchored at the top of the
+   * document hangs off the top of the screen by exactly that much, with a
+   * strip of bare page under its bottom edge. It is intermittent because
+   * whether the browser needs to scroll depends on where the caret is.
+   */
+  it("sits where the window is, not where the document starts", () => {
+    expect(css).toMatch(/\.shell\s*\{[^}]*top:\s*var\(--viewport-top, 0px\)/);
+    const hook = readFileSync(new URL("../src/lib/app-height.ts", import.meta.url), "utf8");
+    expect(hook).toContain('const TOP = "--viewport-top"');
+    /* What the document has scrolled is already had for free. */
+    expect(hook).toMatch(/viewport\.offsetTop - window\.scrollY/);
+  });
+});
+
+describe("the conversation as it is being written", () => {
+  /*
+   * An agent's paragraph is re-read from its screen every frame. Answering
+   * that by emptying the bubble and building it again is correct, and is also
+   * the blink: for as long as the agent is writing, the text somebody is
+   * reading is removed from the page and put back, several times a second.
+   */
+  it("replaces the rows that changed rather than the whole message", () => {
+    expect(view).not.toMatch(/body\.innerHTML = ""/);
+    expect(view).toContain("lineSignature");
+    expect(view).toMatch(/dataset\?\.sig === signature/);
+  });
+
+  /*
+   * `sticking` is maintained from scroll events, and iOS does not deliver
+   * those while a flick is still gliding. A message arriving mid-flick was
+   * answered with where the reader had been a moment earlier, which for
+   * somebody who had just started scrolling up was "at the bottom".
+   */
+  it("asks the scroller where it is instead of remembering", () => {
+    expect(view).toMatch(/const wasAtBottom = this\.atBottom\(\)/);
+    expect(view).toContain("private anchor()");
+    expect(view).toContain("private hold(");
+  });
+
+  /* A tap is a fragile sequence on a phone; the press is not. */
+  it("sends from the press as well as the click", () => {
+    expect(view).toMatch(/addEventListener\("pointerup", send\)/);
+    expect(view).toMatch(/addEventListener\("click", send\)/);
+  });
+});

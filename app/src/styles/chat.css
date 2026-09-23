@@ -676,7 +676,14 @@
   }
 }
 
-.chat-input::placeholder { color: var(--faint); }
+/*
+ * Plainly a prompt rather than something somebody typed. `--faint` is the
+ * dimmest ink the palette has, and at this size against cream paper it still
+ * read as text in the box instead of as the label for an empty one.
+ */
+.chat-input::placeholder {
+  color: color-mix(in srgb, var(--faint) 62%, transparent);
+}
 
 .chat-send {
   display: inline-flex;

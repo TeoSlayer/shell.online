@@ -128,6 +128,24 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   private spoken = false;
 
   /**
+   * The prompt being read, while its rows are still arriving.
+   *
+   * A sent prompt is not one row. The program prints it into the conversation
+   * exactly as wide as the terminal and wraps the rest of it underneath,
+   * indented two spaces to sit under the `❯`, with no blank line in between:
+   *
+   *     ❯ Please reply with exactly the single word acknowledged and nothing
+   *       else, no explanation, no tool calls
+   *
+   * Read a row at a time, the second row is an indented line with no marker
+   * before the agent has spoken -- which is precisely the shape of a tool
+   * report -- so the back half of what somebody typed arrived in the
+   * conversation as its own separate message. A long prompt came apart into
+   * three or four of them.
+   */
+  private prompting: string[] | null = null;
+
+  /**
    * Whether Claude Code is what is drawing this screen.
    *
    * The title it sets, first, because it is the one thing about the program
@@ -162,6 +180,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   reset(): void {
     this.reader.reset();
     this.open = [];
+    this.prompting = null;
     this.started = false;
     this.spoken = false;
   }
@@ -173,10 +192,23 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       if (prompt) {
         this.started = true;
         this.spoken = false;
+        this.sent(utterances);
         this.close(utterances);
         const text = prompt[1].trim();
-        if (text) utterances.push({ kind: "sent", text, lines: [] });
+        this.prompting = text ? [text] : null;
         continue;
+      }
+
+      /*
+       * Still inside the prompt: anything that is not blank and carries no
+       * marker of its own is the rest of what was typed.
+       */
+      if (this.prompting) {
+        if (line.trim() !== "" && !STATUS.test(line) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
+          this.prompting.push(line.trim());
+          continue;
+        }
+        this.sent(utterances);
       }
 
       const spoke = SPOKE.exec(line);
@@ -228,9 +260,27 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       this.open.push(line);
     }
 
-    if (ending) this.close(utterances);
-    else this.offer(utterances);
+    if (ending) {
+      this.sent(utterances);
+      this.close(utterances);
+    } else {
+      this.offer(utterances);
+    }
     return utterances;
+  }
+
+  /**
+   * Closes the prompt being read into the one message somebody sent.
+   *
+   * The rows are joined the way the terminal broke them: it wrapped a
+   * sentence to fit 80 columns, and nobody typed those breaks.
+   */
+  private sent(into: AgentUtterance[]): void {
+    const rows = this.prompting;
+    this.prompting = null;
+    if (!rows || rows.length === 0) return;
+    const text = unwrap(rows).join("\n").trim();
+    if (text) into.push({ kind: "sent", text, lines: [] });
   }
 
   /** What the agent is saying, as it stands. Kept open so it can grow. */

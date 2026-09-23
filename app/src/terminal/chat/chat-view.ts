@@ -228,11 +228,33 @@ export class ChatView {
      * a submit -- so the only way to send was the return key. Asking the
      * button directly removes every step that could go wrong.
      */
-    this.send.addEventListener("click", (event) => {
+    /*
+     * And sent from the press, not only from the click.
+     *
+     * A click is the end of a sequence -- touchstart, touchend, mousedown,
+     * mouseup, click -- and on a phone that sequence is fragile in ways a
+     * pointer's is not. The box is the thing the keyboard is pushing around,
+     * the press guard above cancels the default of the mousedown, and if the
+     * composer moves by a pixel between the finger landing and lifting, what
+     * WebKit delivers is a cancelled gesture and no click at all. That is the
+     * button that "only sometimes works", and it works every time from the
+     * keyboard because the keyboard never goes near any of this.
+     *
+     * So the press sends, and the click that may or may not follow it is
+     * ignored if it does. Guarded by the frame it happened in rather than by a
+     * flag somebody has to remember to clear.
+     */
+    let sentAt = 0;
+    const send = (event: Event) => {
       event.preventDefault();
+      const now = performance.now();
+      if (now - sentAt < 700) return;
+      sentAt = now;
       this.submit();
       this.input.focus();
-    });
+    };
+    this.send.addEventListener("pointerup", send);
+    this.send.addEventListener("click", send);
     row.append(this.input, this.send);
     this.composer.append(row);
 
@@ -295,7 +317,30 @@ export class ChatView {
   render(messages: readonly Message[], revision: number): void {
     if (this.disposed || revision === this.drawnRevision) return;
     this.drawnRevision = revision;
-    const wasAtBottom = this.sticking;
+    /*
+     * Measured now, not remembered.
+     *
+     * `sticking` is maintained from scroll events, and a phone does not
+     * deliver those while a flick is still gliding -- iOS batches them and
+     * sends the last one when the scroll settles. A message arriving mid-flick
+     * was therefore answered with wherever the reader had been a moment ago,
+     * which for somebody who had just started scrolling up was "at the
+     * bottom": the thread was pulled back down out from under them. The
+     * scroller can be asked directly, and it always knows.
+     */
+    const wasAtBottom = this.atBottom();
+    this.sticking = wasAtBottom;
+    /*
+     * Where the reader is looking, so it can be put back.
+     *
+     * Anything can change height above the viewport: a paragraph re-read from
+     * the agent's screen and re-wrapped, the oldest messages being trimmed off
+     * the top, a tool line gaining its detail. Every one of those moves the
+     * page under somebody reading further down by exactly that difference.
+     * `overflow-anchor` is supposed to cover this and does not cover it here,
+     * because the nodes it would anchor to are the nodes being replaced.
+     */
+    const anchor = wasAtBottom ? null : this.anchor();
 
     /* Messages are dropped from the top as the conversation is trimmed. */
     const live = new Set(messages.map((message) => message.id));
@@ -328,8 +373,35 @@ export class ChatView {
       this.scroller.scrollTop = this.scroller.scrollHeight;
       this.jump.hidden = true;
     } else {
+      this.hold(anchor);
       this.jump.hidden = false;
     }
+  }
+
+  /** Whether the thread is close enough to its end to be following it. */
+  private atBottom(): boolean {
+    const { scrollHeight, scrollTop, clientHeight } = this.scroller;
+    return scrollHeight - scrollTop - clientHeight <= STICK_SLACK_PX;
+  }
+
+  /** The first message on screen, and how far down the viewport it starts. */
+  private anchor(): { el: HTMLElement; offset: number } | null {
+    const top = this.scroller.getBoundingClientRect().top;
+    for (const id of this.order) {
+      const node = this.nodes.get(id);
+      if (!node) continue;
+      const box = node.el.getBoundingClientRect();
+      if (box.bottom > top) return { el: node.el, offset: box.top - top };
+    }
+    return null;
+  }
+
+  /** Puts that message back where it was, whatever happened above it. */
+  private hold(anchor: { el: HTMLElement; offset: number } | null): void {
+    if (!anchor || !anchor.el.isConnected) return;
+    const top = this.scroller.getBoundingClientRect().top;
+    const drift = anchor.el.getBoundingClientRect().top - top - anchor.offset;
+    if (drift !== 0) this.scroller.scrollTop += drift;
   }
 
   /** The reason typing is refused, or null when the viewer may type. */
@@ -579,14 +651,23 @@ export class ChatView {
       if (host) {
         host.classList.toggle("is-still", !message.live);
         /*
-         * The mirror is replaced whole. A grid being repainted has no stable
-         * rows to diff against: row four of vim is a different line of the
-         * file one keystroke later, so matching them up would cost more than
-         * rebuilding forty small nodes.
+         * Row by row, by signature. A repainting grid has no stable *rows* --
+         * row four of vim is a different line of the file one keystroke later
+         * -- but it has stable *content*: almost every row of a forty-row
+         * screen is identical from one frame to the next, and replacing all
+         * forty to change one is a screen that flickers under a cursor.
          */
-        const next = document.createDocumentFragment();
-        for (const line of message.lines) next.append(lineNode(line));
-        host.replaceChildren(next);
+        const grid = host.childNodes;
+        for (let index = 0; index < message.lines.length; index += 1) {
+          const signature = lineSignature(message.lines[index]);
+          const was = grid[index] as HTMLElement | undefined;
+          if (was && was.dataset?.sig === signature) continue;
+          const fresh = lineNode(message.lines[index]);
+          fresh.dataset.sig = signature;
+          if (was) host.replaceChild(fresh, was);
+          else host.append(fresh);
+        }
+        while (grid.length > message.lines.length) host.removeChild(grid[grid.length - 1]);
       }
       return;
     }
@@ -609,27 +690,30 @@ export class ChatView {
       message.preformatted || message.lines.length > 2 ? "true" : "false";
 
     /*
-     * A growing answer only pays for the lines it gained.
+     * Only the rows that actually changed are touched.
      *
-     * The test is "no more lines than last time" rather than "fewer",
-     * because not every change is a line arriving at the end. An agent's
-     * paragraph is re-read from its screen on every frame and put back
-     * together as it grows, so the same line comes back longer than it was;
-     * rendered by appending, the row already on screen was never touched and
-     * the paragraph stopped one row short of what the agent had written. A
-     * message whose line count has not gone up is rebuilt, which costs
-     * nothing on the short messages that is true of and never happens to the
-     * long ones, where lines only ever arrive at the end.
+     * An agent's paragraph is re-read from its screen on every frame, so a
+     * message whose line count has not gone up still has to be looked at: the
+     * same line comes back longer than it was as the sentence is written.
+     * This used to answer that by emptying the bubble and building it again,
+     * which is correct and is also the blink -- every frame, for as long as
+     * the agent is writing, the text somebody is reading is removed from the
+     * page and put back. Rows that kept their content now keep their nodes,
+     * so the only thing that moves is the row that changed.
      */
-    if (message.lines.length <= node.lines) {
-      body.innerHTML = "";
-      node.lines = 0;
+    const rows = body.childNodes;
+    for (let index = 0; index < message.lines.length; index += 1) {
+      const line = message.lines[index];
+      const signature = lineSignature(line);
+      const existing = rows[index] as HTMLElement | undefined;
+      if (existing && existing.dataset?.sig === signature) continue;
+      const fresh = lineNode(line);
+      fresh.dataset.sig = signature;
+      if (existing) body.replaceChild(fresh, existing);
+      else body.append(fresh);
     }
-    const fragment = document.createDocumentFragment();
-    for (let index = node.lines; index < message.lines.length; index += 1) {
-      fragment.append(lineNode(message.lines[index]));
-    }
-    if (fragment.childNodes.length > 0) body.append(fragment);
+    /* Whatever the message used to be longer by. */
+    while (rows.length > message.lines.length) body.removeChild(rows[rows.length - 1]);
     node.lines = message.lines.length;
 
     this.fold(node, message);
@@ -682,8 +766,7 @@ export class ChatView {
   }
 
   private readonly onScroll = (): void => {
-    const distance = this.scroller.scrollHeight - this.scroller.scrollTop - this.scroller.clientHeight;
-    this.sticking = distance <= STICK_SLACK_PX;
+    this.sticking = this.atBottom();
     this.jump.hidden = this.sticking;
   };
 
@@ -857,21 +940,44 @@ export class ChatView {
    * Grows the box with what is being typed, between two limits.
    *
    * The floor is the send button beside it, measured rather than written
-   * down. The row aligns to its bottom so that a box three lines tall keeps
-   * the button on the last one, and with an empty box shorter than the button
-   * that same rule left the line somebody was typing floating above the
-   * button's centre, which on a phone is the composer looking assembled
-   * rather than designed. Measured, because the button is one size for a
-   * pointer and another for a finger.
+   * down.
+   *
+   * The box is exactly as tall as what is in it, and the row centres it
+   * against the button. It used to be floored at the button's own height
+   * instead, which made an empty box 51px tall holding one 22px line -- and a
+   * textarea puts its line at the top, so the words somebody was typing sat
+   * against the ceiling of the box with fifteen pixels of nothing under them.
    *
    * The ceiling is about six lines, after which the box scrolls: past that it
    * is eating the conversation it is being typed into.
    */
   private autosize(): void {
     this.input.style.height = "auto";
-    const floor = this.send.offsetHeight;
-    this.input.style.height = `${Math.min(Math.max(this.input.scrollHeight, floor), 168)}px`;
+    this.input.style.height = `${Math.min(this.input.scrollHeight, 168)}px`;
   }
+}
+
+/**
+ * What a rendered row is made of, as one string.
+ *
+ * Two lines with the same signature produce identical DOM, so a row whose
+ * signature has not changed does not need to be built, compared or replaced.
+ */
+function lineSignature(line: TranscriptLine): string {
+  if (line.runs.length <= 1 && !styled(line.runs[0])) return line.text;
+  return line.runs
+    .map((run) =>
+      [
+        run.text,
+        run.fg ?? "",
+        run.bg ?? "",
+        run.bold ? "b" : "",
+        run.dim ? "d" : "",
+        run.italic ? "i" : "",
+        run.underline ? "u" : "",
+      ].join("\u0000"),
+    )
+    .join("\u0001");
 }
 
 function lineNode(line: TranscriptLine): HTMLElement {

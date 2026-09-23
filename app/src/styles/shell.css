@@ -622,6 +622,17 @@
     height: var(--visible-height, calc(100dvh / var(--zoom)));
   }
 
+  /*
+   * And it sits where the window is, not where the document starts. See
+   * `--viewport-top` in lib/app-height.ts: a browser that scrolls the visual
+   * viewport to lift a field above the keyboard leaves the shell hanging off
+   * the top of the screen by exactly this much.
+   */
+  .shell {
+    position: relative;
+    top: var(--viewport-top, 0px);
+  }
+
   :root[data-pane="open"] .shell-content {
     overflow: hidden;
     padding-bottom: 0;
