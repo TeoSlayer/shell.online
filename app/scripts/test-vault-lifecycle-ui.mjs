@@ -281,24 +281,29 @@ try {
 
   const status = () => evaluate('vt.vault.status');
   const liveKey = () => evaluate('vt.vault.publicKey');
+  const uidLiteral = (uid) => {
+    if (uid === 'account-a') return "'account-a'";
+    if (uid === 'account-b') return "'account-b'";
+    throw new Error('uidLiteral: unexpected uid ' + uid);
+  };
   const switchTo = async (uid) => {
-    await evaluate(`vt.switchAccount(${JSON.stringify(uid)})`);
-    await waitFor(() => evaluate(`vt.vault && vt.vault.uid === ${JSON.stringify(uid)}`), 'provider rendered uid ' + uid);
+    await evaluate(`vt.switchAccount(${uidLiteral(uid)})`);
+    await waitFor(() => evaluate(`vt.vault && vt.vault.uid === ${uidLiteral(uid)}`), 'provider rendered uid ' + uid);
     await waitFor(() => evaluate(`vt.vault.status !== 'loading'`), 'provider settled for ' + uid);
   };
   const readAccountState = async (uid) => evaluate(
-    `(async () => JSON.stringify({ uid: vt.vault.uid, status: vt.vault.status, publicKey: vt.vault.publicKey, version: vt.vault.version, fingerprint: vt.vault.fingerprint, remembered: await vt.rememberedPublicKey(${JSON.stringify(uid)}) }))()`,
+    `(async () => JSON.stringify({ uid: vt.vault.uid, status: vt.vault.status, publicKey: vt.vault.publicKey, version: vt.vault.version, fingerprint: vt.vault.fingerprint, remembered: await vt.rememberedPublicKey(${uidLiteral(uid)}) }))()`,
   ).then((text) => JSON.parse(text));
   const resetAccount = async (uid) => {
     await switchTo(uid);
     await evaluate(`(async () => {
-      delete vt.vaults[${JSON.stringify(uid)}];
-      await vt.clearLocalVault(${JSON.stringify(uid)});
+      delete vt.vaults[${uidLiteral(uid)}];
+      await vt.clearLocalVault(${uidLiteral(uid)});
       vt.vault.retry();
       for (let i = 0; i < 300 && vt.vault.status === 'loading'; i++) await new Promise((r) => setTimeout(r, 10));
       return vt.vault.status;
     })()`);
-    await waitFor(() => evaluate(`vt.vault.uid === ${JSON.stringify(uid)} && ['setup','locked'].includes(vt.vault.status)`), 'account reset to locked/setup');
+    await waitFor(() => evaluate(`vt.vault.uid === ${uidLiteral(uid)} && ['setup','locked'].includes(vt.vault.status)`), 'account reset to locked/setup');
   };
 
   // ---- Case B: lock while becomeUnlocked is awaiting fingerprint ----
