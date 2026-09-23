@@ -102,17 +102,18 @@ try{
   await browser.evaluate('renderIdentity(null)');
   await wait(()=>events.some(e=>e.phase===phase&&e.payload.event==='signed_out'),'sign out');
   reports.push('StrictMode + private route + game SPA + mutation + logout');
-  for (const [label, userAgent] of [
-    ['safari-ua', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'],
-    ['x-browser-ua', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Twitter for iPhone/10.0'],
-    ['crawler-ua', 'Googlebot/2.1 (+http://www.google.com/bot.html)'],
+  // Literal scripts only: no input or serialized strings interpolated into code.
+  for (const [label, source] of [
+    ['safari-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'});"],
+    ['x-browser-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Twitter for iPhone/10.0'});"],
+    ['crawler-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Googlebot/2.1 (+http://www.google.com/bot.html)'});"],
   ]) {
     await browser.navigate('about:blank'); await delay(100);
-    phase=label; expectedAgents.set(phase, userAgent);
-    const override=await cdp('Page.addScriptToEvaluateOnNewDocument', {
-      source:`Object.defineProperty(navigator,'userAgent',{get:()=>${JSON.stringify(userAgent)}});`,
-    });
+    phase=label;
+    const override=await cdp('Page.addScriptToEvaluateOnNewDocument', { source });
     await browser.navigate('https://shell.online/');
+    const userAgent=await browser.evaluate('navigator.userAgent');
+    expectedAgents.set(phase, userAgent);
     await wait(()=>events.some(e=>e.phase===phase&&e.payload.event==='$pageview'), label);
     assert.equal(events.filter(e=>e.phase===phase&&e.payload.event==='$pageview').length,1);
     assert.equal(events.find(e=>e.phase===phase&&e.payload.event==='$pageview').payload.properties.$user_agent,userAgent);
