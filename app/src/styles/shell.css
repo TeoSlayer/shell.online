@@ -1004,8 +1004,14 @@
 
 @media (max-width: 760px) and (max-height: 450px) and (min-aspect-ratio: 4/3) {
   :root { zoom: 1; --zoom: 1; }
-  .shell .rail { padding-block: 2px; }
-  .shell .rail-link { height: 44px; flex-direction: row; gap: 5px; }
+  /* Five destinations fit vertically here. Moving them to the side returns
+     a full row to the terminal without shrinking its text below the floor. */
+  .shell { grid-template-columns: 64px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .shell .rail { grid-column: 1; grid-row: 1; padding: 4px 2px; border-top: 0; border-right: 1px solid var(--line); }
+  .shell .rail-nav { flex-direction: column; justify-content: flex-start; gap: 2px; }
+  .shell .rail-link { height: 52px; flex: none; flex-direction: column; gap: 2px; padding: 3px 0; }
+  .shell .rail-label { font-size: 9px; }
+  .shell .shell-main { grid-column: 2; grid-row: 1; }
 }
 
 @media (max-width: 400px) {

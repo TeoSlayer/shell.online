@@ -120,7 +120,11 @@ try {
       assert(state.screen.w >= Math.min(state.panes.w * 0.75, state.screen.h * 1.4), "Real xterm is not needlessly squeezed");
     }
     assert(state.panes.b <= state.height + 2 && state.main.b <= state.height + 2, "Workspace and terminal pane fit the viewport");
-    if (state.width <= 760) assert(Math.abs(state.rail.b - state.height) <= 2, "Phone navigation stays at the bottom");
+    if (state.width <= 760) {
+      const shortLandscape=state.height<=450&&state.width/state.height>=4/3;
+      if(shortLandscape)assert(state.rail.w<=70&&state.main.x>=state.rail.right-1,"Short landscape moves navigation beside the terminal");
+      else assert(Math.abs(state.rail.b - state.height) <= 2, "Phone navigation stays at the bottom");
+    }
     assert(state.screen.right <= state.panes.right + 2, "Terminal columns fit");
     assert(state.screen.b <= state.panes.b + 2, "All terminal rows fit, including short landscape windows");
     assert(state.links.every(l => l.w > 35 && l.h >= 40), "Navigation remains usable");
