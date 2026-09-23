@@ -28,6 +28,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Automatic account cleanup no longer closes a session by ID alone, which could
   mistake a resumed run for its predecessor. Explicit stop and normal process
   exit still work; an unreported end may remain in the app until relay expiry.
+- Persistent launches reserve local control before resuming the relay. A second
+  launch cannot overwrite the first one's credentials, and clean exit removes
+  only its own record and socket, including after a password rotation.
 - Chat no longer treats wrapped, unsent Claude Code input as a submitted message
   or repeats a prompt sent from the same browser. Unchanged frames avoid redraws,
   while terminal colour and formatting changes are still rendered.
