@@ -335,27 +335,48 @@ try {
       await browser.call(()=>layoutMode('terminal'));
       await until("!!document.querySelector('.pane') && !document.querySelector('.pane-gate')",'typing fixture mounted');
       await delay(150);
-      const before=await browser.call(()=>({
+      /*
+       * What must not move is the terminal's own rendering; the pane around it
+       * is supposed to get smaller.
+       *
+       * This used to hold the pane's height still and keep the bar drawn in
+       * the layout with `visibility: hidden`, from an approach where the shell
+       * stayed screen-height under an open keyboard. A bar that keeps its row
+       * while the page scrolls is a bar that scrolls into the middle of the
+       * canvas, which is what somebody typing in a session actually saw. The
+       * shell is the visible viewport now, the bar leaves the flow, and the
+       * pane shrinks with it -- while the terminal holds the grid and the type
+       * size it had, because a font re-fitting under a thumb mid-sentence is
+       * the thing freezing the pane was really protecting against.
+       */
+      const measure=()=>({
         pane:document.querySelector('.panes').getBoundingClientRect().height,
         rail:document.querySelector('.rail').getBoundingClientRect().height,
-      }));
+        gone:getComputedStyle(document.querySelector('.rail')).display==='none',
+        /* The emulator's own box, which is what a re-fit would change. */
+        screen:(()=>{const s=document.querySelector('.xterm-screen');return s?s.getBoundingClientRect().height:0;})(),
+        font:(()=>{const s=document.querySelector('.xterm');return s?getComputedStyle(s).fontSize:'';})(),
+        /* Nothing may be left underneath the keyboard. */
+        foot:document.querySelector('.shell').getBoundingClientRect().bottom,
+      });
+      const before=await browser.call(measure);
       await browser.call(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:400});visualViewport.dispatchEvent(new Event('resize'));});
       await until("document.documentElement.dataset.keyboard==='open'",'typing keyboard open');
       await delay(150);
-      const during=await browser.call(()=>({
-        pane:document.querySelector('.panes').getBoundingClientRect().height,
-        rail:document.querySelector('.rail').getBoundingClientRect().height,
-        hidden:getComputedStyle(document.querySelector('.rail')).visibility==='hidden',
-      }));
-      assert(Math.abs(before.pane-during.pane)<1,`${renderer}/${theme}: keyboard must not refit the terminal pane`);
-      assert.equal(during.rail,before.rail,'Hidden navigation keeps its layout row');
-      assert(during.hidden,'Navigation cannot appear over the terminal during typing');
+      const during=await browser.call(measure);
+      assert.equal(during.screen,before.screen,`${renderer}/${theme}: keyboard must not refit the terminal`);
+      assert.equal(during.font,before.font,`${renderer}/${theme}: keyboard must not resize the terminal's type`);
+      assert(during.pane<before.pane,`${renderer}/${theme}: the pane must give up the keyboard's room`);
+      assert(during.foot<=401,`${renderer}/${theme}: nothing may be left under the keyboard`);
+      assert(during.gone&&during.rail===0,'Navigation leaves the flow rather than keeping a blank row');
       await browser.call(()=>{delete visualViewport.height;visualViewport.dispatchEvent(new Event('resize'));});
       await until("!document.documentElement.hasAttribute('data-keyboard')",'typing keyboard closed');
       await delay(150);
-      assert(await browser.call(()=>getComputedStyle(document.querySelector('.rail')).visibility==='visible'),'Navigation returns after typing');
-      assert(Math.abs(await browser.call(()=>document.querySelector('.panes').getBoundingClientRect().height)-before.pane)<1,'Pane returns to exactly the original height');
-      console.log(`PASS ${renderer}/${theme}: synthetic keyboard preserves pane and hides/restores navigation`);
+      const after=await browser.call(measure);
+      assert(!after.gone&&Math.abs(after.rail-before.rail)<1,'Navigation returns after typing');
+      assert(Math.abs(after.pane-before.pane)<1,'Pane returns to exactly the original height');
+      assert.equal(after.screen,before.screen,'Terminal returns to exactly the original rendering');
+      console.log(`PASS ${renderer}/${theme}: synthetic keyboard shrinks the pane, holds the terminal and hides/restores navigation`);
     }
   }
   console.log("PASS actual app shell and terminal across tablet/phone/desktop boundaries; document scrolling and resize transitions");
