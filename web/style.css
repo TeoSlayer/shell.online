@@ -1102,6 +1102,9 @@ a {
 
 .presence-agent {
   flex: none;
+  max-width: min(160px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
   margin-left: 8px;
   padding: 3px 9px;
   border: 1px solid rgb(126 164 255 / 45%);

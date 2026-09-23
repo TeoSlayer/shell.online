@@ -1249,7 +1249,7 @@ function SessionGroup({
                 <td className="table-quiet table-optional" data-label="Machine">
                   {session.host || "unknown"}
                 </td>
-                <td className="table-quiet" data-label={live ? "Open for" : "Ran for"}>
+                <td className="table-quiet table-status" data-label={live ? "Open for" : "Ran for"}>
                   {live ? (
                     <>{sessionStateLabel(session)} · {elapsed(session.startedAt, now)}</>
                   ) : elapsed(session.startedAt, sessionEndedAt(session, now))}

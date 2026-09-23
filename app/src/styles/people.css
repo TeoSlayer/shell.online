@@ -38,6 +38,7 @@
 .person {
   display: inline-flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 8px;
 }
@@ -557,6 +558,9 @@
   color: var(--muted);
   white-space: nowrap;
 }
+
+/* "Status unavailable" plus an elapsed time must not push actions offscreen. */
+.table-quiet.table-status { white-space: normal; }
 
 .table-exit {
   margin-left: 8px;

@@ -26,6 +26,7 @@ import { generateKeyPair, exportJWK } from "jose";
 import { createServer as createViteServer } from "vite";
 import { parseJsonc } from "./wrangler-config-contract.mjs";
 import { launchChromeTransport, launchSafariTransport } from "./lib/browser-transport.mjs";
+import { auditTextLayout } from "./lib/text-layout-audit.mjs";
 
 if (process.platform === "win32") throw new Error("local PTY canary requires a POSIX shell");
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -362,7 +363,7 @@ try {
   session = await h.createSession([process.execPath, fixturePath, pauseFile]);
   secret = [session.session_id, session.share_url, session.e2ee_password];
   check(/^[-A-Za-z0-9_]{32}$/.test(session.session_id || ""), "synthetic session created");
-  bearer = await h.grant(session.session_id, "live-browser-canary", "control", 300);
+  bearer = await h.grant(session.session_id, "Browser canary " + "W".repeat(40), "control", 900);
   secret.push(bearer);
   stage = "fixture streaming";
   let live = await hostScreen();
@@ -532,6 +533,9 @@ try {
   for (const [width, height] of [[1440,900],[901,768],[900,768],[761,700],[760,700],[561,700],[560,700],[481,700],[480,700],[371,700],[370,700],[320,640],[390,844],[850,480],[600,480],[844,390],[667,375],[1024,480],[1440,900]]) {
     await transport.setViewport({ width, height, dpr: 1, mobile: false });
     await delay(350);
+    // Stress only the synthetic fixture's displayed label. Do not change the
+    // session's authorization or connection state to manufacture a pass.
+    await evaluate(`document.getElementById('session-label').textContent='Synthetic terminal '+ 'W'.repeat(96)`);
     const layout = await evaluate(`(() => {
       const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,b:r.bottom}};
       return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,page:rect('.session-page'),header:rect('.session-header'),identity:rect('.session-identity'),actions:rect('.session-actions'),screen:rect('#terminal .xterm-screen'),wrap:rect('#terminal-wrap'),settings:rect('#settings-open'),report:rect('#issue-open')};
@@ -546,6 +550,11 @@ try {
       return {visible:!badge.hidden && r.width>0 && r.x>=identity.x && r.right<=identity.right+1,statusVisible:status.right<=identity.right+1,compact:getComputedStyle(badge,'::after').content,hasMcp:badge.textContent.includes('MCP')};
     })()`);
     check(disclosure.visible && disclosure.statusVisible && (layout.width>760 || !disclosure.hasMcp || disclosure.compact.includes('MCP')), `${browser} public ${layout.width}: connection and MCP disclosure stay visible`);
+    const labels = await transport.call(auditTextLayout, {selectors:['#session-label','#session-status','.presence-agent','.presence-more'],groups:['.session-identity','.session-actions'],complete:['#session-status','.presence-more']});
+    check(labels.length===0, `${browser} public ${layout.width}: labels and badges fit (${labels.join(', ')})`);
+    await evaluate(`(()=>{const p=document.getElementById('presence');p.scrollLeft=p.scrollWidth;})()`);
+    await delay(80);
+    check(await evaluate(`(()=>{const p=document.getElementById('presence'),b=p.lastElementChild;if(!b||!p.checkVisibility())return true;const r=b.getBoundingClientRect(),v=p.getBoundingClientRect();return r.right<=v.right+2&&r.left>=v.left-2;})()`), `${browser} public ${layout.width}: last presence badge is reachable`);
     await evaluate(`document.getElementById('settings-open').click()`);
     await delay(220);
     const dialog = await evaluate(`(() => {

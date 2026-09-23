@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
 import { launchChromeTransport, launchSafariTransport } from '../../scripts/lib/browser-transport.mjs';
+import { auditTextLayout } from '../../scripts/lib/text-layout-audit.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const temp = await mkdtemp('/tmp/shell-route-themes-');
@@ -23,9 +24,9 @@ ${['tokens','base','auth','shell','terminal','chat','people','collab','audit','t
 window.fixture={errors:[],unknown:[],variant:'full'};
 addEventListener('error',e=>fixture.errors.push(e.message));
 addEventListener('unhandledrejection',e=>fixture.errors.push(String(e.reason)));
-const you={uid:'qa-owner',orgId:'qa-org',email:'long-account-name-for-layout-verification@example.test',name:'Synthetic teammate with a long display name',role:'owner',joinedAt:Date.now()};
+const you={uid:'qa-owner',orgId:'qa-org',email:'long-account-name-for-layout-verification@example.test',name:'Synthetic teammate '+('W'.repeat(64)),role:'owner',joinedAt:Date.now()};
 const members=[you,...Array.from({length:6},(_,i)=>({...you,uid:'member-'+i,email:'teammate-'+i+'@example.test',name:'Teammate '+i,role:'member'}))];
-const session={id:'route-test',uid:you.uid,ownerUid:you.uid,orgId:'qa-org',shareUrl:location.origin+'/s/'+'r'.repeat(32),command:'/opt/tools/long-terminal-process --synthetic --long-command-line',name:'A long session title that should never widen the page',readOnly:false,encrypted:true,persistent:false,host:'Synthetic machine',startedAt:Date.now()-60000,mcpTeamAccess:false,dailyBriefingEnabled:false,dailyBriefingTeamAccess:false};
+const session={id:'route-test',uid:you.uid,ownerUid:you.uid,orgId:'qa-org',shareUrl:location.origin+'/s/'+'r'.repeat(32),command:'/opt/tools/long-terminal-process --synthetic --path=/workspace/'+('directory/'.repeat(35)),name:'A long session title '+('W'.repeat(64)),readOnly:false,encrypted:true,persistent:false,host:'Synthetic machine',startedAt:Date.now()-60000,mcpTeamAccess:false,dailyBriefingEnabled:false,dailyBriefingTeamAccess:false};
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
 globalThis.fetch=async(input,init={})=>{
   const u=new URL(typeof input==='string'?input:input.url,location.origin),p=u.pathname;
@@ -36,7 +37,7 @@ globalThis.fetch=async(input,init={})=>{
   if(p==='/api/team-key')return json({teamKey:null,share:null,missing:[],you});
   if(p==='/api/org')return json({organization:{id:'qa-org',name:'Synthetic team',createdAt:Date.now()},you,members,invites:[]});
   if(p==='/api/notifications')return json({notifications:[],unread:0,unreadAssignments:0,members});
-  if(p==='/api/sessions')return json({sessions:empty?[]:Array.from({length:8},(_,i)=>({...session,id:i?'session-'+i:'route-test'})),members,you});
+  if(p==='/api/sessions')return json({sessions:empty?[]:Array.from({length:8},(_,i)=>({...session,id:i?'session-'+i:'route-test',relayStatus:['connected','unknown','waiting','disconnected'][i%4],readOnly:i%2===1})),members,you});
   if(p==='/api/sessions/route-test')return json({session,members,you,comments:[{id:'comment',sessionId:session.id,authorUid:you.uid,body:'Synthetic comment with a long unbroken path /workspace/'+('directory/').repeat(12),at:Date.now(),mentions:[]}]});
   if(p.endsWith('/content'))return json({},404);
   if(p==='/api/devices')return json({devices:empty?[]:Array.from({length:4},(_,i)=>({id:'device-'+i,label:'A-long-machine-name-for-layout-'+i,createdAt:Date.now()-360000,lastSeenAt:Date.now(),agentSeenAt:Date.now(),harnesses:['codex','opencode']}))});
@@ -87,7 +88,10 @@ async function inspect(label,theme){
     return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,paper:getComputedStyle(document.body).backgroundColor,scheme:getComputedStyle(document.documentElement).colorScheme,shadowInk:getComputedStyle(document.documentElement).getPropertyValue('--shadow-ink').trim(),controls,errors:fixture.errors,unknown:fixture.unknown};
   })()`);
   const offscreen=result.controls.filter(r=>r.left < -2 || r.right > result.width+2);
-  if(result.overflow || offscreen.length) await writeFile(join(shots,'failure.png'),Buffer.from(await browser.screenshot(),'base64'));
+  if(result.overflow || offscreen.length) {
+    await writeFile(join(shots,'failure.png'),Buffer.from(await browser.screenshot(),'base64'));
+    console.error(await browser.evaluate(`(()=>{const scale=innerWidth/document.documentElement.getBoundingClientRect().width;return [...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right*scale>innerWidth+2}).slice(0,15).map(e=>({tag:e.tagName,className:e.getAttribute('class'),right:e.getBoundingClientRect().right*scale}));})()`));
+  }
   assert(!result.overflow,label+' page overflow; screenshot '+shots);
   assert.deepEqual(offscreen,[],label+' controls fit horizontally; screenshot '+shots);
   assert.equal(result.scheme,theme,label+' color scheme');
@@ -95,6 +99,11 @@ async function inspect(label,theme){
   assert.equal(result.shadowInk,theme==='dark'?'#000':'#1a1f16',label+' shadows stay dark, never text-colored glow');
   assert.deepEqual(result.errors,[],label+' browser errors');
   assert.deepEqual(result.unknown,[],label+' unexpected requests');
+  const labels = await browser.call(auditTextLayout, {
+    selectors: ['.topbar-title','.detail-name','.detail-status','.detail-command-full','.table-name','.table-status','.person-name','.member-name','.device-label','.role-badge','.status-badge','.account-pop-name','.picker-label','.comment-head b','.comment-head time'],
+    groups: ['.detail-title','.detail-head','.comment-head'], complete: ['.detail-status','.role-badge','.status-badge'],
+  });
+  assert.deepEqual(labels,[],label+' label/badge bounds');
   console.log('PASS '+label+' '+result.width+'x'+result.height+' '+theme);
 }
 try{
@@ -117,6 +126,7 @@ try{
         await browser.evaluate('fixture.navigate('+JSON.stringify(path)+')');
         await until(`location.pathname===${JSON.stringify(path)} && !!document.querySelector(${JSON.stringify(ready)})`,'route '+path);
         if(path==='/audit')await browser.evaluate(`document.querySelector('.audit-filter-more').open=true`);
+        if(path==='/sessions/route-test')await browser.evaluate(`document.querySelector('.detail-command-details').open=true`);
         await inspect(path,theme);
         if(path==='/audit')assert(await browser.evaluate(`(()=>{const k=document.querySelector('.audit-reading-key');if(!k)return false;const r=k.getBoundingClientRect();return [...k.children].every(e=>e.getBoundingClientRect().bottom<=r.bottom+1);})()`),'Audit reading key contains its wrapped text');
       }

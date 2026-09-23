@@ -19,6 +19,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   layouts. Compact landscape navigation leaves more room for the terminal.
 - Dark-mode menus and mobile sheets no longer cast pale shadows or white scrims.
   Terminal pixel, cursor-position, scrollback and TUI mouse checks now run in CI.
+- Long names, agent badges, session statuses and comment authors now wrap or
+  ellipsize without pushing actions offscreen. Browser checks stress long labels
+  in both themes and reject clipped permission/status text or overlapping controls.
 
 ## [0.23.0] — 2026-09-23
 

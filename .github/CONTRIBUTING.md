@@ -53,6 +53,9 @@ On macOS, `APP_LAYOUT_BROWSER=safari` selects Safari for the first check;
 `SHELL_BROWSER=safari` selects it for the other checks (Safari remote automation must
 be enabled). The tests measure actual browser viewports, sweep both sides of
 layout breakpoints and use synthetic sessions, never your running agents.
+They stress long names, commands, tabs, comments and agent labels in both themes.
+Names may wrap or deliberately ellipsize; status/permission text must stay readable,
+controls must not overlap, and overflow tabs/presence must remain scroll-reachable.
 Screenshots and temporary browser profiles stay outside the repository.
 
 ## Keep changes focused

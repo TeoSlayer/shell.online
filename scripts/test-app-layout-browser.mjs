@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
 import { launchChromeTransport, launchSafariTransport } from "./lib/browser-transport.mjs";
+import { auditTextLayout } from "./lib/text-layout-audit.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const temp = await mkdtemp("/tmp/shell-app-layout-");
@@ -42,7 +43,7 @@ const built = await build({
       useKeyboardInset(panes,mode==='terminal');
       return <AppShell title="Sessions" aside={<button className="new-session"><Plus size={16} weight="bold"/>Session</button>}>
         {mode==='terminal' ? <>
-          <div className="terminal-bar"><div className="tabs"><button className="tab">All sessions</button>{Array.from({length:8},(_,i)=><div className="tab is-active" key={i}><button className="tab-label">Synthetic agent {i+1}</button><button className="tab-close" aria-label="Close tab">×</button></div>)}</div><label className="tab-renderer"><span>Renderer</span><select><option>xterm.js</option></select></label></div>
+          <div className="terminal-bar"><div className="tabs"><button className="tab">All sessions</button>{Array.from({length:8},(_,i)=><div className="tab is-active" key={i}><button className="tab-label">Synthetic agent {i+1} {'W'.repeat(64)}</button><button className="tab-close" aria-label="Close tab">×</button></div>)}</div><label className="tab-renderer"><span>Renderer</span><select><option>xterm.js</option></select></label></div>
           <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} renderer="xterm" active canType={false} pulseAllowed={false}/></div>
         </> : <div>{Array.from({length:mode==='long'?65:1},(_,i)=><p key={i} style={{padding:'12px 0'}}>Synthetic session row {i+1}</p>)}<button id="last-row">Last row</button></div>}
       </AppShell>;
@@ -55,7 +56,7 @@ const built = await build({
     b.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ loader: "js", contents: args.path === "game" ? "export default function Game(){return null}" : `
       export class TerminalConnection {
         constructor({events}){this.events=events;this.needsPassword=false;window.layoutGrid=grid=>events.onGrid(grid);}
-        async start(){this.events.onGrid({cols:120,rows:36});this.events.onStatus('connected');this.events.onHostState({presence:'connected'});this.events.onReadOnly(true);this.events.onData(new TextEncoder().encode(Array.from({length:36},(_,i)=>String(i+1).padStart(2,'0')+' '+(i===0?'SYNTHETIC TERMINAL — RESPONSIVE LAYOUT':'Working on a fixture. No real session or credentials.')).join('\\r\\n')),true);}
+        async start(){this.events.onGrid({cols:120,rows:36});this.events.onStatus('connected');this.events.onHostState({presence:'connected'});this.events.onMcpAuthorization(true);this.events.onReadOnly(true);this.events.onData(new TextEncoder().encode(Array.from({length:36},(_,i)=>String(i+1).padStart(2,'0')+' '+(i===0?'SYNTHETIC TERMINAL — RESPONSIVE LAYOUT':'Working on a fixture. No real session or credentials.')).join('\\r\\n')),true);}
         sendFrame(){} send(){} sendBinary(){} requestSnapshot(){} close(){} async submitPassword(){}
       }
     ` }));
@@ -90,6 +91,14 @@ try {
     : await launchChromeTransport({ profile: join(temp, "profile") });
   const origin = `http://127.0.0.1:${server.address().port}/sessions`;
   await browser.navigate(origin);
+  // Prove the geometry oracle rejects overflow, accepts intentional name
+  // ellipsis, and still rejects clipping a required status/permission badge.
+  await browser.evaluate(`(()=>{const p=document.createElement('div');p.id='text-audit-fixture';p.style.cssText='position:fixed;top:0;left:0;width:20px';const e=document.createElement('span');e.className='text-audit-label';e.style.cssText='display:block;width:20px;white-space:nowrap';e.textContent='W'.repeat(64);p.append(e);document.body.append(p);})()`);
+  assert((await browser.call(auditTextLayout,{selectors:['.text-audit-label']})).includes('.text-audit-label: text overflows'),'Oracle catches unbounded text');
+  await browser.evaluate(`Object.assign(document.querySelector('.text-audit-label').style,{overflow:'hidden',textOverflow:'ellipsis'})`);
+  assert.deepEqual(await browser.call(auditTextLayout,{selectors:['.text-audit-label']}),[],'Names may deliberately ellipsize');
+  assert((await browser.call(auditTextLayout,{selectors:['.text-audit-label'],complete:['.text-audit-label']})).includes('.text-audit-label: required badge text clipped'),'Required badge cannot hide behind ellipsis');
+  await browser.evaluate(`document.getElementById('text-audit-fixture').remove()`);
   await until("!!document.querySelector('.xterm-screen') && document.fonts.status==='loaded'", "real terminal mounted");
   // Resize one mounted app across both sides of each breakpoint, including returning.
   for (const theme of ['light','dark']) {
@@ -128,6 +137,7 @@ try {
     assert(state.screen.right <= state.panes.right + 2, "Terminal columns fit");
     assert(state.screen.b <= state.panes.b + 2, "All terminal rows fit, including short landscape windows");
     assert(state.links.every(l => l.w > 35 && l.h >= 40), "Navigation remains usable");
+    assert.deepEqual(await browser.call(auditTextLayout,{selectors:['.tab-label','.pane-mcp-disclosure'],groups:['.tab','.pane-tools'],complete:['.pane-mcp-disclosure']}),[],"Tab names and complete MCP disclosure fit without overlap");
     await browser.evaluate(`(() => {const strip=document.querySelector('.tabs');strip.scrollLeft=strip.scrollWidth;})()`);
     await delay(80); // Safari applies native scrolling on the next rendering frame.
     const tabs = await browser.evaluate(`(() => {
