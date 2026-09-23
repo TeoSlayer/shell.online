@@ -53,6 +53,7 @@ import type {
   GameCollectionRun,
   GameProfile,
   Notification,
+  PasswordRequest,
   SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
@@ -89,6 +90,11 @@ function isSealed(text: string): boolean {
   return text.startsWith("a1.");
 }
 
+function withoutSessionUid(entry: PasswordRequest & { sessionUid: string }): PasswordRequest {
+  const { sessionUid: _sessionUid, ...request } = entry;
+  return { ...request };
+}
+
 interface Shape {
   sessionContent: { sessionUid: string; sessionId: string; generation: string; content?: SessionContent; publishedAt?: number }[];
   mcpFlows: McpFlowRow[];
@@ -115,6 +121,8 @@ interface Shape {
   gameProfiles: GameProfile[];
   collectionRuns: GameCollectionRun[];
   teamKeyShares: TeamKeyShare[];
+  /* Bound to the session row by its uid as well, like its key shares. */
+  passwordRequests: (PasswordRequest & { sessionUid: string })[];
 }
 
 const EMPTY: Shape = {
@@ -126,6 +134,7 @@ const EMPTY: Shape = {
   organizations: [], memberships: [], invites: [], audit: [],
   comments: [], notifications: [], feedback: [], accountKeys: [], deletedAccounts: [],
   accountActivity: [], appEvents: [], teamKeys: [], teamKeyShares: [], gameProfiles: [], collectionRuns: [],
+  passwordRequests: [],
 };
 
 /**
@@ -216,6 +225,7 @@ export class MemoryStore implements Store {
         gameProfiles: parsed.gameProfiles ?? [],
         collectionRuns: parsed.collectionRuns ?? [],
         teamKeyShares: parsed.teamKeyShares ?? [],
+        passwordRequests: parsed.passwordRequests ?? [],
       };
     } catch {
       return structuredClone(EMPTY);
@@ -324,6 +334,94 @@ export class MemoryStore implements Store {
     session.keyShares = [...kept, ...shares];
     this.flush();
     return true;
+  }
+
+  async requestSessionPassword(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    now = Date.now(),
+  ): Promise<PasswordRequest | null> {
+    const session = await this.sessionInOrg(orgId, sessionId);
+    if (!session) return null;
+    const existing = this.data.passwordRequests.find(
+      (entry) =>
+        entry.sessionUid === session.uid && entry.sessionId === sessionId && entry.requesterUid === requesterUid,
+    );
+    if (existing?.status === "pending") return withoutSessionUid(existing);
+    const request = {
+      sessionUid: session.uid,
+      orgId,
+      sessionId,
+      requesterUid,
+      status: "pending" as const,
+      requestedAt: now,
+    };
+    this.data.passwordRequests = [
+      ...this.data.passwordRequests.filter((entry) => entry !== existing),
+      request,
+    ];
+    this.flush();
+    return withoutSessionUid(request);
+  }
+
+  async passwordRequests(orgId: string, sessionId?: string): Promise<PasswordRequest[]> {
+    const live = new Set(
+      this.data.sessions
+        .filter((session) => session.orgId === orgId)
+        .map((session) => `${session.uid}\u0000${session.id}`),
+    );
+    return this.data.passwordRequests
+      .filter(
+        (entry) =>
+          entry.orgId === orgId &&
+          (sessionId === undefined || entry.sessionId === sessionId) &&
+          live.has(`${entry.sessionUid}\u0000${entry.sessionId}`),
+      )
+      .sort(byTime((entry) => entry.requestedAt, (entry) => entry.requesterUid, true))
+      .map(withoutSessionUid);
+  }
+
+  async resolvePasswordRequest(input: {
+    orgId: string;
+    sessionId: string;
+    requesterUid: string;
+    resolverUid: string;
+    decision: "approved" | "declined";
+    share?: Omit<SessionKeyShare, "uid">;
+    now?: number;
+  }): Promise<PasswordRequest | null> {
+    const session = await this.sessionInOrg(input.orgId, input.sessionId);
+    if (!session) return null;
+    const request = this.data.passwordRequests.find(
+      (entry) =>
+        entry.sessionUid === session.uid &&
+        entry.sessionId === input.sessionId &&
+        entry.requesterUid === input.requesterUid &&
+        entry.status === "pending",
+    );
+    if (!request) return null;
+    if (input.decision === "approved") {
+      if (!input.share) return null;
+      const share = { uid: input.requesterUid, ...input.share };
+      session.keyShares = [
+        ...(session.keyShares ?? []).filter((entry) => entry.uid !== share.uid),
+        share,
+      ];
+    }
+    request.status = input.decision;
+    request.resolvedAt = input.now ?? Date.now();
+    request.resolvedBy = input.resolverUid;
+    this.flush();
+    return withoutSessionUid(request);
+  }
+
+  /* A request is about one run of a session; when the row goes, so does it. */
+  private dropOrphanedPasswordRequests(): void {
+    const live = new Set(this.data.sessions.map((session) => `${session.uid}\u0000${session.id}`));
+    this.data.passwordRequests = this.data.passwordRequests.filter((entry) =>
+      live.has(`${entry.sessionUid}\u0000${entry.sessionId}`),
+    );
   }
 
   async rotateSessionCredentials(
@@ -477,6 +575,9 @@ export class MemoryStore implements Store {
       entry.email = DELETED_ACTOR_EMAIL;
       entry.canReply = false;
     }
+    /* Their own asks go with them; asks about sessions that went follow those. */
+    data.passwordRequests = data.passwordRequests.filter((entry) => entry.requesterUid !== uid);
+    this.dropOrphanedPasswordRequests();
     data.deletedAccounts = [
       ...data.deletedAccounts.filter((entry) => entry.uid !== uid),
       { uid, deletedAt: now },
@@ -1246,6 +1347,7 @@ export class MemoryStore implements Store {
     this.data.jevAssessments = this.data.jevAssessments.filter(
       (entry) => entry.orgId !== orgId || entry.sessionId !== id,
     );
+    this.dropOrphanedPasswordRequests();
     this.flush();
     return true;
   }
@@ -1382,6 +1484,9 @@ export class MemoryStore implements Store {
         session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
       }
     }
+    this.data.passwordRequests = this.data.passwordRequests.filter(
+      (entry) => !(entry.orgId === orgId && entry.requesterUid === uid),
+    );
     this.flush();
     return true;
   }

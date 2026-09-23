@@ -543,3 +543,30 @@
 .vault-team-actions .btn {
   width: auto;
 }
+
+/* Under the password prompt: asking the owner, and where that ask stands. */
+.pane-gate-ask {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.pane-gate-ask p {
+  display: flex;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.pane-gate-ask p svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.pane-gate-ask .btn {
+  gap: 6px;
+}

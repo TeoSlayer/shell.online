@@ -18,6 +18,7 @@ import type {
   Feedback,
   GameProfile,
   Notification,
+  PasswordRequest,
   SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
@@ -376,6 +377,34 @@ export interface Store {
    */
   deleteSession(orgId: string, id: string): Promise<boolean>;
   putKeyShares(orgId: string, sessionId: string, shares: SessionKeyShare[]): Promise<boolean>;
+  /* ---- Password requests ---- */
+  /**
+   * Asks for a session's password, or asks again. A pending request is
+   * returned as it is; an answered one is reopened. Null when the session is
+   * not in the organization.
+   */
+  requestSessionPassword(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    now?: number,
+  ): Promise<PasswordRequest | null>;
+  /** Requests in an organization, newest first; one session's when `sessionId` is given. */
+  passwordRequests(orgId: string, sessionId?: string): Promise<PasswordRequest[]>;
+  /**
+   * Answers a pending request. An approval stores `share` in the same step,
+   * so a request is never marked shared without the copy. Null when there is
+   * no pending request to answer.
+   */
+  resolvePasswordRequest(input: {
+    orgId: string;
+    sessionId: string;
+    requesterUid: string;
+    resolverUid: string;
+    decision: "approved" | "declined";
+    share?: Omit<SessionKeyShare, "uid">;
+    now?: number;
+  }): Promise<PasswordRequest | null>;
   /** Changes the public salt and every sealed copy as one credential generation. */
   rotateSessionCredentials(
     orgId: string,

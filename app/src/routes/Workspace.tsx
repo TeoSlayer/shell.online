@@ -3,7 +3,7 @@ import { X, Trash, Broom, Terminal as TerminalIcon, List, Plus, CaretRight, Magn
 import { Link, useSearchParams } from "react-router-dom";
 import { PeopleChip, PersonChip } from "../components/Avatar";
 import { MultiPersonPicker } from "../components/PersonPicker";
-import { findPerson } from "../lib/people";
+import { displayName, findPerson } from "../lib/people";
 import { kindForCommand } from "../lib/session-kinds";
 import {
   assigneeIds,
@@ -21,6 +21,7 @@ import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionStartGuide } from "../components/SessionStartGuide";
 import { SessionBoard } from "../components/SessionBoard";
 import { SessionClipboard } from "../components/SessionClipboard";
+import { SessionLock } from "../components/SessionLock";
 import { SignedInModal } from "../components/SignedInModal";
 import { AppShell } from "../components/AppShell";
 import { useAuth } from "../auth/AuthProvider";
@@ -35,6 +36,7 @@ import { readOpenTabs, writeOpenTabs } from "../terminal/tab-store";
 import {
   assignSession,
   deleteSession,
+  requestSessionPassword,
   fetchDevices,
   fetchSessions,
   startSession,
@@ -622,6 +624,18 @@ export function Workspace() {
     }
   }
 
+  /*
+   * Asks the owner for a session's password. The answer is shown straight
+   * away rather than on the next poll, so the prompt says "asked" the moment
+   * the button is pressed.
+   */
+  async function handleRequestPassword(session: SessionRecord) {
+    const { request } = await requestSessionPassword(session.id);
+    setSessions((current) =>
+      current?.map((entry) => (entry.id === session.id ? { ...entry, passwordRequest: request } : entry)) ?? null,
+    );
+  }
+
   async function handleAssign(session: SessionRecord, uids: string[]) {
     setError("");
     setNotice("");
@@ -843,6 +857,9 @@ export function Workspace() {
              * the list, where the last known answer is the best there is.
              */
             const current = sessions?.find((session) => session.id === tab.id);
+            /* Anyone in the team but the owner can ask the owner for the password. */
+            const mayAsk = Boolean(current?.encrypted && you && current.ownerUid && current.ownerUid !== you.uid);
+            const owner = findPerson(members, current?.ownerUid);
             return (
               <TerminalPane
                 key={tab.id}
@@ -855,6 +872,9 @@ export function Workspace() {
                 onPasteReady={(open) => { if (open) pasteActions.current.set(tab.id, open); else pasteActions.current.delete(tab.id); }}
                 pulseAllowed={!!current}
                 onPulseChange={(value) => receivePulse(tab.id, value)}
+                onRequestPassword={mayAsk && current ? () => handleRequestPassword(current) : undefined}
+                passwordRequest={current?.passwordRequest}
+                ownerName={owner ? displayName(owner) : undefined}
               />
             );
           })}
@@ -1203,6 +1223,7 @@ function SessionGroup({
                     <span className="table-name" title={session.name?.trim() || session.command}>
                       {title}
                     </span>
+                    <SessionLock session={session} />
                   </Link>
                   {/*
                     * A genuine two-line summary when the record carries one,

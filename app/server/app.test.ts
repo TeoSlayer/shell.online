@@ -3971,3 +3971,98 @@ describe("account figures for the statistics dashboard", () => {
     expect(JSON.stringify(answer.body)).not.toContain("ours.example");
   });
 });
+
+describe("asking the owner for a session password", () => {
+  const session = {
+    id: "pW4rEqTm9Ld2Ravh4YsPcE8UjZgF6tKb",
+    share_url: "https://shell.online/s/pW4rEqTm9Ld2Ravh4YsPcE8UjZgF6tKb",
+    command: "claude",
+    encrypted: true,
+  };
+  const asks = `/api/sessions/${session.id}/password-requests`;
+
+  async function vaultFor(auth: string, uid: string) {
+    const made = await createVault(uid);
+    await call("POST", "/api/vault", {
+      auth,
+      body: {
+        public_key: made.bundle.publicKey,
+        encrypted_private_key: made.bundle.encryptedPrivateKey,
+        recovery_wrap: made.bundle.recoveryWrap,
+      },
+    });
+  }
+
+  async function team() {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    await vaultFor(colleague, "uid-2");
+    return { owner: await idToken(), colleague };
+  }
+
+  it("records the ask and counts it on the owner's share button", async () => {
+    const { owner, colleague } = await team();
+    const asked = await call("POST", asks, { auth: colleague });
+    expect(asked.status).toBe(200);
+    expect(asked.body.request).toMatchObject({ requesterUid: "uid-2", status: "pending" });
+
+    const ownerList = await call("GET", "/api/sessions", { auth: owner });
+    expect(ownerList.body.sessions[0].passwordRequestsPending).toBe(1);
+    const colleagueList = await call("GET", "/api/sessions", { auth: colleague });
+    expect(colleagueList.body.sessions[0].passwordRequest.status).toBe("pending");
+    expect(colleagueList.body.sessions[0].passwordRequestsPending).toBeUndefined();
+
+    /* Only the owner is given the list of who asked. */
+    expect((await call("GET", `/api/sessions/${session.id}`, { auth: owner })).body.passwordRequests)
+      .toHaveLength(1);
+    expect((await call("GET", `/api/sessions/${session.id}`, { auth: colleague })).body.passwordRequests)
+      .toBeUndefined();
+  });
+
+  it("refuses an ask from the owner, or from someone with no vault to seal to", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    expect((await call("POST", asks, { auth: await idToken() })).status).toBe(400);
+    const invite = await call("POST", "/api/org/invites", { auth: await idToken(), body: { role: "member" } });
+    const colleague = await idToken({ sub: "uid-2", email: "colleague@example.com" });
+    await call("GET", `/api/org?invite=${invite.body.invite.id}`, { auth: colleague });
+    expect((await call("POST", asks, { auth: colleague })).status).toBe(409);
+  });
+
+  it("stores the sealed copy when the owner accepts", async () => {
+    const { owner, colleague } = await team();
+    await call("POST", asks, { auth: colleague });
+    const accepted = await call("PUT", `${asks}/uid-2`, {
+      auth: owner,
+      body: { decision: "approve", share: { sender_public_key: P256_PUBLIC_KEY_A, sealed: SESSION_SHARE_A } },
+    });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.request.status).toBe("approved");
+
+    const listed = await call("GET", "/api/sessions", { auth: colleague });
+    expect(listed.body.sessions[0].keyShare).toMatchObject({ sealed: SESSION_SHARE_A });
+    expect(listed.body.sessions[0].passwordRequest.status).toBe("approved");
+    expect((await call("GET", "/api/sessions", { auth: owner })).body.sessions[0].passwordRequestsPending).toBe(0);
+  });
+
+  it("lets only the owner answer, once, and never accept without a copy", async () => {
+    const { owner, colleague } = await team();
+    await call("POST", asks, { auth: colleague });
+    expect((await call("PUT", `${asks}/uid-2`, { auth: colleague, body: { decision: "decline" } })).status)
+      .toBe(403);
+    expect((await call("PUT", `${asks}/uid-2`, { auth: owner, body: { decision: "approve" } })).status).toBe(400);
+
+    const declined = await call("PUT", `${asks}/uid-2`, { auth: owner, body: { decision: "decline" } });
+    expect(declined.body.request.status).toBe("declined");
+    expect((await call("PUT", `${asks}/uid-2`, { auth: owner, body: { decision: "decline" } })).status).toBe(409);
+    const listed = await call("GET", "/api/sessions", { auth: colleague });
+    expect(listed.body.sessions[0].keyShare).toBeUndefined();
+    expect(listed.body.sessions[0].passwordRequest.status).toBe("declined");
+
+    /* Asking again after a decline opens a fresh request. */
+    expect((await call("POST", asks, { auth: colleague })).body.request.status).toBe("pending");
+  });
+});

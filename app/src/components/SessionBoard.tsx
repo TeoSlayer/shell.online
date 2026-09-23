@@ -9,6 +9,7 @@ import { MultiPersonPicker } from "./PersonPicker";
 import { ago } from "../lib/time";
 import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
+import { SessionLock } from "./SessionLock";
 import { shouldOpenSurface } from "../lib/surface-navigation";
 import { sessionEnded, sessionEndedAt, sessionStateLabel } from "../lib/session-liveness";
 
@@ -75,6 +76,7 @@ function Card({
         <Link className="board-card-name" to={`/sessions/${session.id}`} title={session.name?.trim() || session.command}>
           {title}
         </Link>
+        <SessionLock session={session} />
         <SessionClipboard session={session} you={you} />
       </div>
 

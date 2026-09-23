@@ -222,6 +222,44 @@ export interface SessionDetail {
   members: Member[];
   you: Member;
   comments: Comment[];
+  /** Every request for this session's password. The owner's only. */
+  passwordRequests?: PasswordRequest[];
+}
+
+/** A teammate asking a session's owner for its password, and the answer. */
+export interface PasswordRequest {
+  orgId: string;
+  sessionId: string;
+  requesterUid: string;
+  status: "pending" | "approved" | "declined";
+  requestedAt: number;
+  resolvedAt?: number;
+  resolvedBy?: string;
+}
+
+/** Asks the owner for the password. Asking again while it waits changes nothing. */
+export function requestSessionPassword(sessionId: string) {
+  return request<{ request: NonNullable<SessionRecord["passwordRequest"]> }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/password-requests`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * The owner's answer. Accepting carries the copy their browser sealed to the
+ * asker's vault; the service stores it with the answer.
+ */
+export function answerPasswordRequest(
+  sessionId: string,
+  requesterUid: string,
+  answer:
+    | { decision: "approve"; share: { sender_public_key: string; sealed: string } }
+    | { decision: "decline" },
+) {
+  return request<{ request: PasswordRequest }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/password-requests/${encodeURIComponent(requesterUid)}`,
+    { method: "PUT", body: JSON.stringify(answer) },
+  );
 }
 
 export function fetchSession(sessionId: string) {
@@ -295,6 +333,10 @@ export interface SessionRecord {
    * to seal to.
    */
   sharedWith?: string[];
+  /** For the session's owner: password requests waiting on their answer. */
+  passwordRequestsPending?: number;
+  /** For anyone else: where their own request for the password stands. */
+  passwordRequest?: Pick<PasswordRequest, "requesterUid" | "status" | "requestedAt" | "resolvedAt">;
   readOnly: boolean;
   encrypted: boolean;
   persistent: boolean;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   PaperPlaneTilt,
@@ -16,7 +16,10 @@ import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { Booting } from "../components/Booting";
 import { SessionClipboard } from "../components/SessionClipboard";
+import { SessionLock } from "../components/SessionLock";
 import { SessionAudience } from "../components/SessionAudience";
+import { PasswordRequests } from "../components/PasswordRequests";
+import { PASSWORD_REQUESTS_ANCHOR } from "../lib/password-requests";
 import { SessionAutomation } from "../components/SessionAutomation";
 import {
   assignSession,
@@ -117,6 +120,25 @@ export function Session() {
     const poll = window.setInterval(() => void load(), 6000);
     return () => window.clearInterval(poll);
   }, [load]);
+
+  /*
+   * The Share menu's "Password requests" lands here with the section named in
+   * the hash. It only exists once the session has loaded, so the browser's own
+   * jump to the anchor has already missed it; this makes the jump once.
+   */
+  const location = useLocation();
+  const jumped = useRef("");
+  const hasDetail = Boolean(detail);
+  useEffect(() => {
+    if (!hasDetail || location.hash !== `#${PASSWORD_REQUESTS_ANCHOR}`) return;
+    const target = `${location.key}${location.hash}`;
+    if (jumped.current === target) return;
+    const section = document.getElementById(PASSWORD_REQUESTS_ANCHOR);
+    if (!section) return;
+    jumped.current = target;
+    section.scrollIntoView({ block: "start" });
+    section.focus({ preventScroll: true });
+  }, [hasDetail, location.hash, location.key]);
 
   if (error && !detail) {
     return (
@@ -330,6 +352,7 @@ export function Session() {
               <h2 className="detail-name" title={session.name?.trim() || session.command}>
                 {sessionTitle(session)}
               </h2>
+              <SessionLock session={session} />
               {canRename(session, you) && (
                 <button
                   type="button"
@@ -407,6 +430,17 @@ export function Session() {
               </button>
             )}
           </div>
+
+          {/* Every session its owner started, and only theirs: the password is theirs to give. */}
+          {session.encrypted && session.ownerUid === you.uid && (
+            <PasswordRequests
+              session={session}
+              requests={detail.passwordRequests ?? []}
+              members={members}
+              you={you}
+              onChanged={load}
+            />
+          )}
 
           <SessionAudience session={session} members={members} you={you} />
 

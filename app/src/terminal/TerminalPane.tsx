@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowClockwise, LockKey } from "@phosphor-icons/react";
+import { ArrowClockwise, CheckCircle, HourglassMedium, Key, LockKey } from "@phosphor-icons/react";
 import "@xterm/xterm/css/xterm.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/refstream.css";
 import "../../../web/vendor/refstream/v0.1.0-alpha.5/ui.css";
@@ -15,7 +15,7 @@ import { useVault } from "../vault/VaultProvider";
 import { VaultUnlock } from "../vault/VaultGate";
 import { useTeamKey } from "../vault/TeamKeyProvider";
 import { AuditSink } from "./audit-sink";
-import { postAudit } from "../lib/api";
+import { postAudit, type SessionRecord } from "../lib/api";
 import { Button } from "../components/Button";
 import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
@@ -53,6 +53,15 @@ export interface TerminalPaneProps {
   pulseAllowed?: boolean;
   /** Workspace puts this action beside the renderer, never over terminal cells. */
   onPasteReady?: (open: (() => void) | null) => void;
+  /**
+   * Asks the session's owner for the password, from the password prompt.
+   * Absent for the owner, and for a session opened outside a team.
+   */
+  onRequestPassword?: () => Promise<void>;
+  /** Where this person's own ask stands, from the session list. */
+  passwordRequest?: SessionRecord["passwordRequest"];
+  /** Who is being asked, by name. */
+  ownerName?: string;
 }
 
 /*
@@ -145,6 +154,9 @@ export function TerminalPane({
   onPulseChange,
   pulseAllowed = true,
   onPasteReady,
+  onRequestPassword,
+  passwordRequest,
+  ownerName,
 }: TerminalPaneProps) {
   const pasteReady = useRef(onPasteReady);
   pasteReady.current = onPasteReady;
@@ -208,6 +220,8 @@ export function TerminalPane({
   const [readOnly, setReadOnly] = useState(false);
   const [password, setPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
   const [unlockMethod, setUnlockMethod] = useState<"vault" | "password" | null>(null);
   const lastVaultStatus = useRef(vault.status);
 
@@ -701,7 +715,21 @@ export function TerminalPane({
     setPassword("");
   }
 
+  async function handleAsk() {
+    if (!onRequestPassword) return;
+    setAsking(true);
+    setAskError("");
+    try {
+      await onRequestPassword();
+    } catch (caught) {
+      setAskError(caught instanceof Error ? caught.message : "Could not send the request. Try again.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
   const locked = status === "needs-password";
+  const owner = ownerName || "the owner";
   const sessionOver = status === "ended" || status === "missing" || status === "error";
   const machineAway = !locked && !sessionOver && hostIsAway(hostState?.presence);
   const notice = machineAway
@@ -784,6 +812,46 @@ export function TerminalPane({
                   Stuck here? Tell us
                 </FeedbackLink>
               </form>
+            )}
+            {/*
+              * No password to type? Ask for it here, where the need is, under
+              * either way of unlocking. The owner sees the count on their Share
+              * button and answers in one click; accepting seals the password to
+              * this person's vault, and the next poll brings the copy that
+              * opens this pane by itself.
+              */}
+            {onRequestPassword && (
+              <div className="pane-gate-ask" role="status">
+                {passwordRequest?.status === "pending" ? (
+                  <p>
+                    <HourglassMedium size={15} />
+                    <span>
+                      Asked {owner} for the password. This opens by itself when they accept.
+                    </span>
+                  </p>
+                ) : passwordRequest?.status === "approved" ? (
+                  <p>
+                    <CheckCircle size={15} />
+                    <span>
+                      {owner} shared the password with you. If this does not open in a moment,
+                      unlock your vault.
+                    </span>
+                  </p>
+                ) : (
+                  <>
+                    {passwordRequest?.status === "declined" && (
+                      <p>
+                        <span>{owner} declined your request.</span>
+                      </p>
+                    )}
+                    <Button type="button" variant="ghost" busy={asking} busyLabel="Asking" onClick={() => void handleAsk()}>
+                      <Key size={15} weight="bold" />
+                      {passwordRequest?.status === "declined" ? "Ask again" : `Ask ${owner} for the password`}
+                    </Button>
+                  </>
+                )}
+                {askError && <Alert tone="error">{askError}</Alert>}
+              </div>
             )}
           </div>
         </div>

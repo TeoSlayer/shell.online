@@ -55,6 +55,7 @@ import type {
   GameCollectionRun,
   GameProfile,
   Notification,
+  PasswordRequest,
   SessionAutomationConsent,
   SessionKeyShare,
   SessionRecord,
@@ -204,6 +205,19 @@ function toToken(row: Row): CliToken {
     harnesses: row.harnesses,
     revokedAt: row.revoked_at,
   }) as unknown as CliToken;
+}
+
+function toPasswordRequest(row: Row): PasswordRequest {
+  const request: PasswordRequest = {
+    orgId: row.org_id as string,
+    sessionId: row.session_id as string,
+    requesterUid: row.requester_uid as string,
+    status: row.status as PasswordRequest["status"],
+    requestedAt: Number(row.requested_at),
+  };
+  if (row.resolved_at !== null && row.resolved_at !== undefined) request.resolvedAt = Number(row.resolved_at);
+  if (row.resolved_by) request.resolvedBy = row.resolved_by as string;
+  return request;
 }
 
 function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
@@ -2128,6 +2142,86 @@ export class PostgresStore implements Store {
     return true;
   }
 
+  async requestSessionPassword(
+    orgId: string,
+    sessionId: string,
+    requesterUid: string,
+    now = Date.now(),
+  ): Promise<PasswordRequest | null> {
+    /*
+     * A pending row keeps its time, so asking twice does not move it to the
+     * top of the owner's list; an answered one is reopened as a new ask.
+     */
+    const row = await this.row(
+      `INSERT INTO session_password_requests
+         (session_uid, session_id, org_id, requester_uid, status, requested_at)
+       SELECT uid, id, org_id, $3, 'pending', $4 FROM sessions WHERE org_id = $1 AND id = $2
+       ON CONFLICT (session_uid, session_id, requester_uid) DO UPDATE SET
+         status = 'pending',
+         requested_at = CASE WHEN session_password_requests.status = 'pending'
+           THEN session_password_requests.requested_at ELSE EXCLUDED.requested_at END,
+         resolved_at = NULL,
+         resolved_by = NULL
+       RETURNING *`,
+      [orgId, sessionId, requesterUid, now],
+    );
+    return row ? toPasswordRequest(row) : null;
+  }
+
+  async passwordRequests(orgId: string, sessionId?: string): Promise<PasswordRequest[]> {
+    const rows = await this.rows(
+      `SELECT * FROM session_password_requests
+       WHERE org_id = $1 AND ($2::text IS NULL OR session_id = $2)
+       ORDER BY requested_at DESC, requester_uid COLLATE "C" DESC`,
+      [orgId, sessionId ?? null],
+    );
+    return rows.map(toPasswordRequest);
+  }
+
+  async resolvePasswordRequest(input: {
+    orgId: string;
+    sessionId: string;
+    requesterUid: string;
+    resolverUid: string;
+    decision: "approved" | "declined";
+    share?: Omit<SessionKeyShare, "uid">;
+    now?: number;
+  }): Promise<PasswordRequest | null> {
+    if (input.decision === "approved" && !input.share) return null;
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query<Row>(
+        `UPDATE session_password_requests
+         SET status = $4, resolved_at = $5, resolved_by = $6
+         WHERE org_id = $1 AND session_id = $2 AND requester_uid = $3 AND status = 'pending'
+         RETURNING *`,
+        [input.orgId, input.sessionId, input.requesterUid, input.decision, input.now ?? Date.now(), input.resolverUid],
+      );
+      const row = found.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      if (input.decision === "approved" && input.share) {
+        await client.query(
+          `INSERT INTO session_key_shares (session_uid, session_id, uid, sender_public_key, sealed)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (session_uid, session_id, uid)
+           DO UPDATE SET sender_public_key = EXCLUDED.sender_public_key, sealed = EXCLUDED.sealed`,
+          [row.session_uid, input.sessionId, input.requesterUid, input.share.senderPublicKey, input.share.sealed],
+        );
+      }
+      await client.query("COMMIT");
+      return toPasswordRequest(row);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async rotateSessionCredentials(
     orgId: string,
     sessionId: string,
@@ -2252,6 +2346,7 @@ export class PostgresStore implements Store {
           "external_analysis_consents",
           "jev_assessments",
           "jev_budget",
+          "session_password_requests",
         ]) {
           await client.query(`DELETE FROM ${table} WHERE org_id = $1`, [plan.orgId]);
         }
@@ -2279,6 +2374,7 @@ export class PostgresStore implements Store {
         "DELETE FROM jev_assessments WHERE owner_uid = $1",
         "DELETE FROM jev_budget WHERE owner_uid = $1",
         "DELETE FROM comments WHERE author_uid = $1",
+        "DELETE FROM session_password_requests WHERE requester_uid = $1",
         "DELETE FROM notifications WHERE uid = $1 OR actor_uid = $1",
         /* The address an invite was sent to is theirs once they accepted it. */
         "UPDATE invites SET email = NULL WHERE accepted_by = $1",
@@ -2561,6 +2657,10 @@ export class PostgresStore implements Store {
            USING sessions
            WHERE keys.session_uid = sessions.uid AND keys.session_id = sessions.id
              AND sessions.org_id = $1 AND keys.uid = $2`,
+          [orgId, uid],
+        );
+        await client.query(
+          "DELETE FROM session_password_requests WHERE org_id = $1 AND requester_uid = $2",
           [orgId, uid],
         );
         /* A listing is not a connection: their live team requests go with them. */

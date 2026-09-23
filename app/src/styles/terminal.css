@@ -1471,6 +1471,123 @@ button.tab {
 }
 
 /* ---------------------------------------------------------------
+   Password requests: the owner's accept-or-decline list
+   --------------------------------------------------------------- */
+
+.password-requests {
+  margin-top: 26px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  /* Arrived at from the Share menu: clear of the sticky header. */
+  scroll-margin-top: 88px;
+  outline: none;
+}
+
+/* Arriving from the Share menu draws the eye here once, then settles. */
+.password-requests:target {
+  animation: password-requests-arrive 1.6s var(--ease, ease) 1;
+}
+
+@keyframes password-requests-arrive {
+  0%, 30% {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 22%, transparent);
+  }
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .password-requests:target {
+    animation: none;
+    border-color: var(--blue);
+  }
+}
+
+.password-requests .detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.password-requests .detail-heading .clip-count {
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+
+.password-requests .detail-empty {
+  margin: 0;
+}
+
+.password-requests-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  gap: 8px;
+}
+
+.password-requests-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.password-requests-who {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 140px;
+  font-size: 13.5px;
+}
+
+.password-requests-who time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.password-requests-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.password-requests-actions .btn {
+  width: auto;
+  gap: 5px;
+}
+
+.password-requests-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.password-requests-done {
+  display: grid;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12.5px;
+  list-style: none;
+  gap: 4px;
+}
+
+.password-requests-done li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.password-requests-done li svg {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------
    Starting a session
    --------------------------------------------------------------- */
 

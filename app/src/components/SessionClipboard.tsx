@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, Copy, Check, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
-import { Link } from "react-router-dom";
+import { CaretDown, Copy, Check, Key, Link as LinkIcon, Lock, Terminal, Warning } from "@phosphor-icons/react";
+import { Link, useNavigate } from "react-router-dom";
 import type { Member, SessionRecord } from "../lib/api";
-import { verifiedPasswordFor } from "../lib/session-passwords";
 import { COPY_FAILED, useCopy } from "../lib/clipboard";
-import { useVault } from "../vault/VaultProvider";
-import { isVaultShare } from "../lib/vault-crypto";
+import { useSessionPassword } from "../vault/use-session-password";
+import { passwordRequestsHref } from "../lib/password-requests";
 
 /**
  * The one place a session can be copied from.
@@ -17,25 +16,6 @@ import { isVaultShare } from "../lib/vault-crypto";
  */
 
 type Item = "link" | "password" | "attach";
-
-/*
- * Where the password comes from, and why the service is not in the list.
- *
- * A session password never reaches the service in the clear. This browser
- * either holds it already, or opens the copy sealed to this person's vault.
- * So the answer to "may this person copy it" is not a permission the service
- * grants: they either hold a copy or they do not, and someone outside the
- * team holds nothing whatever the interface says.
- */
-async function readPassword(
-  session: SessionRecord,
-  openShare: (sessionId: string, share: SessionRecord["keyShare"]) => Promise<string | null>,
-): Promise<string | null> {
-  /* A vault share is the current credential generation. A locally verified
-   * cache may be from before rotation and is only a fallback for legacy rows. */
-  if (isVaultShare(session.keyShare?.sealed)) return openShare(session.id, session.keyShare);
-  return verifiedPasswordFor(session.id, session.shareUrl) ?? openShare(session.id, session.keyShare);
-}
 
 export function SessionClipboard({
   session,
@@ -51,37 +31,25 @@ export function SessionClipboard({
    * navigator.clipboard.writeText spends the user gesture the write needs, so
    * copying the password failed on a phone every time while the link beside
    * it worked. Holding the decrypted value means the handler is synchronous.
+   *
+   * The service is not asked whether this person may copy it. A password never
+   * reaches it in the clear: this browser either holds a copy or opens the one
+   * sealed to this person's vault, and someone outside the team holds nothing
+   * whatever the interface says.
    */
-  const [password, setPassword] = useState<string | null>(null);
+  const password = useSessionPassword(session) ?? null;
   const { copiedKey, failedKey, copy } = useCopy<Item>();
   const wrapper = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   /* The attach command runs on the machine that owns the process. */
   const isOwner = Boolean(you && session.ownerUid === you.uid);
   const attachCommand = `shell attach ${session.id.slice(0, 10)}`;
-
   /*
-   * Depends on the sealed material, not on the session object.
-   *
-   * The list is re-fetched every few seconds and hands every row a new object
-   * each time, so this ran an ECDH derivation per session per poll to answer a
-   * question whose inputs had not changed. On a phone with several sessions
-   * open that is most of what the page was doing.
+   * Teammates asking for the password, waiting on the owner. Counted on the
+   * button itself, so it is seen without opening anything.
    */
-  const sealed = session.keyShare
-    ? `${session.keyShare.senderPublicKey}:${session.keyShare.sealed}`
-    : "";
-  const { openShare } = useVault();
-  useEffect(() => {
-    let live = true;
-    void readPassword(session, openShare).then((value) => {
-      if (live) setPassword(value);
-    });
-    return () => {
-      live = false;
-    };
-    /* eslint-disable-next-line react-hooks/exhaustive-deps -- see above */
-  }, [session.id, sealed, openShare]);
+  const asking = isOwner && session.encrypted ? session.passwordRequestsPending ?? 0 : 0;
 
   useEffect(() => {
     if (!open) return;
@@ -114,6 +82,15 @@ export function SessionClipboard({
       >
         {anyCopied ? <Check size={15} weight="bold" /> : <Copy size={15} />}
         <span>Share</span>
+        {asking > 0 && (
+          <span
+            className="clip-badge"
+            aria-label={`${asking} password request${asking === 1 ? "" : "s"} waiting`}
+            title={`${asking} password request${asking === 1 ? "" : "s"} waiting`}
+          >
+            {asking > 99 ? "99+" : asking}
+          </span>
+        )}
         {/* Says it opens something, rather than leaving it to be discovered. */}
         <CaretDown size={10} weight="bold" className="clip-caret" data-open={open} />
       </button>
@@ -158,6 +135,31 @@ export function SessionClipboard({
 
             {session.encrypted && !password && (
               <p className="clip-help">Password not available in this browser. <Link to="/account">Unlock your vault</Link>, or ask the session owner.</p>
+            )}
+
+            {isOwner && session.encrypted && (
+              <button
+                type="button"
+                role="menuitem"
+                className="clip-item"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(passwordRequestsHref(session.id));
+                }}
+              >
+                <Key size={16} />
+                <span className="clip-text">
+                  <b>
+                    Password requests
+                    <span className="clip-count" data-waiting={asking > 0}>{asking}</span>
+                  </b>
+                  <em>
+                    {asking > 0
+                      ? "Teammates are waiting for you to accept or decline."
+                      : "Nobody is waiting. Teammates can ask from the password prompt."}
+                  </em>
+                </span>
+              </button>
             )}
 
             {isOwner && (

@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Store } from "./lib/store";
 import type { Invite, Membership } from "./lib/orgs";
-import type { AuditEvent, SessionRecord,
+import type { AuditEvent, PasswordRequest, SessionKeyShare, SessionRecord,
   AppEvent,
 } from "./lib/types";
 import type { VerifyResult } from "./lib/firebase-token";
@@ -242,14 +242,37 @@ function sessionForMember(
   membership: Membership,
   session: SessionRecord,
   liveness?: SessionLiveness,
+  requests: PasswordRequest[] = [],
 ) {
   const mine = session.keyShares?.find((share) => share.uid === membership.uid);
   return {
     ...sessionForApi(session),
     keyShare: mine,
     sharedWith: sharedWith(membership, session),
+    ...passwordRequestView(membership, session, requests),
     ...liveness,
   };
+}
+
+/*
+ * What one member is told about password requests on a session. The owner
+ * gets how many are waiting on them, which is what the badge on the share
+ * button counts; anyone else gets only where their own ask stands. Nobody
+ * but the owner learns who else has asked.
+ */
+function passwordRequestView(
+  membership: Membership,
+  session: SessionRecord,
+  requests: PasswordRequest[],
+): { passwordRequestsPending?: number; passwordRequest?: Omit<PasswordRequest, "orgId" | "sessionId" | "resolvedBy"> } {
+  const own = requests.filter((request) => request.sessionId === session.id);
+  if (ownsSession(membership, session)) {
+    return { passwordRequestsPending: own.filter((request) => request.status === "pending").length };
+  }
+  const mine = own.find((request) => request.requesterUid === membership.uid);
+  if (!mine) return {};
+  const { orgId: _orgId, sessionId: _sessionId, resolvedBy: _resolvedBy, ...view } = mine;
+  return { passwordRequest: view };
 }
 
 /*
@@ -452,9 +475,16 @@ export function createApp(options: AppOptions) {
       ? await options.sessionLiveness.many(sessions)
       : new Map<string, SessionLiveness>();
     const settled = await closeEndedSessions(store, sessions, states, log);
+    const requests = await store.passwordRequests(membership.orgId);
     return settled.map((session) =>
-      sessionForMember(membership, session, session.closedAt ? undefined : states.get(session.id))
+      sessionForMember(membership, session, session.closedAt ? undefined : states.get(session.id), requests)
     );
+  }
+
+  /* One session as one member sees it, password requests included. */
+  async function memberSession(membership: Membership, session: SessionRecord, liveness?: SessionLiveness) {
+    const requests = await store.passwordRequests(membership.orgId, session.id);
+    return sessionForMember(membership, session, liveness, requests);
   }
 
   function send(response: ServerResponse, status: number, body: unknown): void {
@@ -1846,6 +1876,86 @@ export function createApp(options: AppOptions) {
         return send(response, 200, { shared: shares.length });
       }
 
+      /*
+       * Asking a session's owner for its password.
+       *
+       * The service cannot answer this itself: it holds no copy it can open.
+       * It records the ask, the owner's browser sees it, and if they accept,
+       * their browser seals the password to the asker's vault.
+       */
+      const passwordAskRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/password-requests$/);
+      if (request.method === "POST" && passwordAskRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const session = await store.sessionInOrg(membership.orgId, passwordAskRoute[1]);
+        if (!session) return send(response, 404, { error: "no such session" });
+        if (!session.encrypted) return send(response, 400, { error: "this session has no password" });
+        if (ownsSession(membership, session)) {
+          return send(response, 400, { error: "you started this session, so its password is already yours" });
+        }
+        /* With no vault there is nowhere for the owner to seal it. */
+        if (!(await store.accountKey(membership.uid))) {
+          return send(response, 409, { error: "set up your vault first, so the password has somewhere to go" });
+        }
+        const asked = await store.requestSessionPassword(membership.orgId, session.id, membership.uid);
+        if (!asked) return send(response, 404, { error: "no such session" });
+        const { orgId: _orgId, sessionId: _sessionId, resolvedBy: _resolvedBy, ...view } = asked;
+        return send(response, 200, { request: view });
+      }
+
+      /*
+       * The owner answering. Accepting carries the copy their browser sealed to
+       * the asker's vault, and both are stored together, so a request never
+       * reads as shared without the password having gone with it.
+       */
+      const passwordAnswerRoute = url.pathname.match(
+        /^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/password-requests\/([^/]{1,512})$/,
+      );
+      if (request.method === "PUT" && passwordAnswerRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const sessionId = passwordAnswerRoute[1];
+        /* A uid is whatever the identity provider's subject is, so it arrives encoded. */
+        let requesterUid: string;
+        try {
+          requesterUid = decodeURIComponent(passwordAnswerRoute[2]);
+        } catch {
+          return send(response, 400, { error: "invalid requester" });
+        }
+        const session = await store.sessionInOrg(membership.orgId, sessionId);
+        if (!session) return send(response, 404, { error: "no such session" });
+        if (!ownsSession(membership, session)) {
+          return send(response, 403, { error: "only the session's owner can answer password requests" });
+        }
+        const body = (await readBody(request)) as Record<string, unknown>;
+        const decision = body.decision === "approve" ? "approved" : body.decision === "decline" ? "declined" : null;
+        if (!decision) return send(response, 400, { error: "decision must be approve or decline" });
+        const members = await store.members(membership.orgId);
+        const requester = members.find((member) => member.uid === requesterUid);
+        let share: Omit<SessionKeyShare, "uid"> | undefined;
+        if (decision === "approved") {
+          if (!requester) return send(response, 404, { error: "they are no longer in this organization" });
+          const parsed = await readSessionKeyShare(body.share);
+          if (!parsed) return send(response, 400, { error: "invalid key share" });
+          share = parsed;
+        }
+        const answered = await store.resolvePasswordRequest({
+          orgId: membership.orgId,
+          sessionId,
+          requesterUid,
+          resolverUid: membership.uid,
+          decision,
+          share,
+        });
+        if (!answered) return send(response, 409, { error: "that request has already been answered" });
+        await recordAudit(store, membership, {
+          sessionId,
+          kind: "handoff",
+          text: `${decision === "approved" ? "shared the password with" : "declined a password request from"} ${requester?.email ?? "a former member"}`,
+        });
+        return send(response, 200, { request: answered });
+      }
+
       const assignRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/assignee$/);
       if (request.method === "PUT" && assignRoute) {
         const membership = await requireMember(request);
@@ -1867,7 +1977,7 @@ export function createApp(options: AppOptions) {
             result.session.name || result.session.command,
           );
         }
-        return send(response, 200, { session: sessionForMember(membership, result.session) });
+        return send(response, 200, { session: await memberSession(membership, result.session) });
       }
 
       const nameRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/name$/);
@@ -1877,7 +1987,7 @@ export function createApp(options: AppOptions) {
         const body = (await readBody(request)) as Record<string, unknown>;
         const result = await renameSession(store, membership, nameRoute[1], body.name);
         if (!result.ok) return send(response, result.status, { error: result.error });
-        return send(response, 200, { session: sessionForMember(membership, result.session) });
+        return send(response, 200, { session: await memberSession(membership, result.session) });
       }
 
       /*
@@ -1911,7 +2021,7 @@ export function createApp(options: AppOptions) {
           changes,
         );
         if (!updated) return send(response, 404, { error: "no such session" });
-        return send(response, 200, { session: sessionForMember(membership, updated) });
+        return send(response, 200, { session: await memberSession(membership, updated) });
       }
 
       /* ---- Driving a machine from the browser ---- */
@@ -2135,11 +2245,14 @@ export function createApp(options: AppOptions) {
           new Map(liveness ? [[session.id, liveness]] : []),
           log,
         );
+        const requests = await store.passwordRequests(membership.orgId, oneSession[1]);
         return send(response, 200, {
-          session: sessionForMember(membership, settled, settled.closedAt ? undefined : liveness),
+          session: sessionForMember(membership, settled, settled.closedAt ? undefined : liveness, requests),
           members: await store.members(membership.orgId),
           you: membership,
           comments: await store.comments(membership.orgId, oneSession[1]),
+          /* The whole list is the owner's to manage; nobody else sees who asked. */
+          passwordRequests: ownsSession(membership, settled) ? requests : undefined,
         });
       }
 

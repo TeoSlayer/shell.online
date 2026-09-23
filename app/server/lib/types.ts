@@ -95,6 +95,25 @@ export interface SessionKeyShare {
 }
 
 /**
+ * A teammate asking a session's owner for its password.
+ *
+ * The service cannot hand the password over itself, since it holds no copy it
+ * can open. What it keeps is the ask and the answer: the owner's browser does
+ * the sealing when they accept, and the copy arrives with the acceptance.
+ * One row per person per session; asking again reopens it.
+ */
+export interface PasswordRequest {
+  orgId: string;
+  sessionId: string;
+  requesterUid: string;
+  status: "pending" | "approved" | "declined";
+  requestedAt: number;
+  resolvedAt?: number;
+  /** The owner who answered. */
+  resolvedBy?: string;
+}
+
+/**
  * A person's session vault.
  *
  * The public key is what session passwords are sealed to. The private key is

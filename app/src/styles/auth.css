@@ -1322,6 +1322,58 @@
   gap: 4px;
 }
 
+/*
+ * Password requests waiting on the owner: an unread-style count pinned to the
+ * button's top right corner. The ring in the page colour keeps it legible
+ * where it overlaps the button's border.
+ */
+.clip .session-copy {
+  position: relative;
+}
+
+.clip-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--blue);
+  box-shadow: 0 0 0 2px var(--paper);
+  color: var(--paper);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 18px;
+  place-items: center;
+  pointer-events: none;
+}
+
+/* The same number inside the menu, quiet when nobody is waiting. */
+.clip-count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 18px;
+  place-items: center;
+  vertical-align: 1px;
+}
+
+.clip-count[data-waiting="true"] {
+  background: var(--blue);
+  color: var(--paper);
+}
+
 /* Only the phone sheet has a backdrop; on a pointer the menu is a popover. */
 .clip-scrim {
   display: none;
@@ -1856,6 +1908,10 @@
   gap: 8px;
 }
 
+.board-card-head > .clip {
+  margin-left: auto;
+}
+
 .board-card-icon {
   width: 18px;
   height: 18px;
@@ -1865,7 +1921,8 @@
 
 .board-card-name {
   overflow: hidden;
-  flex: 1;
+  /* Only as wide as the name, so the lock sits beside it; Share is pushed right. */
+  flex: 0 1 auto;
   color: var(--ink);
   font-size: 13px;
   font-weight: 540;
@@ -1993,4 +2050,12 @@
   .board-card .picker-pop {
     width: min(300px, calc(100vw - 40px));
   }
+}
+
+/* No password for this session in this browser. Quiet: a hint, not an alarm. */
+.session-lock {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+  align-self: center;
 }

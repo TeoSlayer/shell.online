@@ -1237,6 +1237,58 @@ for (const implementation of implementations) {
         expect(shares.find((share) => share.uid === "uid-1")?.sealed).toBe("one");
       });
 
+      it("keeps one password request per person and reopens it after an answer", async () => {
+        await store.upsertSession(session());
+        const first = await store.requestSessionPassword("org_1", "s1", "uid-2", 1000);
+        expect(first).toMatchObject({ requesterUid: "uid-2", status: "pending", requestedAt: 1000 });
+        /* Asking twice while it waits does not move it. */
+        expect((await store.requestSessionPassword("org_1", "s1", "uid-2", 2000))?.requestedAt).toBe(1000);
+        expect(await store.passwordRequests("org_1", "s1")).toHaveLength(1);
+
+        expect(await store.resolvePasswordRequest({
+          orgId: "org_1", sessionId: "s1", requesterUid: "uid-2", resolverUid: "uid-1",
+          decision: "declined", now: 3000,
+        })).toMatchObject({ status: "declined", resolvedAt: 3000, resolvedBy: "uid-1" });
+        /* Answered once; a second answer finds nothing pending. */
+        expect(await store.resolvePasswordRequest({
+          orgId: "org_1", sessionId: "s1", requesterUid: "uid-2", resolverUid: "uid-1", decision: "declined",
+        })).toBeNull();
+
+        const again = await store.requestSessionPassword("org_1", "s1", "uid-2", 4000);
+        expect(again).toMatchObject({ status: "pending", requestedAt: 4000 });
+        expect(again?.resolvedAt).toBeUndefined();
+      });
+
+      it("stores the sealed copy together with an approval", async () => {
+        await store.upsertSession(session());
+        await store.requestSessionPassword("org_1", "s1", "uid-2", 1000);
+        /* An approval without the copy is refused and leaves the request waiting. */
+        expect(await store.resolvePasswordRequest({
+          orgId: "org_1", sessionId: "s1", requesterUid: "uid-2", resolverUid: "uid-1", decision: "approved",
+        })).toBeNull();
+        expect((await store.passwordRequests("org_1", "s1"))[0]?.status).toBe("pending");
+
+        const approved = await store.resolvePasswordRequest({
+          orgId: "org_1", sessionId: "s1", requesterUid: "uid-2", resolverUid: "uid-1",
+          decision: "approved", share: { senderPublicKey: "pk", sealed: "sealed-for-2" }, now: 2000,
+        });
+        expect(approved?.status).toBe("approved");
+        const shares = (await store.sessionInOrg("org_1", "s1"))?.keyShares ?? [];
+        expect(shares.find((share) => share.uid === "uid-2")?.sealed).toBe("sealed-for-2");
+      });
+
+      it("scopes password requests to the organization and drops them with the session", async () => {
+        await store.upsertSession(session());
+        await store.upsertSession(session({ id: "s2" }));
+        expect(await store.requestSessionPassword("org_2", "s1", "uid-2")).toBeNull();
+        await store.requestSessionPassword("org_1", "s1", "uid-2", 1000);
+        await store.requestSessionPassword("org_1", "s2", "uid-3", 2000);
+        expect((await store.passwordRequests("org_1")).map((entry) => entry.sessionId)).toEqual(["s2", "s1"]);
+        expect(await store.passwordRequests("org_2")).toEqual([]);
+        await store.deleteSession("org_1", "s1");
+        expect((await store.passwordRequests("org_1")).map((entry) => entry.sessionId)).toEqual(["s2"]);
+      });
+
       it("rotates the public salt and sealed copies as one owner-scoped generation", async () => {
         await store.upsertSession(session({ shareUrl: "https://shell.online/s/s1#salt=old" }));
         await store.putKeyShares("org_1", "s1", [
