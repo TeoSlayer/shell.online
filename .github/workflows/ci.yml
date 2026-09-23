@@ -189,6 +189,14 @@ jobs:
           VITE_FIREBASE_AUTH_DOMAIN: ci.firebaseapp.com
           VITE_FIREBASE_PROJECT_ID: ci-project
           VITE_FIREBASE_APP_ID: 1:1:web:ci
+      # Exercise the actual React provider and browser crypto/storage with all
+      # collection intercepted. No production account or analytics traffic.
+      - name: Build the public analytics client
+        run: npm ci && npm run build:web
+      - name: Browser analytics and vault regression gate
+        run: node scripts/test-posthog-browser.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
       - name: Build with generic OpenID Connect
         run: npm run build
         working-directory: app

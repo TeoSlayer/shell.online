@@ -57,6 +57,9 @@ the maintained browser gates `scripts/test-posthog-browser.mjs` and
 vendor scripts; both intercept all synthetic collection. Use `POSTHOG_LIVE=1` and
 `X_PIXEL_LIVE=1` for deployed-asset checks. The vault fixture uses a synthetic
 account and stub server, real browser crypto/storage, and no production records.
+CI runs that browser/vault gate against the production-compatible app build on
+every PR. The real-vendor GA4/X gate is a separate release check because vendor
+scripts and collection protocols can change independently of this repository.
 
 ## What the counters mean
 
