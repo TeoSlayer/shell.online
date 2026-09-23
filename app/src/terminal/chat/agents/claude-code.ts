@@ -55,10 +55,33 @@ const PROMPT = /^❯\s?(.*)$/u;
 const SPOKE = /^⏺\s+(.*)$/u;
 
 /**
- * A status line: how long it took, what mode it is in, what is wrong with the
- * login. None of it is an utterance and most of it changes every frame.
+ * A status line. None of it is an utterance and most of it changes every
+ * frame, so shown it would be a message per repaint.
+ *
+ * Four shapes, all of them real:
+ *
+ *     ✽ Flowing… (8m 57s · ↓ 10.8k tokens)      a spinner, and what it costs
+ *     ⏵⏵ auto mode on (shift+tab to cycle)      what mode it is in
+ *     Tip: Use /config to change your…          advice nobody asked for
+ *     ✔ Update installed · Restart to update    news about the program
+ *
+ * The spinner cycles through a whole block of stars and sparkles rather than
+ * one glyph, so the range is matched rather than the handful anybody happens
+ * to have seen. The tip and the update line have no marker at all and are
+ * matched on what they say, which is the only thing they have.
  */
-const STATUS = /^[✻✶✳✢⚠⏵⏸◐◑◒◓·⋯]/u;
+const STATUS =
+  /^(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓·⋯]|Tip:|Update installed\b|Restart to update\b)/u;
+
+/**
+ * The same, anywhere on the line.
+ *
+ * A terminal is wide, and a program with two things to say puts one at each
+ * end of the same row: `Tip: … ✔ Update installed · Restart to update`. The
+ * row starts as a tip, so matching the start is enough for that one -- but a
+ * row that starts with something else and ends in an update is still status.
+ */
+const STATUS_TAIL = /(?:✓|✔)\s*Update installed|Restart to update/u;
 
 /** Anything indented under the marker above it. */
 const INDENTED = /^\s+\S/u;
@@ -69,7 +92,7 @@ const INDENTED = /^\s+\S/u;
  * The same markers as STATUS but allowed an indent, because the lines under
  * the composer are indented and the ones above it are not.
  */
-const FURNITURE = /^\s*[✻✶✳✢⚠⏵⏸◐◑◒◓]/u;
+const FURNITURE = /^\s*(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓]|Tip:)/u;
 
 /**
  * The glyph Claude Code puts in front of the window title.
@@ -166,7 +189,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
 
       /* Not an utterance, and most of it changes every frame. */
-      if (STATUS.test(line)) {
+      if (STATUS.test(line) || STATUS_TAIL.test(line)) {
         this.close(utterances);
         continue;
       }

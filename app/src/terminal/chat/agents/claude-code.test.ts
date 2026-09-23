@@ -112,6 +112,59 @@ describe("reading a real exchange", () => {
     expect(shaped.join("\n")).not.toContain("login expires");
   });
 
+  /*
+   * Everything the program says about itself rather than about the work. The
+   * spinner cycles a whole block of glyphs, and the tip and the update line
+   * carry no marker at all.
+   */
+  it("says nothing for any of the shapes a status line comes in", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const frame = [
+      "❯ do the thing",
+      "",
+      "⏺ Working on it.",
+      "",
+      "✽ Flowing… (8m 57s · ↓ 10.8k tokens)",
+      "✻ Cooked for 13s · done 8:29 PM",
+      "◐ medium · /effort",
+      "Tip: Use /config to change your default permission mode (including Plan Mode",
+      "✔ Update installed · Restart to update",
+      "⏵⏵ auto mode on (shift+tab to cycle)",
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "────────────────────────────────────────",
+    ];
+    const said = shape(read(adapter, frame)).join("\n");
+    expect(said).toContain("Working on it.");
+    for (const noise of ["Flowing", "Cooked for", "medium", "Tip:", "Update installed", "auto mode on"]) {
+      expect(said).not.toContain(noise);
+    }
+  });
+
+  /*
+   * A wide terminal lets a program put two things at opposite ends of one
+   * row, so a line can start as a tip and end as an update.
+   */
+  it("says nothing for two status lines sharing a row", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const frame = [
+      "❯ ask",
+      "",
+      "⏺ answered",
+      "",
+      "  Tip: use /config for the permission mode          ✔ Update installed · Restart to update",
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "────────────────────────────────────────",
+    ];
+    const said = shape(read(adapter, frame)).join("\n");
+    expect(said).toContain("answered");
+    expect(said).not.toContain("Update installed");
+    expect(said).not.toContain("Tip:");
+  });
+
   it("says nothing for a status line", () => {
     const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
     expect(shaped).not.toContain("Cooked for");

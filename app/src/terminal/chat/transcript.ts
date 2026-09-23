@@ -273,10 +273,22 @@ export class Transcript {
       growing ??
       this.push({ kind: "received", at, text: "", lines: [], open: true });
     if (!growing) this.open = target;
-    target.lines = utterance.lines.slice();
-    target.preformatted = utterance.preformatted;
-    this.touch(target);
-    this.lastGrewAt = at;
+    /*
+     * Only when it actually changed.
+     *
+     * The paragraph an agent is writing is offered again on every frame of
+     * its screen, which for a program that repaints while it thinks is many
+     * times a second and almost always the same words. Bumping the revision
+     * regardless told the view something had happened, and the view rebuilt
+     * the message -- so a conversation sitting still twitched, and one that
+     * was growing shook rather than grew.
+     */
+    if (differs(target.lines, utterance.lines) || target.preformatted !== utterance.preformatted) {
+      target.lines = utterance.lines.slice();
+      target.preformatted = utterance.preformatted;
+      this.touch(target);
+      this.lastGrewAt = at;
+    }
     if (!utterance.open) this.close(at);
     return target;
   }
@@ -502,6 +514,10 @@ export class Transcript {
   close(at: number): void {
     this.agentOwned = false;
     if (!this.open) return;
+    if (this.open.open === false) {
+      this.open = null;
+      return;
+    }
     /* A live screen card is closed by the program exiting, not by a pause. */
     if (this.open.kind === "screen" && this.open.live) return;
     this.open.open = false;
@@ -624,6 +640,15 @@ export class Transcript {
  */
 function echoMatches(line: string, command: string): boolean {
   return command !== "" && line.endsWith(command);
+}
+
+/** Whether a message's lines are not the ones it already has. */
+function differs(had: readonly TranscriptLine[], next: readonly TranscriptLine[]): boolean {
+  if (had.length !== next.length) return true;
+  for (let index = 0; index < had.length; index += 1) {
+    if (had[index].text !== next[index].text) return true;
+  }
+  return false;
 }
 
 function lastScreen(items: readonly Message[]): Message | null {
