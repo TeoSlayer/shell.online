@@ -17,6 +17,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   terminal ANSI colors are preserved.
 - Long team email addresses, comment actions and audit filters stay inside narrow
   layouts. Compact landscape navigation leaves more room for the terminal.
+- Dark-mode menus and mobile sheets no longer cast pale shadows or white scrims.
+  Terminal pixel, cursor-position, scrollback and TUI mouse checks now run in CI.
 
 ## [0.23.0] — 2026-09-23
 

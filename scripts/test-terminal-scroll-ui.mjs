@@ -363,7 +363,7 @@ if (part === 'both' || part === 'app') {
   } finally {
     await transport?.close();
     await server.close();
-    if (browser === 'chrome') await rm(profile, { recursive: true, force: true });
+    if (browser === 'chrome') await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 
@@ -375,8 +375,10 @@ if (part === 'both' || part === 'standalone') {
   const bootstrapPlugin = {
     name: 'scroll-standalone-bootstrap',
     transformIndexHtml(html) {
+      const entry = /<script type="module" src="\/web\/entry\.ts"><\/script>/;
+      assert(entry.test(html), 'Standalone fixture must replace the real viewer entry');
       return html.replace(
-        /<script type="module" src="\/web\/main\.ts"><\/script>/,
+        entry,
         `<script type="module" src="/@id/__x00__${BOOTSTRAP_ID}.js"></script>`,
       );
     },
@@ -412,7 +414,7 @@ if (part === 'both' || part === 'standalone') {
           globalThis.scrollTest.terms.standalone = this;
           return originalOpen.call(this, node);
         };
-        await import('/web/main.ts');
+        await import('/web/entry.ts');
       `;
     },
   };
@@ -483,7 +485,7 @@ if (part === 'both' || part === 'standalone') {
   } finally {
     await transport?.close();
     await server.close();
-    if (browser === 'chrome') await rm(profile, { recursive: true, force: true });
+    if (browser === 'chrome') await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 }
 

@@ -39,6 +39,8 @@
   --faint: #696e62;
   --line: #d7d5cc;
   --line-strong: #c5c2b6;
+  /* Elevation must stay dark: text ink becomes white in dark mode. */
+  --shadow-ink: #1a1f16;
 
   --blue: #4267f5;
   --blue-deep: #294ec8;
@@ -93,6 +95,7 @@
     --faint: #868b7f;
     --line: #32362d;
     --line-strong: #454a3f;
+    --shadow-ink: #000;
 
     --blue: #8ea3ff;
     --blue-deep: #adbcff;
@@ -129,6 +132,7 @@
     --faint: #868b7f;
     --line: #32362d;
     --line-strong: #454a3f;
+    --shadow-ink: #000;
 
     --blue: #8ea3ff;
     --blue-deep: #adbcff;

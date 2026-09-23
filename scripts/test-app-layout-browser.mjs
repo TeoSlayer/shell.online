@@ -159,5 +159,7 @@ try {
 } finally {
   await browser?.close();
   await new Promise(r => server.close(r));
-  await rm(temp, { recursive: true, force: true });
+  // Linux Chrome helpers can finish profile writes just after the main process
+  // exits. Retry only this fixture-owned tree; persistent cleanup failure fails.
+  await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

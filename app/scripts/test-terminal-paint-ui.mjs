@@ -162,7 +162,7 @@ function fullScreenScript({ rows = 36, cols = 120, tag = '1', statusRow = 33, gr
    * which shifts what the screen shows relative to the buffer rows this
    * fixture's checks speak in.
    */
-  return out.join(CRLF) + (cursorRow ? ESC + `[${cursorRow};${cursorCol}H` : '');
+  return ESC + '[?1049h' + out.join(CRLF) + (cursorRow ? ESC + `[${cursorRow};${cursorCol}H` + ESC + '[?25h' : '');
 }
 const socketEmit = (index, opcode, text) => `(() => {
   const payload = new TextEncoder().encode(${JSON.stringify(text)});
@@ -236,7 +236,9 @@ function auditExpression({ rootKey, roi, base64, rows, cols, statusRow, greenRow
     const cur = term.element.querySelector('.xterm-cursor');
     if (cur) {
       const b = cur.getBoundingClientRect();
-      report.cursor = { x: +b.x.toFixed(2), y: +b.y.toFixed(2), inside: b.x >= sr.x - 1.5 && b.x + b.width <= sr.x + sr.width + 1.5 && b.y >= sr.y - 1.5 && b.y + b.height <= sr.y + sr.height + 1.5 };
+      const expectedX = sr.x + vb.cursorX * sr.width / term.cols;
+      const expectedY = sr.y + (vb.baseY + vb.cursorY - vb.viewportY) * sr.height / term.rows;
+      report.cursor = { x: +b.x.toFixed(2), y: +b.y.toFixed(2), positioned: Math.abs(b.x - expectedX) <= 1.5 && Math.abs(b.y - expectedY) <= 1.5, inside: b.x >= sr.x - 1.5 && b.x + b.width <= sr.x + sr.width + 1.5 && b.y >= sr.y - 1.5 && b.y + b.height <= sr.y + sr.height + 1.5 };
     }
 
     // --- Pixel layer.
@@ -378,6 +380,14 @@ function auditExpression({ rootKey, roi, base64, rows, cols, statusRow, greenRow
 }
 
 async function audit(rootKey, opts) {
+  // Focus the full-screen TUI and stop blinking so a screenshot cannot sample
+  // the cursor off. The fixture enters the alternate buffer via normal ANSI.
+  await transport.call((key) => {
+    const term = globalThis.paintTest.terms[key];
+    term.options.cursorBlink = false;
+    term.blur(); term.focus();
+  }, rootKey);
+  await delay(80);
   const stageRect = await evaluate(`(() => { const r = document.getElementById('paint-stage').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })()`);
   const clipExpression = `(() => { const r = document.getElementById('paint-stage').getBoundingClientRect(); return { x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16, scale: 1 }; })()`;
   const roi = browser === 'safari'
@@ -413,7 +423,11 @@ async function audit(rootKey, opts) {
   expect(report.dom.contiguous, 'rows not contiguous');
   expect(report.dom.maxH - report.dom.minH <= 0.6, `row heights ${report.dom.minH}..${report.dom.maxH}`);
   expect(Math.abs(report.dom.lastBottomGap) <= 1.5, `last row gap ${report.dom.lastBottomGap}`);
-  if (report.cursor) expect(report.cursor.inside, 'cursor outside the grid');
+  expect(!!report.cursor, 'visible cursor must be painted');
+  if (report.cursor) {
+    expect(report.cursor.inside, 'cursor outside the grid');
+    expect(report.cursor.positioned, 'painted cursor does not match the terminal buffer cell');
+  }
   if (!failures.some((entry) => entry.startsWith(`${opts.label}:`))) {
     console.log(`PASS ${opts.label}: ${JSON.stringify({ screen: report.screen, cell: report.cell, status: report.paint.statusCoverage, stray: report.paint.strayPixels, bg: { black: report.vt.blackCell, green: report.vt.greenCell, status: report.vt.statusCell }, cursor: report.cursor ?? null })}`);
   }
@@ -598,5 +612,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  if (profile) await rm(profile, { recursive: true, force: true });
+  if (profile) await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }

@@ -14,6 +14,17 @@ describe("mobile account menu", () => {
 
 const auth = readFileSync(new URL("../src/styles/auth.css", import.meta.url), "utf8");
 
+describe("dark overlays", () => {
+  it("never derives drop shadows or scrims from theme-switching text ink", () => {
+    for (const file of ["auth", "people", "audit"]) {
+      const source = readFileSync(new URL(`../src/styles/${file}.css`, import.meta.url), "utf8");
+      expect(source).not.toMatch(/box-shadow:[^;]*var\(--ink\)/);
+      expect(source).not.toMatch(/background:\s*color-mix\(in srgb, var\(--ink\) 32%/);
+      expect(source).toContain("var(--shadow-ink)");
+    }
+  });
+});
+
 describe("the sessions toolbar", () => {
   /*
    * Search field, status picker, clean-up button and view toggle used to be

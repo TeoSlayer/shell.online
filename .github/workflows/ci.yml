@@ -205,6 +205,14 @@ jobs:
         run: node app/scripts/test-appearance-routes.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - name: Terminal pixels, cursor, scrollback and refit gates
+        run: |
+          node app/scripts/test-terminal-paint-ui.mjs
+          node scripts/test-terminal-scroll-ui.mjs
+          node app/scripts/test-terminal-refit-ui.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
+          SHELL_BROWSER: chrome
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod

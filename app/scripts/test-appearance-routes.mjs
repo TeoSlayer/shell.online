@@ -55,7 +55,9 @@ history.replaceState(null,'','/account');
 createRoot(document.body.appendChild(document.createElement('div'))).render(React.createElement(BrowserRouter,null,React.createElement(Fixture)));
 `;
 const server = await createServer({
-  root, logLevel: 'error', server: {host:'127.0.0.1',port:0,hmr:false},
+  // Other browser canaries use different module stubs/defines. Their optimizer
+  // must not invalidate this fixture's imported chunks while it is running.
+  root, cacheDir: join(temp,'vite-cache'), logLevel: 'error', server: {host:'127.0.0.1',port:0,hmr:false},
   define: {'import.meta.env.VITE_ACCOUNTS_URL':JSON.stringify('')},
   plugins: [{name:'appearance-routes',enforce:'pre',
     resolveId(specifier,importer){
@@ -82,7 +84,7 @@ async function inspect(label,theme){
     const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left*scale,right:r.right*scale,top:r.top*scale,bottom:r.bottom*scale};};
     const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&e.checkVisibility({checkVisibilityCSS:true});};
     const controls=[...new Set([...c.querySelectorAll('button,input,select,textarea'),...document.querySelectorAll('[role="dialog"] button,[role="dialog"] input,[role="dialog"] textarea')])].filter(visible).map(e=>({...rect(e),name:(e.getAttribute('aria-label')||e.textContent||e.type).slice(0,80)}));
-    return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,paper:getComputedStyle(document.body).backgroundColor,scheme:getComputedStyle(document.documentElement).colorScheme,controls,errors:fixture.errors,unknown:fixture.unknown};
+    return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,paper:getComputedStyle(document.body).backgroundColor,scheme:getComputedStyle(document.documentElement).colorScheme,shadowInk:getComputedStyle(document.documentElement).getPropertyValue('--shadow-ink').trim(),controls,errors:fixture.errors,unknown:fixture.unknown};
   })()`);
   const offscreen=result.controls.filter(r=>r.left < -2 || r.right > result.width+2);
   if(result.overflow || offscreen.length) await writeFile(join(shots,'failure.png'),Buffer.from(await browser.screenshot(),'base64'));
@@ -90,6 +92,7 @@ async function inspect(label,theme){
   assert.deepEqual(offscreen,[],label+' controls fit horizontally; screenshot '+shots);
   assert.equal(result.scheme,theme,label+' color scheme');
   assert.equal(result.paper,theme==='dark'?'rgb(22, 25, 20)':'rgb(243, 241, 233)',label+' brand surface');
+  assert.equal(result.shadowInk,theme==='dark'?'#000':'#1a1f16',label+' shadows stay dark, never text-colored glow');
   assert.deepEqual(result.errors,[],label+' browser errors');
   assert.deepEqual(result.unknown,[],label+' unexpected requests');
   console.log('PASS '+label+' '+result.width+'x'+result.height+' '+theme);
@@ -179,4 +182,4 @@ try{
   }
   assert.deepEqual(await browser.evaluate('fixture.unknown'),[],'No unexpected API / external requests');
   console.log('Screenshots: '+shots);
-}finally{await browser?.close();await server.close();await rm(temp,{recursive:true,force:true});}
+}finally{await browser?.close();await server.close();await rm(temp,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
