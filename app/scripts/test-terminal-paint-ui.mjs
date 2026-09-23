@@ -266,15 +266,21 @@ function auditExpression({ rootKey, roi, base64, rows, cols, statusRow, greenRow
 
     const cellW = sr.width / ${cols}, cellH = sr.height / ${rows};
     /*
-     * Dense probes: a border stroke is one or two device pixels wide, so a
-     * handful of coarse samples can straddle it and report a painted border as
-     * missing. Every check below sweeps at 0.25 CSS px.
+     * Inspect every device-pixel centre inside this cell. Three horizontal
+     * scanlines can miss a one-pixel box border at tiny fonts (font rasterizers
+     * differ across Linux/macOS). Never sample an adjacent row or column: it
+     * must not hide a genuinely blank cell.
      */
     const cellHasInk = (r, c) => {
-      const from = sr.left + c * cellW + 0.3, to = sr.left + (c + 1) * cellW - 0.3;
-      for (const dy of [0.35, 0.5, 0.65]) {
-        const y = sr.top + (r + dy) * cellH;
-        for (let x = from; x <= to; x += 0.25) if (ink(sample(x, y))) return true;
+      const x0 = Math.max(0, Math.ceil((sr.left + c * cellW - ${JSON.stringify(roi.x)}) * sx - 0.5));
+      const x1 = Math.min(cv.width, Math.ceil((sr.left + (c + 1) * cellW - ${JSON.stringify(roi.x)}) * sx - 0.5));
+      const y0 = Math.max(0, Math.ceil((sr.top + r * cellH - ${JSON.stringify(roi.y)}) * sy - 0.5));
+      const y1 = Math.min(cv.height, Math.ceil((sr.top + (r + 1) * cellH - ${JSON.stringify(roi.y)}) * sy - 0.5));
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * cv.width + x) * 4;
+          if (ink([px[i], px[i + 1], px[i + 2]])) return true;
+        }
       }
       return false;
     };
@@ -379,7 +385,7 @@ function auditExpression({ rootKey, roi, base64, rows, cols, statusRow, greenRow
   })())()`;
 }
 
-async function audit(rootKey, opts) {
+async function audit(rootKey, opts, expectedBlankRows = []) {
   // Focus the full-screen TUI and stop blinking so a screenshot cannot sample
   // the cursor off. The fixture enters the alternate buffer via normal ANSI.
   await transport.call((key) => {
@@ -404,7 +410,7 @@ async function audit(rootKey, opts) {
   expect(report.vt.baseY === 0 && report.vt.viewportY === 0, `grid scrolled (baseY ${report.vt.baseY}, viewportY ${report.vt.viewportY}); expectations invalid`);
   expect(report.vt.topLeft && report.vt.topRight && report.vt.bottomLeft && report.vt.bottomRight, 'VT border cells');
   expect(report.vt.labelsOk, 'VT row labels');
-  expect(report.paint.rowsWithoutInk.length === 0, `rows with no painted ink: ${report.paint.rowsWithoutInk.join(',')}`);
+  expect(JSON.stringify(report.paint.rowsWithoutInk) === JSON.stringify(expectedBlankRows), `rows with no painted ink: ${report.paint.rowsWithoutInk.join(',')} (expected ${expectedBlankRows.join(',') || 'none'})`);
   expect(report.paint.borderLeftGapRows.length === 0, `left border unpainted on rows: ${report.paint.borderLeftGapRows.join(',')}`);
   expect(report.paint.borderRightGapRows.length === 0, `right border unpainted on rows: ${report.paint.borderRightGapRows.join(',')}`);
   expect(report.paint.statusCoverage >= 0.85, `reverse bar coverage ${report.paint.statusCoverage}`);
@@ -514,6 +520,16 @@ try {
     await delay(400);
     const tiny = await audit('a', { ...common, label: `${browser}-${theme}-tiny` });
     console.log(`tiny: font ${tiny.vt ? 'n/a' : ''}${JSON.stringify({ screen: tiny.screen, pane: tiny.pane, cell: tiny.cell })}`);
+
+    // Negative control: the VT still holds its bottom border, but no pixels
+    // are painted there. Full-cell sampling must detect this, not borrow ink
+    // from the previous row. Restore before testing actual live output.
+    await evaluate(`paintTest.terms.a.element.querySelector('.xterm-rows > div:last-child').style.visibility = 'hidden'`);
+    try {
+      await audit('a', { ...common, label: `${browser}-${theme}-missing-bottom-row` }, [ROWS - 1]);
+    } finally {
+      await evaluate(`paintTest.terms.a.element.querySelector('.xterm-rows > div:last-child').style.visibility = ''`);
+    }
 
     /*
      * 8) Live streaming under perturbations: full-frame redraws at ~8 fps while
