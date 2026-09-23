@@ -163,15 +163,17 @@ const SETUP = `
       const uid = vt.currentUid;
       if (url.pathname === '/api/vault') {
         if (method === 'POST') {
+          const gate = globalThis.__vaultPostGate;
+          if (gate && gate.armed) { gate.armed = false; gate.entered = true; await gate.wait; }
+          if (vt.vaultPostFail) { return new Response(JSON.stringify({ error: 'conflict' }), { status: 409, headers: { 'Content-Type': 'application/json' } }); }
           const body = JSON.parse(init.body);
           vt.vaults[uid] = {
             publicKey: body.public_key, encryptedPrivateKey: body.encrypted_private_key,
             recoveryWrap: body.recovery_wrap, version: vt.accountVersions[uid] ?? 1,
             createdAt: Date.now(), updatedAt: Date.now(),
           };
-          const gate = globalThis.__vaultPostGate;
-          if (gate && gate.armed) { gate.armed = false; gate.entered = true; await gate.wait; }
         }
+        vt.fetchCount = (vt.fetchCount ?? 0) + 1;
         return json({ vault: vt.vaults[uid] ?? null });
       }
       if (url.pathname === '/api/sessions') return json({ sessions: vt.sessions ?? [] });
@@ -715,6 +717,155 @@ try {
     expectedShareCalls: 1, actualShareCalls: nShareCalls,
     pass: nShareCalls === 1,
   });
+
+  // ---- Case O1: foreign/unowned prepared object never produces POST /api/vault ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    vt.fetchCount = 0;
+    const foreign = { bundle: { publicKey: 'foreign-pk', encryptedPrivateKey: 'x', recoveryWrap: 'y' }, opened: { privateKey: 'pk', publicKey: 'foreign-pk' }, replaces: undefined };
+    await vt.vault.commit(foreign);
+    return vt.fetchCount;
+  })()`).then((count) => {
+    results.push({ scenario: 'unowned-prepared-no-post', expectedPosts: 0, actualPosts: count, pass: count === 0 });
+  });
+
+  // ---- Case O2: A's prepared object handed to B's commit produces no POST, B unaffected ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    const a = await vt.vault.prepare(false, 'pw-a');
+    vt.madeA = a;
+    return true;
+  })()`);
+  await switchTo('account-b');
+  await evaluate(`(async () => {
+    vt.fetchCount = 0;
+    const before = vt.vaults['account-b'] ? vt.vaults['account-b'].publicKey : null;
+    await vt.vault.commit(vt.madeA);
+    const after = vt.vaults['account-b'] ? vt.vaults['account-b'].publicKey : null;
+    return { posts: vt.fetchCount, before, after, status: vt.vault.status };
+  })()`).then((r) => {
+    results.push({ scenario: 'foreign-prepared-cross-account', expectedPosts: 0, actualPosts: r.posts, beforeUnchanged: r.before === r.after, status: r.status, pass: r.posts === 0 && r.before === r.after });
+  });
+
+  // ---- Case O3: hold createVault crypto during prepare, lock, release → prepare rejects ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    __armGate('pbkdf2');
+    vt.prepareDone = false;
+    vt.prepareError = null;
+    vt.vault.prepare(false, 'pw-o3').then(
+      () => { vt.prepareDone = true; },
+      (e) => { vt.prepareDone = true; vt.prepareError = e.message || String(e); },
+    );
+    await new Promise((r) => setTimeout(r, 50));
+    vt.vault.lock();
+    __releaseGate();
+    for (let i = 0; i < 100 && !vt.prepareDone; i++) await new Promise((r) => setTimeout(r, 10));
+    return { done: vt.prepareDone, error: vt.prepareError, status: vt.vault.status };
+  })()`).then((r) => {
+    results.push({ scenario: 'prepare-held-across-lock', expectedError: true, actualError: r.error !== null, status: r.status, pass: r.done && r.error !== null && (r.status === 'locked' || r.status === 'setup') });
+  });
+
+  // ---- Case O4: retain A lock callback, switch to unlocked B, invoke old lock → B unchanged ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    const a = await vt.vault.prepare(false, 'pw-a4');
+    await vt.vault.commit(a);
+    vt.oldLock = vt.vault.lock;
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for old-lock test');
+  await switchTo('account-b');
+  await evaluate(`(async () => {
+    const b = await vt.vault.prepare(false, 'pw-b4');
+    await vt.vault.commit(b);
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'B unlocked for old-lock test');
+  const bKeyBefore = await liveKey();
+  await evaluate('vt.oldLock()');
+  await settle();
+  const o4KeyAfter = await liveKey();
+  const o4StatusAfter = await status();
+  const o4Remembered = await evaluate("(async () => await vt.rememberedPublicKey('account-b'))()");
+  results.push({
+    scenario: 'old-lock-does-not-affect-b',
+    bKeyBefore: prefix(bKeyBefore), bKeyAfter: prefix(o4KeyAfter), bStatusAfter: o4StatusAfter, bRemembered: prefix(o4Remembered),
+    pass: bKeyBefore === o4KeyAfter && o4StatusAfter === 'unlocked' && o4Remembered !== null,
+  });
+
+  // ---- Case O5: held clear then new valid unlock → new key survives remount ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    const a = await vt.vault.prepare(false, 'pw-o5');
+    await vt.vault.commit(a);
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for clear-then-unlock');
+  await evaluate(`(async () => {
+    __armClearGate();
+    vt.lockDone = false;
+    vt.vault.lock().then(() => { vt.lockDone = true; }, () => { vt.lockDone = true; });
+    return true;
+  })()`);
+  await waitFor(() => evaluate('vt.clearGateEntered()'), 'clear held');
+  await evaluate(`(async () => {
+    vt.unlockDone = false;
+    vt.vault.unlockWithPassword('pw-o5').then(() => { vt.unlockDone = true; }, () => { vt.unlockDone = true; });
+    for (let i = 0; i < 200 && !vt.unlockDone; i++) await new Promise((r) => setTimeout(r, 10));
+    return vt.vault.status;
+  })()`);
+  await evaluate('__releaseClearGate()');
+  await waitFor(() => evaluate('vt.lockDone === true'), 'lock settled after clear release');
+  await settle();
+  const o5Status = await status();
+  const o5Key = await liveKey();
+  const o5Remembered = await evaluate("(async () => await vt.rememberedPublicKey('account-a'))()");
+  await evaluate('vt.remount()');
+  await waitFor(() => evaluate("vt.vault && vt.vault.status !== 'loading'"), 'O5 remount settled');
+  const o5RemountStatus = await status();
+  const o5RemountKey = await liveKey();
+  results.push({
+    scenario: 'clear-held-then-new-unlock',
+    status: o5Status, key: prefix(o5Key), remembered: prefix(o5Remembered),
+    remountStatus: o5RemountStatus, remountKey: prefix(o5RemountKey),
+    pass: o5Status === 'unlocked' && o5Remembered !== null && o5RemountStatus === 'unlocked' && o5RemountKey === o5Key,
+  });
+
+  // ---- Case O6: failed save held across newer unlock → no fetchVault/setAttempt ----
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    vt.fetchCount = 0;
+    __armVaultPostGate();
+    vt.commitDone = false;
+    vt.commitError = null;
+    const prepared = await vt.vault.prepare(false, 'pw-o6');
+    vt.vault.commit(prepared).then(
+      () => { vt.commitDone = true; },
+      (e) => { vt.commitDone = true; vt.commitError = e.message || String(e); },
+    );
+    return true;
+  })()`);
+  await waitFor(() => evaluate('vt.vaultPostGateEntered()'), 'POST gate entered for O6');
+  await evaluate(`(async () => {
+    const newer = await vt.vault.prepare(true, 'pw-o6-new');
+    await vt.vault.commit(newer);
+    vt.vaultPostFail = true;
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'newer unlock completed for O6');
+  const fetchBeforeRelease = await evaluate('vt.fetchCount');
+  await evaluate('__releaseVaultPostGate()');
+  await waitFor(() => evaluate('vt.commitDone === true'), 'failed commit settled');
+  await settle();
+  const fetchAfterRelease = await evaluate('vt.fetchCount');
+  const o6Status = await status();
+  results.push({
+    scenario: 'failed-save-no-fetch-across-newer-unlock',
+    fetchBeforeRelease, fetchAfterRelease, status: o6Status,
+    pass: fetchAfterRelease === fetchBeforeRelease && o6Status === 'unlocked',
+  });
+  await evaluate('vt.vaultPostFail = false');
 
   const pageError = await evaluate('vt.error');
   if (pageError) throw new Error('Page error: ' + pageError);

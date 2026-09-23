@@ -395,9 +395,9 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, [uid, user?.email, remote]);
 
   const retry = useCallback(() => {
-    if (!mounted.current) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     setAttempt((value) => value + 1);
-  }, []);
+  }, [uid]);
 
   const openShare = useCallback(
     async (sessionId: string, share: SealedShare | undefined) => {
