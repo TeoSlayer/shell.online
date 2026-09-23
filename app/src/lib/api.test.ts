@@ -5,9 +5,10 @@ vi.mock("./oidc", () => ({
   userManager: { getUser: async () => ({ id_token: "id-token", expired: false }) },
 }));
 vi.mock("./firebase", () => ({ auth: null }));
-vi.mock("../../../web/posthog", () => ({ trackAppAction: vi.fn() }));
+const { result } = vi.hoisted(() => ({ result: vi.fn() }));
+vi.mock("../../../web/posthog", () => ({ trackAppAction: vi.fn(), beginApiRequest: vi.fn(() => result) }));
 
-import { fetchDevices, revokeDevice, NETWORK_FAILURE, SERVER_FAILURE } from "./api";
+import { fetchDevices, revokeDevice, request, NETWORK_FAILURE, SERVER_FAILURE } from "./api";
 import { trackAppAction } from "../../../web/posthog";
 
 function respond(status: number, text: string) {
@@ -53,6 +54,7 @@ describe("request errors", () => {
   it("returns the body of a success", async () => {
     respond(200, JSON.stringify({ devices: [] }));
     await expect(fetchDevices()).resolves.toEqual({ devices: [] });
+    expect(result).toHaveBeenCalledExactlyOnceWith("ok");
   });
   it.each([
     [200, '{"revoked":true}', true, undefined],
@@ -64,10 +66,19 @@ describe("request errors", () => {
     expect(trackAppAction).toHaveBeenCalledTimes(1);
     expect(trackAppAction).toHaveBeenCalledWith("/api/devices/private-device", "DELETE", ok, ...(failure ? [failure] : []));
     expect(JSON.stringify(vi.mocked(trackAppAction).mock.calls)).not.toContain("PRIVATE_ERROR");
+    expect(result).toHaveBeenCalledTimes(1);
+    expect(result).toHaveBeenCalledWith(status === 403 ? "denied" : status === 200 && ok ? "ok" : "response");
   });
   it("records a failed body read without falsely recording success", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => { throw new Error("PRIVATE_ERROR"); } })));
     await expect(revokeDevice("private-device")).rejects.toThrow(NETWORK_FAILURE);
     expect(trackAppAction).toHaveBeenCalledExactlyOnceWith("/api/devices/private-device", "DELETE", false, "network");
+    expect(result).toHaveBeenCalledExactlyOnceWith("network");
+  });
+  it("distinguishes cancellation from a network failure", async () => {
+    const controller = new AbortController(); controller.abort();
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new DOMException("PRIVATE", "AbortError"); }));
+    await expect(request("/api/notifications", { signal: controller.signal })).rejects.toThrow(NETWORK_FAILURE);
+    expect(result).toHaveBeenCalledExactlyOnceWith("cancelled");
   });
 });

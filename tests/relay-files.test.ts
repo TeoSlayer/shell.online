@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { Opcode } from "../shared/protocol";
 import { RelayFileClient } from "../web/relay-files";
+import * as analytics from "../web/posthog";
 
 const control = (value: unknown) => {
   const body = new TextEncoder().encode(JSON.stringify(value));
@@ -12,6 +13,35 @@ const control = (value: unknown) => {
 };
 
 describe("relay-backed files", () => {
+  test.each(["complete", "body_cancel", "abort", "error"])("records actual transfer settlement, not successful metadata: %s", async (mode) => {
+    const ends: Array<{ operation: string; outcomes: string[] }> = [];
+    const spy = vi.spyOn(analytics, "beginProductOperation").mockImplementation(operation => {
+      const row = { operation, outcomes: [] as string[] }; ends.push(row);
+      return outcome => { row.outcomes.push(outcome); };
+    });
+    const sent: Uint8Array[] = [], client = new RelayFileClient(frame => sent.push(frame));
+    const take = () => JSON.parse(new TextDecoder().decode(sent.shift()!.subarray(1)));
+    try {
+      client.probe(); client.handle(control({ id: take().id, type: "capabilities", root: "PRIVATE_ROOT" }));
+      const abort = new AbortController();
+      const resource = client.resolve("PRIVATE_FILE", { purpose: "download", signal: abort.signal });
+      const id = take().id;
+      client.handle(control({ id, type: "meta", name: "PRIVATE_NAME", size: 0, mimeType: "text/plain", token: "PRIVATE_TOKEN" }));
+      const file = await resource;
+      expect(ends).toEqual([{ operation: "file_download", outcomes: [] }]);
+      if (mode === "body_cancel") await file!.body.cancel();
+      else if (mode === "abort") abort.abort();
+      else if (mode === "error") client.handle(control({ id, type: "error", message: "PRIVATE_ERROR" }));
+      else {
+        const chunk = new Uint8Array(15), view = new DataView(chunk.buffer);
+        chunk[0] = Opcode.FileResponse; chunk[1] = 2; chunk[14] = 1; view.setUint32(2, id);
+        client.handle(chunk); client.handle(chunk);
+      }
+      expect(ends[0].outcomes).toEqual([mode === "complete" ? "ok" : mode === "error" ? "failed" : "cancelled"]);
+      expect(JSON.stringify(ends)).not.toContain("PRIVATE_");
+      client.reset(); expect(ends[0].outcomes).toHaveLength(1);
+    } finally { client.dispose(); spy.mockRestore(); }
+  });
   test("stays invisible until the opted-in CLI answers", async () => {
     const sent: Uint8Array[] = [];
     const client = new RelayFileClient((frame) => sent.push(frame));

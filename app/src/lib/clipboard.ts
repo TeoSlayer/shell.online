@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { beginProductOperation } from "../../../web/posthog";
 
 /**
  * Copying, for browsers that do not all agree what copying is.
@@ -52,18 +53,22 @@ function copyBySelection(value: string): boolean {
  * clipboard once it is gone.
  */
 export async function copyText(value: string): Promise<boolean> {
-  if (!value) return false;
+  const finish = beginProductOperation("clipboard_copy");
+  if (!value) { finish("unavailable"); return false; }
 
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(value);
+      finish("ok");
       return true;
     } catch {
       /* denied, or the gesture is spent: the older path may still be allowed */
     }
   }
 
-  return copyBySelection(value);
+  const copied = copyBySelection(value);
+  finish(copied ? "ok" : "denied");
+  return copied;
 }
 
 export type CopyState = "idle" | "copied" | "failed";

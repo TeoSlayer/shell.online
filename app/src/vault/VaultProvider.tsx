@@ -31,6 +31,7 @@ import { registerVaultPasskey, unlockVaultWithPasskey } from "../lib/vault-passk
 import { clearLocalVault, loadLocalVault, saveLocalVault } from "../lib/vault-store";
 import { openSealed } from "../lib/keypair";
 import { openTeamKeyShare, sealTeamKeyShare, type TeamKeyContext } from "../lib/team-crypto";
+import { measureProductOperation } from "../../../web/posthog";
 
 /**
  * The signed-in person's session vault, and what is open in this browser.
@@ -398,12 +399,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       remembered,
       version: remote?.version ?? null,
       prepare,
-      commit,
-      unlock,
-      unlockWithPassword,
-      unlockWithPasskey,
-      setPassword,
-      addPasskey,
+      commit: (prepared) => measureProductOperation("vault_create", () => commit(prepared)),
+      unlock: (key) => measureProductOperation("vault_unlock_recovery", () => unlock(key)),
+      unlockWithPassword: (password) => measureProductOperation("vault_unlock_password", () => unlockWithPassword(password)),
+      unlockWithPasskey: () => measureProductOperation("vault_unlock_passkey", unlockWithPasskey),
+      setPassword: (key, password) => measureProductOperation("vault_password", () => setPassword(key, password)),
+      addPasskey: (password, label) => measureProductOperation("vault_passkey", () => addPasskey(password, label)),
       unlockMethods: remote ? vaultUnlockMethods(remote) : { password: false, passkeys: [] },
       retry,
       openShare,
@@ -412,7 +413,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       keep,
       uid,
       createdAt: remote?.createdAt ?? null,
-      lock,
+      lock: () => measureProductOperation("vault_lock", lock),
       sealTeamKey,
       openTeamKey,
     }),

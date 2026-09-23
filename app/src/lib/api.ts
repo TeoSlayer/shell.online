@@ -1,7 +1,8 @@
 import type { FeedbackPayload } from "./feedback";
 import { auth } from "./firebase";
 import { oidcConfigured, userManager } from "./oidc";
-import { trackAppAction } from "../../../web/posthog";
+import { beginApiRequest, trackAppAction } from "../../../web/posthog";
+import { httpOutcome } from "../../../shared/analytics-operations";
 
 /**
  * The ID token for the current session, or nothing when there is none.
@@ -328,8 +329,12 @@ export const SERVER_FAILURE = "Something went wrong on our side. Try again.";
  * the rest of the application.
  */
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await currentIdToken();
+  const finish = beginApiRequest(path, init.method ?? "GET");
+  let token: string | null;
+  try { token = await currentIdToken(); }
+  catch (error) { finish("signed_out"); throw error; }
   if (!token) {
+    finish("signed_out");
     trackAppAction(path, init.method ?? "GET", false, "signed_out");
     throw new ApiError("You are signed out. Sign in and try again.");
   }
@@ -344,6 +349,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       },
     });
   } catch {
+    finish(init.signal?.aborted ? "cancelled" : "network");
     trackAppAction(path, init.method ?? "GET", false, "network");
     throw new ApiError(NETWORK_FAILURE);
   }
@@ -355,6 +361,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   let text: string;
   try { text = await response.text(); }
   catch {
+    finish(init.signal?.aborted ? "cancelled" : "network");
     trackAppAction(path, init.method ?? "GET", false, "network");
     throw new ApiError(NETWORK_FAILURE);
   }
@@ -363,15 +370,18 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     try {
       body = JSON.parse(text) as Record<string, unknown>;
     } catch {
+      finish("response");
       trackAppAction(path, init.method ?? "GET", false, "response");
       throw new ApiError(SERVER_FAILURE);
     }
   }
   if (!response.ok) {
+    finish(httpOutcome(response.status));
     trackAppAction(path, init.method ?? "GET", false, "http");
     throw new ApiError(typeof body.error === "string" ? body.error : SERVER_FAILURE);
   }
   trackAppAction(path, init.method ?? "GET", true);
+  finish("ok");
   return body as T;
 }
 

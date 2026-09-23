@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPosthog } from "../shared/posthog";
+import { relayOperation, httpOutcome, type OperationOutcome } from "../shared/analytics-operations";
 import { safeSource } from "../shared/public-attribution";
 import {
   decodeResize,
@@ -300,7 +301,7 @@ interface InitializeSessionBody {
   expiresAt: number;
 }
 
-export default {
+const relayHandler = {
   async fetch(request, env, executionContext): Promise<Response> {
     const url = new URL(request.url);
 
@@ -432,6 +433,28 @@ export default {
     const response = secureAssetResponse(assetResponse, url.pathname, url.hostname);
     executionContext.waitUntil(recordAssetAnalytics(request, env, url, response, executionContext));
     return response;
+  },
+} satisfies ExportedHandler<Env>;
+
+export default {
+  async fetch(request, env, executionContext): Promise<Response> {
+    const prefetch = `${request.headers.get("Purpose") ?? ""} ${request.headers.get("Sec-Purpose") ?? ""}`.includes("prefetch");
+    const operation = prefetch ? null : relayOperation(new URL(request.url).pathname, request.method);
+    const started = performance.now();
+    let outcome: OperationOutcome = "failed";
+    try {
+      const response = await relayHandler.fetch(request, env, executionContext);
+      outcome = httpOutcome(response.status);
+      return response;
+    } finally {
+      if (operation && env.POSTHOG_ENABLED === "1") {
+        try {
+          executionContext.waitUntil(sendPosthog("service_request", "00000000-0000-4000-8000-000000000001", {
+            service: "relay", operation, method: request.method, outcome, elapsed_ms: performance.now() - started, trigger: "request",
+          }));
+        } catch { /* Telemetry cannot change relay behavior. */ }
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;
 
@@ -1920,6 +1943,11 @@ export class TerminalSession extends DurableObject<Env> {
       requestBytes,
       outcome,
     });
+    if (this.env.POSTHOG_ENABLED === "1") {
+      this.state.waitUntil(sendPosthog("mcp_result", "00000000-0000-4000-8000-000000000001", {
+        service: "relay", tool: MCP_KNOWN_TOOLS.has(tool) ? tool : "unknown", outcome, elapsed_ms: Date.now() - startedAt,
+      }));
+    }
   }
 
   // Record a lifecycle (revocation/expiry/run-end) audit event.
@@ -2703,15 +2731,16 @@ export class TerminalSession extends DurableObject<Env> {
         // an old-grant audit entry into the freshly-reset state.
         if (this.mcpRunGeneration !== reqGen) return;
         const auditOutcome: McpAuditOutcome = toolOutcome ?? (response.ok ? "ok" : "error");
+        const tool = this.mcpToolName(mcpBody);
         recordMcpEvent({
           action: "tool_call",
-          tool: "shell_status",
+          tool,
           outcome: auditOutcome,
           grant,
           sessionId,
           bearer,
         });
-        this.recordMcpAuditCall(grant, this.mcpToolName(mcpBody), startedAt, requestBytes, auditOutcome);
+        this.recordMcpAuditCall(grant, tool, startedAt, requestBytes, auditOutcome);
       };
       // Hold the slot until the body is actually delivered (or cancelled), not just produced.
       const originalBody = response.body;

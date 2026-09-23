@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TerminalConnection, type ConnectionStatus, type HostState } from "./connection";
 import { Opcode, encodeFrame } from "./protocol";
 import { BrowserFrameCipher } from "./e2ee";
+import * as analytics from "../../../web/posthog";
 import {
   DESKTOP_TERMINAL_GRID,
   LEGACY_MOBILE_TERMINAL_GRID,
@@ -115,6 +116,24 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("stale socket callbacks", () => {
+  it("separates handshake attempts, admission, capacity denial and intentional close", async () => {
+    const rows: Array<{ name: string; results: string[] }> = [];
+    vi.spyOn(analytics, "beginProductOperation").mockImplementation(name => {
+      const row = { name, results: [] as string[] }; rows.push(row);
+      let done = false; return result => { if (!done) { done = true; row.results.push(result); } };
+    });
+    const denied = connect(); await denied.connection.start(); FakeSocket.last!.opened();
+    expect(rows[0].results).toEqual([]); // opening WebSocket is not session admission
+    FakeSocket.last!.closedWith(4005); denied.connection.close();
+    expect(rows[0]).toEqual({ name: "terminal_connect", results: ["limited"] });
+    const allowed = connect(); await allowed.connection.start(); FakeSocket.last!.opened();
+    FakeSocket.last!.control({ type: "status", status: "connected" });
+    FakeSocket.last!.control({ type: "status", status: "connected" });
+    allowed.connection.close();
+    expect(rows[1]).toEqual({ name: "terminal_connect", results: ["ok"] });
+    const pending = connect(); await pending.connection.start(); pending.connection.close();
+    expect(rows[2]).toEqual({ name: "terminal_connect", results: ["cancelled"] });
+  });
   it("does not deliver a frame whose decryption finishes after close", async () => {
     const { connection, recorded } = connect(`${SALT}&password=hunter2`);
     await connection.start();

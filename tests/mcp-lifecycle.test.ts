@@ -20,6 +20,40 @@ import { setMcpTelemetrySink } from "../shared/mcp-status";
 
 describe("PostHog relay milestones", () => {
   afterEach(() => vi.unstubAllGlobals());
+  it("records an MCP transport denial without claiming a successful tool call", async () => {
+    const captured: any[] = [], tasks: Promise<unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => { captured.push(JSON.parse(init.body)); return new Response("1"); }));
+    setMcpTelemetrySink(() => {});
+    const response = await worker.fetch(new Request("https://shell.online/mcp?PRIVATE_QUERY", {
+      method: "POST", headers: { Host: "shell.online" }, body: "PRIVATE_CONTENT",
+    }) as never, { ...makeEnv("unused", "unused"), POSTHOG_ENABLED: "1" } as never, { waitUntil: (p: Promise<unknown>) => tasks.push(p) } as never);
+    expect(response.status).toBe(401); await Promise.all(tasks);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({ event: "service_request", properties: { service: "relay", operation: "mcp_transport", outcome: "denied" } });
+    expect(JSON.stringify(captured)).not.toContain("PRIVATE_");
+  });
+  it.each([true, false])("measures actual MCP completion with no credentials when enabled=%s", async (enabled) => {
+    const captured: any[] = [], tasks: Promise<unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => { captured.push(JSON.parse(init.body)); return new Response("1"); }));
+    setMcpTelemetrySink(() => {});
+    const routeKey = await makeEcdhJwk("route-v1"), frameKey = await makeEcdhJwk("frame-v1");
+    const state = { ...makeMockState("PRIVATE_SESSION"), waitUntil: (p: Promise<unknown>) => tasks.push(p) };
+    const do_ = new TerminalSession(state as never, { ...makeEnv(routeKey, frameKey), POSTHOG_ENABLED: enabled ? "1" : undefined } as never);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await do_.fetch(postJson("https://shell.online/internal/init", initBody(await sha256Hex("PRIVATE_HOST_TOKEN"))));
+    const grantResponse = await do_.fetch(postJson("https://shell.online/internal/mcp/grant", {
+      scopes: ["observe"], lifetime: 60, label: "PRIVATE_GRANT_LABEL", frame_key: base64url.encode(new Uint8Array(32)),
+    }, { Authorization: "Bearer PRIVATE_HOST_TOKEN" }));
+    expect(grantResponse.status).toBe(201);
+    const grant = await grantResponse.json() as { bearer: string; grant_id: string };
+    const response = await worker.fetch(workerMcpRequest(grant.bearer, MCP_TOOLS_CALL) as never, makeWorkerEnv(routeKey, do_) as never, { waitUntil: (p: Promise<unknown>) => tasks.push(p) } as never);
+    expect(response.status).toBe(200);
+    await response.text(); await Promise.all(tasks);
+    const events = captured.filter(p => p.event === "mcp_result");
+    expect(events).toHaveLength(enabled ? 1 : 0);
+    if (enabled) expect(events[0].properties).toMatchObject({ service: "relay", tool: "shell_status", outcome: "ok" });
+    for (const secret of ["PRIVATE_", grant.bearer, grant.grant_id]) expect(JSON.stringify(captured)).not.toContain(secret);
+  });
   it.each([true, false])("mirrors bounded install outcomes only when enabled=%s", async (enabled) => {
     const fetcher = vi.fn(async () => new Response("1"));
     vi.stubGlobal("fetch", fetcher);

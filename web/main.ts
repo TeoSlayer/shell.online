@@ -65,7 +65,8 @@ import "./relay-files.css";
 import "./landing.css";
 import { initAnalytics } from "./analytics";
 import { sessionConnectionLabel } from "./session-status";
-import { observeProductPage, trackProduct } from "./posthog";
+import { beginProductOperation, observeProductPage, trackProduct } from "./posthog";
+import { terminalCloseOutcome } from "../shared/analytics-operations";
 
 const app = document.querySelector<HTMLElement>("#app");
 if (!app) throw new Error("Missing app root");
@@ -420,6 +421,7 @@ function renderTerminal(sessionId: string): void {
   rendererSelect.addEventListener("change", () => {
     const next: TerminalRenderer = rendererSelect.value === "refstream" ? "refstream" : "xterm";
     if (next === terminalRenderer) return;
+    trackProduct("feature_action", { operation: "terminal_renderer" });
     writeTerminalRenderer(next);
     if (next === "refstream") {
       try {
@@ -1093,6 +1095,8 @@ function renderTerminal(sessionId: string): void {
 
   const connect = (): void => {
     if (stopped) return;
+    const finishConnect = beginProductOperation("terminal_connect");
+    const finishUnlock = encryptedSession ? beginProductOperation("terminal_unlock") : () => {};
     setStatus(waitingForCapacity ? "full" : "connecting");
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const portrait = isPortraitViewer();
@@ -1113,6 +1117,7 @@ function renderTerminal(sessionId: string): void {
     socket.addEventListener("message", (event: MessageEvent<string | ArrayBuffer>) => {
       if (!analyticsConnected) {
         analyticsConnected = true;
+        finishConnect("ok");
         trackProduct("terminal_connected");
       }
       if (typeof event.data === "string") {
@@ -1127,8 +1132,10 @@ function renderTerminal(sessionId: string): void {
           if (!frameCipher) return;
           try {
             frame = await frameCipher.open(received);
+            finishUnlock("ok");
           } catch (error) {
             if (error instanceof E2EEReplayError) return;
+            finishUnlock("denied");
             frameCipher = null;
             socket?.close(4003, "decryption failed");
             showEncryptionGate("That password could not decrypt this session. Check it and try again.", encryptionDescriptor?.kind === "password");
@@ -1159,6 +1166,9 @@ function renderTerminal(sessionId: string): void {
     });
 
     socket.addEventListener("close", (event) => {
+      finishConnect(terminalCloseOutcome(event.code));
+      finishUnlock(terminalCloseOutcome(event.code));
+      trackProduct("terminal_closed", { outcome: terminalCloseOutcome(event.code) });
       socket = null;
       fileClient.reset();
       terminalInput.clear();
@@ -1436,6 +1446,7 @@ function renderTerminal(sessionId: string): void {
     helperTextarea?.blur();
     renderLatencyGraph();
     if (settingsDialog.open) return;
+    trackProduct("feature_action", { operation: "terminal_settings" });
     try {
       settingsDialog.showModal();
     } catch {

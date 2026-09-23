@@ -1,8 +1,62 @@
-# Public website measurement
+# Website and product measurement
 
 The landing page is a static HTML entry point with a small interaction bundle.
 The terminal renderer is loaded only when a visitor opens a terminal or other
 application route. Brand artwork is served locally.
+
+## Coverage and verification
+
+GA4 measures the public landing page and guides. PostHog measures the privacy-safe
+product journey and separate operational totals. X measures landing visits only.
+Private pages do not load GA4 or X. There is no replay, keystroke recording, generic
+DOM autocapture, command collection, or terminal-content collection.
+
+| Area | Recorded evidence | Regression coverage |
+| --- | --- | --- |
+| Landing and every published guide | Views, source buckets, real foreground time, copies and CTAs | `posthog`, `public-analytics`, `public-attribution`, actual-vendor browser gates |
+| App pages and tabs | Template-only navigation, account-boundary reset, no duplicate auth-restoration views | React StrictMode and hydration browser fixture |
+| Sign-in, signup, password reset | Attempt and provider-confirmed result; creation only when confirmed | Authentication call-through tests; API errors remain separate |
+| Sessions, sharing, machines, team/invites, commands | Classified API reads/mutations, exact HTTP/network/parse/cancel outcomes | Real API-wrapper tests and complete literal-route inventory check |
+| Vault | Explicit create, password/recovery/passkey unlock, lock and credential-change outcomes | Shared lifecycle tests; real VaultProvider/WebCrypto/IndexedDB browser fixture with wrong/right passwords |
+| Terminals in both UIs | Connection attempt, first relay message, close category; unlock only after a frame decrypts | Connection lifecycle tests; viewer browser gate |
+| Files | Listing, preview/download attempt; completion only at final stream chunk, not metadata | Real file-protocol tests for success, body cancellation, abort and failure |
+| Inbox and clipboard | Open/follow intent, mark-read API result, actual copy outcome | Clipboard tests; API classification and finite-property boundary |
+| Current game, Jev, team MCP, content and automation | Existing routes classified separately, including assessment/consent, activity, grant authorization and preferences | Router inventory, actual Worker tests, existing route/provider suites |
+| Account service | HTTP outcome and elapsed time by fixed operation; scheduled purge result | Actual Worker tests, including store/collector failure and disabled configuration |
+| Relay and MCP | Existing lifecycle/download/install totals; MCP tool completion category and elapsed time | Actual Worker→DO MCP and installer tests; no grant/session identifiers |
+
+`shared/analytics-operations.ts` is the maintained API operation inventory. A test
+reads the real account router and fails when a new literal route is unclassified.
+Dynamic route families have explicit classification/redaction regressions. Unknown
+routes, arbitrary operation names and methods are dropped—not copied into events.
+
+`api_request` includes background polling: it is **not** a count of deliberate
+clicks or active people. `feature_attempt`/`feature_result` measure a bounded local
+operation, once per attempt. `feature_action` measures intent (for example choosing
+a renderer), not proof the new renderer drew successfully. `terminal_connected`
+means relay admission, not a successful decryption or completed agent task.
+
+`service_request` and `mcp_result` use fixed service identities, with no browser
+session or person ID. Never use their distinct-user count as a product-user count,
+or combine them with browser calls and double-count a single operation. HTTP 2xx
+means API acknowledgement: a queued command/grant, returned Jev result, and finished
+agent task are different things. MCP `delivered` is a host acknowledgement only.
+The cloud account Worker uses `POSTHOG_ENABLED=1`; unconfigured deployments are off.
+Operational counts are separate from browser opt-outs. Collector failures never
+change responses, retry commands, or log sensitive data.
+
+Features not in the shipped build—such as the parked workshop, native mobile
+companion, periodic history forks and unsupported automatic briefing execution—
+have no invented completion events. Saving their preferences is measured only as
+a preference save. External email delivery and native OS notification delivery
+are not established by an API acknowledgement.
+
+Run `npm run check`, `npm --prefix app run typecheck`, `npm --prefix app test`, and
+the maintained browser gates `scripts/test-posthog-browser.mjs` and
+`scripts/test-x-pixel-browser.mjs` against built assets. The latter uses actual
+vendor scripts; both intercept all synthetic collection. Use `POSTHOG_LIVE=1` and
+`X_PIXEL_LIVE=1` for deployed-asset checks. The vault fixture uses a synthetic
+account and stub server, real browser crypto/storage, and no production records.
 
 ## What the counters mean
 
@@ -233,13 +287,17 @@ Use the **shell.online — acquisition and product health** dashboard in PostHog
 | App actions | Which operations fail, and at which bounded failure category? |
 | Product usage | Are app pages, viewers and the current game being used? |
 | Install and relay milestones | How many downloads, reported installs, hosts and viewers reach each stage? |
+| Feature outcomes | Do vault operations, file streams and terminal access complete or fail? |
+| API reliability | Which browser requests fail through auth, network, cancellation or response handling? |
+| Service health | How do account/relay requests and scheduled maintenance behave, independently of users? |
+| MCP outcomes | Do tools match, time out, cancel or receive a host acknowledgement? |
 
 Stage counts are not automatically an ordered funnel. Public-site/app identities
 are deliberately separate and reset at account changes; neither is joined to
 the aggregate relay identity. Cross-device advertising ROI and person-level
 retention cannot be inferred from these counts. No replay/autocapture is enabled.
 
-Recognized guides get separate paths such as `/docs/agents`. Public campaigns
+Recognized guides get their public canonical paths such as `/agents`. Public campaigns
 use native `utm_source`/`utm_medium` properties after finite classification;
 referrers become known domain buckets, never raw URLs. Browser/OS/device
 families are derived locally. Unknown values stay unknown. Raw campaign names

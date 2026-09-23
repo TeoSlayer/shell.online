@@ -9,6 +9,8 @@ import { allowedOriginsFor, readIdentity, type Env as Settings } from "../server
 import { browserSecurityHeaders } from "../server/lib/browser-headers";
 import { parseExcludedAccounts } from "../server/lib/internal-accounts";
 import { relaySessionLiveness, type SessionLivenessSource } from "../server/lib/session-liveness";
+import { apiOperation, httpOutcome, type OperationOutcome } from "../../shared/analytics-operations.js";
+import { sendPosthog } from "../../shared/posthog.js";
 
 /**
  * The Worker deployment of the accounts service.
@@ -27,6 +29,8 @@ import { relaySessionLiveness, type SessionLivenessSource } from "../server/lib/
  * them. wrangler.jsonc is the authority on what is actually bound.
  */
 export interface Env {
+  /** Non-identifying operation totals. Off for unconfigured/self-hosted deployments. */
+  POSTHOG_ENABLED?: string;
   /** The built client, served for everything that is not an API route. */
   ASSETS: { fetch(request: Request): Promise<Response> };
   /** Hyperdrive in front of Cloud SQL. Its string is local to the isolate. */
@@ -214,8 +218,7 @@ async function toClient(request: Request, env: Env): Promise<Response> {
   return response;
 }
 
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function fetchApp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
 
     /*
@@ -241,6 +244,31 @@ export default {
        */
       ctx.waitUntil(store.close());
     }
+}
+
+function serviceResult(env: Env, ctx: ExecutionContext, operation: string, outcome: OperationOutcome, started: number, method?: string): void {
+  if (env.POSTHOG_ENABLED !== "1") return;
+  try {
+    ctx.waitUntil(sendPosthog("service_request", "00000000-0000-4000-8000-000000000002", {
+      service: "accounts", operation, outcome, method, elapsed_ms: performance.now() - started,
+      trigger: operation === "service_purge" ? "scheduled" : "request",
+    }));
+  } catch { /* Telemetry must never delay or fail the response. */ }
+}
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const prefetch = `${request.headers.get("Purpose") ?? ""} ${request.headers.get("Sec-Purpose") ?? ""}`.includes("prefetch");
+    const operation = prefetch ? null : apiOperation(new URL(request.url).pathname, request.method);
+    const started = performance.now();
+    try {
+      const response = await fetchApp(request, env, ctx);
+      if (operation) serviceResult(env, ctx, operation, httpOutcome(response.status), started, request.method);
+      return response;
+    } catch (error) {
+      if (operation) serviceResult(env, ctx, operation, "failed", started, request.method);
+      throw error;
+    }
   },
 
   /*
@@ -249,14 +277,22 @@ export default {
    * doing it per request would mean two DELETE statements on every call for
    * work that needs doing every few minutes.
    */
-  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const store = await openStore(env);
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const started = performance.now();
+    let outcome: OperationOutcome = "failed";
     try {
-      await store.purgeExpired();
-    } catch (error) {
-      console.error("accounts: purge failed", error);
+      const store = await openStore(env);
+      let succeeded = false;
+      try {
+        await store.purgeExpired(); succeeded = true;
+      } catch (error) {
+        console.error("accounts: purge failed", error);
+      } finally {
+        await store.close();
+      }
+      if (succeeded) outcome = "ok";
     } finally {
-      await store.close();
+      serviceResult(env, ctx, "service_purge", outcome, started);
     }
   },
 };

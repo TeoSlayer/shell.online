@@ -351,6 +351,12 @@ export function Privacy() {
           <p>
             The public site, web app, game and shared-terminal viewer use
             PostHog (US hosting) for page views and explicit product actions.
+            This includes fixed categories for API requests, vault operations,
+            file-transfer outcomes, connection failures and elapsed times. API
+            polling is counted separately from deliberate actions. Operational
+            account-service and MCP totals use service identities, not account or
+            session identifiers. Passwords, keys, filenames, terminal contents,
+            commands, notification bodies and raw error messages are not included.
             Routes are reduced to fixed categories; session IDs, share links,
             passwords, email addresses, commands and terminal content are not
             included. There is no automatic form capture, session replay or

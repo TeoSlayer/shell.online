@@ -1,4 +1,6 @@
 import { encodeFrame, Opcode } from "../shared/protocol";
+import { beginProductOperation } from "./posthog";
+import type { OperationOutcome } from "../shared/analytics-operations";
 
 export interface RelayFileEntry {
   path: string;
@@ -29,6 +31,7 @@ interface ControlMessage {
 }
 
 interface Transfer {
+  finish(outcome: OperationOutcome): void;
   id: number;
   path: string;
   purpose: "preview" | "download";
@@ -97,30 +100,35 @@ export class RelayFileClient {
   }
 
   async list(path = ""): Promise<RelayFileEntry[]> {
-    if (!this.available || this.disposed) return [];
+    const finish = beginProductOperation("file_list");
+    if (!this.available || this.disposed) { finish("unavailable"); return []; }
     const id = this.id();
-    return new Promise((resolve, reject) => {
+    try { const entries = await new Promise<RelayFileEntry[]>((resolve, reject) => {
       const timeout = globalThis.setTimeout(() => {
         this.lists.delete(id);
-        reject(new Error("File listing timed out."));
+        reject(new DOMException("File listing timed out.", "TimeoutError"));
       }, REQUEST_TIMEOUT_MS);
       this.lists.set(id, { resolve, reject, timeout });
       this.send({ id, type: "list", path });
-    });
+    }); finish("ok"); return entries; }
+    catch (error) { finish(error instanceof Error && error.name === "TimeoutError" ? "timeout" : "failed"); throw error; }
   }
 
   resolve(path: string, request: { purpose: "preview" | "download"; signal: AbortSignal }): Promise<RelayFileResource | null> {
-    if (!this.available || this.disposed || request.signal.aborted) return Promise.resolve(null);
+    const finish = beginProductOperation(request.purpose === "preview" ? "file_preview" : "file_download");
+    if (!this.available || this.disposed || request.signal.aborted) {
+      finish(request.signal.aborted ? "cancelled" : "unavailable"); return Promise.resolve(null);
+    }
     const id = this.id();
     return new Promise((resolve, reject) => {
       const transfer: Transfer = {
         id, path, purpose: request.purpose, offset: 0, token: "", inFlight: false,
-        resolve, reject, settled: false, signal: request.signal,
+        resolve, reject, settled: false, signal: request.signal, finish,
       };
       const abort = () => this.failTransfer(transfer, new DOMException("File request cancelled.", "AbortError"));
       transfer.abort = abort;
       request.signal.addEventListener("abort", abort, { once: true });
-      transfer.timeout = globalThis.setTimeout(() => this.failTransfer(transfer, new Error("File request timed out.")), REQUEST_TIMEOUT_MS);
+      transfer.timeout = globalThis.setTimeout(() => this.failTransfer(transfer, new DOMException("File request timed out.", "TimeoutError")), REQUEST_TIMEOUT_MS);
       this.transfers.set(id, transfer);
       this.pull(transfer);
     });
@@ -230,7 +238,7 @@ export class RelayFileClient {
     const body = new ReadableStream<Uint8Array>({
       start: (controller) => { transfer.controller = controller; },
       pull: () => this.pull(transfer),
-      cancel: () => this.finishTransfer(transfer),
+      cancel: () => this.finishTransfer(transfer, "cancelled"),
     }, { highWaterMark: 0 });
     transfer.settled = true;
     transfer.resolve({ name: message.name, mimeType: message.mimeType, size: message.size, body });
@@ -245,23 +253,25 @@ export class RelayFileClient {
     if (!transfer || offset !== transfer.offset) return;
     transfer.inFlight = false;
     clearTimeout(transfer.timeout);
-    transfer.timeout = globalThis.setTimeout(() => this.failTransfer(transfer, new Error("File request timed out.")), REQUEST_TIMEOUT_MS);
+    transfer.timeout = globalThis.setTimeout(() => this.failTransfer(transfer, new DOMException("File request timed out.", "TimeoutError")), REQUEST_TIMEOUT_MS);
     const chunk = new Uint8Array(frame.subarray(15));
     transfer.offset += chunk.byteLength;
     if (chunk.byteLength) transfer.controller?.enqueue(chunk);
     if (frame[14] === 1) this.finishTransfer(transfer);
   }
 
-  private finishTransfer(transfer: Transfer): void {
+  private finishTransfer(transfer: Transfer, outcome: OperationOutcome = "ok"): void {
     if (!this.transfers.delete(transfer.id)) return;
+    transfer.finish(outcome);
     clearTimeout(transfer.timeout);
     if (transfer.abort) transfer.signal.removeEventListener("abort", transfer.abort);
-    transfer.controller?.close();
+    if (outcome !== "cancelled") transfer.controller?.close();
     if (!transfer.settled) transfer.resolve(null);
   }
 
   private failTransfer(transfer: Transfer, error: Error): void {
     if (!this.transfers.delete(transfer.id)) return;
+    transfer.finish(error.name === "AbortError" ? "cancelled" : error.name === "TimeoutError" ? "timeout" : "failed");
     clearTimeout(transfer.timeout);
     if (transfer.abort) transfer.signal.removeEventListener("abort", transfer.abort);
     if (transfer.settled) transfer.controller?.error(error);

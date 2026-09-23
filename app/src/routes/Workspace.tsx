@@ -27,6 +27,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { Alert } from "../components/Alert";
 import { FeedbackLink } from "../feedback/FeedbackLink";
 import { TerminalPane } from "../terminal/TerminalPane";
+import { trackProduct } from "../../../web/posthog";
 import type { SessionPulse } from "../terminal/session-pulse";
 import { SessionPulseBadge } from "../terminal/SessionPulse";
 import { EMPTY, reduce, sessionToOpen, tabFor } from "../terminal/tabs";
@@ -783,6 +784,7 @@ export function Workspace() {
               onChange={(event) => {
                 const value = event.target.value;
                 const next: TerminalRenderer = isTerminalRenderer(value) ? value : "xterm";
+                if (next !== terminalRenderer) trackProduct("feature_action", { operation: "terminal_renderer" });
                 writeTerminalRenderer(next);
                 setTerminalRenderer(next);
               }}

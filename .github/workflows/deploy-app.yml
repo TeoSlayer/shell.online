@@ -22,6 +22,9 @@ on:
     paths:
       - "app/**"
       - "shared/posthog.ts"
+      - "shared/analytics-operations.ts"
+      - "shared/documentation.ts"
+      - "shared/public-attribution.ts"
       - "web/posthog.ts"
       - ".github/workflows/deploy-app.yml"
   workflow_dispatch:

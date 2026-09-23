@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { posthogPayload, sendPosthog, POSTHOG_ORIGIN } from "../shared/posthog";
-import { analyticsRoute, analyticsSource, analyticsSessionId, observeProductPage, resetProductIdentity, trackAppAction, trackProduct, measureAuthentication } from "../web/posthog";
+import { analyticsRoute, analyticsSource, analyticsSessionId, observeProductPage, resetProductIdentity, trackAppAction, trackProduct, measureAuthentication, beginProductOperation, measureProductOperation, beginApiRequest } from "../web/posthog";
 
 const ID = "12345678-1234-4123-8123-123456789abc";
 const SECRET = "SECRET_PASSWORD_TOKEN_TERMINAL_CONTENT";
@@ -30,6 +30,43 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("PostHog explicit capture boundary", () => {
+  it("captures actual feature attempts and one completion without inspecting work inputs or outputs", async () => {
+    const value = { password: SECRET, output: SECRET };
+    await expect(measureProductOperation("vault_unlock_password", async () => value)).resolves.toBe(value);
+    expect(requests.map(r => r.data.event)).toEqual(["feature_attempt", "feature_result"]);
+    expect(requests.at(-1)!.data.properties).toMatchObject({ operation: "vault_unlock_password", outcome: "ok" });
+    expect(JSON.stringify(requests)).not.toContain(SECRET);
+    const end = beginProductOperation("file_download"); end("cancelled"); end("ok");
+    expect(requests.filter(r => r.data.properties.operation === "file_download").map(r => r.data.event)).toEqual(["feature_attempt", "feature_result"]);
+    expect(requests.at(-1)!.data.properties.outcome).toBe("cancelled");
+  });
+  it("preserves exceptions, distinguishes aborts, and refuses arbitrary feature names", async () => {
+    const failure = new Error(SECRET);
+    await expect(measureProductOperation("vault_unlock_passkey", async () => { throw failure; })).rejects.toBe(failure);
+    await expect(measureProductOperation("file_preview", async () => { throw new DOMException(SECRET, "AbortError"); })).rejects.toThrow(SECRET);
+    expect(requests.filter(r => r.data.event === "feature_result").map(r => r.data.properties.outcome)).toEqual(["failed", "cancelled"]);
+    const count = requests.length; beginProductOperation(SECRET)("ok");
+    expect(requests).toHaveLength(count);
+    expect(JSON.stringify(requests)).not.toContain(SECRET);
+  });
+  it("attributes pending operations to their starting route, but never the next account", () => {
+    win.location.href = "https://app.shell.online/account";
+    const end = beginProductOperation("vault_lock");
+    win.location.href = "https://app.shell.online/team";
+    end("ok");
+    expect(requests.at(-1)!.data.properties.route).toBe("account");
+    const pending = beginProductOperation("vault_unlock_password");
+    resetProductIdentity(); const count = requests.length; pending("ok");
+    expect(requests).toHaveLength(count);
+  });
+  it("measures reads and writes separately from user actions and honors opt-out mid-operation", () => {
+    beginApiRequest(`/api/sessions/${SECRET}/content?token=${SECRET}`, "GET")("denied");
+    expect(requests.at(-1)!.data).toMatchObject({ event: "api_request", properties: { operation: "session_content_read", method: "GET", outcome: "denied" } });
+    const end = beginProductOperation("file_download"); const count = requests.length;
+    vi.stubGlobal("navigator", { globalPrivacyControl: true }); end("ok");
+    expect(requests).toHaveLength(count);
+    expect(JSON.stringify(requests)).not.toContain(SECRET);
+  });
   it("uses UUIDv7 sessions acceptable to PostHog, with capture timestamps in the session window", () => {
     const now = Date.now();
     const ids = new Set(Array.from({ length: 100 }, () => analyticsSessionId(now)));
@@ -187,7 +224,7 @@ describe("PostHog explicit capture boundary", () => {
   it("uses native campaign/device properties and finite documentation paths, never raw UTM text", () => {
     win.location.href = `https://shell.online/docs/v0.23.0/agents/?utm_source=newsletter&utm_medium=email&utm_campaign=${SECRET}`;
     observeProductPage()();
-    expect(requests[0].data.properties).toMatchObject({ guide: "agents", $pathname: "/docs/agents", utm_source: "newsletter", utm_medium: "email", $referring_domain: "x.com", $browser: "Chrome", $os: "Mac OS X", $device_type: "Desktop" });
+    expect(requests[0].data.properties).toMatchObject({ guide: "agents", $pathname: "/agents", utm_source: "newsletter", utm_medium: "email", $referring_domain: "x.com", $browser: "Chrome", $os: "Mac OS X", $device_type: "Desktop" });
     expect(JSON.stringify(requests)).not.toContain(SECRET);
     expect(analyticsSource(new URL("https://shell.online/?utm_source=producthunt"), "")).toBe("product_hunt");
   });

@@ -5,6 +5,7 @@ import { Avatar } from "../components/Avatar";
 import { fetchInbox, markNotifications, type Inbox as InboxView } from "../lib/api";
 import { displayName, findPerson } from "../lib/people";
 import { ago } from "../lib/time";
+import { trackProduct } from "../../../web/posthog";
 
 const POLL_MS = 20_000;
 
@@ -51,6 +52,7 @@ export function Inbox() {
   const assignments = view?.unreadAssignments ?? 0;
 
   async function follow(id: string, sessionId: string) {
+    trackProduct("feature_action", { operation: "inbox_follow" });
     setOpen(false);
     try {
       setView(await markNotifications(id));
@@ -65,7 +67,7 @@ export function Inbox() {
       <button
         type="button"
         className="inbox-trigger"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => { if (!open) trackProduct("feature_action", { operation: "inbox_open" }); setOpen(!open); }}
         aria-expanded={open}
         aria-label={unread > 0 ? `Inbox, ${unread} unread` : "Inbox"}
       >

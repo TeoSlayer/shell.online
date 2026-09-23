@@ -132,7 +132,7 @@ function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   }, [firebaseAuth]);
 
   const resetPassword = useCallback(async (email: string) => {
-    await sendPasswordResetEmail(firebaseAuth, email.trim());
+    await measureAuthentication("password_reset", "email", () => sendPasswordResetEmail(firebaseAuth, email.trim()));
   }, [firebaseAuth]);
 
   const resendVerification = useCallback(async () => {

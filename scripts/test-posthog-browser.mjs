@@ -22,21 +22,29 @@ const cdp=(method,params={})=>new Promise((resolve,reject)=>{
 const wait=async(check,label)=>{const end=Date.now()+15000;while(Date.now()<end){if(await check())return;await delay(60);}throw Error('Timeout: '+label);};
 const mime={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.json':'application/json'};
 const built=await build({
-  absWorkingDir:join(base,'app'),bundle:true,write:false,format:'esm',platform:'browser',
+  absWorkingDir:join(base,'app'),bundle:true,write:false,format:'esm',platform:'browser',jsx:'automatic',
   stdin:{contents:`
     import React,{StrictMode,useState} from 'react'; import {createRoot} from 'react-dom/client';
     import {BrowserRouter} from 'react-router-dom';
     import {ProductAnalytics} from './src/components/ProductAnalytics';
     import {trackAppAction} from '../web/posthog';
+    import {VaultProvider,useVault} from './src/vault/VaultProvider';
     window.fixtureUser={uid:'${marker}',email:'${marker}@example.test'};
     window.fixtureInitializing=location.pathname==='/sessions/loading';
+    function VaultFixture(){window.fixtureVault=useVault();return null;}
     function Fixture(){const [n,setN]=useState(0); window.renderIdentity=u=>{window.fixtureUser=u;setN(n+1)};
       window.fixtureReady=()=>{window.fixtureInitializing=false;setN(n+1)};
-      return React.createElement(BrowserRouter,null,React.createElement(ProductAnalytics));}
+      return React.createElement(BrowserRouter,null,React.createElement(ProductAnalytics),location.pathname==='/account' ? React.createElement(VaultProvider,null,React.createElement(VaultFixture)) : null);}
     window.fixtureAction=()=>trackAppAction('/api/sessions/${marker}/automation?password=${marker}','PATCH',true);
     createRoot(document.getElementById('root')).render(React.createElement(StrictMode,null,React.createElement(Fixture)));
   `,resolveDir:join(base,'app'),sourcefile:'posthog-fixture.jsx'},
-  plugins:[{name:'auth-test-only',setup(b){b.onResolve({filter:/auth\/AuthProvider$/},()=>({path:'test-auth',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export function useAuth(){return {user:window.fixtureUser,initializing:window.fixtureInitializing}}',loader:'js'}));}}],
+  plugins:[{name:'auth-test-only',setup(b){
+    b.onResolve({filter:/auth\/AuthProvider$/},()=>({path:'test-auth',namespace:'fixture'}));
+    b.onResolve({filter:/lib\/api$/},()=>({path:'vault-api',namespace:'fixture'}));
+    b.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='test-auth'
+      ? 'export function useAuth(){return {user:window.fixtureUser,initializing:window.fixtureInitializing}}'
+      : `let vault=null;export async function fetchVault(){return {vault}};export async function saveVault(bundle){vault={...bundle,version:1,createdAt:Date.now(),updatedAt:Date.now()};return {vault}};export async function fetchSessions(){return {sessions:[]}};export async function shareSessionKeys(){};export async function updateVaultUnlocks(){return {vault}};`,loader:'js'}));
+  }}],
 });
 async function handler({requestId,request}){
   const url=new URL(request.url);
@@ -114,6 +122,24 @@ try{
   await browser.evaluate('fixtureReady()');await delay(80);
   assert.equal(events.filter(e=>e.phase===phase&&e.payload.event==='$pageview').length,1,'auth restore counts once');
   reports.push('initial login restoration is not a duplicate visit');
+  await browser.navigate('about:blank'); await delay(150);
+  phase='fixture-vault'; await browser.navigate('https://app.shell.online/account');
+  await wait(()=>browser.evaluate('window.fixtureVault?.status === "setup"'),'real vault provider ready');
+  await browser.evaluate('window.fixtureTask = fixtureVault.prepare(false,"SYNTHETIC_PRIVATE_POSTHOG_MARKER").then(p => fixtureVault.commit(p)); void 0');
+  await wait(()=>browser.evaluate('window.fixtureVault?.status === "unlocked"'),'real crypto vault creation');
+  await browser.evaluate('window.fixtureTask = fixtureVault.lock(); void 0');
+  await wait(()=>browser.evaluate('window.fixtureVault?.status === "locked"'),'vault lock');
+  await browser.evaluate('window.fixtureTask = fixtureVault.unlockWithPassword("wrong-secret").catch(()=>{}); void 0');
+  await wait(()=>events.some(e=>e.phase===phase&&e.payload.properties.operation==='vault_unlock_password'&&e.payload.properties.outcome==='failed'),'wrong password measured without content');
+  await browser.evaluate('window.fixtureTask = fixtureVault.unlockWithPassword("SYNTHETIC_PRIVATE_POSTHOG_MARKER"); void 0');
+  await wait(()=>browser.evaluate('window.fixtureVault?.status === "unlocked"'),'correct password unlock');
+  await wait(()=>events.some(e=>e.phase===phase&&e.payload.properties.operation==='vault_unlock_password'&&e.payload.properties.outcome==='ok'),'actual unlock completion');
+  const vaultResults=events.filter(e=>e.phase===phase&&e.payload.event==='feature_result');
+  assert.deepEqual(vaultResults.map(e=>[e.payload.properties.operation,e.payload.properties.outcome]),[
+    ['vault_create','ok'],['vault_lock','ok'],['vault_unlock_password','failed'],['vault_unlock_password','ok'],
+  ]);
+  assert.equal(events.filter(e=>e.phase===phase&&e.payload.event==='feature_attempt').length,4);
+  reports.push('actual VaultProvider + WebCrypto + IndexedDB: create, lock, wrong/right password, four exact redacted outcomes');
   // Literal scripts only: no input or serialized strings interpolated into code.
   for (const [label, source] of [
     ['safari-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1'});"],

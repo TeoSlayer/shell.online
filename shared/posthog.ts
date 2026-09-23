@@ -1,4 +1,5 @@
 import { DOCUMENTATION_KINDS } from "./documentation.js";
+import { OPERATION_NAMES, OPERATION_OUTCOMES } from "./analytics-operations.js";
 
 /** Public ingestion token, not an administration/personal API key. */
 export const POSTHOG_TOKEN = "phc_Ct3RkLeqa674ydnWuzAwQBu5X9tXW2v7mJ3cvKKzp4hv";
@@ -11,6 +12,9 @@ const EVENTS = new Set([
   "session_created", "session_started", "session_ended", "viewer_connected",
   "viewer_disconnected", "viewer_rejected", "collaboration_started", "input_denied",
   "page_engaged", "page_engagement", "auth_attempt", "auth_result", "account_created",
+  "feature_attempt", "feature_result", "api_request", "service_request", "mcp_result",
+  "terminal_closed",
+  "feature_action",
 ]);
 const VALUES: Record<string, ReadonlySet<string>> = {
   surface: new Set(["landing", "docs", "terminal", "app", "game", "relay"]),
@@ -18,12 +22,16 @@ const VALUES: Record<string, ReadonlySet<string>> = {
   target: new Set(["install", "brew_install", "source_build", "run", "docs_command", "share", "skill", "start_nav", "start_hero", "start_footer", "start_bottom", "demo", "github_star", "signup_nav", "signup_hero", "signup_team", "signup_footer", "github", "signup", "signin", "docs", "app", "feedback", "session", "machine", "team", "vault", "automation", "account", "command", "invite", "cli", "unknown"]),
   source: new Set(["x", "google", "github", "reddit", "hacker_news", "bing", "youtube", "linkedin", "facebook", "instagram", "direct", "internal", "other", "app", "newsletter", "product_hunt", "discord", "slack", "mastodon", "bluesky", "podcast"]),
   device: new Set(["mobile", "tablet", "desktop", "bot", "cli", "unknown"]),
-  outcome: new Set(["ok", "failed", "denied", "unsupported_os", "unsupported_arch", "download_failed", "checksum_mismatch", "unknown"]),
-  method: new Set(["POST", "PUT", "PATCH", "DELETE"]),
+  outcome: new Set([...OPERATION_OUTCOMES, "unsupported_os", "unsupported_arch", "download_failed", "checksum_mismatch", "unknown", "matched", "limit", "reset", "revoked", "error", "busy", "too_large", "conflict", "in_flight", "delivered", "delivery_uncertain"]),
+  method: new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  operation: OPERATION_NAMES,
+  tool: new Set(["shell_status", "shell_screen", "shell_output", "shell_wait", "shell_send", "unknown"]),
+  service: new Set(["accounts", "relay"]),
+  trigger: new Set(["request", "scheduled"]),
   guide: new Set(DOCUMENTATION_KINDS),
   medium: new Set(["cpc", "paid_social", "social", "email", "referral", "organic"]),
   provider: new Set(["email", "google", "oidc"]),
-  action: new Set(["sign_in", "sign_up", "provider_sign_in", "command_requested", "session_update", "session_remove", "session_access", "machine_update", "machine_remove", "vault_update", "invite_create", "invite_remove", "team_update", "feedback_submit", "account_remove", "cli_authorize", "automation_update"]),
+  action: new Set(["sign_in", "sign_up", "provider_sign_in", "password_reset", "command_requested", "session_update", "session_remove", "session_access", "machine_update", "machine_remove", "vault_update", "invite_create", "invite_remove", "team_update", "feedback_submit", "account_remove", "cli_authorize", "automation_update"]),
   failure: new Set(["network", "response", "http", "signed_out"]),
   engagement_reason: new Set(["hidden", "navigation"]),
 };
@@ -75,6 +83,9 @@ export function posthogPayload(event: string, id: string, input: Record<string, 
   if (typeof input.active_ms === "number" && Number.isFinite(input.active_ms)) {
     properties.active_ms = Math.max(0, Math.min(86_400_000, Math.round(input.active_ms)));
   }
+  if (typeof input.elapsed_ms === "number" && Number.isFinite(input.elapsed_ms)) {
+    properties.elapsed_ms = Math.max(0, Math.min(86_400_000, Math.round(input.elapsed_ms)));
+  }
   if (typeof input.session_id === "string" && UUID.test(input.session_id)) properties.$session_id = input.session_id;
   for (const [from, to] of [["pageview_id", "$pageview_id"], ["previous_pageview_id", "$prev_pageview_id"]]) {
     if (typeof input[from] === "string" && UUID.test(input[from])) properties[to] = input[from];
@@ -99,7 +110,7 @@ export function posthogPayload(event: string, id: string, input: Record<string, 
     const host = properties.surface === "app" || properties.surface === "game" ? "app.shell.online" : "shell.online";
     const path = properties.route === "landing" ? "/" : properties.route === "terminal" ? "/s/:session" : properties.route === "session" ? "/sessions/:session" :
       properties.route === "join" ? "/join/:invite" : properties.route === "cli_authorize" ? "/cli/authorize" :
-      properties.route === "docs" && properties.guide ? (properties.guide === "docs" ? "/docs" : `/docs/${properties.guide}`) : `/${properties.route}`;
+      properties.route === "docs" && properties.guide ? `/${properties.guide}` : `/${properties.route}`;
     properties.$current_url = `https://${host}${path}`;
     properties.$pathname = path;
     properties.$host = host;

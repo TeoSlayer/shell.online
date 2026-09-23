@@ -7,7 +7,8 @@ import {
   type TerminalGrid,
 } from "./terminal-grid";
 import type { HostPresence } from "./host-presence";
-import { trackProduct } from "../../../web/posthog";
+import { beginProductOperation, trackProduct } from "../../../web/posthog";
+import { terminalCloseOutcome, type OperationOutcome } from "../../../shared/analytics-operations";
 
 export type ConnectionStatus =
   | "connecting"
@@ -101,6 +102,8 @@ export class TerminalConnection {
   private proven = false;
   private waitingForCapacity = false;
   private currentGrid: TerminalGrid = DESKTOP_TERMINAL_GRID;
+  private finishConnect: (outcome: OperationOutcome) => void = () => {};
+  private finishUnlock: (outcome: OperationOutcome) => void = () => {};
 
   constructor(private readonly options: ConnectionOptions) {
     this.descriptor = parseEncryptionFragment(options.fragment);
@@ -127,10 +130,13 @@ export class TerminalConnection {
   }
 
   async start(): Promise<void> {
-    if (this.descriptor?.kind === "key") {
-      this.cipher = await BrowserFrameCipher.fromKey(this.descriptor.key);
-    } else if (this.descriptor?.kind === "password" && this.descriptor.password) {
-      this.cipher = await BrowserFrameCipher.fromPassword(this.descriptor.password, this.descriptor.salt);
+    if (this.descriptor?.kind === "key" || this.descriptor?.kind === "password" && this.descriptor.password) {
+      this.finishUnlock("cancelled");
+      this.finishUnlock = beginProductOperation("terminal_unlock");
+      try {
+        this.cipher = this.descriptor.kind === "key" ? await BrowserFrameCipher.fromKey(this.descriptor.key) :
+          await BrowserFrameCipher.fromPassword(this.descriptor.password!, this.descriptor.salt);
+      } catch (error) { this.finishUnlock("failed"); throw error; }
     }
     if (this.needsPassword) {
       this.awaitingPassword = true;
@@ -149,7 +155,10 @@ export class TerminalConnection {
    */
   async submitPassword(password: string): Promise<void> {
     if (this.descriptor?.kind !== "password") return;
-    this.cipher = await BrowserFrameCipher.fromPassword(password, this.descriptor.salt);
+    this.finishUnlock("cancelled");
+    this.finishUnlock = beginProductOperation("terminal_unlock");
+    try { this.cipher = await BrowserFrameCipher.fromPassword(password, this.descriptor.salt); }
+    catch (error) { this.finishUnlock("failed"); throw error; }
     this.awaitingPassword = false;
     this.proven = false;
     this.open();
@@ -184,6 +193,8 @@ export class TerminalConnection {
   }
 
   close(): void {
+    this.finishConnect("cancelled");
+    this.finishUnlock("cancelled");
     this.stopped = true;
     if (this.retryTimer !== null) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -209,6 +220,8 @@ export class TerminalConnection {
 
   private open(): void {
     if (this.stopped) return;
+    this.finishConnect("cancelled");
+    this.finishConnect = beginProductOperation("terminal_connect");
     this.options.events.onStatus(this.waitingForCapacity ? "full" : "connecting");
 
     const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
@@ -232,6 +245,7 @@ export class TerminalConnection {
       if (this.stopped || this.socket !== socket) return;
       if (!analyticsConnected) {
         analyticsConnected = true;
+        this.finishConnect("ok");
         trackProduct("terminal_connected");
       }
       this.markAdmitted();
@@ -249,6 +263,9 @@ export class TerminalConnection {
 
     socket.addEventListener("close", (event: CloseEvent) => {
       if (this.stopped || this.socket !== socket) return;
+      this.finishConnect(terminalCloseOutcome(event.code));
+      this.finishUnlock(terminalCloseOutcome(event.code));
+      trackProduct("terminal_closed", { outcome: terminalCloseOutcome(event.code) });
       this.socket = null;
       if (event.code === CLOSE_MISSING) {
         this.options.events.onStatus("missing");
@@ -297,11 +314,13 @@ export class TerminalConnection {
         if (!isCurrent()) return;
         if (!this.proven) {
           this.proven = true;
+          this.finishUnlock("ok");
           this.options.events.onUnlocked?.();
         }
       } catch (error) {
         if (!isCurrent()) return;
         if (error instanceof E2EEReplayError) return;
+        this.finishUnlock("denied");
         /*
          * A frame that will not open means the derived key is wrong. Drop it,
          * stop retrying, and ask again rather than looping on bad output.

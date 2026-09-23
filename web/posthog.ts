@@ -2,6 +2,7 @@ import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
 import { sendPosthog, type PosthogCaptureContext } from "../shared/posthog";
 import { campaignMedium, campaignSource, classifyReferrer, publicSource } from "../shared/public-attribution";
+import { apiOperation, OPERATION_NAMES, type OperationOutcome } from "../shared/analytics-operations";
 
 const COOKIE = "__Host-shell_ph";
 const COOKIE_VALUE = /^([0-9a-f-]{36})\.([0-9a-f-]{36})\.(\d{13})$/;
@@ -98,6 +99,52 @@ export function trackProduct(event: string, input: Record<string, unknown> = {})
   } catch { /* Includes unavailable browser globals in server-side tests. */ }
 }
 
+/** One result per attempt; telemetry must not observe arguments/results or change the operation.
+ * Capture the starting route and anonymous identity. A completion after logout is discarded,
+ * not attributed to the next account. No product operation IDs or Shell session IDs are transmitted.
+ */
+export function beginProductOperation(operation: string, event: "feature_result" | "api_request" = "feature_result", method?: string): (outcome: OperationOutcome) => void {
+  if (!OPERATION_NAMES.has(operation)) return () => {};
+  const started = performance.now();
+  let finished = false;
+  let emit = (_name: string, _input: Record<string, unknown>) => {};
+  try {
+    const url = new URL(window.location.href), route = analyticsRoute(url);
+    if (route && permitted()) {
+      const { id } = browserIdentity(), acquisition = attribution(url);
+      emit = (name, input) => {
+        try {
+          if (!permitted()) return;
+          const current = browserIdentity();
+          if (current.id !== id) return;
+          void sendPosthog(name, id, { ...acquisition, ...route, operation, method, ...input, session_id: current.session }, browserContext());
+        } catch { /* No product impact. */ }
+      };
+    }
+  } catch { /* Non-browser/test environment. */ }
+  if (event === "feature_result") emit("feature_attempt", {});
+  return (outcome) => {
+    if (finished) return;
+    finished = true;
+    emit(event, { outcome, elapsed_ms: performance.now() - started });
+  };
+}
+
+export async function measureProductOperation<T>(operation: string, work: () => Promise<T>): Promise<T> {
+  const finish = beginProductOperation(operation);
+  try {
+    const result = await work(); finish("ok"); return result;
+  } catch (error) {
+    finish(error instanceof Error && error.name === "AbortError" ? "cancelled" : "failed");
+    throw error;
+  }
+}
+
+export function beginApiRequest(path: string, method: string): (outcome: OperationOutcome) => void {
+  const operation = apiOperation(path, method);
+  return operation ? beginProductOperation(operation, "api_request", method) : () => {};
+}
+
 /** One page view per navigation. One real 10s foreground milestone, no polling pings. */
 export function observeProductPage(): () => void {
   try {
@@ -188,7 +235,7 @@ export function trackAppAction(path: string, method: string, ok: boolean, failur
 
 /** Call-through measurement: no arguments, results or thrown error contents captured. */
 export async function measureAuthentication<T>(
-  action: "sign_in" | "sign_up" | "provider_sign_in", provider: "email" | "google" | "oidc", work: () => Promise<T>,
+  action: "sign_in" | "sign_up" | "provider_sign_in" | "password_reset", provider: "email" | "google" | "oidc", work: () => Promise<T>,
 ): Promise<T> {
   trackProduct("auth_attempt", { action, provider });
   try {

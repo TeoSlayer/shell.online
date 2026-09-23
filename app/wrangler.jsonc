@@ -24,6 +24,7 @@
   ],
   "triggers": { "crons": ["*/5 * * * *"] },
   "vars": {
+    "POSTHOG_ENABLED": "1",
     // The provider whose ID tokens the API accepts. A Firebase deployment
     // sets FIREBASE_PROJECT_ID instead and leaves these two empty; the
     // service reads whichever is filled in.
