@@ -74,7 +74,11 @@ const until=async(expression,label)=>{for(let i=0;i<160;i++){if(await browser.ev
 async function choose(theme){
   await browser.evaluate(`fixture.navigate('/account')`);
   await until(`!!document.querySelector('[aria-label="Color theme"]')`,'theme selector');
-  await browser.evaluate(`(()=>{const s=document.querySelector('[aria-label="Color theme"]');s.value=${JSON.stringify(theme)};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await browser.call(value=>{
+    const select=document.querySelector('[aria-label="Color theme"]');
+    select.value=value;
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+  },theme);
   await delay(80);
 }
 async function inspect(label,theme){
