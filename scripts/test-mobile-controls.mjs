@@ -127,8 +127,13 @@ if (!appShellStylesheet.includes(':root[data-pane="open"] .shell')) {
  * mid-scroll moves it again. `--app-height` is the layout viewport, measured;
  * `--keyboard-inset` is what the keyboard covers of it. See lib/app-height.ts.
  */
-if (!/\.shell \{\s*height: calc\(var\(--app-height/.test(appShellStylesheet)) {
-  throw new Error("The phone shell must be sized from --app-height, with dvh only as the fallback");
+/*
+ * One height, one source, every page. The bar at the foot of a phone is the
+ * bottom edge of the shell, so a page that computes that height a second way
+ * puts the bar somewhere else -- which a session did.
+ */
+if (!/\.shell \{[^}]*height: var\(--visible-height/s.test(appShellStylesheet)) {
+  throw new Error("Every phone page must size its shell from --visible-height");
 }
 
 /*
@@ -141,8 +146,23 @@ if (!/\.shell \{\s*height: calc\(var\(--app-height/.test(appShellStylesheet)) {
  * short by their difference, which is the bottom bar lifted off the foot of
  * the screen with dead page beneath it.
  */
-if (!/:root\[data-pane="open"\] \.shell \{\s*height: var\(--visible-height/.test(appShellStylesheet)) {
-  throw new Error("A session column must be sized from --visible-height alone, not from two terms that can disagree");
+if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.shell \{\s*height: var\(--typing-height/.test(appShellStylesheet)) {
+  throw new Error("A session must hold its height while the keyboard is up, or the terminal refits");
+}
+
+/*
+ * The chat renderer has no accent of its own.
+ *
+ * It used the app's blue for what the viewer sent and its acid green for a
+ * program reading keys, and next to a conversation those read as two more
+ * things asking to be looked at. A chat is mostly other people's text. Red
+ * stays, because a command that failed is a fact about the session rather
+ * than decoration, and so do the colours a process writes its own output in.
+ */
+for (const accent of ["--blue", "--blue-deep", "--blue-wash", "--acid"]) {
+  if (appChatStylesheet.split("\n").some((line) => !line.trim().startsWith("*") && line.includes(`var(${accent})`))) {
+    throw new Error(`The chat renderer must not reach for ${accent}; it takes the app's own neutrals`);
+  }
 }
 
 /*
@@ -153,8 +173,17 @@ if (!/:root\[data-pane="open"\] \.shell \{\s*height: var\(--visible-height/.test
  * typing, blank screen where the grid no longer reaches, and a bar that comes
  * back a centimetre from where it left. The composer is what rises.
  */
-if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail \{\s*display: flex;/.test(appShellStylesheet)) {
-  throw new Error("A session's bottom bar must not be taken out of the layout for a keyboard");
+
+/*
+ * Both declarations, and both are load-bearing. `display` restores the row the
+ * general rule took away, so the pane keeps its size and the terminal in it
+ * does not refit; `visibility` is what stops the bar being drawn -- and it has
+ * to, because a session is taller than the visible page while a keyboard is up
+ * and a phone scrolls the visible page to follow a focused field, which walked
+ * a still-drawn bar up into the middle of the canvas.
+ */
+if (!/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail \{[^}]*display: flex;[^}]*visibility: hidden;/s.test(appShellStylesheet)) {
+  throw new Error("A session's bar must keep its row (display) and stop being drawn (visibility)");
 }
 if (!/\.chat-composer \{[^}]*translateY\(calc\(-1 \* \(var\(--chat-dock\) \+ var\(--keyboard-inset/s.test(appChatStylesheet)) {
   throw new Error("The composer is what rises for the keyboard, by --keyboard-inset");

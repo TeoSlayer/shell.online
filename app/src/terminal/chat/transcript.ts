@@ -238,9 +238,18 @@ export class Transcript {
    * interface is not echoing anything, it is drawing its own record of the
    * conversation, and there is no second copy coming.
    */
-  fromAgent(utterance: AgentUtterance, at: number): Message {
+  fromAgent(utterance: AgentUtterance, at: number): Message | null {
     if (utterance.kind !== "received") this.close(at);
     if (utterance.kind === "sent") {
+      /*
+       * A prompt read off an agent's screen is not always news. One sent from
+       * this browser is already in the thread as the message that caused it,
+       * and the agent draws it into its own conversation a moment later --
+       * which without this arrives as the same prompt a second time. It is
+       * the same echo rule the line-oriented half applies, and the same queue
+       * of commands waiting to be recognised.
+       */
+      if (this.consumedAsEcho(plainLine(utterance.text))) return null;
       return this.push({ kind: "sent", at, text: utterance.text, lines: [], open: false });
     }
     if (utterance.kind === "tool") {
@@ -264,10 +273,22 @@ export class Transcript {
       growing ??
       this.push({ kind: "received", at, text: "", lines: [], open: true });
     if (!growing) this.open = target;
-    target.lines = utterance.lines.slice();
-    target.preformatted = utterance.preformatted;
-    this.touch(target);
-    this.lastGrewAt = at;
+    /*
+     * Only when it actually changed.
+     *
+     * The paragraph an agent is writing is offered again on every frame of
+     * its screen, which for a program that repaints while it thinks is many
+     * times a second and almost always the same words. Bumping the revision
+     * regardless told the view something had happened, and the view rebuilt
+     * the message -- so a conversation sitting still twitched, and one that
+     * was growing shook rather than grew.
+     */
+    if (differs(target.lines, utterance.lines) || target.preformatted !== utterance.preformatted) {
+      target.lines = utterance.lines.slice();
+      target.preformatted = utterance.preformatted;
+      this.touch(target);
+      this.lastGrewAt = at;
+    }
     if (!utterance.open) this.close(at);
     return target;
   }
@@ -493,6 +514,10 @@ export class Transcript {
   close(at: number): void {
     this.agentOwned = false;
     if (!this.open) return;
+    if (this.open.open === false) {
+      this.open = null;
+      return;
+    }
     /* A live screen card is closed by the program exiting, not by a pause. */
     if (this.open.kind === "screen" && this.open.live) return;
     this.open.open = false;
@@ -615,6 +640,24 @@ export class Transcript {
  */
 function echoMatches(line: string, command: string): boolean {
   return command !== "" && line.endsWith(command);
+}
+
+/** Whether a message's lines are not the ones it already has. */
+function differs(had: readonly TranscriptLine[], next: readonly TranscriptLine[]): boolean {
+  if (had.length !== next.length) return true;
+  for (let index = 0; index < had.length; index += 1) {
+    const previous = had[index];
+    const current = next[index];
+    if (previous.text !== current.text || previous.runs.length !== current.runs.length) return true;
+    for (let run = 0; run < previous.runs.length; run += 1) {
+      const a = previous.runs[run];
+      const b = current.runs[run];
+      if (a.text !== b.text || a.fg !== b.fg || a.bg !== b.bg ||
+          a.bold !== b.bold || a.dim !== b.dim || a.italic !== b.italic ||
+          a.underline !== b.underline) return true;
+    }
+  }
+  return false;
 }
 
 function lastScreen(items: readonly Message[]): Message | null {

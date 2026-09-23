@@ -6,6 +6,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- Teammates can ask a session's owner for its password from the unlock prompt.
+  Approval seals a password copy to the teammate's vault in the owner's browser;
+  the service stores the encrypted copy, not the password.
 - Report a problem without signing in, through the same form in the app and
   shared terminal links. Signed-in users can also omit their account and email.
   Anonymous reports cannot receive replies; body limits and rate limits apply.
@@ -17,6 +20,14 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Chat no longer treats wrapped, unsent Claude Code input as a submitted message
+  or repeats a prompt sent from the same browser. Unchanged frames avoid redraws,
+  while terminal colour and formatting changes are still rendered.
+- Mobile keyboard transitions keep terminal and chat panes at a stable size.
+  Navigation is hidden while typing without collapsing its layout row; password
+  forms keep their own scroll area. Activity indicators remain available.
+- Opening a terminal password form no longer automatically scrolls past the
+  heading and unlock choices when focusing the password field.
 - Opening a session from its detail link is consumed once, even if terminal
   activity updates arrive before the address-bar navigation finishes.
 - Locked-terminal forms scroll within the app on short phone screens, keeping

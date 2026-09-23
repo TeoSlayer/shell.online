@@ -212,6 +212,7 @@ jobs:
           node app/scripts/test-terminal-refit-ui.mjs
           node scripts/test-terminal-paste-ui.mjs
           node app/scripts/test-feedback-route.mjs
+          node app/scripts/test-password-requests-ui.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
           SHELL_BROWSER: chrome

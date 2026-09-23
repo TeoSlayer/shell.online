@@ -7,8 +7,15 @@
    never the thing hidden behind the controls.
 
    Radii follow the app rule: chips 7px, controls 10px, panels 18px.
-   The accent is --blue on paper, which is the only accent this app
-   uses outside the dark terminal panel.
+
+   No accent of its own. This used the app's blue for what the viewer
+   sent and its acid green for a program reading keys, and next to a
+   conversation those read as two more things asking to be looked at.
+   A chat is mostly other people's text; the only colour it needs is
+   the one that separates what you said from what came back, and the
+   app already has it -- the near-black it puts on its own primary
+   controls. Red stays, because a command that failed is a fact about
+   the session rather than decoration.
    --------------------------------------------------------------- */
 
 /*
@@ -30,6 +37,14 @@
   position: relative;
   /* How far the composer floats above the foot of the pane; see the phone rules. */
   --chat-dock: 14px;
+  /*
+   * One comfortable line length, shared by the thread and the box that talks
+   * to it. They had two -- 940px for the thread and 720px for the composer --
+   * and only the composer was centred, so on a wide window the conversation
+   * sat against the left edge with a strip of nothing down the right of it
+   * and the box underneath lined up with neither side of it.
+   */
+  --chat-measure: 940px;
   display: flex;
   width: 100%;
   height: 100%;
@@ -65,12 +80,76 @@
 .chat-thread {
   display: flex;
   /* A comfortable line length on a wide pane, never a width to lay out to. */
+  width: 100%;
   min-width: 0;
-  max-width: 940px;
+  max-width: var(--chat-measure);
   flex-direction: column;
   margin-top: auto;
+  margin-inline: auto;
   /* Messages within a turn sit together; turns are separated below. */
-  gap: 3px;
+  gap: 5px;
+}
+
+/* --- before there is anything to read ---------------------------- */
+
+/*
+ * A session takes a moment to connect and an agent longer still to draw its
+ * first screen. An empty thread says nothing about whether anything is
+ * happening: it looks the same as a session that has finished and the same as
+ * one that is broken.
+ */
+.chat-waiting {
+  display: flex;
+  padding: 28px 0;
+  /* Centred in the empty pane rather than hanging from the top of it. */
+  margin-block: auto;
+  align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-waiting[hidden] {
+  display: none;
+}
+
+.chat-waiting-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.chat-waiting-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  animation: chat-waiting 1.25s var(--ease) infinite;
+  background: var(--faint);
+}
+
+.chat-waiting-dot:nth-child(2) { animation-delay: 0.16s; }
+
+.chat-waiting-dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes chat-waiting {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 0.9; }
+}
+
+.chat-waiting-label {
+  margin: 0;
+  color: var(--faint);
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+/*
+ * Still says which of the three it is, without moving. The dots are the only
+ * thing animating and they are the only thing that has to stop.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .chat-waiting-dot {
+    animation: none;
+    opacity: 0.55;
+  }
 }
 
 /* --- one message ------------------------------------------------ */
@@ -91,7 +170,7 @@
  * messaging interface does and what this was missing.
  */
 .chat-msg[data-grouped="false"] {
-  margin-top: 13px;
+  margin-top: 18px;
 }
 
 .chat-thread > .chat-msg:first-child {
@@ -109,10 +188,10 @@
 .chat-bubble {
   position: relative;
   max-width: 100%;
-  padding: 8px 13px;
-  border-radius: 19px;
+  padding: 11px 16px;
+  border-radius: 20px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.58;
 }
 
 /*
@@ -196,20 +275,18 @@
   border-top-left-radius: 7px;
 }
 
+/*
+ * The app's own primary surface, which is what its buttons are made of. It
+ * is the one thing in the thread that is not the page's paper, which is all
+ * the separation a side of a conversation needs.
+ */
 .chat-sent .chat-bubble {
   border-bottom-right-radius: 7px;
-  background: var(--blue);
-  color: #fff;
+  background: var(--cta-bg);
+  color: var(--cta-fg);
   box-shadow: 0 1px 2px rgb(26 31 22 / 10%);
   font-weight: 500;
 }
-
-/* Dark mode's blue is a light accent, so the text on it goes dark. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .chat-sent .chat-bubble { color: #10130c; }
-}
-
-:root[data-theme="dark"] .chat-sent .chat-bubble { color: #10130c; }
 
 /* --- what the process wrote back -------------------------------- */
 
@@ -236,7 +313,7 @@
   border-radius: 1px;
   margin-left: 1px;
   animation: chat-caret 1.1s steps(2, start) infinite;
-  background: var(--blue);
+  background: var(--ink-soft);
   content: "";
   vertical-align: text-bottom;
 }
@@ -261,7 +338,7 @@
   padding: 6px 0 0;
   border: 0;
   background: none;
-  color: var(--blue-deep);
+  color: var(--ink);
   cursor: pointer;
   font-family: var(--sans);
   font-size: 12px;
@@ -415,8 +492,8 @@
 .chat-screen-state {
   padding: 1px 8px;
   border-radius: var(--radius-chip);
-  background: color-mix(in srgb, var(--acid) 18%, transparent);
-  color: var(--acid);
+  background: color-mix(in srgb, var(--terminal-ink) 14%, transparent);
+  color: var(--terminal-ink);
   flex: none;
   font-size: 10px;
   letter-spacing: 0.06em;
@@ -474,7 +551,7 @@
   bottom: 0;
   left: 0;
   display: flex;
-  max-width: 720px;
+  max-width: var(--chat-measure);
   padding: 7px 7px 7px 9px;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
@@ -499,8 +576,8 @@
 }
 
 .chat-composer:focus-within {
-  border-color: color-mix(in srgb, var(--blue) 55%, var(--line-strong));
-  box-shadow: 0 12px 38px rgb(26 31 22 / 16%), 0 0 0 3px var(--blue-wash);
+  border-color: var(--ink-soft);
+  box-shadow: 0 12px 38px rgb(26 31 22 / 16%), 0 0 0 3px color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
 .chat-composer[data-disabled="true"] { opacity: 0.7; }
@@ -574,7 +651,7 @@
  * dead input and an input that is doing exactly what it should.
  */
 .chat-surface[data-direct="true"] .chat-composer {
-  border-color: color-mix(in srgb, var(--acid) 45%, var(--line-strong));
+  border-color: var(--ink-soft);
 }
 
 .chat-surface[data-direct="true"] .chat-input {
@@ -602,7 +679,7 @@
   box-shadow: 0 6px 18px rgb(26 31 22 / 12%);
 }
 
-.chat-jump:hover { color: var(--blue-deep); }
+.chat-jump:hover { color: var(--ink); }
 
 /* --- phones ------------------------------------------------------ */
 
@@ -683,12 +760,12 @@
   }
 
   .chat-composer:focus-within .chat-row {
-    border-color: color-mix(in srgb, var(--blue) 55%, var(--line-strong));
-    box-shadow: 0 0 0 3px var(--blue-wash);
+    border-color: var(--ink-soft);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 9%, transparent);
   }
 
   .chat-surface[data-direct="true"] .chat-row {
-    border-color: color-mix(in srgb, var(--acid) 45%, var(--line-strong));
+    border-color: var(--ink-soft);
   }
 
   .chat-scroll {

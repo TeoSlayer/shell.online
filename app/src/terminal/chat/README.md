@@ -224,9 +224,23 @@ out because it is the row being written, and `flush` exists for the row a
 program *finished* on, which looks identical and differs only in that no frame
 follows it.
 
-`claude-code.ts` reads the real shape. Everything from the composer down is
-dropped by position, because what is between those rules is a line somebody is
-part-way through typing. `❯` is a prompt somebody sent. `⏺` is the agent
+`claude-code.ts` reads the real shape. **The composer is whatever lies between
+the last two rules**, whatever it says and however many rows it has grown to,
+and everything from the first of that pair down is dropped. That is a rule
+about position rather than about content on purpose: what is in there is a
+line somebody is part-way through typing, and it must not be read at all until
+they send it. Read by shape instead -- walk up over anything that looks like
+furniture and drop the first prompt line found -- it works right up until the
+line being typed is long enough to wrap, and then the rows below it are
+ordinary text: the walk stops at the first of them and gives out everything
+below, so half of somebody's half-finished sentence arrives on another device
+as a message they had not sent. It arrives properly the moment they do send
+it, because the program moves it out of the composer and into the conversation
+itself.
+
+A prompt read back that way is dropped when this browser is what sent it: it
+is already in the thread as the message that caused it, and the same echo
+queue the line-oriented half uses recognises it. `❯` is a prompt somebody sent. `⏺` is the agent
 speaking, and what follows it, indented, is the rest of what it said. An
 indented line *before* the agent has spoken in a turn is a tool and the one
 line it reported -- the two look identical and only their position tells them
@@ -351,6 +365,20 @@ as a grid, and the grid is now sized so the session's whole width is on the
 screen wherever that is possible at a legible size. On a phone eighty columns
 is not, so it keeps a legible size and scrolls sideways; on a tablet it fits.
 
+## Colour
+
+None of its own. This used the app's blue for what the viewer sent and its
+acid green for a program reading keys, and next to a conversation those read
+as two more things asking to be looked at. A chat is mostly other people's
+text, and the only colour it needs is the one that separates what you said
+from what came back -- which the app already has, in the near-black it puts on
+its own primary controls.
+
+Two things keep their colour. Red, because a command that exited non-zero is a
+fact about the session rather than decoration. And whatever a process writes
+its own output in: those are the program's colours, faithfully rendered, and
+they are data.
+
 ## Phones
 
 Everything here was a bug before it was a rule.
@@ -378,21 +406,15 @@ conversation, and a box at the foot of the screen that is typed into. While
 the page could also move, the box was wherever the page had been left rather
 than under the thumb.
 
-So `keyboard-inset.ts` marks the root `data-pane="open"` while a pane is the
-page, and `shell.css` turns the shell into a column exactly one screen tall,
-less whatever the keyboard is covering. The bottom bar is a row of that column
-rather than something fixed on top of it, and the pane is the row that takes
-what is left. **Nothing measures a height.** It used to: the pane was given
-one worked out in JavaScript from where its top edge was, taken once, and
-stale from the next layout onwards -- a tab line wrapping or a notice
-appearing above it left the conversation in a short box in the middle of the
-screen with a strip of dead page underneath. A flex row is the same answer,
-recomputed by the browser on every layout.
+`keyboard-inset.ts` marks the root `data-pane="open"` while a pane is the
+page. `app-height.ts` publishes the visible viewport height app-wide, including
+before the pane loads. `shell.css` lays out the bottom bar as a row and gives
+the pane the remaining space. While typing, the session holds its pre-keyboard
+height; other pages shrink with the visible viewport.
 
-**The composer sits on the foot of the pane, and that is the foot of the
-screen.** `--chat-dock` is 8px and does not change, because the pane's own
-foot is the top of the bar -- or the top of the keyboard, once the keyboard
-has taken the bar away. There is exactly one place the clearance is decided.
+**The composer sits at the foot of the pane.** `--chat-dock` is 8px and does
+not change. The keyboard inset lifts the composer when needed, independently
+of the held terminal grid. There is exactly one place the clearance is decided.
 There used to be two, and the two added up: a composer a bar's height above a
 pane that had already stopped a bar's height above the screen.
 
@@ -401,19 +423,19 @@ phone that must not: the terminal inside it is a grid of a fixed number of
 columns, so a pane that shrinks refits that grid to a smaller font -- text
 that shrinks as you start typing, and a strip of blank screen where the grid
 no longer reaches -- and the refit coming back is a bar that arrives a
-centimetre from where it left. So `--visible-height` is measured while the
-keyboard is down and held while it is up, and the keyboard simply covers the
+centimetre from where it left. `--visible-height` follows the visual viewport;
+`--typing-height` preserves the pre-keyboard height while typing. The keyboard covers the
 foot of the session. What rises is the composer, by exactly `--keyboard-inset`,
-with the thread making the same room under itself. The bar stays where it is,
-behind the keyboard, because taking it out of the layout would resize the pane
-for no reason anybody can see.
+with the thread making the same room under itself. The bar's row stays in the
+layout, but the bar becomes invisible and cannot receive input. Otherwise
+viewport panning could reveal it over the terminal.
 
-**The bar leaves when the keyboard arrives, on every page but a session.** A
+**Navigation is hidden while the keyboard is open.** A
 document page does shrink to the space above the keyboard, so its bar has to
 leave or it would be underneath one. `keyboard-inset.ts` publishes
 `--keyboard-inset` and `data-keyboard="open"` on the root, and `shell.css`
-takes the bar's row out on that -- except where a pane is open, for the reason
-above.
+takes the bar's row out on document pages. A session keeps the row and uses
+`visibility: hidden` instead, avoiding a terminal refit.
 
 **The composer is docked with a transform**, not with `bottom`. The dock used
 to animate as a layout property, which re-laid out the thread behind it on

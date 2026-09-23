@@ -242,6 +242,24 @@ try {
   await evaluate(`(() => { pw.navigate('/sessions?open=pw-test'); return true; })()`);
   await waitFor(() => evaluate(`!!document.querySelector('.pane-gate-ask .btn')`), 'ask button on the Decrypt form');
   assert.match(await evaluate(`document.querySelector('.pane-gate-ask .btn').textContent`), /Ask Olivia for the password/);
+  for (const width of [320, 390]) {
+    await transport.setViewport({ width, height: 650, dpr: 2, mobile: true });
+    await delay(150);
+    await evaluate(`document.querySelector('.pane-gate-ask .btn').scrollIntoView({block:'center'})`);
+    await delay(100);
+    const bounds = await evaluate(`(() => {
+      const gate = document.querySelector('.pane-gate').getBoundingClientRect();
+      const ask = document.querySelector('.pane-gate-ask .btn').getBoundingClientRect();
+      return { reachable: ask.top >= gate.top - 1 && ask.bottom <= gate.bottom + 1,
+        fits: ask.left >= -1 && ask.right <= innerWidth + 1, height: ask.height,
+        overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+    })()`);
+    assert(bounds.reachable && bounds.fits && !bounds.overflow, `Phone password request is scroll-reachable at ${width}px: ${JSON.stringify(bounds)}`);
+    assert(bounds.height >= 44, 'Password request remains a usable touch target');
+  }
+  await transport.setViewport({ width: 1280, height: 860, dpr: 2, mobile: false });
+  await delay(150);
+  console.log('PASS: password request is reachable on 320px and 390px phones');
   await shot('2-decrypt-form-ask');
   assert.equal(await evaluate(`pw.click('.pane-gate-ask .btn')`), true);
   await waitFor(() => evaluate(`document.querySelector('.pane-gate-ask')?.textContent.includes('Asked Olivia')`), 'asked state');

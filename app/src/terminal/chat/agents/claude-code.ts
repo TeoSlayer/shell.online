@@ -55,10 +55,33 @@ const PROMPT = /^❯\s?(.*)$/u;
 const SPOKE = /^⏺\s+(.*)$/u;
 
 /**
- * A status line: how long it took, what mode it is in, what is wrong with the
- * login. None of it is an utterance and most of it changes every frame.
+ * A status line. None of it is an utterance and most of it changes every
+ * frame, so shown it would be a message per repaint.
+ *
+ * Four shapes, all of them real:
+ *
+ *     ✽ Flowing… (8m 57s · ↓ 10.8k tokens)      a spinner, and what it costs
+ *     ⏵⏵ auto mode on (shift+tab to cycle)      what mode it is in
+ *     Tip: Use /config to change your…          advice nobody asked for
+ *     ✔ Update installed · Restart to update    news about the program
+ *
+ * The spinner cycles through a whole block of stars and sparkles rather than
+ * one glyph, so the range is matched rather than the handful anybody happens
+ * to have seen. The tip and the update line have no marker at all and are
+ * matched on what they say, which is the only thing they have.
  */
-const STATUS = /^[✻✶✳✢⚠⏵⏸◐◑◒◓·⋯]/u;
+const STATUS =
+  /^(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓·⋯]|Tip:|Update installed\b|Restart to update\b)/u;
+
+/**
+ * The same, anywhere on the line.
+ *
+ * A terminal is wide, and a program with two things to say puts one at each
+ * end of the same row: `Tip: … ✔ Update installed · Restart to update`. The
+ * row starts as a tip, so matching the start is enough for that one -- but a
+ * row that starts with something else and ends in an update is still status.
+ */
+const STATUS_TAIL = /(?:✓|✔)\s*Update installed|Restart to update/u;
 
 /** Anything indented under the marker above it. */
 const INDENTED = /^\s+\S/u;
@@ -69,7 +92,7 @@ const INDENTED = /^\s+\S/u;
  * The same markers as STATUS but allowed an indent, because the lines under
  * the composer are indented and the ones above it are not.
  */
-const FURNITURE = /^\s*[✻✶✳✢⚠⏵⏸◐◑◒◓]/u;
+const FURNITURE = /^\s*(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓]|Tip:)/u;
 
 /**
  * The glyph Claude Code puts in front of the window title.
@@ -166,7 +189,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
 
       /* Not an utterance, and most of it changes every frame. */
-      if (STATUS.test(line)) {
+      if (STATUS.test(line) || STATUS_TAIL.test(line)) {
         this.close(utterances);
         continue;
       }
@@ -250,19 +273,45 @@ export class ClaudeCodeAdapter implements AgentAdapter {
  * arrive in the thread as a message.
  */
 export function strip(frame: readonly string[]): string[] {
+  /*
+   * The composer is whatever lies between the last two rules, whatever it
+   * happens to say and however many rows it has grown to. That is the whole
+   * rule, and it is a rule about position rather than about content on
+   * purpose: what is in there is a line somebody is part-way through typing,
+   * and it must not be read at all until they send it.
+   *
+   * It used to be read by shape -- walk up from the foot of the screen over
+   * anything that looked like furniture, and drop the first prompt line found
+   * -- which works right up until the line being typed is long enough to
+   * wrap. Then the rows below the prompt are ordinary text, the walk stops at
+   * the first of them, and everything from there down is given out: half of
+   * somebody's half-finished sentence, arriving on another device as a
+   * message they had not sent and as output they had not asked for.
+   *
+   * The rules are full-width and start at column zero. Anything the agent
+   * draws inside its conversation is indented under a marker, so a rule in
+   * what it said cannot be mistaken for one of these.
+   */
+  const rules: number[] = [];
+  for (let index = 0; index < frame.length; index += 1) {
+    if (RULE.test(frame[index])) rules.push(index);
+  }
+  if (rules.length >= 2) return frame.slice(0, rules[rules.length - 2]);
+  if (rules.length === 1) return frame.slice(0, rules[0]);
+
+  /*
+   * No rules yet: a program part-way through its first paint. Fall back to
+   * walking the furniture off the foot of the screen, and take the prompt
+   * with it.
+   */
   let end = frame.length;
   let droppedPrompt = false;
   for (let index = frame.length - 1; index >= 0; index -= 1) {
     const line = frame[index];
-    if (line.trim() === "" || RULE.test(line) || FURNITURE.test(line)) {
+    if (line.trim() === "" || FURNITURE.test(line)) {
       end = index;
       continue;
     }
-    /*
-     * The last prompt on the screen is the one being typed into. Any earlier
-     * one is a message somebody sent, so only the first found walking up is
-     * taken, and the walk stops at the line above it.
-     */
     if (!droppedPrompt && PROMPT.test(line)) {
       droppedPrompt = true;
       end = index;

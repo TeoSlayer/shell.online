@@ -219,6 +219,11 @@ export function TerminalPane({
   const [now, setNow] = useState(() => Date.now());
   const [readOnly, setReadOnly] = useState(false);
   const [password, setPassword] = useState("");
+  const focusPassword = useCallback((input: HTMLInputElement | null) => {
+    // Keep the heading and unlock choices visible. Native autofocus scrolls a
+    // tall gate directly to the field and can race the user's scroll gestures.
+    if (active) input?.focus({ preventScroll: true });
+  }, [active]);
   const [unlocking, setUnlocking] = useState(false);
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState("");
@@ -798,7 +803,7 @@ export function TerminalPane({
                   autoCapitalize="off"
                   spellCheck={false}
                   disabled={unlocking}
-                  autoFocus={active}
+                  ref={focusPassword}
                 />
                 <Button type="submit" busy={unlocking} busyLabel="Decrypting">
                   Decrypt terminal

@@ -364,3 +364,64 @@ describe("an answer with no blank line in it", () => {
     expect(received(transcript).map((message) => message.preformatted)).toEqual([false, true]);
   });
 });
+
+describe("a prompt read back off an agent's own screen", () => {
+  /*
+   * An agent draws the conversation it is having, so a prompt sent from this
+   * browser turns up on its screen a moment later. It is already in the
+   * thread as the message that caused it; without the echo rule it arrives a
+   * second time and the conversation stutters.
+   */
+  it("is not added again when this browser is what sent it", () => {
+    const transcript = new Transcript();
+    transcript.submitted("refactor the session store", 1000);
+    transcript.fromAgent({ kind: "sent", text: "refactor the session store", lines: [] }, 1010);
+
+    expect(texts(transcript)).toEqual(["refactor the session store"]);
+  });
+
+  it("is added when somebody typed it on the machine itself", () => {
+    const transcript = new Transcript();
+    transcript.fromAgent({ kind: "sent", text: "typed on the laptop", lines: [] }, 1010);
+
+    expect(texts(transcript)).toEqual(["typed on the laptop"]);
+  });
+});
+
+describe("unchanged agent frames", () => {
+  const answer = (runs = [{ text: "result", fg: "#ff0000" }]) => ({
+    kind: "received" as const, text: "", open: true, preformatted: false,
+    lines: [{ text: "result", runs }],
+  });
+
+  it("keeps the revision stable for equal content with new object identities", () => {
+    const transcript = new Transcript();
+    transcript.fromAgent(answer(), 1000);
+    const revision = transcript.revision;
+    const message = transcript.messages[0];
+    transcript.fromAgent(answer(), 1010);
+    expect(transcript.revision).toBe(revision);
+    expect(transcript.messages[0]).toBe(message);
+  });
+
+  it.each([
+    { fg: "#00ff00" }, { bg: "#000000" }, { bold: true }, { dim: true },
+    { italic: true }, { underline: true },
+  ])("publishes a style-only update: %j", (style) => {
+    const transcript = new Transcript();
+    transcript.fromAgent(answer(), 1000);
+    const revision = transcript.revision;
+    const runs = [{ text: "result", fg: "#ff0000", ...style }];
+    transcript.fromAgent(answer(runs), 1010);
+    expect(transcript.messages[0].lines[0].runs).toEqual(runs);
+    expect(transcript.revision).toBeGreaterThan(revision);
+  });
+
+  it("publishes changed run boundaries even when the plain text is unchanged", () => {
+    const transcript = new Transcript();
+    transcript.fromAgent(answer(), 1000);
+    const runs = [{ text: "re", fg: "#ff0000" }, { text: "sult", fg: "#00ff00" }];
+    transcript.fromAgent(answer(runs), 1010);
+    expect(transcript.messages[0].lines[0].runs).toEqual(runs);
+  });
+});

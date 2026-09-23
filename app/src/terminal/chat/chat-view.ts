@@ -106,6 +106,7 @@ export class ChatView {
   private readonly root: HTMLElement;
   private readonly scroller: HTMLElement;
   private readonly thread: HTMLElement;
+  private readonly waiting: HTMLElement;
   private readonly composer: HTMLFormElement;
   private readonly input: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
@@ -155,11 +156,28 @@ export class ChatView {
     root.innerHTML = "";
 
     this.scroller = el("div", "chat-scroll");
+    /*
+     * Something to look at before there is anything to read.
+     *
+     * A session takes a moment to connect, and an agent takes longer than
+     * that to draw its first screen. An empty thread in the meantime says
+     * nothing about whether anything is happening -- it looks the same as a
+     * session that has finished and the same as one that is broken.
+     */
+    this.waiting = el("div", "chat-waiting");
+    this.waiting.setAttribute("role", "status");
+    const waitingDots = el("div", "chat-waiting-dots");
+    waitingDots.setAttribute("aria-hidden", "true");
+    for (let dot = 0; dot < 3; dot += 1) waitingDots.append(el("span", "chat-waiting-dot"));
+    const waitingLabel = el("p", "chat-waiting-label");
+    waitingLabel.textContent = "Waiting for the session";
+    this.waiting.append(waitingDots, waitingLabel);
+
     this.thread = el("div", "chat-thread");
     this.thread.setAttribute("role", "log");
     this.thread.setAttribute("aria-live", "polite");
     this.thread.setAttribute("aria-label", "Session transcript");
-    this.scroller.append(this.thread);
+    this.scroller.append(this.waiting, this.thread);
 
     this.jump = el("button", "chat-jump") as HTMLButtonElement;
     this.jump.type = "button";
@@ -282,6 +300,7 @@ export class ChatView {
       previous = message;
     }
 
+    this.waiting.hidden = messages.length > 0;
     this.history = messages.filter((m) => m.kind === "sent" && m.text).map((m) => m.text);
     if (wasAtBottom) {
       this.scroller.scrollTop = this.scroller.scrollHeight;

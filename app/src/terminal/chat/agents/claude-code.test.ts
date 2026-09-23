@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ClaudeCodeAdapter, dedent, strip, unwrap } from "./claude-code";
-import { CLAUDE_EXCHANGE, CLAUDE_START, CLAUDE_TITLE } from "./fixtures/claude-code";
+import { CLAUDE_EXCHANGE, CLAUDE_START, CLAUDE_TITLE, CLAUDE_TYPING } from "./fixtures/claude-code";
 import { adapterFor } from "./index";
 import { plainLine } from "../transcript";
 
@@ -75,8 +75,8 @@ describe("taking the interface off", () => {
     expect(kept.join("\n")).not.toContain("─────");
     expect(kept.join("\n")).not.toContain("auto mode on");
     expect(kept.join("\n")).not.toContain("Transcript saving is off");
-    expect(kept.join("\n")).not.toContain("Cooked for 13s");
-    expect(kept.filter((line) => line.trim() !== "").at(-1)).toBe("  Done.");
+    /* The status line above the composer is `classify`'s to drop, not this. */
+    expect(kept.filter((line) => line.trim() !== "").at(-1)).toBe("✻ Cooked for 13s · done 8:29 PM");
   });
 
   it("keeps everything that was said", () => {
@@ -112,6 +112,59 @@ describe("reading a real exchange", () => {
     expect(shaped.join("\n")).not.toContain("login expires");
   });
 
+  /*
+   * Everything the program says about itself rather than about the work. The
+   * spinner cycles a whole block of glyphs, and the tip and the update line
+   * carry no marker at all.
+   */
+  it("says nothing for any of the shapes a status line comes in", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const frame = [
+      "❯ do the thing",
+      "",
+      "⏺ Working on it.",
+      "",
+      "✽ Flowing… (8m 57s · ↓ 10.8k tokens)",
+      "✻ Cooked for 13s · done 8:29 PM",
+      "◐ medium · /effort",
+      "Tip: Use /config to change your default permission mode (including Plan Mode",
+      "✔ Update installed · Restart to update",
+      "⏵⏵ auto mode on (shift+tab to cycle)",
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "────────────────────────────────────────",
+    ];
+    const said = shape(read(adapter, frame)).join("\n");
+    expect(said).toContain("Working on it.");
+    for (const noise of ["Flowing", "Cooked for", "medium", "Tip:", "Update installed", "auto mode on"]) {
+      expect(said).not.toContain(noise);
+    }
+  });
+
+  /*
+   * A wide terminal lets a program put two things at opposite ends of one
+   * row, so a line can start as a tip and end as an update.
+   */
+  it("says nothing for two status lines sharing a row", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const frame = [
+      "❯ ask",
+      "",
+      "⏺ answered",
+      "",
+      "  Tip: use /config for the permission mode          ✔ Update installed · Restart to update",
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "────────────────────────────────────────",
+    ];
+    const said = shape(read(adapter, frame)).join("\n");
+    expect(said).toContain("answered");
+    expect(said).not.toContain("Update installed");
+    expect(said).not.toContain("Tip:");
+  });
+
   it("says nothing for a status line", () => {
     const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
     expect(shaped).not.toContain("Cooked for");
@@ -135,6 +188,66 @@ describe("reading a real exchange", () => {
     const adapter = new ClaudeCodeAdapter();
     const typing = CLAUDE_EXCHANGE.map((line) => (line === "❯" ? "❯ half a thought" : line));
     expect(shape(read(adapter, typing)).join("\n")).not.toContain("half a thought");
+  });
+
+  /*
+   * The case that reached somebody's phone: typing on a laptop, where the
+   * line being written wraps inside the composer. Read by shape, the rows
+   * below the prompt are ordinary text, so the walk up from the foot of the
+   * screen stopped at the first of them and gave the rest out -- half a
+   * half-finished sentence arriving elsewhere as a message nobody had sent.
+   */
+  it("never gives out a line being typed that has wrapped onto more rows", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const typing = [
+      "❯ an earlier question",
+      "",
+      "⏺ an earlier answer",
+      "",
+      "────────────────────────────────────────",
+      "❯ this is a long thought that somebody is",
+      "  still in the middle of writing and it has",
+      "  wrapped onto three rows of the box",
+      "────────────────────────────────────────",
+      "  ⏵⏵ auto mode on",
+    ];
+    const said = shape(read(adapter, typing)).join("\n");
+    expect(said).not.toContain("still in the middle of writing");
+    expect(said).not.toContain("wrapped onto three rows");
+    expect(said).not.toContain("this is a long thought");
+    /* What was actually said is still there. */
+    expect(said).toContain("an earlier question");
+  });
+
+  /* The same thing, from a frame captured while it was actually being typed. */
+  it("says nothing at all for a real screen with an unsent line on it", () => {
+    const adapter = new ClaudeCodeAdapter();
+    expect(shape(read(adapter, CLAUDE_TYPING))).toEqual([]);
+  });
+
+  /*
+   * And it arrives the moment it is sent, because the program itself moves it
+   * out of the composer and up into the conversation.
+   */
+  it("gives it out once it has been sent", () => {
+    const adapter = new ClaudeCodeAdapter();
+    read(adapter, [
+      "────────────────────────────────────────",
+      "❯ a thought half written",
+      "────────────────────────────────────────",
+    ]);
+    const sent = shape(
+      read(adapter, [
+        "❯ a thought half written, now finished",
+        "",
+        "⏺ working on it",
+        "",
+        "────────────────────────────────────────",
+        "❯",
+        "────────────────────────────────────────",
+      ]),
+    );
+    expect(sent).toContain("sent:a thought half written, now finished");
   });
 });
 

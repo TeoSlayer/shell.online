@@ -685,7 +685,18 @@
    * keyboard-inset.ts), so it is subtracted outside that division.
    */
   .shell {
-    height: calc(var(--app-height, calc(100dvh / var(--zoom))) - var(--keyboard-inset, 0px));
+    /*
+     * One height, one source, every page. The bar at the foot of a phone is
+     * the bottom edge of this box, so a page that works its height out a
+     * second way puts the bar somewhere else -- which a session did, and its
+     * bar sat higher than every other page's because of it.
+     *
+     * `--visible-height` is `visualViewport.height`: whatever is covering the
+     * bottom of the screen, a keyboard or a browser toolbar, is already not
+     * in it. `dvh` is only what to use for the frame before the first
+     * measurement lands.
+     */
+    height: var(--visible-height, calc(100dvh / var(--zoom)));
     min-height: 0;
     overflow: hidden;
     grid-template-columns: minmax(0, 1fr);
@@ -719,24 +730,22 @@
   }
 
   /*
-   * A session's column is the visible page, measured once, from one source.
+   * A session is the one page that does not shrink for a keyboard.
    *
-   * Everywhere else on a phone the shell is `--app-height` less
-   * `--keyboard-inset`, which is correct arithmetic between two numbers that
-   * only agree if every engine means the same thing by `window.innerHeight`
-   * while a keyboard is up. They do not, and the two are published by two
-   * modules listening to the same event, so a frame can be laid out with a
-   * new value of one and a stale value of the other. When they disagree the
-   * column is short by exactly their difference, which is the bottom bar
-   * lifted off the foot of the screen with a strip of dead page beneath it
-   * and the conversation squeezed into what is left.
+   * The terminal in it is a grid of a fixed number of columns, so a pane that
+   * changes size refits that grid to a smaller font: text that shrinks as you
+   * start typing, and blank screen where the grid no longer reaches. Coming
+   * back it refits again, and the bar arrives a centimetre from where it
+   * left. `--typing-height` is what the visible page was before the keyboard
+   * covered it; see lib/app-height.ts, which publishes it app-wide so that it
+   * is right before a pane exists -- a session opened with the keyboard
+   * already up has nothing to hold otherwise.
    *
-   * `--visible-height` is `visualViewport.height` and nothing else: whatever
-   * is covering the bottom of the screen is already not in it. Nothing is
-   * subtracted, so there is nothing to disagree with. See keyboard-inset.ts.
+   * Every other page shrinks, which is the right answer for a document with a
+   * form in it, and is what keeps the bar in one place across all of them.
    */
-  :root[data-pane="open"] .shell {
-    height: var(--visible-height, calc(100dvh / var(--zoom)));
+  :root[data-pane="open"][data-keyboard="open"] .shell {
+    height: var(--typing-height, var(--visible-height, calc(100dvh / var(--zoom))));
   }
 
   /*
@@ -818,19 +827,32 @@
   }
 
   /*
-   * Except in a session, where nothing moves for a keyboard.
+   * Except in a session, where it goes invisible rather than going away.
    *
    * A document page shrinks to the space above the keyboard, so its bar has
-   * to leave or it would be under one. A session does not shrink -- the
+   * to leave or it would be under one. A session does not shrink: the
    * terminal in it is a grid of a fixed number of columns, and a pane that
-   * changes size refits that grid to a different font -- so its bar is simply
-   * behind the keyboard while the keyboard is there, and taking it out of the
-   * layout would resize the pane for no reason anybody can see. That resize,
-   * and the one coming back from it, is the bar arriving a centimetre above
-   * where it started.
+   * changes size refits that grid to a different font. Taking the bar out of
+   * the layout is such a change -- its row collapses, the pane grows into it,
+   * and the refit coming back is the bar arriving a centimetre from where it
+   * started.
+   *
+   * So the row stays and only the bar stops being drawn. `display: none` and
+   * `display: flex` were both wrong in their own direction: the first resizes
+   * the pane, and the second leaves a bar that can be scrolled to. A session
+   * is taller than the visible page while a keyboard is up, and a phone
+   * scrolls the visible page to keep a focused field in view -- which on a
+   * terminal walked the bar up into the middle of the canvas.
    */
   :root[data-pane="open"][data-keyboard="open"] .rail {
+    /*
+     * Both, and both are load-bearing. `display` restores the row the general
+     * rule above took away, so the pane keeps its size; `visibility` is what
+     * stops the bar being drawn in it.
+     */
     display: flex;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   /* The wordmark, the copy-command hint and the account row all live in the

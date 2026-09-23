@@ -57,14 +57,15 @@ const built = await build({
     };
     function VaultProbe(){window.layoutVault=useVault();return null;}
     function Fixture(){
-      const panes=useRef(null),[mode,setMode]=useState('terminal'),[share,setShare]=useState();
+      const panes=useRef(null),[mode,setMode]=useState('terminal'),[share,setShare]=useState(),[renderer,setRenderer]=useState('xterm');
       window.layoutSetShare=setShare;
       window.layoutMode=setMode;
+      window.layoutRenderer=setRenderer;
       useKeyboardInset(panes,mode==='terminal');
       return <AppShell title="Sessions" aside={<button className="new-session" aria-label="New session"><Plus size={16} weight="bold"/><span className="new-session-label">Session</span></button>}>
         {mode==='terminal' ? <>
           <div className="terminal-bar"><div className="tabs"><button className="tab">All sessions</button>{Array.from({length:8},(_,i)=><div className="tab is-active" key={i}><button className="tab-label">Synthetic agent {i+1} {'W'.repeat(64)}</button><button className="tab-close" aria-label="Close tab">×</button></div>)}</div><label className="tab-renderer"><span>Renderer</span><select><option>xterm.js</option></select></label></div>
-          <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} keyShare={share} renderer="xterm" active canType={false} pulseAllowed={false} host={'Synthetic-MacBook-'+ 'W'.repeat(64)}/></div>
+          <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} keyShare={share} renderer={renderer} active canType={false} pulseAllowed={false} host={'Synthetic-MacBook-'+ 'W'.repeat(64)}/></div>
         </> : <div>{Array.from({length:mode==='long'?65:1},(_,i)=><p key={i} style={{padding:'12px 0'}}>Synthetic session row {i+1}</p>)}<button id="last-row">Last row</button></div>}
       </AppShell>;
     }
@@ -198,6 +199,10 @@ try {
         await browser.call(status=>window.layoutStatus(status,status==='error'?'Synthetic error '+ 'Long error detail. '.repeat(35):undefined),status);
         await until("!!document.querySelector('.pane-gate-card')",'session gate');
         await delay(100);
+        if(status==='needs-password') {
+          assert(await browser.call(()=>document.querySelector('.pane-gate').scrollTop===0),
+            'Opening the password form must not auto-scroll past its heading and unlock choices');
+        }
         const start=await browser.call(()=>{
           const gate=document.querySelector('.pane-gate'),card=gate.querySelector('.pane-gate-card');
           gate.scrollTop=0;
@@ -226,10 +231,11 @@ try {
           await delay(80);
           assert(await browser.call(()=>{const g=document.querySelector('.pane-gate').getBoundingClientRect(),b=document.querySelector('.pane-gate button[type="submit"]').getBoundingClientRect();return b.top>=g.top&&b.bottom<=g.bottom;}),'Submit independently reachable even in short windows');
         }
-        await browser.call(()=>{document.querySelector('.pane-gate').scrollTop=0;});
+        const scrollReset=await browser.call(()=>{const gate=document.querySelector('.pane-gate');gate.scrollTop=0;return gate.scrollTop;});
         await delay(80);
-        const heading=await browser.call(()=>{const gate=document.querySelector('.pane-gate'),g=gate.getBoundingClientRect(),h=document.querySelector('.pane-gate h2').getBoundingClientRect();return {gateTop:g.top,gateBottom:g.bottom,headingTop:h.top,headingBottom:h.bottom,scroll:gate.scrollTop,width:innerWidth,height:innerHeight};});
-        assert(heading.headingTop>=heading.gateTop,'Oversized card never centers its heading above the scroll origin: '+JSON.stringify(heading));
+        const heading=await browser.call(()=>{const gate=document.querySelector('.pane-gate'),g=gate.getBoundingClientRect(),h=document.querySelector('.pane-gate h2').getBoundingClientRect();return {gateTop:g.top,gateBottom:g.bottom,headingTop:h.top,headingBottom:h.bottom,scroll:gate.scrollTop,width:innerWidth,height:innerHeight,focused:document.activeElement?.tagName,viewport:visualViewport?.height,offsetTop:visualViewport?.offsetTop};});
+        if(shots && heading.headingTop<heading.gateTop)await writeFile(join(shots,'gate-heading-failure.png'),Buffer.from(await browser.screenshot(),'base64'));
+        assert(heading.headingTop>=heading.gateTop,'Oversized card never centers its heading above the scroll origin: '+JSON.stringify({scrollReset,...heading}));
         await browser.call(()=>document.querySelector('.pane-gate h2').scrollIntoView({block:'center'}));
         await delay(80);
         assert(await browser.call(()=>{const g=document.querySelector('.pane-gate').getBoundingClientRect(),h=document.querySelector('.pane-gate h2').getBoundingClientRect();return h.top>=g.top-1&&h.bottom<=g.bottom+1;}),'Heading is fully reachable, including when the viewport is shorter than its decorative header');
@@ -319,6 +325,39 @@ try {
   await until("!document.querySelector('.pane-gate')",'missing-share fallback opens terminal');
   assert.deepEqual(await browser.call(()=>fixtureErrors),[],'No browser or unexpected API errors after fallback');
   console.log('PASS unlocked vault without saved session password: direct-password fallback works');
+  if(browser.name==='chrome') {
+    for(const theme of ['light','dark']) for(const renderer of ['xterm','chat']) {
+      await browser.setViewport({width:390,height:844,dpr:2,mobile:true});
+      await browser.call(({theme,renderer})=>{
+        layoutTheme(theme);layoutMode('short');layoutRenderer(renderer);window.layoutStartLocked=false;
+      },{theme,renderer});
+      await until("!document.querySelector('.pane')",'typing fixture reset');
+      await browser.call(()=>layoutMode('terminal'));
+      await until("!!document.querySelector('.pane') && !document.querySelector('.pane-gate')",'typing fixture mounted');
+      await delay(150);
+      const before=await browser.call(()=>({
+        pane:document.querySelector('.panes').getBoundingClientRect().height,
+        rail:document.querySelector('.rail').getBoundingClientRect().height,
+      }));
+      await browser.call(()=>{Object.defineProperty(visualViewport,'height',{configurable:true,value:400});visualViewport.dispatchEvent(new Event('resize'));});
+      await until("document.documentElement.dataset.keyboard==='open'",'typing keyboard open');
+      await delay(150);
+      const during=await browser.call(()=>({
+        pane:document.querySelector('.panes').getBoundingClientRect().height,
+        rail:document.querySelector('.rail').getBoundingClientRect().height,
+        hidden:getComputedStyle(document.querySelector('.rail')).visibility==='hidden',
+      }));
+      assert(Math.abs(before.pane-during.pane)<1,`${renderer}/${theme}: keyboard must not refit the terminal pane`);
+      assert.equal(during.rail,before.rail,'Hidden navigation keeps its layout row');
+      assert(during.hidden,'Navigation cannot appear over the terminal during typing');
+      await browser.call(()=>{delete visualViewport.height;visualViewport.dispatchEvent(new Event('resize'));});
+      await until("!document.documentElement.hasAttribute('data-keyboard')",'typing keyboard closed');
+      await delay(150);
+      assert(await browser.call(()=>getComputedStyle(document.querySelector('.rail')).visibility==='visible'),'Navigation returns after typing');
+      assert(Math.abs(await browser.call(()=>document.querySelector('.panes').getBoundingClientRect().height)-before.pane)<1,'Pane returns to exactly the original height');
+      console.log(`PASS ${renderer}/${theme}: synthetic keyboard preserves pane and hides/restores navigation`);
+    }
+  }
   console.log("PASS actual app shell and terminal across tablet/phone/desktop boundaries; document scrolling and resize transitions");
 } finally {
   await browser?.close();

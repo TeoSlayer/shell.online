@@ -76,7 +76,14 @@ describe("the phone bottom bar", () => {
    */
   it("keeps the shell one screen tall so the page cannot move the bar", () => {
     const shell = phone.match(/\n {2}\.shell\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
-    expect(shell).toMatch(/height:\s*calc\(var\(--app-height, calc\(100dvh \/ var\(--zoom\)\)\)/);
+    /*
+     * From one measurement of the visible page, on every page. It was
+     * `--app-height` less `--keyboard-inset`, and a session worked its height
+     * out a third way -- so the bar sat higher in a session than everywhere
+     * else, and moved once while a page was still loading. The bar is the
+     * bottom edge of this box, so there can only be one expression for it.
+     */
+    expect(shell).toMatch(/height:\s*var\(--visible-height, calc\(100dvh \/ var\(--zoom\)\)\)/);
     expect(shell).toMatch(/overflow:\s*hidden/);
     const content = phone.match(/\n {2}\.shell-content\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
     expect(content).toMatch(/overflow-y:\s*auto/);
@@ -107,5 +114,29 @@ describe("the phone bottom bar", () => {
     const hidden = phone.match(/:root\[data-keyboard="open"\] \.rail\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     expect(hidden).toMatch(/display:\s*none/);
     expect(hidden).not.toMatch(/translateY/);
+  });
+
+  /*
+   * Except in a session, where the row stays and only the bar stops being
+   * drawn. Collapsing the row resizes the pane, and a pane that changes size
+   * refits the terminal's grid to a different font; leaving the bar drawn is
+   * worse still, because a session is taller than the visible page while a
+   * keyboard is up and a phone scrolls the visible page to follow a focused
+   * field -- which walked the bar up into the middle of the canvas.
+   */
+  it("keeps the bar's row in a session but stops drawing it", () => {
+    const session =
+      phone.match(/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    /* The row stays (display) and the bar stops being drawn (visibility). */
+    expect(session).toMatch(/display:\s*flex/);
+    expect(session).toMatch(/visibility:\s*hidden/);
+    expect(session).not.toMatch(/display:\s*none/);
+  });
+
+  /* And the session is the one page that does not shrink for the keyboard. */
+  it("holds a session's height while somebody is typing in it", () => {
+    const typing =
+      phone.match(/:root\[data-pane="open"\]\[data-keyboard="open"\] \.shell\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(typing).toMatch(/height:\s*var\(--typing-height/);
   });
 });
