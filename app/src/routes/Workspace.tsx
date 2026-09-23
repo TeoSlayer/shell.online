@@ -227,6 +227,7 @@ export function Workspace() {
   const restoredTabs = useRef(false);
   /* Sized to the space a phone keyboard leaves; see useKeyboardInset. */
   const panes = useRef<HTMLDivElement>(null);
+  const pasteActions = useRef(new Map<string, () => void>());
   /* Requests whose session should be offered as soon as it exists: origin -> name. */
   const awaitingOpen = useRef(new Map<string, string>());
   /* Passwords waiting for their session to appear so they can be shared. */
@@ -325,8 +326,13 @@ export function Workspace() {
    * a later refresh does not reopen a tab somebody deliberately closed.
    */
   const requestedSessionId = search.get("open");
+  const openingSessionId = useRef<string | null>(null);
   useEffect(() => {
-    if (!requestedSessionId || sessions === null) return;
+    if (!requestedSessionId) { openingSessionId.current = null; return; }
+    if (sessions === null || openingSessionId.current === requestedSessionId) return;
+    // Removing the query is a router transition. Pulse/content updates can
+    // render again before it commits; do not dispatch/navigate in a loop.
+    openingSessionId.current = requestedSessionId;
     const requested = sessionToOpen(sessions, requestedSessionId);
     setSearch((current) => {
       const next = new URLSearchParams(current);
@@ -776,7 +782,9 @@ export function Workspace() {
             * grid starts below it, so it covers padding and never text.
             */}
           {!showingList && (
-          <label className="tab-renderer">
+          <div className="tab-renderer">
+            {terminalRenderer !== "chat" && <button type="button" className="workspace-paste" aria-label="Paste into terminal"
+              onClick={() => { if (state.activeId) pasteActions.current.get(state.activeId)?.(); }}>Paste</button>}
             <span>Renderer</span>
             <select
               aria-label="Terminal renderer"
@@ -793,7 +801,7 @@ export function Workspace() {
               <option value="chat">Chat</option>
               <option value="refstream">Refstream (unstable alpha)</option>
             </select>
-          </label>
+          </div>
           )}
         </div>
       )}
@@ -844,6 +852,7 @@ export function Workspace() {
                 host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
                 renderer={terminalRenderer}
+                onPasteReady={(open) => { if (open) pasteActions.current.set(tab.id, open); else pasteActions.current.delete(tab.id); }}
                 pulseAllowed={!!current}
                 onPulseChange={(value) => receivePulse(tab.id, value)}
               />

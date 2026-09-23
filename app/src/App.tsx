@@ -71,7 +71,7 @@ export function SignedInApp() {
             * while nobody is signed in yet, which is the whole point of it.
             */}
           <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/feedback" element={<RequireAuth><Feedback /></RequireAuth>} />
+          <Route path="/feedback" element={<Feedback />} />
           {/*
             * Registration and password reset happen at the provider now.
             * The paths are kept because they have been linked and bookmarked;

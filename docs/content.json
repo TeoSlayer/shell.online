@@ -266,6 +266,14 @@
           "On a shared link, open Controls → Appearance and choose Light, Dark or System. The sun/moon button switches quickly. In the app, use Account → Appearance. Each site remembers your choice in this browser. System follows your device’s appearance; switching themes does not restart your terminal."
         ],
         [
+          "Paste on a phone",
+          "Tap Paste in the terminal controls. Review the text, then choose Insert into terminal. If your browser cannot read the clipboard, touch and hold inside the text box and choose Paste. No Enter is added, but line breaks in the text can still run commands. You need input access; read-only viewers cannot paste."
+        ],
+        [
+          "Keep active sessions together",
+          "On a shared link, open Controls and choose Sign up. Create an account and link your computer to find its sessions in the app. This does not share the current session’s password or automatically import someone else’s session."
+        ],
+        [
           "Close the browser when you’re done",
           "Closing the tab leaves the task running. Keep the host computer awake and online. A sleeping laptop cannot be controlled until it reconnects. The session ends when its process exits."
         ]
@@ -563,7 +571,7 @@
         ],
         [
           "Report a useful bug",
-          "Include your CLI version, operating system, browser, renderer and a small reproduction that contains no private work. Say whether the problem happens locally, in a browser, or only after reconnecting. Remove share links, passwords, tokens and raw terminal logs before [opening an issue](https://github.com/TeoSlayer/shell.online/issues)."
+          "Use Report in the shared terminal, or [send feedback](https://app.shell.online/feedback). No account is required. Signed-in users can choose to send without their account or email; anonymous reports cannot receive replies. Terminal text, passwords and sharing links are not attached automatically.\n\nInclude your CLI version, operating system, browser, renderer and a small reproduction that contains no private work. Say whether the problem happens locally, in a browser, or only after reconnecting. Remove share links, passwords, tokens and raw terminal logs before sending feedback or [opening an issue](https://github.com/TeoSlayer/shell.online/issues)."
         ]
       ]
     },

@@ -210,6 +210,8 @@ jobs:
           node app/scripts/test-terminal-paint-ui.mjs
           node scripts/test-terminal-scroll-ui.mjs
           node app/scripts/test-terminal-refit-ui.mjs
+          node scripts/test-terminal-paste-ui.mjs
+          node app/scripts/test-feedback-route.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
           SHELL_BROWSER: chrome

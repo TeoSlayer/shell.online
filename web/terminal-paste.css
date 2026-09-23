@@ -1,0 +1,60 @@
+.terminal-paste-button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--terminal-ui-line, #d7d5cc);
+  border-radius: 8px;
+  background: var(--terminal-ui-surface, #fcfbf7);
+  color: var(--terminal-ui-fg, #191b18);
+  font: inherit;
+  cursor: pointer;
+}
+.terminal-paste-dialog {
+  position: fixed;
+  bottom: auto;
+  box-sizing: border-box;
+  width: min(480px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: 0 auto;
+  transform: translateY(-50%);
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--terminal-ui-line, #d7d5cc);
+  border-radius: 16px;
+  background: var(--terminal-ui-surface, #fcfbf7);
+  color: var(--terminal-ui-fg, #191b18);
+  font: 16px/1.5 "Uncut Sans", system-ui, sans-serif;
+}
+.terminal-paste-dialog::backdrop { background: rgb(0 0 0 / 45%); }
+.terminal-paste-form { display: grid; gap: 12px; min-width: 0; }
+.terminal-paste-form h2 { margin: 0; font-size: 21px; line-height: 1.2; }
+.terminal-paste-form p { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.terminal-paste-form label { display: grid; gap: 6px; }
+.terminal-paste-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 100px;
+  padding: 10px;
+  border: 1px solid var(--terminal-ui-line, #d7d5cc);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 16px/1.4 ui-monospace, monospace;
+  resize: vertical;
+}
+.terminal-paste-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.terminal-paste-actions button {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--terminal-ui-line, #d7d5cc);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.terminal-paste-actions button[type="submit"] {
+  background: var(--terminal-ui-fg, #191b18);
+  color: var(--terminal-ui-surface, #fcfbf7);
+}

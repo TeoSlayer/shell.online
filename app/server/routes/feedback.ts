@@ -106,7 +106,7 @@ export function readFeedback(body: unknown): Outcome<FeedbackInput> {
 export async function submitFeedback(
   store: Store,
   mailer: Mailer,
-  sender: Membership,
+  sender: Membership | null,
   body: unknown,
   userAgent: string,
   forwardTo: string | undefined,
@@ -117,10 +117,12 @@ export async function submitFeedback(
   if (!read.ok) return read;
   const feedback: Feedback = {
     id: newId("fbk"),
-    uid: sender.uid,
-    email: sender.email,
-    orgId: sender.orgId,
     ...read.value,
+    uid: sender?.uid ?? "",
+    email: sender?.email ?? "",
+    orgId: sender?.orgId,
+    canReply: Boolean(sender?.email) && read.value.canReply,
+    context: sender ? read.value.context : {},
     userAgent: userAgent.trim().slice(0, MAX_USER_AGENT),
     at: now,
   };

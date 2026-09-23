@@ -350,7 +350,7 @@ function summarize(body: string, limit = 60): string {
 export function feedbackMessage(feedback: Feedback, to: string): Message {
   const kind = KIND_WORD[feedback.kind];
   const subject = `[shell.online feedback] ${kind}: ${summarize(feedback.body)}`;
-  const reply = feedback.canReply
+  const reply = !feedback.email ? "Anonymous report; no reply address supplied." : feedback.canReply
     ? `${feedback.email} said it is fine to reply.`
     : `${feedback.email} asked not to be written to about this.`;
   const facts: [string, string][] = [
@@ -363,7 +363,7 @@ export function feedbackMessage(feedback: Feedback, to: string): Message {
   ];
 
   const text = [
-    `${kind} from ${feedback.email}`,
+    `${kind} from ${feedback.email || "an anonymous visitor"}`,
     "",
     feedback.body,
     "",

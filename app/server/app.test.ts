@@ -39,7 +39,7 @@ async function idToken(overrides: Record<string, unknown> = {}) {
 async function call(
   method: string,
   path: string,
-  options: { body?: unknown; auth?: string; origin?: string; address?: string } = {},
+  options: { body?: unknown; auth?: string; origin?: string; address?: string; contentType?: string } = {},
   target: typeof handle = handle,
 ) {
   const chunks: Buffer[] = [];
@@ -51,6 +51,7 @@ async function call(
     headers: {
       ...(options.auth ? { authorization: `Bearer ${options.auth}` } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
+      ...(options.body !== undefined ? { "content-type": options.contentType ?? "application/json" } : {}),
     },
     socket: { remoteAddress: options.address ?? "10.0.0.1" },
     on(event: string, handler: (arg?: unknown) => void) {
@@ -3786,7 +3787,7 @@ describe("feedback", () => {
       kind: "problem", body: "The Report control did not respond.", surface: "shared-terminal",
       route: "/feedback", app_version: "test", can_reply: false, context: {},
     };
-    expect((await call("POST", "/api/feedback", { body })).status).toBe(401);
+    expect((await call("POST", "/api/feedback", { body })).status).toBe(403);
     expect(await store.feedback()).toEqual([]);
     const response = await call("POST", "/api/feedback", { auth: await idToken(), body });
     expect(response.status).toBe(201);
@@ -3851,10 +3852,43 @@ describe("feedback", () => {
     expect(await store.appEvents(0)).toEqual([{ event: "feedback_sent", count: 1 }]);
   });
 
-  it("refuses without a signed-in user", async () => {
-    const posted = await call("POST", "/api/feedback", { body: message });
-    expect(posted.status).toBe(401);
+  it("accepts anonymous reports without account, reply address or identity context", async () => {
+    const posted = await call("POST", "/api/feedback", { origin: ORIGIN, body: {
+      ...message, uid: "spoof", email: "spoof@example.test", orgId: "spoof",
+    } });
+    expect(posted.status).toBe(201);
+    expect(await store.feedback()).toEqual([expect.objectContaining({ uid: "", email: "", orgId: undefined, canReply: false, context: {} })]);
+    expect((await call("GET", "/api/sessions")).status).toBe(401);
+  });
+
+  it("never downgrades invalid authentication to anonymous", async () => {
+    expect((await call("POST", "/api/feedback", { auth: "bad-token", origin: ORIGIN, body: message })).status).toBe(401);
     expect(await store.feedback()).toEqual([]);
+  });
+
+  it("requires a trusted browser origin and JSON for anonymous reports", async () => {
+    for (const origin of [undefined, "https://untrusted.example", "null"]) {
+      expect((await call("POST", "/api/feedback", { origin, body: message })).status).toBe(403);
+    }
+    expect((await call("POST", "/api/feedback", { origin: ORIGIN, contentType: "text/plain", body: message })).status).toBe(415);
+    expect(await store.feedback()).toEqual([]);
+  });
+
+  it("bounds anonymous reports and validates their body", async () => {
+    expect((await call("POST", "/api/feedback", { origin: ORIGIN, body: { ...message, body: "" } })).status).toBe(400);
+    expect((await call("POST", "/api/feedback", { origin: ORIGIN, body: { ...message, body: "x".repeat(70_000) } })).status).toBe(413);
+    for (let index = 0; index < 3; index++) expect((await call("POST", "/api/feedback", { origin: ORIGIN, body: message })).status).toBe(201);
+    const sixth = await call("POST", "/api/feedback", { origin: ORIGIN, body: message });
+    expect(sixth.status).toBe(429);
+    expect(Number(sixth.headers["Retry-After"])).toBeGreaterThan(0);
+    expect((await call("POST", "/api/feedback", { origin: ORIGIN, address: "10.0.0.2", body: message })).status).toBe(201);
+  });
+
+  it("caps aggregate anonymous submissions across addresses", async () => {
+    for (let index = 0; index < 30; index++) expect((await call("POST", "/api/feedback", { origin: ORIGIN, address: `10.0.1.${index}`, body: message })).status).toBe(201);
+    expect((await call("POST", "/api/feedback", { origin: ORIGIN, address: "10.0.2.1", body: message })).status).toBe(429);
+    // A public flood does not consume an authenticated person's feedback bucket.
+    expect((await call("POST", "/api/feedback", { auth: await idToken(), body: message })).status).toBe(201);
   });
 
   it("refuses an empty message", async () => {

@@ -31,6 +31,7 @@ const server = await createServer({
         import '/src/styles/auth.css';
         import '/src/styles/shell.css';
         import '/src/styles/collab.css';
+        import '/src/styles/terminal.css';
         import '/src/styles/feedback.css';
         import * as ReactModule from 'react';
         export const React = ReactModule.default ?? ReactModule;
@@ -68,7 +69,7 @@ async function mount(signedIn, path, returnFrom) {
       const url = new URL(typeof input === 'string' ? input : input.url, location.origin);
       if (url.pathname === '/api/feedback') {
         feedbackTest.posts.push({ method: init.method, payload: JSON.parse(init.body),
-          authorization: new Headers(init.headers).get('Authorization') });
+          authorization: new Headers(init.headers).get('Authorization'), credentials: init.credentials });
         return feedbackTest.fail ? json({ error: 'Synthetic failure. Try again.' }, 503)
           : json({ feedback: { id: 'synthetic-feedback', at: Date.now() } }, 201);
       }
@@ -125,7 +126,7 @@ try {
       const box = document.querySelector('#feedback-text');
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, 'Report control did not respond.');
       box.dispatchEvent(new Event('input', { bubbles: true }));
-      document.querySelector('.feedback-reply input').click();
+      document.querySelector('.feedback-contact input').click();
     });
     await browser.evaluate('document.querySelector(".feedback-form").requestSubmit()');
     await check('document.body.textContent.includes("Synthetic failure")', 'failure shown');
@@ -153,17 +154,51 @@ try {
     console.log(`PASS feedback route ${width}px: shared form, authenticated API, privacy, retry, close/reopen`);
   }
 
-  await mount(false, '/feedback?from=terminal');
-  await check('location.pathname === "/login" && !!document.querySelector("form")', 'login guard');
-  assert.equal(await browser.evaluate('!!document.querySelector(".feedback-sheet")'), false);
-  assert.equal(await browser.evaluate('history.state.usr.from'), '/feedback?from=terminal');
+  for (const signedIn of [false, true]) {
+    for (const width of [320, 390, 1280]) {
+      await browser.setViewport({ width, height: 650, dpr: 1, mobile: width < 600 });
+      await mount(signedIn, '/feedback?from=terminal&session=PRIVATE_SESSION#PRIVATE_KEY');
+      await check('!!document.querySelector("#feedback-text")', 'anonymous feedback available');
+      assert.equal(await browser.evaluate('location.pathname'), '/feedback');
+      assert.equal(await browser.evaluate('feedbackTest.posts.length'), 0);
+      await browser.call((signedIn) => {
+        if (signedIn) document.querySelector('.feedback-anonymous input').click();
+        const box = document.querySelector('#feedback-text');
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(box, 'Anonymous mobile report.');
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+      }, signedIn);
+      assert.equal(await browser.call(async () => {
+        await Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => {})));
+        const send = document.querySelector('.feedback-form button[type=submit]');
+        send.scrollIntoView({ block: 'center' });
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const r = send.getBoundingClientRect();
+        const visible = r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth &&
+          send.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+        if (visible) send.click();
+        return visible;
+      }), true, 'anonymous Send button is scroll-reachable and unobstructed');
+      await check('document.body.textContent.includes("Sent. Thank you.")', 'anonymous send');
+      const posts = await browser.evaluate('feedbackTest.posts');
+      assert.equal(posts.length, 1);
+      assert.equal(posts[0].authorization, null);
+      assert.equal(posts[0].credentials, 'omit');
+      assert.equal(posts[0].payload.can_reply, false);
+      assert.deepEqual(posts[0].payload.context, {});
+      assert.ok(!JSON.stringify(posts).includes('PRIVATE_'));
+      console.log(`PASS anonymous feedback ${width}px, signedIn=${signedIn}: no credentials or identity attached`);
+    }
+  }
+
+  await mount(false, '/login', '/feedback?from=terminal');
+  await check('!!document.querySelector("form")', 'login form');
   // Simulates a provider restoring an identity before the login handler returns.
   await browser.evaluate('feedbackTest.signIn()');
   await check('location.pathname === "/feedback" && !!document.querySelector("#feedback-text")', 'sign-in return to feedback');
   assert.equal(await browser.evaluate('feedbackTest.posts.length'), 0);
-  console.log('PASS signed-out guard and sign-in return (no automatic report)');
+  console.log('PASS optional sign-in return (no automatic report)');
 
-  await mount(false, '/feedback?from=terminal');
+  await mount(false, '/login', '/feedback?from=terminal');
   await check('location.pathname === "/login" && !!document.querySelector("input[type=password]")', 'email sign-in form');
   await browser.call(() => {
     for (const [selector, value] of [['input[type=email]', 'reporter@example.test'], ['input[type=password]', 'synthetic-password']]) {
@@ -191,5 +226,5 @@ try {
 } finally {
   await browser?.close();
   await server.close();
-  await rm(profile, { recursive: true, force: true });
+  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }

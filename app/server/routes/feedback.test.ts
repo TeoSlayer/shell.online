@@ -83,6 +83,15 @@ describe("readFeedback", () => {
 });
 
 describe("submitFeedback", () => {
+  it("stores and forwards anonymous reports without invented identity or reply permission", async () => {
+    const store = MemoryStore.memory();
+    const { sent, mailer } = mailbox();
+    const result = await submitFeedback(store, mailer, null, { ...valid, email: "forged@example.com", uid: "forged" }, "", "team@example.com", vi.fn(), 5000);
+    expect(result.ok).toBe(true);
+    expect(await store.feedback()).toEqual([expect.objectContaining({ uid: "", email: "", orgId: undefined, canReply: false, context: {} })]);
+    expect(JSON.stringify(sent)).toContain("anonymous visitor");
+    expect(JSON.stringify(sent)).not.toContain("forged");
+  });
   it("stores the message and forwards it when an address is set", async () => {
     const store = MemoryStore.memory();
     const { sent, mailer } = mailbox();

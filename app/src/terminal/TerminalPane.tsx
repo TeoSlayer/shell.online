@@ -25,6 +25,8 @@ import { PulseObserver } from "./pulse-observer";
 import type { SessionPulse } from "./session-pulse";
 import { SessionPulseBadge } from "./SessionPulse";
 import { attachRefstreamTools } from "../../../web/refstream-tools";
+import { mountTerminalPaste } from "../../../web/terminal-paste";
+import "../../../web/terminal-paste.css";
 import { RelayFileClient } from "../../../web/relay-files";
 import { mountRelayFileBrowser } from "../../../web/relay-files-ui";
 import "../../../web/relay-files.css";
@@ -48,6 +50,8 @@ export interface TerminalPaneProps {
   /** Passive, memory-only metadata from this viewer's existing decrypted stream. */
   onPulseChange?: (pulse: SessionPulse | null) => void;
   pulseAllowed?: boolean;
+  /** Workspace puts this action beside the renderer, never over terminal cells. */
+  onPasteReady?: (open: (() => void) | null) => void;
 }
 
 /*
@@ -139,7 +143,10 @@ export function TerminalPane({
   renderer,
   onPulseChange,
   pulseAllowed = true,
+  onPasteReady,
 }: TerminalPaneProps) {
+  const pasteReady = useRef(onPasteReady);
+  pasteReady.current = onPasteReady;
   const [pulse, setPulse] = useState<SessionPulse | null>(null);
   const pulseObserver = useRef<PulseObserver | null>(null);
   const pulseCallback = useRef(onPulseChange);
@@ -163,6 +170,8 @@ export function TerminalPane({
   const mount = useRef<HTMLDivElement>(null);
   const toolsMount = useRef<HTMLDivElement>(null);
   const filesMount = useRef<HTMLDivElement>(null);
+  const pasteMount = useRef<HTMLDivElement>(null);
+  const pasteUi = useRef<ReturnType<typeof mountTerminalPaste> | null>(null);
   const terminal = useRef<TerminalSurface | null>(null);
 
   /* The palette follows the app theme, including a change while the pane is open. */
@@ -304,6 +313,7 @@ export function TerminalPane({
     const toolsNode = toolsMount.current;
     const filesNode = filesMount.current;
     if (!node || !toolsNode || !filesNode) return;
+    let connectionStatus: ConnectionStatus = "connecting";
     tried.current = new Set();
 
     /* A pane reused for another session starts from the default again. */
@@ -388,6 +398,7 @@ export function TerminalPane({
       fragment: encryptionFragment(shareUrl),
       events: {
         onStatus: (next, message) => {
+          connectionStatus = next;
           observerPulse.connection(next === "connected");
           let shown = message;
           if (next === "needs-password" && message) {
@@ -504,6 +515,14 @@ export function TerminalPane({
       connected.send(data);
       sink?.observe(data);
     });
+    const pasteTools = renderer !== "chat" && pasteMount.current ? mountTerminalPaste({
+      toolbar: pasteMount.current,
+      overlay: node.parentElement!,
+      canPaste: () => activeRef.current && connectionStatus === "connected" && canTypeRef.current && !term.options.disableStdin && !rendererInputSuppressed,
+      paste: (text) => term.paste?.(text),
+    }) : null;
+    pasteUi.current = pasteTools;
+    pasteReady.current?.(pasteTools?.open ?? null);
     /*
      * Legacy mouse protocols (X10/VT200 without SGR) and a few device query
      * responses emit raw bytes via onBinary, not onData. Without this an
@@ -574,6 +593,9 @@ export function TerminalPane({
 
     return () => {
       window.clearInterval(pulseTimer);
+      pasteTools?.dispose();
+      pasteUi.current = null;
+      pasteReady.current?.(null);
       document.removeEventListener("visibilitychange", updatePulse);
       observerPulse.dispose();
       pulseObserver.current = null;
@@ -593,6 +615,10 @@ export function TerminalPane({
       connection.current = null;
     };
   }, [shareUrl, renderer, refit]);
+
+  useEffect(() => {
+    if (!active) pasteUi.current?.close();
+  }, [active]);
 
   /*
    * Apply a handoff in place. The relay's own read-only bit still wins, and
@@ -694,6 +720,7 @@ export function TerminalPane({
         </span>}
         <div ref={toolsMount} className="refstream-toolbar pane-refstream-toolbar" aria-label="Refstream terminal tools" />
         <div ref={filesMount} className="pane-files-toolbar" aria-label="Shared files" />
+        <div ref={pasteMount} className="pane-paste-toolbar" />
       </div>
       <div className="pane-screen" ref={mount} />
 

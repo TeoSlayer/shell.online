@@ -39,7 +39,7 @@
   right: 0;
   display: inline-flex;
   /* Short enough, with the pane's top padding, to clear the first row. */
-  height: 34px;
+  height: 44px;
   padding: 0 5px 0 12px;
   border: 1px solid var(--line);
   border-top: 0;
@@ -77,6 +77,18 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.workspace-paste {
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font: 500 13px var(--sans);
+  cursor: pointer;
+}
+.pane-paste-toolbar { display: none; }
 
 .renderer-warning {
   display: flex;
@@ -212,10 +224,10 @@ button.tab {
   /*
    * The top padding clears the renderer tab hanging over this corner, so the
    * tab covers padding and never a row of output. Measured, not assumed: the
-   * tab is 34px from the tab line's own border, of which 20px is this
+   * tab is 44px from the tab line's own border, of which 20px is this
    * element's margin from it.
    */
-  padding: 18px 0 14px;
+  padding: 28px 0 14px;
   background: transparent;
 }
 
@@ -247,9 +259,10 @@ button.tab {
 .pane-tools {
   position: absolute;
   z-index: 7;
-  top: 26px;
+  top: 36px;
   right: 12px;
   display: flex;
+  flex-wrap: wrap;
   max-width: calc(100% - 24px);
   align-items: flex-start;
   gap: 8px;
@@ -281,7 +294,7 @@ button.tab {
  * any page. Here it is drawn on the app's own surface, so every layer is
  * opaque and takes the app palette, which already follows light and dark.
  */
-.pane[data-renderer="refstream"] {
+.pane {
   --terminal-ui-bg: var(--paper);
   --terminal-ui-surface: var(--white);
   --terminal-ui-line: var(--line);
@@ -310,7 +323,7 @@ button.tab {
 
 @media (max-width: 640px) {
   .pane-tools {
-    top: 26px;
+    top: 36px;
     right: 6px;
     max-width: calc(100% - 12px);
     gap: 5px;
@@ -599,7 +612,7 @@ button.tab {
   }
 
   .pane {
-    padding: 18px 0 12px;
+    padding: 28px 0 12px;
   }
 
   /*
@@ -643,7 +656,7 @@ button.tab {
   :root[data-pane="open"] .topbar { min-height: calc(48px + env(safe-area-inset-top)); }
   :root[data-pane="open"] .shell-content { padding-top: 0; }
   :root[data-pane="open"] .terminal-bar { margin-bottom: 0; padding-inline: 6px; }
-  .tab-renderer { position: static; height: 40px; padding-left: 6px; border: 0; border-radius: 0; }
+  .tab-renderer { position: static; height: 44px; padding-left: 6px; border: 0; border-radius: 0; }
   .tab-renderer select { max-width: 120px; }
   .pane { padding: 4px 0; }
 }

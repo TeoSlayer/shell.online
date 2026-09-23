@@ -26,6 +26,8 @@ import {
   type TerminalRenderer,
 } from "./terminal-renderer";
 import { attachRefstreamTools } from "./refstream-tools";
+import { mountTerminalPaste } from "./terminal-paste";
+import "./terminal-paste.css";
 import { purgeLegacyRefstreamSessionCaches } from "./refstream-session";
 import { RelayFileClient } from "./relay-files";
 import { mountRelayFileBrowser } from "./relay-files-ui";
@@ -269,6 +271,7 @@ function renderTerminal(sessionId: string): void {
         <div id="terminal-input-warning" class="terminal-input-warning" role="status" aria-live="assertive" hidden></div>
       </div>
       <nav id="mobile-terminal-keys" class="mobile-terminal-keys" aria-label="Terminal navigation keys">
+        <span id="terminal-paste-toolbar"></span>
         <button type="button" data-terminal-key="escape" aria-label="Escape">esc</button>
         <button type="button" data-terminal-key="tab" aria-label="Tab">tab</button>
         <button type="button" data-terminal-key="left" aria-label="Left arrow">←</button>
@@ -326,6 +329,11 @@ function renderTerminal(sessionId: string): void {
                 <span id="renderer-description">Refstream is experimental and may be unstable. Changing renderer reopens this view.</span>
               </section>
             </div>
+            <section class="settings-account-card" aria-labelledby="settings-account-title">
+              <div><h3 id="settings-account-title">Keep your sessions in one place</h3>
+              <p>Create an account and link your computer to find your active sessions in the app.</p></div>
+              <a id="settings-signup" href="https://app.shell.online/signup" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer">Sign up</a>
+            </section>
             <section class="latency-card" aria-labelledby="latency-title">
               <div class="latency-heading">
                 <div>
@@ -1381,6 +1389,15 @@ function renderTerminal(sessionId: string): void {
   terminal.onData((data) => {
     sendTerminalData(textEncoder.encode(data));
   });
+  const pasteTools = mountTerminalPaste({
+    toolbar: document.querySelector<HTMLElement>("#terminal-paste-toolbar")!,
+    overlay: document.querySelector<HTMLElement>(".session-page")!,
+    canPaste: () => !stopped && !readOnly && !terminal.options.disableStdin && !rendererInputSuppressed && socket?.readyState === WebSocket.OPEN,
+    paste: (text) => terminal.paste(text),
+  });
+  document.querySelector("#settings-signup")?.addEventListener("click", () => {
+    trackProduct("feature_action", { target: "signup", action: "sign_up" });
+  });
 
   const activateMobileKey = (button: HTMLButtonElement): void => {
     const bytes = mobileTerminalKeyBytes(button.dataset.terminalKey);
@@ -1629,6 +1646,7 @@ function renderTerminal(sessionId: string): void {
   compactPresenceQuery.addEventListener("change", renderPresence);
   window.addEventListener("beforeunload", () => {
     stopped = true;
+    pasteTools.dispose();
     refstreamToolsDisposed = true;
     refstreamTools?.dispose();
     fileClient.dispose();

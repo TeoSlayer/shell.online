@@ -22,6 +22,8 @@ import {AuthContext} from '/src/auth/AuthProvider';
 import {initializeAppearance} from '/src/lib/appearance';
 ${['tokens','base','auth','shell','terminal','chat','people','collab','audit','terms','vault','feedback'].map(s => `import '/src/styles/${s}.css';`).join('\n')}
 window.fixture={errors:[],unknown:[],variant:'full'};
+const consoleError=console.error;
+console.error=(...args)=>{if(String(args[0]).includes('Maximum update depth'))fixture.errors.push('render loop');consoleError(...args);};
 addEventListener('error',e=>fixture.errors.push(e.message));
 addEventListener('unhandledrejection',e=>fixture.errors.push(String(e.reason)));
 const you={uid:'qa-owner',orgId:'qa-org',email:'long-account-name-for-layout-verification@example.test',name:'Synthetic teammate '+('W'.repeat(64)),role:'owner',joinedAt:Date.now()};
@@ -88,10 +90,13 @@ async function inspect(label,theme){
     const c=document.querySelector('.shell-content')||document.body;
     const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left*scale,right:r.right*scale,top:r.top*scale,bottom:r.bottom*scale};};
     const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&e.checkVisibility({checkVisibilityCSS:true});};
-    const controls=[...new Set([...c.querySelectorAll('button,input,select,textarea'),...document.querySelectorAll('[role="dialog"] button,[role="dialog"] input,[role="dialog"] textarea')])].filter(visible).map(e=>({...rect(e),name:(e.getAttribute('aria-label')||e.textContent||e.type).slice(0,80)}));
+    const controls=[...new Set([...c.querySelectorAll('button,input,select,textarea'),...document.querySelectorAll('[role="dialog"] button,[role="dialog"] input,[role="dialog"] textarea')])].filter(visible).map(e=>({...rect(e),scrollingTab:!!e.closest('.tabs'),name:(e.getAttribute('aria-label')||e.textContent||e.type).slice(0,80)}));
     return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,paper:getComputedStyle(document.body).backgroundColor,scheme:getComputedStyle(document.documentElement).colorScheme,shadowInk:getComputedStyle(document.documentElement).getPropertyValue('--shadow-ink').trim(),controls,errors:fixture.errors,unknown:fixture.unknown};
   })()`);
-  const offscreen=result.controls.filter(r=>r.left < -2 || r.right > result.width+2);
+  // Tabs deliberately scroll, unlike page actions. Prove their close controls
+  // remain reachable rather than treating their overflow as document overflow.
+  const offscreen=result.controls.filter(r=>!r.scrollingTab && (r.left < -2 || r.right > result.width+2));
+  assert(await browser.evaluate(`(()=>{for(const b of document.querySelectorAll('.tabs .tab-close')){if(!b.checkVisibility({checkVisibilityCSS:true}))continue;b.scrollIntoView({block:'nearest',inline:'end'});const r=b.getBoundingClientRect(),p=b.closest('.tabs').getBoundingClientRect();if(r.left<p.left-1||r.right>p.right+1)return false;}return true;})()`),label+' scrolling tab actions reachable');
   if(result.overflow || offscreen.length) {
     await writeFile(join(shots,'failure.png'),Buffer.from(await browser.screenshot(),'base64'));
     console.error(await browser.evaluate(`(()=>{const scale=innerWidth/document.documentElement.getBoundingClientRect().width;return [...document.querySelectorAll('body *')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.right*scale>innerWidth+2}).slice(0,15).map(e=>({tag:e.tagName,className:e.getAttribute('class'),right:e.getBoundingClientRect().right*scale}));})()`));
@@ -134,7 +139,18 @@ try{
         await inspect(path,theme);
         if(path==='/audit')assert(await browser.evaluate(`(()=>{const k=document.querySelector('.audit-reading-key');if(!k)return false;const r=k.getBoundingClientRect();return [...k.children].every(e=>e.getBoundingClientRect().bottom<=r.bottom+1);})()`),'Audit reading key contains its wrapped text');
       }
+      await browser.evaluate(`fixture.navigate('/sessions?open=route-test')`);
+      await until(`!!document.querySelector('.workspace-paste') && !!document.querySelector('.pane[data-active="true"] .terminal-paste-dialog')`,'workspace paste action');
+      await inspect('workspace paste toolbar',theme);
+      assert(await browser.evaluate(`(()=>{const b=document.querySelector('.workspace-paste').getBoundingClientRect(),s=document.querySelector('.pane[data-active="true"] .xterm-screen').getBoundingClientRect();return b.bottom<=s.top+1 && b.height>=44;})()`),'Paste never covers terminal output');
+      await browser.evaluate(`document.querySelector('.workspace-paste').click()`);
+      await until(`document.querySelector('.pane[data-active="true"] .terminal-paste-dialog').open`,'active pane paste dialog');
+      assert(await browser.evaluate(`document.querySelector('.terminal-paste-dialog[open]').textContent.includes('Connect and unlock')`),'disconnected pane refuses clipboard access');
+      if(width===390)await writeFile(join(shots,theme+'-paste.png'),Buffer.from(await browser.screenshot(),'base64'));
+      await browser.evaluate(`document.querySelector('.terminal-paste-dialog[open]').close()`);
       await writeFile(join(shots,theme+'-'+width+'-'+height+'.png'),Buffer.from(await browser.screenshot(),'base64'));
+      await browser.evaluate(`[...document.querySelectorAll('.tab-close')].forEach(button=>button.click())`);
+      await until(`!document.querySelector('.pane')`,'synthetic tabs closed and paste actions disposed');
     }
     for(const [width,height] of [[320,640],[390,844],[844,390],[1440,900]]){
       await browser.setViewport({width,height,dpr:1,mobile:false});

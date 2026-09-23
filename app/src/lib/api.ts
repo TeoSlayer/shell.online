@@ -254,11 +254,11 @@ export function markNotifications(id?: string) {
 }
 
 /** A message from the feedback sheet. The service keeps it and may forward it. */
-export function sendFeedback(input: FeedbackPayload) {
+export function sendFeedback(input: FeedbackPayload, anonymous = false) {
   return request<{ feedback: { id: string; at: number } }>("/api/feedback", {
     method: "POST",
     body: JSON.stringify(input),
-  });
+  }, { anonymous });
 }
 
 export interface SessionRecord {
@@ -328,12 +328,12 @@ export const SERVER_FAILURE = "Something went wrong on our side. Try again.";
  * src/game/README.md, which lists this among the seams between the game and
  * the rest of the application.
  */
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}, options: { anonymous?: boolean } = {}): Promise<T> {
   const finish = beginApiRequest(path, init.method ?? "GET");
   let token: string | null;
-  try { token = await currentIdToken(); }
+  try { token = options.anonymous ? null : await currentIdToken(); }
   catch (error) { finish("signed_out"); throw error; }
-  if (!token) {
+  if (!token && !options.anonymous) {
     finish("signed_out");
     trackAppAction(path, init.method ?? "GET", false, "signed_out");
     throw new ApiError("You are signed out. Sign in and try again.");
@@ -342,10 +342,11 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   try {
     response = await fetch(`${BASE}${path}`, {
       ...init,
+      ...(options.anonymous ? { credentials: "omit" as const } : {}),
       headers: {
         ...(init.headers ?? {}),
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
   } catch {

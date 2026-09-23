@@ -28,6 +28,8 @@ export interface TerminalSurface {
   resize(cols: number, rows: number): void;
   refresh(start: number, end: number): void;
   focus(): void;
+  /** Text renderers support bracketed paste; chat has its own native composer. */
+  paste?(text: string): void;
   dispose(): void;
   onData(listener: (data: string) => void): { dispose(): void };
   /**

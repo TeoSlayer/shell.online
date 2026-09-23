@@ -29,6 +29,27 @@ const part = process.env.SHELL_SCROLL_PART ?? 'both';
 const SESSION_ID = 'scroll-canary-'.padEnd(32, '0');
 
 const failures = [];
+// Exercise the actual viewer wiring, not just the reusable paste dialog.
+const pasteProbe = async ({ key, sockId, readOnly = false }) => {
+  const term = scrollTest.terms[key];
+  const socket = scrollTest.sockets.find(s => s.url.includes(sockId));
+  const root = key === 'standalone' ? document : document.querySelector(`[data-scroll-root="${key}"]`);
+  await new Promise(resolve => term.write('\x1b[?2004h', resolve));
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { readText: async () => 'paste-canary' } });
+  const from = socket.sent.length;
+  root.querySelector('.terminal-paste-button').click();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  const field = root.querySelector('.terminal-paste-dialog textarea');
+  const previewed = field.value === 'paste-canary';
+  field.value = 'paste-canary';
+  root.querySelector('.terminal-paste-form').requestSubmit();
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const inputs = socket.sent.slice(from).filter(data => typeof data !== 'string')
+    .map(data => data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data.buffer, data.byteOffset, data.byteLength))
+    .filter(data => data[0] === 2).map(data => new TextDecoder().decode(data.subarray(1)));
+  root.querySelector('.terminal-paste-dialog').close();
+  return readOnly ? inputs.length === 0 && !previewed : previewed && inputs.length === 1 && inputs[0] === '\x1b[200~paste-canary\x1b[201~';
+};
 const check = (probe, report, verdict) => {
   // A probe is authoritative: a failed precondition (out.errors) is a failure
   // even when the assertion itself held. No PASS with errors.
@@ -306,6 +327,9 @@ if (part === 'both' || part === 'app') {
     };
     const AA = 'a'.repeat(32);
     const RR = 'r'.repeat(32);
+    assert.equal(await transport.call(pasteProbe, { key: 'a', sockId: AA }), true, 'app paste reaches existing PTY input path');
+    assert.equal(await transport.call(pasteProbe, { key: 'r', sockId: RR, readOnly: true }), true, 'app read-only paste blocked');
+    console.log('PASS app: real paste wiring and read-only input guard');
 
     // A1: normal buffer, no mouse mode — the wheel scrolls local scrollback.
     let r = await probe({ termKey: 'a', sockId: AA, lines: 300, wheel: -400 });
@@ -473,6 +497,28 @@ if (part === 'both' || part === 'standalone') {
       r.report?.kind === 'binary-x10',
     );
 
+    assert.equal(await transport.call(pasteProbe, { key: 'standalone', sockId: SESSION_ID }), true, 'standalone paste reaches PTY input path');
+    console.log('PASS standalone: real paste wiring');
+    for (const width of [320, 390, 768, 1280]) {
+      await transport.setViewport({ width, height: 500, mobile: width < 600, dpr: 1 });
+      const fits = await transport.call(async () => {
+        const dialog = document.querySelector('#terminal-settings');
+        dialog.showModal();
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const cta = document.querySelector('#settings-signup');
+        cta.scrollIntoView({ block: 'center' });
+        const rect = cta.getBoundingClientRect();
+        const panel = dialog.getBoundingClientRect();
+        const good = cta.href === 'https://app.shell.online/signup' && cta.referrerPolicy === 'no-referrer' &&
+          cta.rel.includes('noopener') && cta.rel.includes('noreferrer') && rect.height >= 44 &&
+          rect.left >= 0 && rect.right <= innerWidth && rect.top >= panel.top && rect.bottom <= panel.bottom;
+        dialog.close();
+        return good;
+      });
+      assert.equal(fits, true, `shared settings signup reachable at ${width}px`);
+    }
+    console.log('PASS standalone: fixed, no-referrer signup CTA reachable at four widths');
+
     // S4: read-only viewer, normal buffer — history must still be readable.
     r = await probe({
       mouse: '\u001b[?1000l\u001b[?1049l', wantMouse: 'none',
@@ -482,6 +528,7 @@ if (part === 'both' || part === 'standalone') {
     check('standalone: read-only wheel still scrolls local scrollback', r,
       r.bufferType === 'normal' && r.mouse === 'none' && r.viewportAfter < r.viewportBefore,
     );
+    assert.equal(await transport.call(pasteProbe, { key: 'standalone', sockId: SESSION_ID, readOnly: true }), true, 'standalone read-only paste blocked');
   } finally {
     await transport?.close();
     await server.close();

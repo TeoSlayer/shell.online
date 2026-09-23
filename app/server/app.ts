@@ -420,6 +420,10 @@ export function createApp(options: AppOptions) {
   const credentialLimit = rateLimiter(CREDENTIAL_BUCKET);
   const generalLimit = rateLimiter(GENERAL_BUCKET);
   const feedbackLimit = rateLimiter(FEEDBACK_BUCKET);
+  const anonymousFeedbackLimit = rateLimiter(FEEDBACK_BUCKET);
+  // Per-instance backstop as well as per-address throttling. Neither address
+  // nor a synthetic account is stored with an anonymous report.
+  const anonymousFeedbackTotal = rateLimiter({ burst: 30, perSecond: 60 / 3600 });
   /*
    * Advisory external analysis, inert without a deployment secret and the
    * owner's separate consent. The stores own every predicate; this object
@@ -2154,9 +2158,19 @@ export function createApp(options: AppOptions) {
       /* ---- Feedback ---- */
 
       if (route === "POST /api/feedback") {
-        const membership = await requireMember(request);
-        if (!membership) return send(response, 401, { error: "sign in first" });
-        const allowance = feedbackLimit.take(membership.uid);
+        const identified = request.headers.authorization !== undefined;
+        if (!identified) {
+          if (!request.headers.origin || !allowedOrigins.includes(request.headers.origin)) {
+            return send(response, 403, { error: "Open the report form on shell.online to send a report." });
+          }
+          if (!/^application\/json(?:\s*;|$)/i.test(String(request.headers["content-type"] ?? ""))) {
+            return send(response, 415, { error: "Send reports as JSON." });
+          }
+        }
+        const membership = identified ? await requireMember(request) : null;
+        if (identified && !membership) return send(response, 401, { error: "sign in first" });
+        let allowance = membership ? feedbackLimit.take(membership.uid) : anonymousFeedbackTotal.take("anonymous");
+        if (!membership && allowance.ok) allowance = anonymousFeedbackLimit.take(caller);
         if (!allowance.ok) {
           response.setHeader("Retry-After", String(Math.ceil(allowance.retryAfterMs / 1000)));
           return send(response, 429, { error: "That is plenty for now. Try again in a little while." });
@@ -2171,7 +2185,7 @@ export function createApp(options: AppOptions) {
           log,
         );
         if (!result.ok) return send(response, result.status, { error: result.error });
-        track("feedback_sent", membership.email);
+        track("feedback_sent", membership?.email ?? "");
         return send(response, 201, { feedback: { id: result.value.id, at: result.value.at } });
       }
 

@@ -11,8 +11,8 @@ import { FeedbackSheet } from "./FeedbackSheet";
  *
  * Rendered here rather than by the link that opened it, so it outlives a
  * modal that closes underneath it and reads the same on every screen. It
- * needs a signed-in person: the message is recorded against the account,
- * which is what makes a reply possible.
+ * supports anonymous visitors as well. Only identified reports can receive a
+ * reply; anonymous submission omits account credentials entirely.
  */
 export function FeedbackProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -25,9 +25,10 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   return (
     <FeedbackContext.Provider value={value}>
       {children}
-      {request && user && (
+      {request && (
         <FeedbackSheet
-          email={user.email ?? ""}
+          key={user?.uid ?? "anonymous"}
+          email={user?.email ?? ""}
           route={routeForFeedback(location.pathname)}
           request={request}
           onSend={sendFeedback}

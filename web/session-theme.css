@@ -1,6 +1,34 @@
 /* Shared-link chrome uses the same warm paper / ink surfaces as the account
  * app. Scoped to the viewer: never recolor application-supplied ANSI output,
  * the marketing pages, avatars, or a terminal renderer's content. */
+.session-page .settings-content { overflow-y: auto; overscroll-behavior: contain; }
+.settings-account-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--viewer-line);
+  border-radius: 12px;
+  background: var(--viewer-surface);
+  color: var(--viewer-ink);
+}
+.settings-account-card > div { flex: 1 1 200px; min-width: 0; }
+.settings-account-card h3 { margin: 0 0 4px; font-size: 15px; }
+.settings-account-card p { margin: 0; font-size: 13px; line-height: 1.4; color: var(--viewer-muted); }
+.settings-account-card a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--viewer-primary);
+  color: var(--viewer-on-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+#terminal-paste-toolbar { display: inline-flex; flex: 0 0 auto; }
 .session-page.theme-light {
   --viewer-paper: #f3f1e9;
   --viewer-surface: #fcfbf7;

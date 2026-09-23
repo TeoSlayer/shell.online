@@ -2088,6 +2088,11 @@ for (const implementation of implementations) {
     });
 
     describe("feedback", () => {
+      it("stores anonymous reports without a membership or organization", async () => {
+        const anonymous = feedback({ uid: "", email: "", orgId: undefined, canReply: false, context: {} });
+        await store.putFeedback(anonymous);
+        expect(await store.feedback()).toEqual([anonymous]);
+      });
       it("keeps a message with where it came from, newest first", async () => {
         await store.putFeedback(feedback());
         await store.putFeedback(feedback({ id: "fbk_2", kind: "idea", at: 3000, context: {} }));

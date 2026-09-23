@@ -29,6 +29,7 @@ export interface TerminalSurface {
   resize(cols: number, rows: number): void;
   refresh(start: number, end: number): void;
   focus(): void;
+  paste(text: string): void;
   blur(): void;
   dispose(): void;
   scrollLines(lines: number): void;

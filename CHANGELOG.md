@@ -4,8 +4,21 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- Report a problem without signing in, through the same form in the app and
+  shared terminal links. Signed-in users can also omit their account and email.
+  Anonymous reports cannot receive replies; body limits and rate limits apply.
+- Mobile terminals have a Paste control with a preview and a native text-box
+  fallback when clipboard access is unavailable. Both terminal renderers retain
+  bracketed-paste behavior and input permissions; no Enter is added automatically.
+- Shared-session Controls includes a sign-up shortcut for keeping active sessions
+  together in the app, without passing the current sharing link or password.
+
 ### Fixed
 
+- Opening a session from its detail link is consumed once, even if terminal
+  activity updates arrive before the address-bar navigation finishes.
 - Locked-terminal forms scroll within the app on short phone screens, keeping
   password submission and help reachable above navigation. The same prompt offers
   vault unlock or a session password; unlocking retries a saved password without

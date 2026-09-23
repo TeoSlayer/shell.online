@@ -23,7 +23,7 @@ export interface FeedbackSheetProps {
   request: FeedbackRequest;
   /** Defaults to this browser's. A parameter so the sheet can be rendered elsewhere. */
   userAgent?: string;
-  onSend(payload: FeedbackPayload): Promise<unknown>;
+  onSend(payload: FeedbackPayload, anonymous?: boolean): Promise<unknown>;
   onClose(): void;
 }
 
@@ -47,12 +47,13 @@ export function FeedbackSheet({
   const [kind, setKind] = useState<FeedbackKind>(request.kind ?? "problem");
   const [text, setText] = useState("");
   const [canReply, setCanReply] = useState(true);
+  const [anonymous, setAnonymous] = useState(!email);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const done = useRef<HTMLButtonElement>(null);
-  const context = trimContext(request.context);
+  const context = anonymous ? {} : trimContext(request.context);
   const option = FEEDBACK_KINDS.find((candidate) => candidate.id === kind) ?? FEEDBACK_KINDS[0];
 
   useEffect(() => {
@@ -95,9 +96,9 @@ export function FeedbackSheet({
         surface: request.surface,
         route,
         app_version: APP_VERSION,
-        can_reply: canReply,
+        can_reply: !anonymous && canReply,
         context,
-      });
+      }, anonymous);
       setSent(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not send that. Try again.");
@@ -124,7 +125,7 @@ export function FeedbackSheet({
             </span>
             <h2 id="feedback-title">Sent. Thank you.</h2>
             <p>
-              {canReply ? (
+              {anonymous ? "We received your anonymous report. No account or email was attached, so we cannot reply." : canReply ? (
                 <>
                   If we have a question, we will write to <b>{email}</b>.
                 </>
@@ -205,7 +206,12 @@ export function FeedbackSheet({
                 attached. Please do not paste them either.
               </p>
 
-              <label className="feedback-reply">
+              {email && <label className="feedback-anonymous feedback-reply">
+                <input type="checkbox" checked={anonymous} disabled={busy}
+                  onChange={(event) => setAnonymous(event.target.checked)} />
+                <span>Send without my account or email</span>
+              </label>}
+              {anonymous ? <p className="sheet-help">No account or email will be attached. We cannot reply to anonymous reports.</p> : <label className="feedback-reply feedback-contact">
                 <input
                   type="checkbox"
                   checked={canReply}
@@ -214,7 +220,7 @@ export function FeedbackSheet({
                 <span>
                   You can write back to me at <b>{email}</b>
                 </span>
-              </label>
+              </label>}
 
               <div className="sheet-actions">
                 <Button type="button" variant="ghost" onClick={onClose} disabled={busy}>
