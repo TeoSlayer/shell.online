@@ -197,6 +197,19 @@ jobs:
         run: node scripts/test-posthog-browser.mjs
         env:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - name: Responsive app shell and terminal regression gate
+        run: node scripts/test-app-layout-browser.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Real terminal and public session responsive regression gate
+        run: node scripts/test-terminal-live-browser.mjs
+        env:
+          SHELL_CHROME_BIN: /usr/bin/google-chrome
+          SHELL_BROWSER: chrome
       - name: Build with generic OpenID Connect
         run: npm run build
         working-directory: app

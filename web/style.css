@@ -831,7 +831,8 @@ a {
   border-bottom: 1px solid #252a34;
   background: #11141b;
   color: #c9d0de;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 12px;
   align-items: center;
 }
 
@@ -847,6 +848,9 @@ a {
 .session-identity {
   display: flex;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  justify-self: center;
   color: #8f9bb1;
   font-size: 12px;
   align-items: center;
@@ -855,6 +859,7 @@ a {
 
 .session-access {
   display: inline-flex;
+  flex: none;
   min-height: 18px;
   padding: 0 7px;
   border: 1px solid #3a4559;
@@ -1042,6 +1047,9 @@ a {
 .presence {
   display: flex;
   min-width: 0;
+  max-width: min(24vw, 260px);
+  overflow-x: auto;
+  scrollbar-width: none;
   align-items: center;
 }
 
@@ -1051,6 +1059,7 @@ a {
 
 .presence-avatar {
   display: grid;
+  flex: none;
   width: 24px;
   height: 24px;
   margin-left: -5px;
@@ -1092,6 +1101,7 @@ a {
 }
 
 .presence-agent {
+  flex: none;
   margin-left: 8px;
   padding: 3px 9px;
   border: 1px solid rgb(126 164 255 / 45%);
@@ -2243,7 +2253,7 @@ a {
 
 }
 
-@media (max-width: 560px) {
+@media (max-width: 760px) {
   .session-header {
     padding: 4px max(10px, env(safe-area-inset-right)) 3px max(10px, env(safe-area-inset-left));
     grid-template-columns: minmax(0, 1fr) auto;
@@ -2303,7 +2313,7 @@ a {
 
   .session-access.encryption::after {
     font-size: 9px;
-    content: "E2EE";
+    content: attr(data-compact-label);
   }
 }
 
@@ -2348,6 +2358,10 @@ a {
 
   .session-actions {
     gap: 5px;
+  }
+
+  .presence {
+    max-width: clamp(24px, calc(100vw - 310px), 100px);
   }
 
   .settings-button,

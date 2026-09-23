@@ -432,6 +432,24 @@
   flex-direction: column;
 }
 
+/* A terminal is a viewport, not a document with a minimum content height.
+   Keep short desktop windows bounded too; its own scrollback owns scrolling. */
+.shell:has(.panes) {
+  height: var(--visible-height, calc(100dvh / var(--zoom)));
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shell:has(.panes) .shell-main,
+.shell-content:has(.panes) {
+  min-height: 0;
+}
+
+.shell-content:has(.panes) {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
 .page-dek {
   max-width: 62ch;
   margin: 0 0 4px;
@@ -475,21 +493,18 @@
 }
 
 /* ---------------------------------------------------------------
-   Responsive: the rail becomes a horizontal strip under the topbar.
-   Three items fit without a drawer, so there is no menu state to manage.
+   Tablets: a content-sized navigation row above the scrolling workspace.
+   Never let implicit auto rows split spare height with the navigation.
    --------------------------------------------------------------- */
 
 @media (max-width: 900px) {
   .shell {
-    /*
-     * 100dvh is a viewport measurement, and viewport units do not follow the
-     * zoom above: 100dvh resolves against the undivided viewport and is then
-     * drawn in this scaled space, so the page was 15% taller than the screen
-     * on every phone. That bought nothing and cost a page that scrolled
-     * underneath a fixed bottom bar and anything docked above it.
-     */
-    min-height: calc(100dvh / var(--zoom));
+    /* Viewport units need the same zoom correction as the phone layout. */
+    height: calc(var(--app-height, calc(100dvh / var(--zoom))) - var(--keyboard-inset, 0px));
+    min-height: 0;
+    overflow: hidden;
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .rail {
@@ -506,6 +521,7 @@
 
   .rail-nav {
     display: flex;
+    flex: none;
     overflow-x: auto;
     gap: 4px;
     scrollbar-width: none;
@@ -540,6 +556,7 @@
   }
 
   .shell-main {
+    min-height: 0;
     border-left: 0;
   }
 
@@ -569,8 +586,35 @@
   }
 
   .shell-content {
-    padding: 24px 18px 64px;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 24px 18px 20px;
   }
+
+  /* The terminal owns scrolling. The tablet must reserve its full viewport,
+     just like the phone, without an outer scroller or unused footer gutter. */
+  :root[data-pane="open"] .shell {
+    height: var(--visible-height, calc(100dvh / var(--zoom)));
+  }
+
+  :root[data-pane="open"] .shell-content {
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 900px) and (max-height: 600px) {
+  .rail { padding-top: 8px; }
+  .rail-head { padding-bottom: 6px; }
+  .rail-foot { top: 6px; }
+  .topbar { height: 52px; }
+  :root[data-pane="open"] .shell-content { padding-top: 8px; }
+}
+
+@media (min-width: 901px) and (max-height: 600px) {
+  .rail { overflow-y: auto; }
+  .rail-nav { flex-shrink: 0; }
 }
 
 /* ---------------------------------------------------------------
@@ -885,6 +929,19 @@
 
   .topbar-account {
     display: block;
+  }
+
+  /* Anchor to the full topbar (its backdrop-filter is the fixed containing
+     block), not the avatar: a 232px menu under it ran off a 320px phone. */
+  .topbar-account .account-pop {
+    position: fixed;
+    top: calc(100% + 8px);
+    right: 10px;
+    left: 10px;
+    width: auto;
+    min-width: 0;
+    max-height: calc((100dvh - 96px) / var(--zoom));
+    overflow-y: auto;
   }
 
   /*

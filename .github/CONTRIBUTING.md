@@ -36,6 +36,21 @@ and include a synthetic screenshot. Record exact commands, results and checks
 you could not run; “all green” without scope is not enough. CI still runs its
 full configured checks for pull requests.
 
+For app-shell or terminal layout changes, also run these browser checks after
+installing both sets of dependencies and building the public viewer:
+
+```sh
+node scripts/test-app-layout-browser.mjs
+SHELL_BROWSER=chrome node scripts/test-terminal-live-browser.mjs
+```
+
+Set `SHELL_CHROME_BIN` if Chrome is not installed at its standard macOS path.
+On macOS, `APP_LAYOUT_BROWSER=safari` selects Safari for the first check;
+`SHELL_BROWSER=safari` selects it for the second (Safari remote automation must
+be enabled). The tests measure actual browser viewports, sweep both sides of
+layout breakpoints and use synthetic sessions, never your running agents.
+Screenshots and temporary browser profiles stay outside the repository.
+
 ## Keep changes focused
 
 - Describe the user-visible outcome and why the change is needed.

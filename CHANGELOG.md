@@ -2,6 +2,17 @@
 
 All notable user-visible changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Tablet navigation no longer consumes the app's terminal workspace. Short
+  landscape windows keep terminal rows and overflow tabs reachable.
+- Shared-session headers keep Controls, Report, connection state and the MCP
+  encryption disclosure visible across phone, tablet and desktop widths.
+- Added Chrome CI and Safari-compatible responsive browser checks using real
+  terminal rendering and an isolated Go host/relay.
+
 ## [0.23.0] — 2026-09-23
 
 ### Added

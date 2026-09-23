@@ -520,6 +520,63 @@ try {
   check(replayMismatches === 0, `after reconnect the buffer matches the host again (rows ${mismatchRows.join(",")}, host rows ${frozenNow.length}, browser rows ${after.rows})`);
   await audit("a", { label: `${browser}-after-reconnect`, greenRow, blackRow, statusRow });
 
+  stage = "public session responsive layout";
+  // Real /s/* page, not the isolated app pane. Navigate away from the app
+  // first so its viewers cannot impose a competing canonical grid.
+  await transport.navigate(browserShareUrl(session));
+  await waitForPage(() => evaluate(`!!document.querySelector('#terminal .xterm-screen') && document.querySelector('#session-status').classList.contains('connected')`), "public viewer decrypted");
+  for (const [width, height] of [[1440,900],[901,768],[900,768],[761,700],[760,700],[561,700],[560,700],[481,700],[480,700],[371,700],[370,700],[320,640],[390,844],[850,480],[600,480],[1024,480],[1440,900]]) {
+    await transport.setViewport({ width, height, dpr: 1, mobile: false });
+    await delay(350);
+    const layout = await evaluate(`(() => {
+      const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height,right:r.right,b:r.bottom}};
+      return {width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth+1,page:rect('.session-page'),header:rect('.session-header'),identity:rect('.session-identity'),actions:rect('.session-actions'),screen:rect('#terminal .xterm-screen'),wrap:rect('#terminal-wrap'),settings:rect('#settings-open'),report:rect('#issue-open')};
+    })()`);
+    writeFileSync(join(shots, `${browser}-public-${layout.width}-${layout.height}.png`), Buffer.from(await transport.screenshot(), "base64"));
+    check(!layout.overflow, `${browser} public ${layout.width}x${layout.height}: no page overflow`);
+    check(layout.page.b <= layout.height + 2 && layout.screen.b <= layout.wrap.b + 2 && layout.screen.right <= layout.wrap.right + 2, `${browser} public ${layout.width}: complete terminal fits`);
+    check(layout.settings.x >= 0 && layout.settings.right <= layout.width && layout.report.x >= 0 && layout.actions.b <= layout.header.b + 2, `${browser} public ${layout.width}: header actions fit`);
+    if (layout.width > 760) check(layout.identity.right <= layout.actions.x + 2, `${browser} public ${layout.width}: identity does not overlap controls`);
+    const disclosure = await evaluate(`(() => {
+      const badge=document.getElementById('session-encryption'),r=badge.getBoundingClientRect(),identity=badge.parentElement.getBoundingClientRect(),status=document.getElementById('session-status').getBoundingClientRect();
+      return {visible:!badge.hidden && r.width>0 && r.x>=identity.x && r.right<=identity.right+1,statusVisible:status.right<=identity.right+1,compact:getComputedStyle(badge,'::after').content,hasMcp:badge.textContent.includes('MCP')};
+    })()`);
+    check(disclosure.visible && disclosure.statusVisible && (layout.width>760 || !disclosure.hasMcp || disclosure.compact.includes('MCP')), `${browser} public ${layout.width}: connection and MCP disclosure stay visible`);
+    await evaluate(`document.getElementById('settings-open').click()`);
+    await delay(220);
+    const dialog = await evaluate(`(() => {
+      const d=document.getElementById('terminal-settings'),r=d.getBoundingClientRect(),c=d.querySelector('.settings-content');
+      c.scrollTop=c.scrollHeight;
+      const last=c.lastElementChild.getBoundingClientRect(),box=c.getBoundingClientRect();
+      return {open:d.open,x:r.x,y:r.y,right:r.right,b:r.bottom,width:innerWidth,height:innerHeight,lastVisible:last.bottom<=box.bottom+2};
+    })()`);
+    check(dialog.open && dialog.x >= 0 && dialog.y >= 0 && dialog.right <= dialog.width + 2 && dialog.b <= dialog.height + 2 && dialog.lastVisible, `${browser} public ${layout.width}: controls dialog fits and scrolls`);
+    await evaluate(`document.getElementById('settings-close').click()`);
+  }
+
+  stage = "public password gate responsive layout";
+  await evaluate(`(() => {sessionStorage.clear();localStorage.clear();})()`);
+  const lockedLink = new URL(session.share_url);
+  const lockedFragment = new URLSearchParams(lockedLink.hash.slice(1));
+  lockedFragment.delete("password");
+  lockedLink.hash = lockedFragment.toString();
+  // A fragment-only navigation would retain the current in-memory cipher.
+  await transport.navigate("about:blank");
+  await transport.navigate(lockedLink.toString());
+  await waitForPage(() => evaluate(`!!document.querySelector('.encryption-gate:not([hidden])')`), "password required on a fresh viewer");
+  for (const [width, height] of [[320,640],[760,480],[1024,768]]) {
+    await transport.setViewport({width,height,dpr:1,mobile:false});
+    await evaluate(`(() => {const help=document.querySelector('.encryption-help');if(help)help.open=true;})()`);
+    await delay(150);
+    const gate = await evaluate(`(() => {
+      const g=document.querySelector('.encryption-gate'),p=document.querySelector('.encryption-panel');
+      g.scrollTop=0;const top=p.getBoundingClientRect().top,box=g.getBoundingClientRect();
+      g.scrollTop=g.scrollHeight;const bottom=p.getBoundingClientRect().bottom;
+      return {top,gateTop:box.top,bottom,gateBottom:box.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};
+    })()`);
+    check(!gate.overflow && gate.top>=gate.gateTop-1 && gate.bottom<=gate.gateBottom+1, `${browser} password ${width}: expanded help and form are reachable`);
+  }
+
   console.log(`screenshots in ${shots}`);
 } catch (error) {
   failed = true;

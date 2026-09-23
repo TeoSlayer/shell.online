@@ -9,10 +9,12 @@
   border-bottom: 1px solid var(--line);
   margin-bottom: 20px;
   align-items: stretch;
+  flex: none;
 }
 
 .tabs {
   display: flex;
+  container-type: inline-size;
   min-width: 0;
   overflow-x: auto;
   gap: 2px;
@@ -95,7 +97,7 @@
 .tab {
   position: relative;
   display: inline-flex;
-  max-width: 240px;
+  max-width: min(240px, 100cqw);
   border: 0;
   border-radius: var(--radius-chip) var(--radius-chip) 0 0;
   margin-bottom: -1px;
@@ -191,6 +193,10 @@ button.tab {
   position: relative;
   min-height: 320px;
   flex: 1;
+}
+
+.shell .panes {
+  min-height: 0;
 }
 
 /*
@@ -561,29 +567,12 @@ button.tab {
 }
 
 @media (max-width: 900px) {
-  /*
-   * A phone's keyboard covers the bottom of the page rather than making the
-   * page shorter, and the prompt is at the bottom of a terminal, so the line
-   * being typed was the first thing to disappear behind it. --pane-height is
-   * what the visual viewport has left below this element; see keyboard-inset.
-   */
+  /* The shell owns the viewport at both tablet and phone widths. The pane
+     takes its remaining space rather than competing with a measured height. */
   .panes {
-    /*
-     * The pane is the child of the session column that takes what is left of
-     * the screen; shell.css sets the column's height and reserves the strip
-     * the bottom bar is holding. Nothing here measures anything, which is the
-     * point: the pane's top edge moves whenever a tab line wraps, a notice
-     * appears or a summary line is added, and a height measured once in
-     * JavaScript was stale from the next layout onwards -- the conversation
-     * in a short box with a strip of dead page under it.
-     *
-     * --pane-height is what is left for the widths the column rule does not
-     * cover: a tablet, wide enough to miss the phone breakpoint and with the
-     * same on-screen keyboard, where the shell is still a document that
-     * scrolls and the pane has to be told how much of it the keyboard left.
-     */
-    height: var(--pane-height, 60dvh);
+    height: auto;
     min-height: 0;
+    flex: 1;
   }
 
   .pane {
@@ -607,7 +596,7 @@ button.tab {
   .tab,
   .tab-label,
   button.tab {
-    max-width: 190px;
+    max-width: min(190px, 100cqw);
   }
 }
 
@@ -623,6 +612,17 @@ button.tab {
     height: auto;
     flex: 1;
   }
+}
+
+/* In a short window the renderer belongs beside the tabs, not hanging over
+   a second row. Reclaim decoration space without changing the shared grid. */
+@media (max-width: 760px) and (max-height: 600px) {
+  :root[data-pane="open"] .topbar { min-height: calc(48px + env(safe-area-inset-top)); }
+  :root[data-pane="open"] .shell-content { padding-top: 0; }
+  :root[data-pane="open"] .terminal-bar { margin-bottom: 0; padding-inline: 6px; }
+  .tab-renderer { position: static; height: 40px; padding-left: 6px; border: 0; border-radius: 0; }
+  .tab-renderer select { max-width: 120px; }
+  .pane { padding: 4px 0; }
 }
 
 /* ---------------------------------------------------------------
