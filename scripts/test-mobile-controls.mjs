@@ -146,6 +146,21 @@ if (!/:root\[data-pane="open"\] \.shell \{\s*height: var\(--visible-height/.test
 }
 
 /*
+ * The chat renderer has no accent of its own.
+ *
+ * It used the app's blue for what the viewer sent and its acid green for a
+ * program reading keys, and next to a conversation those read as two more
+ * things asking to be looked at. A chat is mostly other people's text. Red
+ * stays, because a command that failed is a fact about the session rather
+ * than decoration, and so do the colours a process writes its own output in.
+ */
+for (const accent of ["--blue", "--blue-deep", "--blue-wash", "--acid"]) {
+  if (appChatStylesheet.split("\n").some((line) => !line.trim().startsWith("*") && line.includes(`var(${accent})`))) {
+    throw new Error(`The chat renderer must not reach for ${accent}; it takes the app's own neutrals`);
+  }
+}
+
+/*
  * A session does not change size for a keyboard, and the bar does not move.
  *
  * The terminal in it is a grid of a fixed number of columns, so a pane that
