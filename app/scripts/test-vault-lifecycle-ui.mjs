@@ -98,6 +98,10 @@ const overlayPlugin = {
       if (mutation === 'storage-admission') {
         transformed = transformed.split('if (isCurrent && !isCurrent()) return false;').join('if (false && isCurrent && !isCurrent()) return false;');
       }
+      const clearTarget = 'await enqueue(uid, async () => {\n    try {\n      const database = await openDatabase();';
+      if (transformed.includes(clearTarget)) {
+        transformed = transformed.replace(clearTarget, 'await enqueue(uid, async () => {\n    try {\n      const __cg = globalThis.__clearGate;\n      if (__cg && __cg.armed) { __cg.armed = false; __cg.entered = true; await __cg.wait; }\n      const database = await openDatabase();');
+      }
       return transformed + `
 export async function saveLocalVault(...args) {
   const gate = globalThis.__saveGate;
@@ -142,6 +146,7 @@ const SETUP = `
       fingerprint, createVault, sealToAccount, clearLocalVault, loadLocalVault,
       gateEntered: () => !!(globalThis.__gateState && globalThis.__gateState.entered),
       saveGateEntered: () => !!(globalThis.__saveGate && globalThis.__saveGate.entered),
+      clearGateEntered: () => !!(globalThis.__clearGate && globalThis.__clearGate.entered),
       vaultPostGateEntered: () => !!(globalThis.__vaultPostGate && globalThis.__vaultPostGate.entered),
       rememberedPublicKey: async (uid) => { const local = await loadLocalVault(uid); return local ? local.publicKey : null; },
     });
@@ -177,6 +182,8 @@ const SETUP = `
     crypto.subtle.deriveBits = async (algorithm, ...rest) => { const gate = globalThis.__gateState; if (gate && gate.mode === 'ecdh' && algorithm && algorithm.name === 'ECDH') { gate.mode = null; gate.entered = true; await gate.wait; } return realDeriveBits(algorithm, ...rest); };
     globalThis.__armSaveGate = () => { let release; const wait = new Promise((resolve) => { release = resolve; }); globalThis.__saveGate = { armed: true, entered: false, wait, release }; };
     globalThis.__releaseSaveGate = () => { const gate = globalThis.__saveGate; if (gate) { gate.armed = false; gate.release(); } };
+    globalThis.__armClearGate = () => { let release; const wait = new Promise((resolve) => { release = resolve; }); globalThis.__clearGate = { armed: true, entered: false, wait, release }; };
+    globalThis.__releaseClearGate = () => { const gate = globalThis.__clearGate; if (gate) { gate.armed = false; gate.release(); } };
     globalThis.__armVaultPostGate = () => { let release; const wait = new Promise((resolve) => { release = resolve; }); globalThis.__vaultPostGate = { armed: true, entered: false, wait, release }; };
     globalThis.__releaseVaultPostGate = () => { const gate = globalThis.__vaultPostGate; if (gate) { gate.armed = false; gate.release(); } };
     function VaultProbe() {
@@ -588,6 +595,32 @@ try {
     expectedPendingRemembered: false, actualPendingRemembered: jPendingRemembered,
     expectedLegitRemembered: true, actualLegitRemembered: jLegitRemembered,
     pass: jPendingRemembered === false && jLegitRemembered === true,
+  });
+
+  // ---- Case K: clear held in queue across account switch must still delete ----
+  await resetAccount('account-a');
+  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-clear"); await vt.vault.commit(made); return vt.vault.status; })()');
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for clear race');
+  await evaluate('(async () => { __armClearGate(); vt.lockDone = false; vt.vault.lock().then(() => { vt.lockDone = true; }, () => { vt.lockDone = true; }); return true; })()');
+  await waitFor(() => evaluate('vt.clearGateEntered()'), 'clear held inside queue');
+  await switchTo('account-b');
+  await evaluate('__releaseClearGate()');
+  await waitFor(() => evaluate('vt.lockDone === true'), 'clear settled after release');
+  await settle();
+  await evaluate(`(async () => {
+    vt.switchAccount('account-a');
+    vt.remount();
+    for (let i = 0; i < 300 && (!vt.vault || vt.vault.status === 'loading'); i++) await new Promise((r) => setTimeout(r, 10));
+    return true;
+  })()`);
+  await waitFor(() => evaluate("vt.vault && vt.vault.uid === 'account-a' && vt.vault.status !== 'loading'"), 'A remounted after clear race');
+  const kStatus = await status();
+  const kRemembered = await evaluate("(async () => (await vt.loadLocalVault('account-a')) !== null)()");
+  results.push({
+    scenario: 'clear-held-across-account-switch',
+    expectedStatus: 'locked', actualStatus: kStatus,
+    expectedRemembered: false, actualRemembered: kRemembered,
+    pass: kStatus === 'locked' && kRemembered === false,
   });
 
   const pageError = await evaluate('vt.error');

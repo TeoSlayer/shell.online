@@ -9,6 +9,10 @@
  *
  * Losing this costs a recovery key, not a session: the vault itself is kept
  * by the service, sealed, and this is only the unlocked copy.
+ *
+ * Mutations (save/clear) are serialized per-UID in a FIFO queue. A lock's
+ * clear cannot overtake a newer save for the same UID, and a read awaits
+ * pending mutations so it never sees a key a queued clear is about to remove.
  */
 
 const DATABASE = "shell.online:vault";
@@ -62,9 +66,30 @@ function isLocalVault(value: unknown): value is LocalVault {
   );
 }
 
+/*
+ * Per-UID FIFO mutation queue. Save and clear for the same UID run in the
+ * order they were requested, so a lock's clear cannot overtake a newer save.
+ * Reads await the tail of the queue so they never observe a key a pending
+ * clear is about to remove.
+ */
+const queues = new Map<string, Promise<void>>();
+
+function enqueue<T>(uid: string, mutation: () => Promise<T>): Promise<T> {
+  const prev = queues.get(uid) ?? Promise.resolve();
+  const next = prev.then(mutation, mutation);
+  queues.set(uid, next.then(() => undefined, () => undefined));
+  return next;
+}
+
+async function drain(uid: string): Promise<void> {
+  const tail = queues.get(uid);
+  if (tail) await tail;
+}
+
 /** The unlocked vault for this account, or null when this browser has none. */
 export async function loadLocalVault(uid: string): Promise<LocalVault | null> {
   try {
+    await drain(uid);
     const found = await run("readonly", (store) => store.get(uid));
     return isLocalVault(found) && found.uid === uid ? found : null;
   } catch {
@@ -82,52 +107,53 @@ export async function loadLocalVault(uid: string): Promise<LocalVault | null> {
  * overwrite the newer valid key.
  */
 export async function saveLocalVault(vault: LocalVault, isCurrent?: () => boolean): Promise<boolean> {
-  try {
-    if (isCurrent && !isCurrent()) return false;
-    const database = await openDatabase();
+  return enqueue(vault.uid, async () => {
     try {
       if (isCurrent && !isCurrent()) return false;
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction(STORE, "readwrite");
-        transaction.objectStore(STORE).put(vault);
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
-      });
-      return true;
-    } finally {
-      database.close();
+      const database = await openDatabase();
+      try {
+        if (isCurrent && !isCurrent()) return false;
+        await new Promise<void>((resolve, reject) => {
+          const transaction = database.transaction(STORE, "readwrite");
+          transaction.objectStore(STORE).put(vault);
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error);
+        });
+        return true;
+      } finally {
+        database.close();
+      }
+    } catch {
+      return false;
     }
-  } catch {
-    return false;
-  }
+  });
 }
 
 /**
  * Locks the vault in this browser. The vault itself is untouched.
  *
- * The optional `isCurrent` predicate is checked before the database opens
- * and again immediately before the delete. A stale clear held behind a slow
- * openDatabase() that resolves after a newer valid unlock must not erase
- * the newer key.
+ * The clear always runs (no admission predicate): it was authorized by the
+ * lock's synchronous generation bump. Serialization ensures it cannot
+ * overtake a newer save for the same UID.
  */
-export async function clearLocalVault(uid: string, isCurrent?: () => boolean): Promise<void> {
-  try {
-    if (isCurrent && !isCurrent()) return;
-    const database = await openDatabase();
+export async function clearLocalVault(uid: string): Promise<void> {
+  await enqueue(uid, async () => {
     try {
-      if (isCurrent && !isCurrent()) return;
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction(STORE, "readwrite");
-        transaction.objectStore(STORE).delete(uid);
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
-      });
-    } finally {
-      database.close();
+      const database = await openDatabase();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const transaction = database.transaction(STORE, "readwrite");
+          transaction.objectStore(STORE).delete(uid);
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error);
+        });
+      } finally {
+        database.close();
+      }
+    } catch {
+      /* nothing kept, nothing to clear */
     }
-  } catch {
-    /* nothing kept, nothing to clear */
-  }
+  });
 }

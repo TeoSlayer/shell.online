@@ -197,7 +197,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         if (!live || lifecycle.current.generation !== gen) return;
         setRemote(vault);
         if (!vault) {
-          if (local) await clearLocalVault(uid, () => lifecycle.current.generation === gen);
+          if (local) await clearLocalVault(uid);
           if (!live || lifecycle.current.generation !== gen) return;
           setStatus("setup");
           return;
@@ -448,8 +448,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setPublicKey(null);
     setPrint("");
     setStatus(remote ? "locked" : "setup");
-    const gen = lifecycle.current.generation;
-    await clearLocalVault(uid, () => lifecycle.current.generation === gen);
+    await clearLocalVault(uid);
   }, [uid, remote]);
 
   /*
