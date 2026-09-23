@@ -92,6 +92,7 @@ try {
   };
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   await cdp('Page.enable'); await cdp('Network.enable');
+  await cdp('Emulation.setFocusEmulationEnabled', { enabled:true });
   await cdp('Network.setBlockedURLs', { urls:['ws://*', 'wss://*'] });
   await cdp('Fetch.enable', { patterns:[{ urlPattern:'*', requestStage:'Request' }] });
   phase = 'landing';
@@ -106,6 +107,7 @@ try {
     document.querySelector('[data-cta=start_hero]').click();
   });
   await delay(11500); // Exceed vendor dwell threshold; it must remain disabled.
+  assert.equal(await browser.evaluate('document.visibilityState === "visible" && document.hasFocus()'),true,'foreground engagement fixture');
   await blank(); await delay(1000);
   const landing = captures.filter(c => c.phase === 'landing');
   assert.equal(landing.filter(c => c.host === 'analytics.twitter.com').length, 1, 'one base event, no automatic conversions');
@@ -125,8 +127,12 @@ try {
   assert.deepEqual(scripts.map(s => s.referrer), ['']);
   for (const event of ['page_loaded', 'copy', 'cta_click']) assert.equal(own.filter(e => e.phase === 'landing' && e.event === event).length, 1);
   for (const event of ['$pageview', 'command_copy', 'landing_cta']) assert.equal(product.filter(e => e.phase === 'landing' && e.payload.event === event).length, 1, event);
+  assert.equal(product.filter(e=>e.phase==='landing'&&e.payload.event==='page_engaged').length,1,'one genuine foreground reading milestone');
+  assert(product.some(e=>e.phase==='landing'&&e.payload.event==='$pageleave'&&e.payload.properties.active_ms>=10000),'PostHog foreground duration');
   const ga = google.filter(c => c.phase === 'landing').flatMap(c => (c.body ? c.body.split(/\r?\n/) : ['']).map(line => ({ ...Object.fromEntries(new URL(c.url).searchParams), ...Object.fromEntries(new URLSearchParams(line)) })));
   for (const event of ['page_view', 'command_copy', 'landing_cta']) assert.equal(ga.filter(e => e.en === event).length, 1);
+  assert(ga.some(e => Number(e._et) >= 10_000), 'GA4 must report actual foreground engagement, not just page views');
+  assert(ga.some(e => e.seg === '1'), 'GA4 must mark the genuinely engaged session');
   assert(ga.every(e => e.tid === 'G-101HMD03VD' && e.dl === 'https://shell.online/'));
   assert(!JSON.stringify([google, own, product]).includes(marker));
   for (const [label, url] of [

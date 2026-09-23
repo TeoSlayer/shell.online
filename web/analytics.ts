@@ -59,8 +59,9 @@ function canonicalPageLocation(url: URL): string {
 }
 
 function pageTitleFor(pathname: string): string {
-  if (pathname === "/" || pathname === "") return "Your Coding Agent. On Your Phone. | shell.online";
-  if (resolveDocumentationRoute(pathname, RELEASE_VERSION)) return "Documentation | shell.online";
+  if (pathname === "/" || pathname === "") return "Your terminal, anywhere | shell.online";
+  const guide = resolveDocumentationRoute(pathname, RELEASE_VERSION);
+  if (guide) return `${guide.kind === "docs" ? "Getting started" : guide.kind} | shell.online docs`;
   return "shell.online";
 }
 

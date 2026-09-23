@@ -135,7 +135,10 @@ try{
   reports.push('GPC blocks browser capture');
   for(const e of events){assert(!JSON.stringify(e).includes(marker));assert(!e.headers.Referer&&!e.headers.Cookie);assert.equal(e.payload.properties.$process_person_profile,false);
     assert.equal(e.payload.properties.capture_source,'browser');
-    assert.equal(e.payload.properties.instrumentation_version,2);
+    assert.equal(e.payload.properties.instrumentation_version,3);
+    assert.match(e.payload.properties.$session_id,/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    const sessionStart=Number.parseInt(e.payload.properties.$session_id.replaceAll('-','').slice(0,12),16);
+    assert(Date.parse(e.payload.timestamp)>=sessionStart&&Date.parse(e.payload.timestamp)<sessionStart+86400000,'session aggregation timestamp range');
     assert.equal(e.payload.properties.user_agent_status,'present');
     assert.equal(typeof e.payload.properties.browser_automation,'boolean');
     const expected=expectedAgents.get(e.phase)??expectedAgents.get('landing');

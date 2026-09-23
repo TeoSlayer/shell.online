@@ -358,8 +358,12 @@ export function Privacy() {
             session cookie connects actions on the same site; it is not stored
             in localStorage, shared across subdomains or linked to your account.
             Browser Do Not Track, Global Privacy Control and saved analytics
-            opt-outs disable this browser tracking. Foreground time is measured
-            on navigation, not by artificial engagement pings. Browser events
+            opt-outs disable this browser tracking. We measure foreground time
+            on navigation or backgrounding, and record one reading milestone
+            after ten focused seconds. We also measure categorized sign-in,
+            account-creation and app-action outcomes, without form values or
+            raw errors. Public campaign sources, referring sites, browser/device
+            families and guide pages use fixed categories. Browser events
             include a bounded browser user-agent string and the browser&rsquo;s
             automation flag, when available, to help distinguish browser visits
             from bots and backend events. These signals do not prove a visitor

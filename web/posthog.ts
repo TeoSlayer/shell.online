@@ -1,32 +1,35 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
 import { sendPosthog, type PosthogCaptureContext } from "../shared/posthog";
+import { campaignMedium, campaignSource, classifyReferrer, publicSource } from "../shared/public-attribution";
 
 const COOKIE = "__Host-shell_ph";
 const COOKIE_VALUE = /^([0-9a-f-]{36})\.([0-9a-f-]{36})\.(\d{13})$/;
 let identity: { id: string; session: string; time: number } | undefined;
+const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export function analyticsSource(url: URL, referrer: string): string {
-  const source = url.searchParams.get("utm_source")?.toLowerCase();
-  if (source && ["x", "twitter", "google", "github", "reddit", "linkedin", "youtube"].includes(source)) return source === "twitter" ? "x" : source;
-  if (url.searchParams.has("twclid")) return "x";
-  if (!referrer) return "direct";
-  try {
-    const host = new URL(referrer).hostname;
-    if (host === url.hostname) return "internal";
-    for (const [domain, bucket] of [["t.co", "x"], ["x.com", "x"], ["twitter.com", "x"], ["google.com", "google"], ["github.com", "github"], ["reddit.com", "reddit"]]) {
-      if (host === domain || host.endsWith(`.${domain}`)) return bucket;
-    }
-  } catch { /* Never preserve malformed referrers. */ }
-  return "other";
+/** PostHog's session aggregation requires a timestamp-bearing UUIDv7. */
+export function analyticsSessionId(now = Date.now()): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let timestamp = now;
+  for (let i = 5; i >= 0; i--) { bytes[i] = timestamp % 256; timestamp = Math.floor(timestamp / 256); }
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export function analyticsRoute(url: URL): { surface: string; route: string } | null {
+export function analyticsSource(url: URL, referrer: string): string {
+  return publicSource(url, referrer);
+}
+
+export function analyticsRoute(url: URL): { surface: string; route: string; guide?: string } | null {
   if (url.protocol !== "https:" || url.port || url.username || url.password) return null;
   if (url.hostname === "shell.online") {
     if (/^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(url.pathname)) return { surface: "terminal", route: "terminal" };
     if (url.pathname === "/") return { surface: "landing", route: "landing" };
-    if (resolveDocumentationRoute(url.pathname, RELEASE_VERSION)) return { surface: "docs", route: "docs" };
+    const guide = resolveDocumentationRoute(url.pathname, RELEASE_VERSION);
+    if (guide) return { surface: "docs", route: "docs", guide: guide.kind };
   }
   if (url.hostname === "app.shell.online") {
     const path = url.pathname.replace(/\/$/, "");
@@ -55,8 +58,10 @@ function browserIdentity() {
     const match = value?.match(COOKIE_VALUE);
     if (match) identity = { id: match[1], session: match[2], time: Number(match[3]) };
   } catch { /* Memory fallback, never localStorage. */ }
-  identity ??= { id: crypto.randomUUID(), session: crypto.randomUUID(), time: now };
-  if (now - identity.time > 30 * 60_000 || now < identity.time) identity.session = crypto.randomUUID();
+  identity ??= { id: crypto.randomUUID(), session: analyticsSessionId(now), time: now };
+  const started = Number.parseInt(identity.session.replaceAll("-", "").slice(0, 12), 16);
+  if (!UUID_V7.test(identity.session) || now - identity.time >= 30 * 60_000 || now < identity.time ||
+      now < started || now - started >= 24 * 60 * 60_000) identity.session = analyticsSessionId(now);
   identity.time = now;
   try { document.cookie = `${COOKIE}=${identity.id}.${identity.session}.${now}; Path=/; Secure; SameSite=Lax`; } catch { /* Memory only. */ }
   return identity;
@@ -76,41 +81,77 @@ function browserContext(): PosthogCaptureContext {
   return { source: "browser", userAgent, automated };
 }
 
+function attribution(url: URL): Record<string, unknown> {
+  // UTM values and referrers are classified locally; no raw campaigns, click IDs,
+  // paths or account/query/fragment data go to the provider.
+  return { source: publicSource(url, document.referrer), campaign_source: campaignSource(url),
+    medium: campaignMedium(url), referrer_source: classifyReferrer(document.referrer, url.origin) };
+}
+
 export function trackProduct(event: string, input: Record<string, unknown> = {}): void {
   try {
     const url = new URL(window.location.href);
     const route = analyticsRoute(url);
     if (!route || !permitted()) return;
     const { id, session } = browserIdentity();
-    void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session }, browserContext());
+    void sendPosthog(event, id, { ...attribution(url), ...input, ...route, session_id: session }, browserContext());
   } catch { /* Includes unavailable browser globals in server-side tests. */ }
 }
 
-/** One page view per navigation, paired with actual foreground time; never timer pings. */
+/** One page view per navigation. One real 10s foreground milestone, no polling pings. */
 export function observeProductPage(): () => void {
-  try { return observePage(); } catch { return () => {}; }
+  try {
+    let end = observePage();
+    const restore = (event: PageTransitionEvent) => {
+      if (event.persisted) { end(); end = observePage(); }
+    };
+    window.addEventListener("pageshow", restore);
+    return () => { window.removeEventListener("pageshow", restore); end(); };
+  } catch { return () => {}; }
 }
 
 function observePage(): () => void {
   const url = new URL(window.location.href);
   const route = analyticsRoute(url);
   if (!route || !permitted()) return () => {};
-  const { id, session } = browserIdentity();
+  const { id } = browserIdentity();
+  const pageview = crypto.randomUUID();
+  const acquisition = attribution(url);
+  const started = performance.now();
   const emit = (event: string, input: Record<string, unknown> = {}) => {
-    if (permitted()) void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session }, browserContext());
+    if (!permitted()) return;
+    const current = browserIdentity();
+    // Never stitch a surviving observer to a different signed-in identity. Long-
+    // lived tabs still rotate idle/24-hour sessions before their next event.
+    if (current.id === id) void sendPosthog(event, id, { ...acquisition, ...input, ...route, session_id: current.session, pageview_id: pageview }, browserContext());
   };
   emit("$pageview");
   let active = 0, since = document.visibilityState === "visible" && document.hasFocus() ? performance.now() : null;
-  let ended = false;
+  let ended = false, reported = 0, engaged = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const schedule = () => {
+    clearTimeout(timer);
+    if (!ended && !engaged && since !== null) timer = setTimeout(account, Math.max(1, 10_000 - active));
+  };
+  const flush = (reason: "hidden" | "navigation") => {
+    const delta = Math.round(active) - reported;
+    if (delta > 0) { emit("page_engagement", { active_ms: delta, engagement_reason: reason }); reported += delta; }
+  };
   const account = () => {
+    if (ended) return;
     const now = performance.now();
-    if (since !== null) active += now - since;
+    if (since !== null) active += Math.max(0, now - since);
     since = document.visibilityState === "visible" && document.hasFocus() ? now : null;
+    if (active >= 10_000 && !engaged) { engaged = true; emit("page_engaged"); }
+    if (document.visibilityState === "hidden") flush("hidden");
+    schedule();
   };
   const finish = () => {
     if (ended) return;
     account(); ended = true;
-    emit("$pageleave", { active_ms: active });
+    clearTimeout(timer);
+    flush("navigation");
+    emit("$pageleave", { active_ms: active, previous_pageview_id: pageview, duration_seconds: (performance.now() - started) / 1000 });
     document.removeEventListener("visibilitychange", account);
     window.removeEventListener("focus", account);
     window.removeEventListener("blur", account);
@@ -120,20 +161,42 @@ function observePage(): () => void {
   window.addEventListener("focus", account);
   window.addEventListener("blur", account);
   window.addEventListener("pagehide", finish);
+  schedule();
   return finish;
 }
 
 /** Finite classification for successful/failed mutations, not API URLs, bodies or errors. */
-export function trackAppAction(path: string, method: string, ok: boolean): void {
+export function trackAppAction(path: string, method: string, ok: boolean, failure?: "network" | "response" | "http" | "signed_out"): void {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return;
   const pathname = path.split("?")[0];
   const target = /^\/api\/sessions\/[^/]+\/automation$/.test(pathname) ? "automation" :
     /^\/api\/sessions(?:\/|$)/.test(pathname) ? "session" :
-    /^\/api\/machines(?:\/|$)/.test(pathname) ? "machine" :
+    /^\/api\/(?:machines|devices)(?:\/|$)/.test(pathname) ? "machine" :
     /^\/api\/vault(?:\/|$)/.test(pathname) ? "vault" :
     /^\/api\/org\/invites(?:\/|$)/.test(pathname) ? "invite" :
     /^\/api\/org(?:\/|$)/.test(pathname) ? "team" :
     pathname === "/api/feedback" ? "feedback" : pathname === "/api/account" ? "account" :
-    pathname === "/api/cli/authorize" ? "cli" : null;
-  if (target) trackProduct("app_action", { target, method, outcome: ok ? "ok" : "failed" });
+    pathname === "/api/cli/authorize" ? "cli" : pathname === "/api/commands" ? "command" : null;
+  const action = target === "automation" ? "automation_update" : target === "cli" ? "cli_authorize" :
+    target === "command" ? "command_requested" : target === "feedback" ? "feedback_submit" :
+    target === "account" ? "account_remove" : target === "vault" ? "vault_update" : target === "team" ? "team_update" :
+    target === "invite" ? (method === "DELETE" ? "invite_remove" : "invite_create") :
+    target === "machine" ? (method === "DELETE" ? "machine_remove" : "machine_update") :
+    target === "session" ? (method === "DELETE" ? "session_remove" : /\/(?:share|access|assignee)$/.test(pathname) ? "session_access" : "session_update") : undefined;
+  if (target) trackProduct("app_action", { target, action, method, outcome: ok ? "ok" : "failed", failure: ok ? undefined : failure });
+}
+
+/** Call-through measurement: no arguments, results or thrown error contents captured. */
+export async function measureAuthentication<T>(
+  action: "sign_in" | "sign_up" | "provider_sign_in", provider: "email" | "google" | "oidc", work: () => Promise<T>,
+): Promise<T> {
+  trackProduct("auth_attempt", { action, provider });
+  try {
+    const result = await work();
+    trackProduct("auth_result", { action, provider, outcome: "ok" });
+    return result;
+  } catch (error) {
+    trackProduct("auth_result", { action, provider, outcome: "failed" });
+    throw error;
+  }
 }

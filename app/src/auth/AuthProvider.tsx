@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   createUserWithEmailAndPassword,
+  getAdditionalUserInfo,
   deleteUser,
   EmailAuthProvider,
   onAuthStateChanged,
@@ -34,6 +35,7 @@ import { deleteAccountData } from "../lib/api";
 import { forgetAll, setPasswordOwner } from "../lib/session-passwords";
 import { clearLocalVault } from "../lib/vault-store";
 import { forgetOpenTabs } from "../terminal/tab-store";
+import { measureAuthentication, trackProduct } from "../../../web/posthog";
 
 export interface UserIdentity {
   uid: string;
@@ -93,16 +95,18 @@ function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   }, [firebaseAuth]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+    await measureAuthentication("sign_in", "email", () => signInWithEmailAndPassword(firebaseAuth, email.trim(), password));
   }, [firebaseAuth]);
 
   const signUp = useCallback(
     async (name: string, email: string, password: string) => {
-      const credential = await createUserWithEmailAndPassword(
+      const credential = await measureAuthentication("sign_up", "email", () => createUserWithEmailAndPassword(
         firebaseAuth,
         email.trim(),
         password,
-      );
+      ));
+      // Creation is confirmed here even if optional profile setup fails later.
+      trackProduct("account_created", { provider: "email" });
       const displayName = name.trim();
       if (displayName) {
         await updateProfile(credential.user, { displayName });
@@ -123,7 +127,8 @@ function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signInWithGoogle = useCallback(async () => {
-    await signInWithPopup(firebaseAuth, googleProvider);
+    const credential = await measureAuthentication("provider_sign_in", "google", () => signInWithPopup(firebaseAuth, googleProvider));
+    if (getAdditionalUserInfo(credential)?.isNewUser) trackProduct("account_created", { provider: "google" });
   }, [firebaseAuth]);
 
   const resetPassword = useCallback(async (email: string) => {

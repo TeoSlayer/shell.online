@@ -329,7 +329,10 @@ export const SERVER_FAILURE = "Something went wrong on our side. Try again.";
  */
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await currentIdToken();
-  if (!token) throw new ApiError("You are signed out. Sign in and try again.");
+  if (!token) {
+    trackAppAction(path, init.method ?? "GET", false, "signed_out");
+    throw new ApiError("You are signed out. Sign in and try again.");
+  }
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -341,7 +344,7 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
       },
     });
   } catch {
-    trackAppAction(path, init.method ?? "GET", false);
+    trackAppAction(path, init.method ?? "GET", false, "network");
     throw new ApiError(NETWORK_FAILURE);
   }
 
@@ -349,17 +352,23 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
    * The edge answers an outage with an HTML page, not JSON. The reader is owed
    * a sentence about what happened, not the parser's complaint about a "<".
    */
-  const text = await response.text();
+  let text: string;
+  try { text = await response.text(); }
+  catch {
+    trackAppAction(path, init.method ?? "GET", false, "network");
+    throw new ApiError(NETWORK_FAILURE);
+  }
   let body: Record<string, unknown> = {};
   if (text) {
     try {
       body = JSON.parse(text) as Record<string, unknown>;
     } catch {
+      trackAppAction(path, init.method ?? "GET", false, "response");
       throw new ApiError(SERVER_FAILURE);
     }
   }
   if (!response.ok) {
-    trackAppAction(path, init.method ?? "GET", false);
+    trackAppAction(path, init.method ?? "GET", false, "http");
     throw new ApiError(typeof body.error === "string" ? body.error : SERVER_FAILURE);
   }
   trackAppAction(path, init.method ?? "GET", true);

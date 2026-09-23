@@ -5,8 +5,10 @@ vi.mock("./oidc", () => ({
   userManager: { getUser: async () => ({ id_token: "id-token", expired: false }) },
 }));
 vi.mock("./firebase", () => ({ auth: null }));
+vi.mock("../../../web/posthog", () => ({ trackAppAction: vi.fn() }));
 
-import { fetchDevices, NETWORK_FAILURE, SERVER_FAILURE } from "./api";
+import { fetchDevices, revokeDevice, NETWORK_FAILURE, SERVER_FAILURE } from "./api";
+import { trackAppAction } from "../../../web/posthog";
 
 function respond(status: number, text: string) {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(text, { status })));
@@ -14,6 +16,7 @@ function respond(status: number, text: string) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.clearAllMocks();
 });
 
 describe("request errors", () => {
@@ -50,5 +53,21 @@ describe("request errors", () => {
   it("returns the body of a success", async () => {
     respond(200, JSON.stringify({ devices: [] }));
     await expect(fetchDevices()).resolves.toEqual({ devices: [] });
+  });
+  it.each([
+    [200, '{"revoked":true}', true, undefined],
+    [403, '{"error":"PRIVATE_ERROR"}', false, "http"],
+    [200, '<html>PRIVATE_ERROR</html>', false, "response"],
+  ])("records exactly one categorized mutation result for status %s", async (status, text, ok, failure) => {
+    respond(status as number, text as string);
+    await revokeDevice("private-device").catch(() => {});
+    expect(trackAppAction).toHaveBeenCalledTimes(1);
+    expect(trackAppAction).toHaveBeenCalledWith("/api/devices/private-device", "DELETE", ok, ...(failure ? [failure] : []));
+    expect(JSON.stringify(vi.mocked(trackAppAction).mock.calls)).not.toContain("PRIVATE_ERROR");
+  });
+  it("records a failed body read without falsely recording success", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, text: async () => { throw new Error("PRIVATE_ERROR"); } })));
+    await expect(revokeDevice("private-device")).rejects.toThrow(NETWORK_FAILURE);
+    expect(trackAppAction).toHaveBeenCalledExactlyOnceWith("/api/devices/private-device", "DELETE", false, "network");
   });
 });

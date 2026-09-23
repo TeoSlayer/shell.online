@@ -133,9 +133,21 @@ project token is a public capture token, not a personal/admin credential.
 
 ## What is measured
 
-- `$pageview` / `$pageleave`: route category and actual focused time (`active_ms`).
+- `$pageview` / `$pageleave`: route category, per-view ID and native PostHog page
+  duration fields. Native duration includes background time; it is not focused time.
+- `page_engaged`: once per page view after ten seconds of actual visible, focused
+  reading. It is not a timer heartbeat or proof of a human visitor.
+- `page_engagement`: **incremental** focused milliseconds (`active_ms`), flushed
+  on backgrounding and navigation. Sum this event alone for active time; do not
+  also sum the cumulative `$pageleave.active_ms`. Mobile-close delivery is best effort.
 - `command_copy` / `landing_cta`: fixed button categories, never copied text.
-- `app_action`: successful or failed mutations with a fixed target and HTTP method.
+- `app_action`: successful or failed mutations with fixed target, action and HTTP
+  method; failures distinguish network, malformed response, HTTP and signed-out.
+  A successful `command_requested` means queue acceptance, not completed execution.
+- `auth_attempt` / `auth_result`: email/Google authentication resolution without
+  form values or raw errors. `account_created` requires identity-provider confirmation;
+  an existing Google account signing in is not a new account. OIDC provider returns
+  are represented by `signed_in`, not a claimed new-account event.
 - `signed_in` / `signed_out`: identity transitions, without an account identifier.
 - `terminal_connected` / `report_opened`: viewer connection and feedback entry.
 - Relay milestones (installer/binary downloads, install outcomes, sessions and
@@ -149,7 +161,7 @@ page load is not a verified human visit. Do not equate these stages in funnels.
 
 ### Browser and automation filters
 
-Instrumentation version `2` includes `capture_source=browser` or `server` on
+Instrumentation versions `2` and `3` include `capture_source=browser` or `server` on
 every event. Browser events supply PostHog's `$user_agent` from the browser,
 limited to 1,024 printable ASCII characters. No replacement browser string is
 invented. `user_agent_status` is `present`, `missing` or `invalid`;
@@ -159,7 +171,7 @@ Server milestones do not copy incoming request headers or impersonate browsers.
 
 For a report of likely non-automated browser traffic, filter to:
 
-- `instrumentation_version = 2`
+- `instrumentation_version >= 2` (use `3` for repaired session/engagement reports)
 - `capture_source = browser`
 - `user_agent_status = present`
 - `browser_automation = false`
@@ -178,14 +190,18 @@ challenges, user IP collection or fingerprinting are introduced by this fix.
 ## Privacy and operation
 
 No autocapture, remote JavaScript, replay, DOM text, raw errors, commands,
-terminal output, URLs with identifiers, queries/fragments, referrers, names,
+terminal output, URLs with identifiers, queries/fragments, raw referrers, names,
 email addresses, IP forwarding or person profiles. Properties are constructed
 from finite lists, except the bounded browser user-agent string, rather than
 redacted after collection. PostHog geo enrichment
 is disabled. Network requests necessarily reach its US ingestion service.
 
 Anonymous identifiers use a Secure, SameSite=Lax, host-only session cookie, not
-localStorage. An idle analytics session rotates after 30 minutes. Account changes
+localStorage. Version 3 uses UUIDv7 analytics session IDs, as required by PostHog,
+and client capture timestamps. Version 1/2 used UUIDv4 IDs: pageviews arrived but
+were excluded from native session aggregations. Old cookies are migrated in place;
+historical events are not silently rewritten. Sessions rotate after 30 minutes of
+inactivity or 24 hours total, including in long-lived tabs. Account changes
 clear the app identifier; public-site and app identities are intentionally not
 joined. GPC/DNT and saved opt-outs stop browser events. Unknown/self-hosted origins,
 OAuth callbacks and the private statistics site send nothing. CSP permits only
@@ -202,3 +218,55 @@ navigation, duplicate prevention and privacy controls. Set `POSTHOG_LIVE=1`
 to inspect deployed assets; collection remains intercepted so synthetic events
 never enter the project. Safari/X-browser user-agent fixtures are emulated in
 Chrome, not a claim of running those browsers themselves.
+
+## Reports that answer different questions
+
+Use the **shell.online — acquisition and product health** dashboard in PostHog:
+
+| Report | Question |
+| --- | --- |
+| Tracking health | Which versions have valid session IDs and metadata? |
+| Acquisition | Which finite sources, media, devices and surfaces bring browser sessions? |
+| Landing actions | Do visitors read, copy install/run commands, or follow signup CTAs? |
+| Pages and guides | Where is actual foreground time spent? |
+| Account access | Are authentication attempts succeeding? How many accounts were confirmed created? |
+| App actions | Which operations fail, and at which bounded failure category? |
+| Product usage | Are app pages, viewers and the current game being used? |
+| Install and relay milestones | How many downloads, reported installs, hosts and viewers reach each stage? |
+
+Stage counts are not automatically an ordered funnel. Public-site/app identities
+are deliberately separate and reset at account changes; neither is joined to
+the aggregate relay identity. Cross-device advertising ROI and person-level
+retention cannot be inferred from these counts. No replay/autocapture is enabled.
+
+Recognized guides get separate paths such as `/docs/agents`. Public campaigns
+use native `utm_source`/`utm_medium` properties after finite classification;
+referrers become known domain buckets, never raw URLs. Browser/OS/device
+families are derived locally. Unknown values stay unknown. Raw campaign names
+and click IDs are not retained in GA4/PostHog.
+
+### GA4 configuration and engagement verification
+
+Keep GA4 on public landing/docs only; PostHog covers private app/viewer routes
+with redacted templates. Configure enhanced measurement to keep page loads and
+scrolls, but disable browser-history pageviews, outbound-click capture, site
+search, form interactions, video and file-download autocapture. Explicit copy/
+CTA events and first-party verified download responses already describe those
+stages more accurately, without automatic URL/DOM collection.
+
+Register the event-scoped **Action target** custom dimension for parameter
+`target`, so GA4 explorations can distinguish install, run, docs and CTA buttons.
+It contains finite labels, not button text or destination URLs. Custom dimensions
+apply prospectively and can take time to appear in processed reports.
+
+Do not mark page views or reading milestones as key events just to lower bounce.
+GA4 engaged sessions are computed from its real engagement signal; the maintained
+X/GA browser gate now verifies `_et >= 10000` and `seg=1` after a genuinely focused
+visit. Headless pages without focus must not be mistaken for engagement failures.
+Check **today** separately from historical reports; configuration changes cannot
+repair prior missing metadata, and an all-traffic bounce figure alone does not
+prove fraudulent ad clicks.
+
+References: [PostHog custom session requirements](https://posthog.com/docs/data/sessions#custom-session-ids),
+[GA4 engagement and bounce](https://support.google.com/analytics/answer/12195621),
+[manual GA4 pageviews](https://developers.google.com/analytics/devguides/collection/ga4/views).

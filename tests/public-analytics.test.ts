@@ -162,12 +162,12 @@ describe("gtagConfig", () => {
   });
 
   it("uses fixed public page title for landing", () => {
-    expect(gtagConfig(url).page_title).toBe("Your Coding Agent. On Your Phone. | shell.online");
+    expect(gtagConfig(url).page_title).toBe("Your terminal, anywhere | shell.online");
   });
 
   it("uses fixed public page title for docs", () => {
     const docsUrl = new URL("https://shell.online/security/");
-    expect(gtagConfig(docsUrl).page_title).toBe("Documentation | shell.online");
+    expect(gtagConfig(docsUrl).page_title).toBe("security | shell.online docs");
   });
 
   it("uses canonical page_location for landing", () => {
