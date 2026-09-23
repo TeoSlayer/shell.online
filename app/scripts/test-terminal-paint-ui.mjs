@@ -608,7 +608,17 @@ try {
   assert.equal(await evaluate(`paintTest.pulses.c.lastOutputAt`), null, 'snapshot does not imply live activity');
   await evaluate(`paintTest.emitEncrypted(0x01, '\\r\\nApproval required')`);
   await waitFor(() => evaluate(`paintTest.pulses.c?.bytesSinceViewed > 0 && paintTest.pulses.c?.hint?.label === 'Input may be needed'`), 'decrypted hidden output pulse');
-  assert.equal(await evaluate(`!!document.querySelector('[data-paint-root="c"] .session-pulse')`), true, 'pulse badge rendered');
+  /*
+   * Observed and published, and deliberately not drawn.
+   *
+   * The badge that used to sit over the session -- a coloured dot and a word
+   * about whether output was arriving -- said nothing the conversation was
+   * not already saying, in an accent that competed with the messages for the
+   * same attention. Everything it was made of is still measured and still
+   * reported upward, which is what every other assertion here is about; the
+   * pane simply does not paint it over the terminal any more.
+   */
+  assert.equal(await evaluate(`!!document.querySelector('[data-paint-root="c"] .session-pulse')`), false, 'pulse is observed but not drawn over the session');
   await evaluate(`(() => { paintTest.setActive('c', true); return true; })()`);
   await waitFor(() => evaluate(`paintTest.pulses.c?.bytesSinceViewed === 0`), 'visible pane acknowledges output');
   assert.equal(await evaluate(`paintTest.sockets.length`), 1, 'pulse keeps the same viewer socket');
@@ -622,7 +632,7 @@ try {
   await delay(1100);
   assert.equal(await evaluate(`paintTest.pulseEvents.length`), eventsAfterUnmount, 'disposed pane does not publish pulse');
   assert.equal(await evaluate(`paintTest.sockets.length`), 1, 'unmount creates no socket');
-  console.log('PASS passive pulse: encrypted output, snapshots, hidden unread, visible acknowledgement, no network traffic, disconnect and timer cleanup');
+  console.log('PASS passive pulse: encrypted output, snapshots, hidden unread, visible acknowledgement, not drawn, no network traffic, disconnect and timer cleanup');
   if (failures.length > 0) throw new Error(`paint audit failures (${failures.length}):\n- ${failures.join('\n- ')}`);
   console.log(`screenshots in ${shots}`);
 } finally {
