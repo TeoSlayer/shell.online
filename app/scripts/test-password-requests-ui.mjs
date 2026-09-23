@@ -77,8 +77,15 @@ const testEntryPlugin = {
  */
 const backend = { requests: [], answers: [], keyShares: {} };
 
-function setup(persona, path) {
-  return `
+/*
+ * A constant: everything that varies between page loads (who is signed in,
+ * where they start, the service's state) arrives in the page's own URL, so no
+ * value is ever spliced into code the page evaluates.
+ */
+const SETUP = `
+  const params = new URLSearchParams(location.search);
+  const persona = params.get('as');
+  const startAt = params.get('path');
   const { React, createRoot, BrowserRouter, Routes, Route, useNavigate, Session, Workspace, AuthContext, VaultProvider, useVault, TeamKeyProvider, FeedbackProvider, rememberVerified } =
     await import('/@id/__x00__${TEST_ENTRY_ID}.js');
   const encode = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
@@ -91,8 +98,8 @@ function setup(persona, path) {
     { orgId: 'org-qa', uid: 'qa-ana', email: 'ana@test', name: 'Ana', role: 'member', joinedAt: 2, accountKey: await accountKey() },
     { orgId: 'org-qa', uid: 'qa-ben', email: 'ben@test', name: 'Ben', role: 'member', joinedAt: 3, accountKey: await accountKey() },
   ];
-  const you = members.find((member) => member.uid === ${JSON.stringify(persona)});
-  globalThis.pw = ${JSON.stringify(backend)};
+  const you = members.find((member) => member.uid === persona);
+  globalThis.pw = JSON.parse(params.get('state'));
   const shareUrl = location.origin + '/s/' + 'p'.repeat(32) + '#salt=${SALT}';
   const session = () => {
     const mine = pw.requests.filter((request) => request.sessionId === 'pw-test');
@@ -151,6 +158,13 @@ function setup(persona, path) {
   };
   /* The owner's browser proved the password when it started the session. */
   if (you.uid === 'qa-owner') rememberVerified('pw-test', 'correct horse battery staple', shareUrl);
+  pw.click = (selector, text) => {
+    const found = [...document.querySelectorAll(selector)]
+      .find((element) => !text || element.textContent.includes(text));
+    if (!found) return false;
+    found.click();
+    return true;
+  };
   function Probe() {
     pw.vault = useVault();
     pw.navigate = useNavigate();
@@ -163,7 +177,7 @@ function setup(persona, path) {
     signIn: async () => {}, signUp: async () => {}, signInWithGoogle: async () => {}, signInWithProvider: async () => {},
     resetPassword: async () => {}, resendVerification: async () => {}, signOutUser: async () => {}, deleteAccount: async () => {},
   };
-  history.replaceState(null, '', ${JSON.stringify(path)});
+  history.replaceState(null, '', startAt);
   const root = document.createElement('div');
   document.body.append(root);
   createRoot(root).render(React.createElement(AuthContext.Provider, { value: auth },
@@ -177,7 +191,6 @@ function setup(persona, path) {
             React.createElement(Probe)))))));
   return true;
 `;
-}
 
 const server = await createServer({
   root: join(here, '..'),
@@ -201,20 +214,15 @@ const shot = async (name) => {
   const data = await transport.screenshot();
   await writeFile(join(shots, `${name}.png`), Buffer.from(data, 'base64'));
 };
-const click = (selector, text) => evaluate(`(() => {
-  const found = [...document.querySelectorAll(${JSON.stringify(selector)})]
-    .find((element) => ${text ? `element.textContent.includes(${JSON.stringify(text)})` : 'true'});
-  if (!found) return false;
-  found.click();
-  return true;
-})()`);
 
 let port;
 /* A fresh page as somebody, carrying the service's state over. */
 async function as(persona, path) {
-  await transport.navigate(`http://127.0.0.1:${port}/scripts/fixtures/route-test.html?as=${persona}&at=${Date.now()}`);
+  const page = new URL(`http://127.0.0.1:${port}/scripts/fixtures/route-test.html`);
+  page.search = new URLSearchParams({ as: persona, path, state: JSON.stringify(backend), at: String(Date.now()) }).toString();
+  await transport.navigate(page.href);
   await waitFor(() => evaluate(`document.readyState === 'complete'`), 'page load');
-  await evaluate(`(async () => { ${setup(persona, path)} })()`);
+  await evaluate(`(async () => { ${SETUP} })()`);
 }
 async function keep() {
   Object.assign(backend, await evaluate(`({ requests: pw.requests, answers: pw.answers, keyShares: pw.keyShares })`));
@@ -235,7 +243,7 @@ try {
   await waitFor(() => evaluate(`!!document.querySelector('.pane-gate-ask .btn')`), 'ask button on the Decrypt form');
   assert.match(await evaluate(`document.querySelector('.pane-gate-ask .btn').textContent`), /Ask Olivia for the password/);
   await shot('2-decrypt-form-ask');
-  assert.equal(await click('.pane-gate-ask .btn'), true);
+  assert.equal(await evaluate(`pw.click('.pane-gate-ask .btn')`), true);
   await waitFor(() => evaluate(`document.querySelector('.pane-gate-ask')?.textContent.includes('Asked Olivia')`), 'asked state');
   await shot('3-decrypt-form-asked');
   await keep();
@@ -244,7 +252,7 @@ try {
   // Ben asks too, so the owner has two to answer.
   await as('qa-ben', '/sessions?open=pw-test');
   await waitFor(() => evaluate(`!!document.querySelector('.pane-gate-ask .btn')`), 'ben ask button');
-  await click('.pane-gate-ask .btn');
+  await evaluate(`pw.click('.pane-gate-ask .btn')`);
   await waitFor(() => evaluate(`document.querySelector('.pane-gate-ask')?.textContent.includes('Asked Olivia')`), 'ben asked');
   await keep();
   assert.equal(backend.requests.filter((request) => request.status === 'pending').length, 2);
@@ -261,14 +269,14 @@ try {
   })()`);
   assert.ok(badge.right > 0 && badge.top < 0, `badge sits on the top right corner ${JSON.stringify(badge)}`);
   await shot('4-owner-share-badge');
-  await click('.clip .session-copy');
+  await evaluate(`pw.click('.clip .session-copy')`);
   await waitFor(() => evaluate(`!!document.querySelector('.clip-pop')`), 'share menu');
   const item = await evaluate(`[...document.querySelectorAll('.clip-item')].find((element) => element.textContent.includes('Password requests'))?.querySelector('.clip-count')?.textContent`);
   assert.equal(item, '2', 'menu item carries the same count');
   await shot('5-owner-share-menu');
 
   // 3) The item lands on the session page's section.
-  await click('.clip-item', 'Password requests');
+  await evaluate(`pw.click('.clip-item', 'Password requests')`);
   await waitFor(() => evaluate(`location.pathname === '/sessions/pw-test' && location.hash === '#password-requests'`), 'navigated to section');
   await waitFor(() => evaluate(`document.querySelectorAll('.password-requests-list li').length === 2`), 'two pending rows');
   await waitFor(() => evaluate(`(() => { const r = document.getElementById('password-requests').getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight / 2; })()`), 'section scrolled into view');
