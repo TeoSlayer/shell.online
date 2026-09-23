@@ -233,9 +233,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const prepare = useCallback(
     async (reset: boolean, password: string): Promise<PreparedVault> => {
       if (!mounted.current || lifecycle.current.uid !== uid) throw new VaultError("damaged", "There is no vault to prepare. Reload and try again.");
+      const gen = lifecycle.current.generation;
       const made = await createVault(uid, password);
+      if (!mounted.current || lifecycle.current.uid !== uid || lifecycle.current.generation !== gen) throw new VaultError("damaged", "The vault preparation is stale. Try again.");
       const prepared: PreparedVault = { ...made, replaces: reset && remote ? remote.version : undefined };
-      preparedOwner.current.set(prepared, { uid, generation: lifecycle.current.generation });
+      preparedOwner.current.set(prepared, { uid, generation: gen });
       return prepared;
     },
     [uid, remote],
@@ -245,7 +247,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     async (prepared: PreparedVault) => {
       if (!mounted.current || lifecycle.current.uid !== uid) return;
       const owner = preparedOwner.current.get(prepared);
-      if (owner && (owner.uid !== uid || owner.generation !== lifecycle.current.generation)) return;
+      if (!owner || owner.uid !== uid || owner.generation !== lifecycle.current.generation) return;
       const previous = opened.current;
       const gen = lifecycle.current.generation;
       let vault: VaultRecord | null;
@@ -258,10 +260,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
          * end, look again: in this browser the one that won is already
          * unlocked, and anywhere else it asks for that window's key.
          */
+        if (!mounted.current || lifecycle.current.uid !== uid || lifecycle.current.generation !== gen) throw caught;
         const winner = prepared.replaces === undefined
           ? await fetchVault().then((result) => result.vault, () => null)
           : null;
         if (winner) {
+          if (!mounted.current || lifecycle.current.uid !== uid || lifecycle.current.generation !== gen) throw caught;
           setAttempt((value) => value + 1);
           throw new VaultError(
             "damaged",
@@ -390,11 +394,15 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setRemote(saved);
   }, [uid, user?.email, remote]);
 
-  const retry = useCallback(() => setAttempt((value) => value + 1), []);
+  const retry = useCallback(() => {
+    if (!mounted.current) return;
+    setAttempt((value) => value + 1);
+  }, []);
 
   const openShare = useCallback(
     async (sessionId: string, share: SealedShare | undefined) => {
       if (!share) return null;
+      if (!mounted.current || lifecycle.current.uid !== uid) return null;
       if (isVaultShare(share.sealed)) {
         const key = opened.current;
         if (!key) return null;
@@ -412,6 +420,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const openContent = useCallback(async (sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}) => {
+    if (!mounted.current || lifecycle.current.uid !== uid) return null;
     const key = opened.current;
     if (!key) return null;
     const gen = lifecycle.current.generation;
@@ -423,9 +432,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const sealTo = useCallback(
     async (recipient: { uid: string; accountKey?: string }, sessionId: string, password: string) => {
       if (!recipient.accountKey) return null;
+      if (!mounted.current || lifecycle.current.uid !== uid) return null;
       const uidAtEntry = uid;
+      const gen = lifecycle.current.generation;
       const result = await sealToAccount(recipient.accountKey, sessionId, recipient.uid, password);
-      return lifecycle.current.uid === uidAtEntry ? result : null;
+      return lifecycle.current.uid === uidAtEntry && lifecycle.current.generation === gen ? result : null;
     },
     [uid],
   );
@@ -433,6 +444,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const keep = useCallback(
     async (sessionId: string, password: string) => {
       /* The key this browser verified when it unlocked, not one fetched since. */
+      if (!mounted.current || lifecycle.current.uid !== uid) return false;
       const key = opened.current;
       if (!key) return false;
       const gen = lifecycle.current.generation;
@@ -451,6 +463,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   );
 
   const lock = useCallback(async () => {
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     /*
      * Synchronous invalidation first: the in-memory key is gone before any
      * await, so a stale unlock continuation that resolves after this point
@@ -471,6 +484,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
    */
   const sealTeamKey = useCallback(
     async (recipient: { uid: string; accountKey: string }, team: TeamKeyContext, pkcs8: Uint8Array<ArrayBuffer>) => {
+      if (!mounted.current || lifecycle.current.uid !== uid) return null;
       const key = opened.current;
       if (!key) return null;
       const gen = lifecycle.current.generation;
@@ -487,6 +501,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const openTeamKey = useCallback(
     async (share: { senderUid: string; sealed: string }, senderAccountKey: string, team: TeamKeyContext) => {
+      if (!mounted.current || lifecycle.current.uid !== uid) return null;
       const key = opened.current;
       if (!key) return null;
       const gen = lifecycle.current.generation;

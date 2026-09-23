@@ -302,7 +302,7 @@ try {
   // ---- Case B: lock while becomeUnlocked is awaiting fingerprint ----
   await resetAccount('account-a');
   await evaluate(`(async () => {
-    const made = await vt.createVault('account-a');
+    const made = await vt.vault.prepare(false, 'pw-b');
     __armGate('digest');
     vt.commitDone = false;
     vt.pendingCommit = vt.vault.commit(made).then(() => { vt.commitDone = true; }, () => { vt.commitDone = true; });
@@ -321,7 +321,7 @@ try {
   // ---- Case A: lock while PBKDF2 crypto is still running ----
   await resetAccount('account-a');
   await evaluate(`(async () => {
-    const made = await vt.createVault('account-a', 'pw-canary');
+    const made = await vt.vault.prepare(false, 'pw-canary');
     await vt.vault.commit(made);
     await vt.vault.lock();
     __armGate('pbkdf2');
@@ -342,7 +342,7 @@ try {
   // ---- Case C: stale saveLocalVault completing after lock/clear ----
   await resetAccount('account-a');
   await evaluate(`(async () => {
-    const made = await vt.createVault('account-a', 'pw-canary');
+    const made = await vt.vault.prepare(false, 'pw-canary');
     await vt.vault.commit(made);
     await vt.vault.lock();
     __armSaveGate();
@@ -366,7 +366,7 @@ try {
   // ---- Case D: stale older save must not delete a newer live vault ----
   await resetAccount('account-a');
   await evaluate(`(async () => {
-    const made = await vt.createVault('account-a', 'pw-canary');
+    const made = await vt.vault.prepare(false, 'pw-canary');
     await vt.vault.commit(made);
     await vt.vault.lock();
     __armSaveGate();
@@ -393,20 +393,15 @@ try {
   const dRemountStatus = await status();
   results.push({ scenario: 'stale-save-after-newer-unlock', actualStatus: dStatus, actualKeyHeld: dKeyHeld, actualRemembered: dRemembered, actualRemountStatus: dRemountStatus, pass: dStatus === 'unlocked' && dKeyHeld === true && dRemembered === true && dRemountStatus === 'unlocked' });
 
-  // Fixed per-account keys, created once with real WebCrypto.
-  const keysDiffer = await evaluate(`(async () => {
-    const a = await vt.createVault('account-a', 'pw-a');
-    const b = await vt.createVault('account-b', 'pw-b');
-    vt.made = { a, b };
-    vt.keys = { a: a.bundle.publicKey, b: b.bundle.publicKey };
-    return a.bundle.publicKey !== b.bundle.publicKey;
-  })()`);
-  if (keysDiffer !== true) throw new Error('account keys are not distinct');
-  const keys = await blob('({ a: vt.keys.a, b: vt.keys.b })');
-
   // ---- Case E: account A stale save held across a switch to account B ----
   await resetAccount('account-a');
-  await evaluate('(async () => { await vt.vault.commit(vt.made.a); await vt.vault.lock(); return true; })()');
+  await evaluate(`(async () => {
+    const a = await vt.vault.prepare(false, 'pw-a');
+    vt.keysA = a.bundle.publicKey;
+    await vt.vault.commit(a);
+    await vt.vault.lock();
+    return true;
+  })()`);
   await evaluate(`(async () => {
     __armSaveGate();
     vt.aDone = false;
@@ -416,7 +411,9 @@ try {
   await waitFor(() => evaluate('vt.saveGateEntered()'), 'account A save held');
   await switchTo('account-b');
   await evaluate(`(async () => {
-    await vt.vault.commit(vt.made.b);
+    const b = await vt.vault.prepare(false, 'pw-b');
+    vt.keysB = b.bundle.publicKey;
+    await vt.vault.commit(b);
     await vt.vault.lock();
     vt.bDone = false;
     vt.pendingB = vt.vault.unlockWithPassword('pw-b').then(() => { vt.bDone = true; }, () => { vt.bDone = true; });
@@ -428,6 +425,8 @@ try {
   await settle();
   const eLiveUid = await evaluate('vt.currentUid');
   const eLiveKey = await liveKey();
+  const eKeysA = await evaluate('vt.keysA');
+  const eKeysB = await evaluate('vt.keysB');
   const eARemembered = await evaluate("(async () => await vt.rememberedPublicKey('account-a'))()");
   const eBRemembered = await evaluate("(async () => await vt.rememberedPublicKey('account-b'))()");
   await evaluate(`(async () => {
@@ -441,20 +440,31 @@ try {
   const eRemountAKey = await liveKey();
   results.push({
     scenario: 'stale-save-cross-account', liveUid: eLiveUid,
-    expectedBLiveKey: prefix(keys.b), actualBLiveKey: prefix(eLiveKey),
+    expectedBLiveKey: prefix(eKeysB), actualBLiveKey: prefix(eLiveKey),
     expectedARemembered: null, actualARemembered: prefix(eARemembered),
-    expectedBRemembered: prefix(keys.b), actualBRemembered: prefix(eBRemembered),
+    expectedBRemembered: prefix(eKeysB), actualBRemembered: prefix(eBRemembered),
     expectedARemountStatus: 'locked', actualARemountStatus: eRemountAStatus, actualARemountKey: prefix(eRemountAKey),
-    pass: eLiveUid === 'account-b' && eLiveKey === keys.b && eARemembered === null && eBRemembered === keys.b && eRemountAStatus === 'locked' && eRemountAKey !== keys.a,
+    pass: eLiveUid === 'account-b' && eLiveKey === eKeysB && eARemembered === null && eBRemembered === eKeysB && eRemountAStatus === 'locked' && eRemountAKey !== eKeysA,
   });
 
   // ---- Case E2: account A stale fingerprint must not publish after switching to B ----
   await resetAccount('account-a');
-  await evaluate('(async () => { await vt.vault.commit(vt.made.a); await vt.vault.lock(); __armGate("digest"); vt.aDone = false; vt.pendingA = vt.vault.unlockWithPassword("pw-a").then(() => { vt.aDone = true; }, () => { vt.aDone = true; }); return true; })()');
+  await evaluate(`(async () => {
+    const a = await vt.vault.prepare(false, 'pw-a');
+    vt.keysA = a.bundle.publicKey;
+    await vt.vault.commit(a);
+    await vt.vault.lock();
+    __armGate("digest");
+    vt.aDone = false;
+    vt.pendingA = vt.vault.unlockWithPassword("pw-a").then(() => { vt.aDone = true; }, () => { vt.aDone = true; });
+    return true;
+  })()`);
   await waitFor(() => evaluate('vt.gateEntered()'), 'account A fingerprint held');
   await switchTo('account-b');
   await evaluate(`(async () => {
-    await vt.vault.commit(vt.made.b);
+    const b = await vt.vault.prepare(false, 'pw-b');
+    vt.keysB = b.bundle.publicKey;
+    await vt.vault.commit(b);
     await vt.vault.lock();
     vt.bDone = false;
     vt.pendingB = vt.vault.unlockWithPassword('pw-b').then(() => { vt.bDone = true; }, () => { vt.bDone = true; });
@@ -466,19 +476,21 @@ try {
   await settle();
   const e2LiveKey = await liveKey();
   const e2Print = await evaluate('vt.vault.fingerprint');
-  const expectedPrintB = await evaluate('vt.fingerprint(vt.keys.b)');
-  const expectedPrintA = await evaluate('vt.fingerprint(vt.keys.a)');
+  const e2KeysB = await evaluate('vt.keysB');
+  const e2KeysA = await evaluate('vt.keysA');
+  const expectedPrintB = await evaluate(`vt.fingerprint(${JSON.stringify(e2KeysB)})`);
+  const expectedPrintA = await evaluate(`vt.fingerprint(${JSON.stringify(e2KeysA)})`);
   results.push({
     scenario: 'stale-fingerprint-cross-account', liveUid: await evaluate('vt.currentUid'),
-    expectedLiveKey: prefix(keys.b), actualLiveKey: prefix(e2LiveKey),
+    expectedLiveKey: prefix(e2KeysB), actualLiveKey: prefix(e2LiveKey),
     expectedFingerprint: expectedPrintB, actualFingerprint: e2Print, staleFingerprint: expectedPrintA,
-    pass: e2LiveKey === keys.b && e2Print === expectedPrintB && e2Print !== expectedPrintA,
+    pass: e2LiveKey === e2KeysB && e2Print === expectedPrintB && e2Print !== expectedPrintA,
   });
 
   // ---- Case F: same owner, genuinely different new key generation ----
   await resetAccount('account-a');
   const fKeys = await evaluate(`(async () => {
-    const v1 = await vt.createVault('account-a', 'pw-v1');
+    const v1 = await vt.vault.prepare(false, 'pw-v1');
     vt.v1 = v1.bundle.publicKey;
     await vt.vault.commit(v1);
     await vt.vault.lock();
@@ -514,9 +526,9 @@ try {
 
   // ---- Case G: delayed saveVault + account switch must not publish A's remote onto B ----
   await resetAccount('account-a');
-  await evaluate('(async () => { await vt.vault.commit(vt.made.a); await vt.vault.lock(); return true; })()');
+  await evaluate('(async () => { const a = await vt.vault.prepare(false, "pw-a"); await vt.vault.commit(a); await vt.vault.lock(); return true; })()');
   await switchTo('account-b');
-  await evaluate('(async () => { await vt.vault.commit(vt.made.b); await vt.vault.lock(); return true; })()');
+  await evaluate('(async () => { const b = await vt.vault.prepare(false, "pw-b"); await vt.vault.commit(b); await vt.vault.lock(); return true; })()');
   await switchTo('account-a');
   await evaluate(`(async () => {
     __armVaultPostGate();
@@ -545,7 +557,7 @@ try {
 
   // ---- Case H: synchronous UID boundary, observed at a child layout effect ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-a"); await vt.vault.commit(made); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-a"); await vt.vault.commit(made); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for boundary probe');
   await evaluate("(async () => { vt.layoutProbe = null; vt.keepProbe = []; vt.switchAccount('account-b'); return true; })()");
   await waitFor(() => evaluate('vt.layoutProbe !== null'), 'layout probe captured');
@@ -562,7 +574,7 @@ try {
 
   // ---- Case I: a delayed openShare must not return a password after lock ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-share"); await vt.vault.commit(made); vt.share = await vt.sealToAccount(made.bundle.publicKey, "share-session", "account-a", "share-password"); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-share"); await vt.vault.commit(made); vt.share = await vt.sealToAccount(made.bundle.publicKey, "share-session", "account-a", "share-password"); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for share');
   await evaluate("(async () => { __armGate('ecdh'); vt.shareDone = false; vt.shareValue = 'pending'; vt.vault.openShare('share-session', vt.share).then((value) => { vt.shareDone = true; vt.shareValue = value; }, () => { vt.shareDone = true; vt.shareValue = 'error'; }); return true; })()");
   await waitFor(() => evaluate('vt.gateEntered()'), 'share decrypt held');
@@ -574,7 +586,7 @@ try {
 
   // ---- Case I2: a delayed openShare must not return a password after an account switch ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-share"); await vt.vault.commit(made); vt.share = await vt.sealToAccount(made.bundle.publicKey, "share-session", "account-a", "share-password"); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-share"); await vt.vault.commit(made); vt.share = await vt.sealToAccount(made.bundle.publicKey, "share-session", "account-a", "share-password"); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for share switch');
   await evaluate("(async () => { __armGate('ecdh'); vt.shareDone = false; vt.shareValue = 'pending'; vt.vault.openShare('share-session', vt.share).then((value) => { vt.shareDone = true; vt.shareValue = value; }, () => { vt.shareDone = true; vt.shareValue = 'error'; }); return true; })()");
   await waitFor(() => evaluate('vt.gateEntered()'), 'share decrypt held for switch');
@@ -586,7 +598,7 @@ try {
 
   // ---- Case J: provider disposal invalidates a pending save ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-canary"); await vt.vault.commit(made); await vt.vault.lock(); __armSaveGate(); vt.unlockDone = false; vt.pendingUnlock = vt.vault.unlockWithPassword("pw-canary").then(() => { vt.unlockDone = true; }, () => { vt.unlockDone = true; }); return true; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-canary"); await vt.vault.commit(made); await vt.vault.lock(); __armSaveGate(); vt.unlockDone = false; vt.pendingUnlock = vt.vault.unlockWithPassword("pw-canary").then(() => { vt.unlockDone = true; }, () => { vt.unlockDone = true; }); return true; })()');
   await waitFor(() => evaluate('vt.saveGateEntered()'), 'save held before disposal');
   await evaluate('vt.hide()');
   await evaluate('__releaseSaveGate()');
@@ -609,7 +621,7 @@ try {
 
   // ---- Case K: clear held in queue across account switch must still delete ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-clear"); await vt.vault.commit(made); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-clear"); await vt.vault.commit(made); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for clear race');
   await evaluate('(async () => { __armClearGate(); vt.lockDone = false; vt.vault.lock().then(() => { vt.lockDone = true; }, () => { vt.lockDone = true; }); return true; })()');
   await waitFor(() => evaluate('vt.clearGateEntered()'), 'clear held inside queue');
@@ -636,7 +648,7 @@ try {
 
   // ---- Case L: retained A unlock (recovery) invoked after switch to B ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-l"); vt.recoveryA = made.recoveryKey; await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-l"); vt.recoveryA = made.recoveryKey; await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'locked'"), 'A locked for recovery callback');
   await evaluate('vt.retainedUnlock = vt.vault.unlock;');
   await switchTo('account-b');
@@ -658,7 +670,7 @@ try {
 
   // ---- Case M: retained unlockWithPassword invoked after unmount (A2) ----
   await resetAccount('account-a');
-  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-m"); await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
+  await evaluate('(async () => { const made = await vt.vault.prepare(false, "pw-m"); await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
   await waitFor(() => evaluate("vt.vault.status === 'locked'"), 'A locked for unmount callback');
   await evaluate('vt.retainedUnlockPw = vt.vault.unlockWithPassword;');
   await evaluate('vt.hide()');
@@ -682,7 +694,7 @@ try {
   await waitFor(() => evaluate("vt.vault && vt.vault.uid === 'account-a' && vt.vault.status !== 'loading'"), 'remounted for carry-over');
   await resetAccount('account-a');
   await evaluate(`(async () => {
-    const made = await vt.createVault("account-a", "pw-n1");
+    const made = await vt.vault.prepare(false, "pw-n1");
     vt.shareN = await vt.sealToAccount(made.bundle.publicKey, "carry-session", "account-a", "carry-pw");
     vt.sessions = [{ id: "carry-session", keyShare: vt.shareN }];
     vt.shareCalls = [];
