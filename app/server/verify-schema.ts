@@ -52,6 +52,7 @@ const REQUIRED_TABLES = [
   "organizations",
   "schema_migrations",
   "session_key_shares",
+  "session_password_requests",
   "sessions",
   "team_key_shares",
   "team_keys",
