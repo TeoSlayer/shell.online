@@ -20,12 +20,32 @@ const VALUES: Record<string, ReadonlySet<string>> = {
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Browser metadata is supplied by the transport, never by event properties. */
+export type PosthogCaptureContext =
+  | { source: "browser"; userAgent: unknown; automated: unknown }
+  | { source: "server" };
+
 /** Construct, never spread: even a malicious caller cannot attach arbitrary content. */
-export function posthogPayload(event: string, id: string, input: Record<string, unknown> = {}) {
+export function posthogPayload(event: string, id: string, input: Record<string, unknown> = {}, context: PosthogCaptureContext = { source: "server" }) {
   if (!EVENTS.has(event) || !UUID.test(id)) return null;
   const properties: Record<string, string | number | boolean> = {
     $process_person_profile: false, $geoip_disable: true, $ip: "", $lib: "shell-online",
+    instrumentation_version: 2, capture_source: context.source,
   };
+  if (context.source === "browser") {
+    const ua = context.userAgent;
+    // Preserve real browser/bot tokens for PostHog's classifier. Never substitute
+    // a human-looking UA or truncate an oversized string into a different identity.
+    if (ua === undefined || (typeof ua === "string" && !ua.trim())) {
+      properties.user_agent_status = "missing";
+    } else if (typeof ua === "string" && ua.length <= 1024 && /^[\x20-\x7e]+$/.test(ua)) {
+      properties.$user_agent = ua.trim();
+      properties.user_agent_status = "present";
+    } else {
+      properties.user_agent_status = "invalid";
+    }
+    if (typeof context.automated === "boolean") properties.browser_automation = context.automated;
+  }
   for (const [key, allowed] of Object.entries(VALUES)) {
     if (typeof input[key] === "string" && allowed.has(input[key] as string)) properties[key] = input[key] as string;
   }
@@ -45,8 +65,8 @@ export function posthogPayload(event: string, id: string, input: Record<string, 
 }
 
 /** Non-blocking callers own waitUntil. No retries, logs, request headers or IP forwarding. */
-export async function sendPosthog(event: string, id: string, input: Record<string, unknown> = {}): Promise<void> {
-  const payload = posthogPayload(event, id, input);
+export async function sendPosthog(event: string, id: string, input: Record<string, unknown> = {}, context: PosthogCaptureContext = { source: "server" }): Promise<void> {
+  const payload = posthogPayload(event, id, input, context);
   if (!payload) return;
   try {
     await fetch(`${POSTHOG_ORIGIN}/i/v0/e/`, {

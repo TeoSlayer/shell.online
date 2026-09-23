@@ -36,15 +36,15 @@ export function isGpcOrDnt(): boolean {
   return false;
 }
 
-function hasLegacyDecline(cookieString?: string): boolean {
+function hasAnalyticsOptOut(cookieString?: string): boolean {
   const source = cookieString ?? document.cookie;
   for (const part of source.split(";")) {
     const eq = part.indexOf("=");
     if (eq === -1) continue;
     const name = part.slice(0, eq).trim();
-    if (name !== LEGACY_CONSENT_COOKIE) continue;
     const value = part.slice(eq + 1).trim();
-    return value === "declined";
+    if ((name === LEGACY_CONSENT_COOKIE && value === "declined") ||
+        (name === "shell_analytics_opt_out" && value === "1")) return true;
   }
   return false;
 }
@@ -97,7 +97,7 @@ export function initAnalytics(): void {
   if (isGpcOrDnt()) return;
   if (hasGaDisableFlag()) return;
   try {
-    if (hasLegacyDecline()) return;
+    if (hasAnalyticsOptOut()) return;
   } catch {
     return;
   }
@@ -144,7 +144,7 @@ function sendPublicEvent(event: string, target: string, url: URL): void {
 export function trackPublicEvent(event: string, target: string): void {
   const url = new URL(window.location.href);
   if (!isPublicAnalyticsUrl(url) || !isPublicEvent(event, target) || isGpcOrDnt() || hasGaDisableFlag()) return;
-  try { if (hasLegacyDecline()) return; } catch { return; }
+  try { if (hasAnalyticsOptOut()) return; } catch { return; }
   sendPublicEvent(event, target, url);
   trackProduct(event === "copy" ? "command_copy" : "landing_cta", { target, source: publicSource(url, document.referrer) });
   if (gtagLoaded) {

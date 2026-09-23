@@ -1,6 +1,6 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
-import { sendPosthog } from "../shared/posthog";
+import { sendPosthog, type PosthogCaptureContext } from "../shared/posthog";
 
 const COOKIE = "__Host-shell_ph";
 const COOKIE_VALUE = /^([0-9a-f-]{36})\.([0-9a-f-]{36})\.(\d{13})$/;
@@ -67,13 +67,22 @@ export function resetProductIdentity(): void {
   try { document.cookie = `${COOKIE}=; Path=/; Secure; SameSite=Lax; Max-Age=0`; } catch { /* no storage */ }
 }
 
+function browserContext(): PosthogCaptureContext {
+  let userAgent: unknown, automated: unknown;
+  // Browser privacy tools may make either property unavailable. Keep the event
+  // unknown instead of losing it or pretending that absence proves automation.
+  try { userAgent = navigator.userAgent; } catch { /* unavailable */ }
+  try { automated = navigator.webdriver; } catch { /* unavailable */ }
+  return { source: "browser", userAgent, automated };
+}
+
 export function trackProduct(event: string, input: Record<string, unknown> = {}): void {
   try {
     const url = new URL(window.location.href);
     const route = analyticsRoute(url);
     if (!route || !permitted()) return;
     const { id, session } = browserIdentity();
-    void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session });
+    void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session }, browserContext());
   } catch { /* Includes unavailable browser globals in server-side tests. */ }
 }
 
@@ -88,7 +97,7 @@ function observePage(): () => void {
   if (!route || !permitted()) return () => {};
   const { id, session } = browserIdentity();
   const emit = (event: string, input: Record<string, unknown> = {}) => {
-    if (permitted()) void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session });
+    if (permitted()) void sendPosthog(event, id, { source: route.surface === "landing" || route.surface === "docs" ? analyticsSource(url, document.referrer) : undefined, ...input, ...route, session_id: session }, browserContext());
   };
   emit("$pageview");
   let active = 0, since = document.visibilityState === "visible" && document.hasFocus() ? performance.now() : null;

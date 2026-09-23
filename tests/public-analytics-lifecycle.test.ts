@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type CookieJar = Map<string, string>;
 
@@ -61,9 +61,11 @@ describe("initAnalytics automatic public-page analytics", () => {
 
   beforeEach(() => {
     vi.resetModules();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
     cookies = new Map();
     dom = installDom("https://shell.online/", cookies);
   });
+  afterEach(() => { vi.unstubAllGlobals(); });
 
   it("initializes automatically on fresh visit without prior cookies", async () => {
     const { initAnalytics } = await import("../web/analytics");
@@ -138,6 +140,26 @@ describe("initAnalytics automatic public-page analytics", () => {
     initAnalytics();
 
     expect(dom.window.dataLayer).toBeUndefined();
+  });
+
+  it("honors the shared opt-out for GA and first-party events even with an older granted cookie", async () => {
+    cookies.set("shell_analytics_consent", "granted");
+    cookies.set("shell_analytics_opt_out", "1");
+    const { initAnalytics, trackPublicEvent } = await import("../web/analytics");
+    initAnalytics(); trackPublicEvent("copy", "install");
+    expect(dom.window.dataLayer).toBeUndefined();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("stops explicit public action events if opt-out is set after initialization", async () => {
+    const { initAnalytics, trackPublicEvent } = await import("../web/analytics");
+    initAnalytics();
+    const count = (dom.window.dataLayer as unknown[]).length;
+    vi.mocked(fetch).mockClear();
+    cookies.set("shell_analytics_opt_out", "1");
+    trackPublicEvent("copy", "install");
+    expect((dom.window.dataLayer as unknown[]).length).toBe(count);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("stays off when GPC is set", async () => {

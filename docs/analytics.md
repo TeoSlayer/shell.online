@@ -45,7 +45,7 @@ connect a phone ad click to a later installation on another computer.
 - The first-party event endpoint accepts bounded bodies and fixed event/target/
   source values. It does not store submitted page URLs, terminal content, link
   passwords, frame keys or bearer tokens.
-- GPC, DNT, an existing analytics decline and Google's disable flag suppress
+- GPC, DNT, an existing analytics decline, `shell_analytics_opt_out=1` and Google's disable flag suppress
   browser marketing events. GPC/DNT also suppress first-party visitor hashing.
   Aggregate operational request counts are separate and can still be recorded.
 - Public event reports and installer reports can be spoofed; rate limits and
@@ -91,12 +91,41 @@ Use `surface` to separate landing, docs, terminal, app and game usage. A copy is
 not an installation, an accepted send is not an agent completing work, and a
 page load is not a verified human visit. Do not equate these stages in funnels.
 
+### Browser and automation filters
+
+Instrumentation version `2` includes `capture_source=browser` or `server` on
+every event. Browser events supply PostHog's `$user_agent` from the browser,
+limited to 1,024 printable ASCII characters. No replacement browser string is
+invented. `user_agent_status` is `present`, `missing` or `invalid`;
+`browser_automation` reflects `navigator.webdriver` when available. A false
+automation flag or a normal-looking user agent does not prove a human visit.
+Server milestones do not copy incoming request headers or impersonate browsers.
+
+For a report of likely non-automated browser traffic, filter to:
+
+- `instrumentation_version = 2`
+- `capture_source = browser`
+- `user_agent_status = present`
+- `browser_automation = false`
+- PostHog's **Is bot = false**
+
+Keep separate views for known automation and unknown/missing metadata. Earlier
+events omitted both user-agent properties, so PostHog may classify real visits
+as `no_user_agent`. Do not delete or relabel that history as confirmed bots, and
+do not apply the new filter to historical conversion comparisons without
+accounting for the instrumentation change. Missing event metadata does not
+establish that the original HTTP request lacked a User-Agent header.
+
+Classification is best-effort, not an access-control rule. No firewall blocks,
+challenges, user IP collection or fingerprinting are introduced by this fix.
+
 ## Privacy and operation
 
 No autocapture, remote JavaScript, replay, DOM text, raw errors, commands,
 terminal output, URLs with identifiers, queries/fragments, referrers, names,
 email addresses, IP forwarding or person profiles. Properties are constructed
-from finite lists rather than redacted after collection. PostHog geo enrichment
+from finite lists, except the bounded browser user-agent string, rather than
+redacted after collection. PostHog geo enrichment
 is disabled. Network requests necessarily reach its US ingestion service.
 
 Anonymous identifiers use a Secure, SameSite=Lax, host-only session cookie, not
@@ -110,3 +139,10 @@ For verification, intercept `/i/v0/e/` in browser tests and assert emitted paylo
 contain no synthetic secret markers. Keep synthetic tests out of production
 analytics. API acceptance proves ingestion accepted a request, not that a report
 has finished processing it. A capture token cannot query dashboards.
+
+Run `node scripts/test-posthog-browser.mjs` after building the site and app to
+check actual outgoing requests, metadata, route templates, actions, SPA
+navigation, duplicate prevention and privacy controls. Set `POSTHOG_LIVE=1`
+to inspect deployed assets; collection remains intercepted so synthetic events
+never enter the project. Safari/X-browser user-agent fixtures are emulated in
+Chrome, not a claim of running those browsers themselves.
