@@ -43,11 +43,10 @@ type localSessionRecord struct {
 	PID             int        `json:"pid"`
 	StartedAt       time.Time  `json:"started_at"`
 	ClosesAt        *time.Time `json:"closes_at,omitempty"`
-	// AbandonedAt is when this machine noticed the process was gone without
-	// having reported it. A session that ends normally deletes its own record
-	// and tells the accounts service; one whose machine was rebooted or lost
-	// power does neither, and this is the note left behind so the next run can
-	// finish the job. See reclaimAbandonedSessions.
+	// AbandonedAt is a legacy discovery note, not proof of process death.
+	// Failed/denied probes in older clients could set it on a live session.
+	// Discovery preserves it and rechecks the process/control endpoint; safe
+	// automatic reclamation requires a run-bound account API (see reclaim.go).
 	AbandonedAt *time.Time `json:"abandoned_at,omitempty"`
 }
 

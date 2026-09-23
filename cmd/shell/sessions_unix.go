@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -103,6 +104,16 @@ func startLocalSession(record localSessionRecord) (localSessionControl, error) {
 	directory, err := ensureLocalSessionDirectory()
 	if err != nil {
 		return nil, err
+	}
+	// An unlinked/denied socket does not make the record safe to replace.
+	// Refuse malformed state too: it supplies no positive proof of absence.
+	path := localSessionRecordPath(directory, record.ID)
+	prior, _, _, priorErr := readLocalSessionSnapshot(path, record.ID)
+	if priorErr == nil && !localSessionProcessGone(prior.PID) {
+		return nil, fmt.Errorf("session is already running locally or its process state is unknown")
+	}
+	if priorErr != nil && !os.IsNotExist(priorErr) {
+		return nil, fmt.Errorf("existing session record is unavailable or invalid; refusing replacement: %w", priorErr)
 	}
 	if response, pingError := sendLocalControl(record.ID, "ping"); pingError == nil && response.OK {
 		return nil, fmt.Errorf(
@@ -464,12 +475,10 @@ func writeAll(writer io.Writer, value []byte) error {
 	return nil
 }
 
-// abandonedRecordTTL is how long a note about an unreported session is kept.
+// abandonedRecordTTL bounds how long a legacy discovery note is a candidate.
 //
-// The note only exists to tell the accounts service about an end it never
-// heard about. Past a day the service has worked that out for itself -- the
-// relay has long since expired the session -- so a machine that stays signed
-// out does not collect files forever.
+// Legacy abandonment notes older than a day are not candidates. Discovery
+// preserves the original files; aging a note is not authority to remove it.
 const abandonedRecordTTL = 24 * time.Hour
 
 func loadActiveLocalSessions() ([]localSessionRecord, error) {
@@ -484,19 +493,23 @@ func abandonedLocalSessions() ([]localSessionRecord, error) {
 	return abandoned, err
 }
 
-// scanLocalSessions reads the session records this machine keeps and sorts
-// them into the ones still running and the ones whose process has gone.
-//
-// A record whose control socket does not answer is not deleted on the spot any
-// more. The process is gone, but whether anybody was told is a separate
-// question: a session that exits normally closes itself in the accounts
-// service, and one that dies with its machine -- a reboot, a power cut -- never
-// does. Deleting the record here threw away the only local evidence that the
-// session had ever existed, and the browser was left showing it as something
-// you could still type into. So the record is kept, dated, and cleared once
-// the service has been told.
+// scanLocalSessions observes local state without rewriting/deleting records or
+// sockets. Failed discovery cannot recover an already-unlinked control socket.
 func scanLocalSessions() (active, abandoned []localSessionRecord, err error) {
-	directory, err := ensureLocalSessionDirectory()
+	return scanLocalSessionsWithProbe(sendLocalControl, localSessionProcessGone)
+}
+
+// Connection failure is not evidence of process death. In particular a sandbox
+// can deny a probe while still allowing unlink/write in the runtime directory.
+// Keep unknown sessions intact; only a positively dead process may be reclaimed.
+func scanLocalSessionsWithProbe(
+	probe func(string, string) (localControlResponse, error),
+	processGone func(int) bool,
+) (active, abandoned []localSessionRecord, err error) {
+	directory, err := existingLocalSessionDirectory()
+	if os.IsNotExist(err) {
+		return []localSessionRecord{}, nil, nil
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -506,61 +519,87 @@ func scanLocalSessions() (active, abandoned []localSessionRecord, err error) {
 	}
 	active = make([]localSessionRecord, 0, len(paths))
 	for _, path := range paths {
-		file, openError := os.Open(path)
-		if openError != nil {
-			continue
-		}
-		var record localSessionRecord
-		decodeError := json.NewDecoder(io.LimitReader(file, 16*1024)).Decode(&record)
-		_ = file.Close()
 		expectedID := strings.TrimSuffix(filepath.Base(path), ".json")
-		if decodeError != nil || !localSessionIDPattern.MatchString(record.ID) || record.ID != expectedID || record.PID <= 0 || record.StartedAt.IsZero() {
-			_ = os.Remove(path)
+		// In particular, .session-*.json belongs to an in-progress atomic
+		// writer, and arbitrary JSON files do not belong to this scanner.
+		if !localSessionIDPattern.MatchString(expectedID) {
 			continue
 		}
-		if record.AbandonedAt != nil {
-			if time.Since(*record.AbandonedAt) >= abandonedRecordTTL {
-				_ = os.Remove(path)
-				continue
+		record, snapshot, info, readErr := readLocalSessionSnapshot(path, expectedID)
+		if readErr != nil {
+			continue
+		}
+		response, pingError := probe(record.ID, "ping")
+		// A replacement during the probe belongs to another observation, even
+		// when it happens to reuse the same session id.
+		if !localSessionSnapshotUnchanged(path, expectedID, snapshot, info) {
+			continue
+		}
+		if pingError == nil {
+			// An exact responding ID+PID is the live host, even when an older
+			// client left a stale abandonment note on the record. The note is
+			// not death proof, so the host stays reachable for attach/kill/mcp.
+			// The record on disk is left untouched.
+			if response.OK && response.ID == record.ID && response.PID == record.PID {
+				active = append(active, record)
 			}
-			abandoned = append(abandoned, record)
+			// Any other answering endpoint (a mismatch or a refusal) is
+			// uncertainty, never evidence that this path can be reclaimed.
 			continue
 		}
-		response, pingError := sendLocalControl(record.ID, "ping")
-		if pingError != nil || !response.OK || response.ID != record.ID || response.PID != record.PID {
-			cleanupLocalControl(record.ID)
+		if !errors.Is(pingError, os.ErrNotExist) || !processGone(record.PID) {
+			continue
+		}
+		if !localSessionSnapshotUnchanged(path, expectedID, snapshot, info) {
+			continue
+		}
+		if record.AbandonedAt == nil {
 			noticed := time.Now().UTC()
 			record.AbandonedAt = &noticed
-			/*
-			 * Closing the session needs its id and nothing else. The browser
-			 * password would still open the relay's copy for as long as it is
-			 * retained, so a record that outlives its process does not keep it.
-			 */
-			record.Password = ""
-			if writeError := writeLocalSessionRecord(directory, record); writeError != nil {
-				/* Nowhere to leave the note: the old behaviour is still better than a stale record. */
-				_ = os.Remove(path)
-				continue
-			}
-			abandoned = append(abandoned, record)
+		}
+		if time.Since(*record.AbandonedAt) >= abandonedRecordTTL {
 			continue
 		}
-		active = append(active, record)
+		// The caller needs identity only. The original credential-bearing
+		// evidence remains untouched until an explicitly safe cleanup.
+		record.Password = ""
+		abandoned = append(abandoned, record)
 	}
 	return active, abandoned, nil
 }
 
-// forgetLocalSession drops the record for a session whose end has been
-// reported, so it is not reported again.
-func forgetLocalSession(id string) {
-	if !localSessionIDPattern.MatchString(id) {
-		return
-	}
-	directory, err := ensureLocalSessionDirectory()
+func readLocalSessionSnapshot(path, expectedID string) (localSessionRecord, []byte, os.FileInfo, error) {
+	var record localSessionRecord
+	info, err := os.Lstat(path)
 	if err != nil {
-		return
+		return record, nil, nil, err
 	}
-	_ = os.Remove(localSessionRecordPath(directory, id))
+	if !info.Mode().IsRegular() {
+		return record, nil, nil, fmt.Errorf("session record is not a regular file")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return record, nil, nil, err
+	}
+	defer file.Close()
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		return record, nil, nil, fmt.Errorf("session record changed while opening")
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, 16*1024+1))
+	if err != nil {
+		return record, nil, nil, err
+	}
+	if len(contents) > 16*1024 || json.Unmarshal(contents, &record) != nil ||
+		!localSessionIDPattern.MatchString(record.ID) || record.ID != expectedID || record.PID <= 0 || record.StartedAt.IsZero() {
+		return record, nil, nil, fmt.Errorf("invalid session record")
+	}
+	return record, contents, opened, nil
+}
+
+func localSessionSnapshotUnchanged(path, id string, contents []byte, info os.FileInfo) bool {
+	_, current, currentInfo, err := readLocalSessionSnapshot(path, id)
+	return err == nil && os.SameFile(info, currentInfo) && bytes.Equal(contents, current)
 }
 
 func requestLocalSessionStop(id string) error {

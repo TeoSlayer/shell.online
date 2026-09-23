@@ -55,6 +55,24 @@ func ensureLocalSessionDirectory() (string, error) {
 	return directory, nil
 }
 
+// existingLocalSessionDirectory reports the runtime directory only when it is a
+// regular directory. Discovery must not create it, and a symlink is not a
+// directory it is safe to rewrite.
+func existingLocalSessionDirectory() (string, error) {
+	directory, err := localSessionDirectory()
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(directory)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("local session directory is not a regular directory")
+	}
+	return directory, nil
+}
+
 // localSessionDirectory holds this user's session records. The daemon's own
 // lock is the named pipe, not a file here.
 //

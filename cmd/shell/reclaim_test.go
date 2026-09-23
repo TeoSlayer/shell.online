@@ -13,11 +13,13 @@ import (
 
 // recordingCloser stands in for the accounts client.
 type recordingCloser struct {
-	closed []string
-	fail   error
+	closed   []string
+	fail     error
+	attempts int
 }
 
 func (closer *recordingCloser) CloseSession(_ context.Context, _, id string, exitCode *int) error {
+	closer.attempts++
 	if closer.fail != nil {
 		return closer.fail
 	}
@@ -88,30 +90,39 @@ func TestScanKeepsTheRecordOfASessionWhoseProcessIsGone(t *testing.T) {
 	}
 }
 
-func TestReclaimClosesAbandonedSessionsOnce(t *testing.T) {
+func TestReclaimWithoutRunPreconditionPreservesEvidence(t *testing.T) {
 	isolatedRuntime(t)
 	id := strings.Repeat("b", 32)
 	writeRecord(t, id)
 	if _, abandoned, _ := scanLocalSessions(); len(abandoned) != 1 {
 		t.Fatal("setup did not produce an abandoned session")
 	}
+	directory, err := existingLocalSessionDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(localSessionRecordPath(directory, id))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	closer := &recordingCloser{}
 	var report strings.Builder
 	reclaimAbandonedSessions(context.Background(), closer, "token", &report)
 
-	if len(closer.closed) != 1 || closer.closed[0] != id {
-		t.Fatalf("closed = %v", closer.closed)
-	}
-	if !strings.Contains(report.String(), "left behind by an earlier run") {
-		t.Errorf("report = %q", report.String())
+	if closer.attempts != 0 || len(closer.closed) != 0 || report.Len() != 0 {
+		t.Fatal("unsafe id-only automatic close was attempted")
 	}
 
 	/* Reported once. A second run has nothing left to say. */
 	closer.closed = nil
 	reclaimAbandonedSessions(context.Background(), closer, "token", &report)
-	if len(closer.closed) != 0 {
-		t.Fatalf("closed again = %v", closer.closed)
+	if closer.attempts != 0 || len(closer.closed) != 0 {
+		t.Fatal("unsafe id-only close was attempted on a retry")
+	}
+	after, err := os.ReadFile(localSessionRecordPath(directory, id))
+	if err != nil || string(before) != string(after) {
+		t.Fatal("automatic catch-up changed saved credentials/evidence")
 	}
 }
 
@@ -124,16 +135,17 @@ func TestReclaimKeepsTheRecordWhenTheServiceCannotBeReached(t *testing.T) {
 	var report strings.Builder
 	reclaimAbandonedSessions(context.Background(), offline, "token", &report)
 
-	if !strings.Contains(report.String(), "could not close") {
-		t.Errorf("report = %q", report.String())
+	if offline.attempts != 0 || report.Len() != 0 {
+		t.Fatal("automatic catch-up attempted an unsafe network close")
 	}
-	/* Still owed, so the next run tries again rather than losing the session. */
+	/* The record is preserved: with automatic catch-up disabled, a stale row
+	   stays until a run-bound close exists or the relay expires it. */
 	if _, abandoned, _ := scanLocalSessions(); len(abandoned) != 1 || abandoned[0].ID != id {
 		t.Fatalf("abandoned after a failed close = %+v", abandoned)
 	}
 }
 
-func TestScanForgetsANoteNobodyCollected(t *testing.T) {
+func TestScanPreservesAnExpiredNoteNobodyCollected(t *testing.T) {
 	isolatedRuntime(t)
 	id := strings.Repeat("d", 32)
 	writeRecord(t, id)
@@ -152,11 +164,16 @@ func TestScanForgetsANoteNobodyCollected(t *testing.T) {
 	if err := writeLocalSessionRecord(directory, stale); err != nil {
 		t.Fatal(err)
 	}
+	before, err := os.ReadFile(localSessionRecordPath(directory, id))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if _, left, err := scanLocalSessions(); err != nil || len(left) != 0 {
 		t.Fatalf("stale note = %+v, %v", left, err)
 	}
-	if _, err := os.Stat(localSessionRecordPath(directory, id)); !os.IsNotExist(err) {
-		t.Errorf("stale record still on disk: %v", err)
+	after, err := os.ReadFile(localSessionRecordPath(directory, id))
+	if err != nil || string(before) != string(after) {
+		t.Error("discovery changed an expired record")
 	}
 }

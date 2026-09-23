@@ -351,6 +351,12 @@ Use an ID or an unambiguous prefix with shell attach or shell kill.
 
 shell list shows the processes on this machine. shell ls shows the sessions in
 your account instead, from every linked machine; see shell help ls.
+
+Reading this machine's sessions is read-only: discovery never removes a session
+record or a control socket, and starting a session does not remove an existing
+control socket. A process that ended without reporting stays listed until the
+relay expires it; the automatic close is disabled until it can be bound to the
+exact run.
 `)
 	case "ls":
 		fmt.Fprint(stdout, `List your account's sessions

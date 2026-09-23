@@ -66,12 +66,16 @@ func (loop *agentLoop) run(ctx context.Context) error {
 	client := account.NewClient(loop.credentials.Server, "shell/"+version)
 
 	/*
-	 * Before taking any work: report the sessions this machine left open when
-	 * it last stopped. A reboot or a power cut kills the process without it
-	 * getting to close its session, and the browser has no way to tell that
-	 * apart from a machine that is briefly off the network -- so those rows sat
-	 * in "Write", offered as live, until the relay expired them. Starting up is
-	 * the moment the machine knows better, and this is where it says so.
+	 * Before taking any work: the catch-up for sessions this machine left open
+	 * when it last stopped. A reboot or power cut kills the process without it
+	 * closing its session, and the relay cannot tell that apart from a dropped
+	 * network, so such rows stay in "Write" until the relay expires them.
+	 *
+	 * The automatic remote close is currently disabled: CloseSession takes only
+	 * an id, which cannot tell an old run from a resumed live one, so closing
+	 * by id could discard a replacement's credentials. The call boundary is
+	 * kept for a future run-bound close; until then it performs no discovery,
+	 * no remote call and no local cleanup. See reclaim.go.
 	 */
 	reclaimAbandonedSessions(ctx, client, loop.credentials.AccessToken, loop.report)
 
