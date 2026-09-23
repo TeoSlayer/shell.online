@@ -757,14 +757,14 @@ try {
       () => { vt.prepareDone = true; },
       (e) => { vt.prepareDone = true; vt.prepareError = e.message || String(e); },
     );
-    await new Promise((r) => setTimeout(r, 50));
-    vt.vault.lock();
-    __releaseGate();
-    for (let i = 0; i < 100 && !vt.prepareDone; i++) await new Promise((r) => setTimeout(r, 10));
-    return { done: vt.prepareDone, error: vt.prepareError, status: vt.vault.status };
-  })()`).then((r) => {
-    results.push({ scenario: 'prepare-held-across-lock', expectedError: true, actualError: r.error !== null, status: r.status, pass: r.done && r.error !== null && (r.status === 'locked' || r.status === 'setup') });
-  });
+    return true;
+  })()`);
+  await waitFor(() => evaluate('vt.gateEntered()'), 'prepare crypto registered');
+  await evaluate('vt.vault.lock()');
+  await evaluate('__releaseGate()');
+  await waitFor(() => evaluate('vt.prepareDone === true'), 'prepare settled after lock');
+  const o3Result = await evaluate('({ done: vt.prepareDone, error: vt.prepareError, status: vt.vault.status })');
+  results.push({ scenario: 'prepare-held-across-lock', expectedError: true, actualError: o3Result.error !== null, status: o3Result.status, pass: o3Result.done && o3Result.error !== null && (o3Result.status === 'locked' || o3Result.status === 'setup') });
 
   // ---- Case O4: retain A lock callback, switch to unlocked B, invoke old lock → B unchanged ----
   await resetAccount('account-a');
