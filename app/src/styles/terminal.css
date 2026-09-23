@@ -681,10 +681,15 @@ button.tab {
  * That attribute is published by the pane's own hook, which a desktop does
  * not run, so a rule hung off it reached a phone and left a laptop with the
  * fifty pixels this is removing.
+ *
+ * And on a pane that is showing. Open tabs stay mounted behind the sessions
+ * list so switching back is instant, so a workspace merely *containing* a
+ * pane is also every visit to the list -- which took the list's own heading
+ * and margins away with it.
  */
-.shell-content:has(.panes) { padding-top: 0; }
-.shell-content:has(.panes) .terminal-bar { margin-bottom: 0; }
-.shell-content:has(.panes) .tab-renderer {
+.shell-content:has(.panes:not([hidden])) { padding-top: 0; }
+.shell-content:has(.panes:not([hidden])) .terminal-bar { margin-bottom: 0; }
+.shell-content:has(.panes:not([hidden])) .tab-renderer {
   position: static;
   height: 44px;
   padding-left: 6px;

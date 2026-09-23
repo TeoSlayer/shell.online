@@ -453,14 +453,19 @@
  * in, and it is why the conversation and the terminal both stopped short of
  * the rail rather than starting where it ends. The tab line above keeps the
  * gutter, because that is a row of controls and does want one.
+ *
+ * A pane that is *showing*, not merely one that exists. Open tabs stay
+ * mounted while the list is in front of them -- that is what makes switching
+ * back instant -- so `:has(.panes)` is true on the sessions list too, and the
+ * list lost the margins every other page in the application has.
  */
-.shell-content:has(.panes) {
+.shell-content:has(.panes:not([hidden])) {
   padding-inline: 0;
 }
 
-.shell-content:has(.panes) > .terminal-bar,
-.shell-content:has(.panes) > .renderer-warning,
-.shell-content:has(.panes) > .session-panel-summary {
+.shell-content:has(.panes:not([hidden])) > .terminal-bar,
+.shell-content:has(.panes:not([hidden])) > .renderer-warning,
+.shell-content:has(.panes:not([hidden])) > .session-panel-summary {
   padding-inline: clamp(22px, 2.4vw, 34px);
 }
 

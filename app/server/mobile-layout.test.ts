@@ -184,7 +184,7 @@ describe("the width of the conversation", () => {
 
   /* And the pane itself keeps no padding of its own beside the rail. */
   it("starts the pane where the rail ends", () => {
-    expect(css).toMatch(/\.shell-content:has\(\.panes\)\s*\{[\s\S]*?padding-inline:\s*0/);
+    expect(css).toMatch(/\.shell-content:has\(\.panes:not\(\[hidden\]\)\)\s*\{\s*padding-inline:\s*0/);
   });
 });
 
@@ -200,9 +200,13 @@ describe("the canvas", () => {
    * the first row. It read as the canvas being inset inside a container.
    */
   it("begins at the tab line, with the renderer tab in the line rather than over it", () => {
-    expect(terminal).toMatch(/\.shell-content:has\(\.panes\)\s*\{\s*padding-top:\s*0/);
-    expect(terminal).toMatch(/\.shell-content:has\(\.panes\) \.terminal-bar\s*\{\s*margin-bottom:\s*0/);
-    expect(terminal).toMatch(/\.shell-content:has\(\.panes\) \.tab-renderer\s*\{[\s\S]*?position:\s*static/);
+    expect(terminal).toMatch(/\.shell-content:has\(\.panes:not\(\[hidden\]\)\)\s*\{\s*padding-top:\s*0/);
+    expect(terminal).toMatch(
+      /\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \.terminal-bar\s*\{\s*margin-bottom:\s*0/,
+    );
+    expect(terminal).toMatch(
+      /\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \.tab-renderer\s*\{[\s\S]*?position:\s*static/,
+    );
     expect(terminal).toMatch(/\.panes \.pane\s*\{\s*padding:\s*0/);
   });
 
@@ -262,5 +266,23 @@ describe("the conversation as it is being written", () => {
   it("sends from the press as well as the click", () => {
     expect(view).toMatch(/addEventListener\("pointerup", send\)/);
     expect(view).toMatch(/addEventListener\("click", send\)/);
+  });
+});
+
+describe("the sessions list, with tabs open behind it", () => {
+  /*
+   * Open tabs stay mounted while the list is in front of them, because that
+   * is what makes switching back to one instant. So `.panes` is in the
+   * document on the list too, and every rule that took a margin off "a
+   * session" took the list's margins with it: the page lost the gutter every
+   * other page in the application has.
+   */
+  it("keeps its margins, because a hidden pane is not an open session", () => {
+    for (const source of [css, terminal]) {
+      const stripping =
+        source.match(/\.shell-content:has\(\.panes[^)]*\)[^{]*\{[^}]*padding-(?:inline|top)[^}]*\}/g) ?? [];
+      expect(stripping.length).toBeGreaterThan(0);
+      for (const rule of stripping) expect(rule).toContain(":not([hidden])");
+    }
   });
 });

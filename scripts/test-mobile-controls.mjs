@@ -74,8 +74,15 @@ if (!/\.chat-composer \{[^}]*border-radius: 26px;/s.test(appChatStylesheet)) {
 if (!/--chat-gutter:/.test(appChatStylesheet) || !/padding: var\(--chat-gutter\)/.test(appChatStylesheet)) {
   throw new Error("The composer must use one gutter on every side of the send button");
 }
-/* And the surface it sits on is full-bleed, so there is nothing to meet past. */
-if (!/\.shell-content:has\(\.panes\) \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
+/*
+ * And the surface it sits on is full-bleed, so there is nothing to meet past.
+ *
+ * A pane that is *showing*: open tabs stay mounted behind the sessions list so
+ * switching back to one is instant, which makes a workspace merely containing
+ * a pane true on the list as well -- and the list lost the margins every other
+ * page in the application has.
+ */
+if (!/\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
   throw new Error("A session surface must be full-bleed at every width, not only on a phone");
 }
 /*

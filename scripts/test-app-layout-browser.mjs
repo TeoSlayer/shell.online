@@ -66,7 +66,13 @@ const built = await build({
         {mode==='terminal' ? <>
           <div className="terminal-bar"><div className="tabs"><button className="tab">All sessions</button>{Array.from({length:8},(_,i)=><div className="tab is-active" key={i}><button className="tab-label">Synthetic agent {i+1} {'W'.repeat(64)}</button><button className="tab-close" aria-label="Close tab">×</button></div>)}</div><label className="tab-renderer"><span>Renderer</span><select><option>xterm.js</option></select></label></div>
           <div className="panes" ref={panes}><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} keyShare={share} renderer={renderer} active canType={false} pulseAllowed={false} host={'Synthetic-MacBook-'+ 'W'.repeat(64)}/></div>
-        </> : <div>{Array.from({length:mode==='long'?65:1},(_,i)=><p key={i} style={{padding:'12px 0'}}>Synthetic session row {i+1}</p>)}<button id="last-row">Last row</button></div>}
+        </> : <>
+          {/* "listing" is the list with a tab still open behind it, which is how the workspace
+              keeps it: panes stay mounted so switching back is instant. Only this mode, because
+              the other list modes are what the unmount checks above are waiting for. */}
+          {mode==='listing' && <div className="panes" ref={panes} hidden><TerminalPane shareUrl={location.origin+'/s/00000000000000000000000000000000'} keyShare={share} renderer={renderer} active={false} canType={false} pulseAllowed={false} host="Synthetic"/></div>}
+          <div>{Array.from({length:mode==='long'?65:1},(_,i)=><p key={i} style={{padding:'12px 0'}}>Synthetic session row {i+1}</p>)}<button id="last-row">Last row</button></div>
+        </>}
       </AppShell>;
     }
     createRoot(document.getElementById('root')).render(<BrowserRouter><AuthContext.Provider value={auth}><VaultProvider><VaultProbe/><TeamKeyProvider><Fixture/></TeamKeyProvider></VaultProvider></AuthContext.Provider></BrowserRouter>);
@@ -374,6 +380,7 @@ try {
       await delay(150);
       const after=await browser.call(measure);
       assert(!after.gone&&Math.abs(after.rail-before.rail)<1,'Navigation returns after typing');
+      if(Math.abs(after.pane-before.pane)>=1) console.log('DEBUG',renderer,theme,JSON.stringify({before,during,after}));
       assert(Math.abs(after.pane-before.pane)<1,'Pane returns to exactly the original height');
       assert.equal(after.screen,before.screen,'Terminal returns to exactly the original rendering');
       /*
@@ -395,6 +402,31 @@ try {
       assert(picker.within,'The renderer picker sits inside the tab line, not over the canvas');
       console.log(`PASS ${renderer}/${theme}: synthetic keyboard shrinks the pane, holds the terminal and hides/restores navigation`);
     }
+  }
+  /*
+   * The sessions list, with tabs open behind it.
+   *
+   * The workspace keeps every open pane mounted while the list is in front of
+   * them, so `:has(.panes)` is true on the list too -- and every rule written
+   * to take the margins off "a session" took the list's margins with it. The
+   * list is a page like every other page and keeps them.
+   */
+  if (browser.name === "chrome") {
+    await browser.setViewport({ width: 390, height: 844, dpr: 2, mobile: true });
+    await browser.call(() => layoutMode("terminal"));
+    await until("!!document.querySelector('.panes:not([hidden])')", "session open");
+    const open = await browser.call(() => parseFloat(getComputedStyle(document.querySelector(".shell-content")).paddingLeft));
+    await browser.call(() => layoutMode("listing"));
+    await until("!!document.querySelector('.panes[hidden]')", "list in front of the open tab");
+    const listed = await browser.call(() => {
+      const c = getComputedStyle(document.querySelector(".shell-content"));
+      return { inline: parseFloat(c.paddingLeft), top: parseFloat(c.paddingTop), panes: !!document.querySelector(".panes") };
+    });
+    assert(listed.panes, "The open tab is still mounted behind the list");
+    assert.equal(open, 0, "An open session still runs to the edge of the pane");
+    assert(listed.inline > 0, "The sessions list keeps the gutter every other page has");
+    assert(listed.top > 0, "The sessions list keeps the room above its first row");
+    console.log(`PASS sessions list keeps its margins with a tab open behind it (${listed.inline}px beside, ${listed.top}px above)`);
   }
   console.log("PASS actual app shell and terminal across tablet/phone/desktop boundaries; document scrolling and resize transitions");
 } finally {
