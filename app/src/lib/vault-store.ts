@@ -77,7 +77,11 @@ const queues = new Map<string, Promise<void>>();
 function enqueue<T>(uid: string, mutation: () => Promise<T>): Promise<T> {
   const prev = queues.get(uid) ?? Promise.resolve();
   const next = prev.then(mutation, mutation);
-  queues.set(uid, next.then(() => undefined, () => undefined));
+  const tail = next.then(
+    () => { if (queues.get(uid) === tail) queues.delete(uid); },
+    () => { if (queues.get(uid) === tail) queues.delete(uid); },
+  );
+  queues.set(uid, tail);
   return next;
 }
 

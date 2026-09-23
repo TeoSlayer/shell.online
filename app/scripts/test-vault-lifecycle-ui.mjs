@@ -56,7 +56,7 @@ const sourceHash = createHash('sha256').update(readFileSync(VAULT_PROVIDER)).dig
 
 const mutationArg = process.argv.find((value) => value.startsWith('--mutation='));
 const mutation = mutationArg ? mutationArg.slice('--mutation='.length) : null;
-if (mutation !== null && !['fingerprint-guard', 'precapture', 'storage-admission', 'sync-guard', 'unmount-invalidate'].includes(mutation)) {
+if (mutation !== null && !['fingerprint-guard', 'precapture', 'storage-admission', 'sync-guard', 'unmount-invalidate', 'clear-fifo'].includes(mutation)) {
   throw new Error('unknown mutation: ' + mutation);
 }
 
@@ -110,12 +110,12 @@ export async function saveLocalVault(...args) {
 }
 `;
     }
-    if (mutation && mutation !== 'storage-admission' && id.includes('VaultProvider.tsx')) {
+    if (mutation && mutation !== 'storage-admission' && mutation !== 'clear-fifo' && id.includes('VaultProvider.tsx')) {
       const targets = {
         'fingerprint-guard': ['if (lifecycle.current.generation !== myGen) return;', 'if (false && lifecycle.current.generation !== myGen) return;'],
-        precapture: ['const gen = lifecycle.current.generation;\n    const next = await openVaultWithPassword(uid, remote, password);\n    if (lifecycle.current.generation !== gen) return;', 'const next = await openVaultWithPassword(uid, remote, password);\n    const gen = lifecycle.current.generation;\n    if (lifecycle.current.generation !== gen) return;'],
+        precapture: ['const gen = lifecycle.current.generation;\n    const next = await openVaultWithPassword(uid, remote, password);\n    if (!mounted.current || lifecycle.current.generation !== gen) return;', 'const next = await openVaultWithPassword(uid, remote, password);\n    const gen = lifecycle.current.generation;\n    if (!mounted.current || lifecycle.current.generation !== gen) return;'],
         'sync-guard': ['if (lifecycle.current.uid !== uid) {', 'if (false && lifecycle.current.uid !== uid) {'],
-        'unmount-invalidate': ['lifecycle.current.generation++;\n    opened.current = null;\n  }, []);', '/* mutation: no unmount invalidation */\n  }, []);'],
+        'unmount-invalidate': ['mounted.current = false;\n      lifecycle.current.generation++;\n      opened.current = null;', '/* mutation: no unmount invalidation */'],
       };
       const [needle, replacement] = targets[mutation];
       if (!code.includes(needle)) throw new Error('mutation target not found: ' + mutation);
@@ -168,7 +168,11 @@ const SETUP = `
         }
         return json({ vault: vt.vaults[uid] ?? null });
       }
-      if (url.pathname === '/api/sessions') return json({ sessions: [] });
+      if (url.pathname === '/api/sessions') return json({ sessions: vt.sessions ?? [] });
+      if (method === 'PUT' && url.pathname.includes('/api/sessions/') && url.pathname.endsWith('/keys')) {
+        if (vt.shareCalls) vt.shareCalls.push(url.pathname);
+        return json({ shared: 1 });
+      }
       return json({});
     };
     globalThis.WebSocket = class extends EventTarget { readyState = 0; send() {} close() { this.readyState = 3; } };
@@ -622,6 +626,77 @@ try {
     expectedRemembered: false, actualRemembered: kRemembered,
     pass: kStatus === 'locked' && kRemembered === false,
   });
+  await settle();
+
+  // ---- Case L: retained A unlock (recovery) invoked after switch to B ----
+  await resetAccount('account-a');
+  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-l"); vt.recoveryA = made.recoveryKey; await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
+  await waitFor(() => evaluate("vt.vault.status === 'locked'"), 'A locked for recovery callback');
+  await evaluate('vt.retainedUnlock = vt.vault.unlock;');
+  await switchTo('account-b');
+  const lBefore = await evaluate('JSON.stringify({ uid: vt.vault.uid, status: vt.vault.status, publicKey: vt.vault.publicKey, version: vt.vault.version })').then(JSON.parse);
+  await evaluate(`(async () => {
+    vt.lDone = false;
+    vt.retainedUnlock(vt.recoveryA).then(() => { vt.lDone = true; }, () => { vt.lDone = true; });
+    for (let i = 0; i < 300 && !vt.lDone; i++) await new Promise((r) => setTimeout(r, 10));
+    return true;
+  })()`);
+  await settle();
+  const lAfter = await evaluate('JSON.stringify({ uid: vt.vault.uid, status: vt.vault.status, publicKey: vt.vault.publicKey, version: vt.vault.version })').then(JSON.parse);
+  const lARemembered = await evaluate("(async () => (await vt.loadLocalVault('account-a')) !== null)()");
+  results.push({
+    scenario: 'old-recovery-callback-cross-account',
+    before: lBefore, after: lAfter, aRemembered: lARemembered,
+    pass: lAfter.uid === lBefore.uid && lAfter.status === lBefore.status && lAfter.publicKey === lBefore.publicKey && lAfter.version === lBefore.version && lARemembered === false,
+  });
+
+  // ---- Case M: retained unlockWithPassword invoked after unmount (A2) ----
+  await resetAccount('account-a');
+  await evaluate('(async () => { const made = await vt.createVault("account-a", "pw-m"); await vt.vault.commit(made); await vt.vault.lock(); return vt.vault.status; })()');
+  await waitFor(() => evaluate("vt.vault.status === 'locked'"), 'A locked for unmount callback');
+  await evaluate('vt.retainedUnlockPw = vt.vault.unlockWithPassword;');
+  await evaluate('vt.hide()');
+  await settle();
+  await evaluate(`(async () => {
+    vt.mDone = false;
+    vt.retainedUnlockPw('pw-m').then(() => { vt.mDone = true; }, () => { vt.mDone = true; });
+    for (let i = 0; i < 300 && !vt.mDone; i++) await new Promise((r) => setTimeout(r, 10));
+    return true;
+  })()`);
+  await settle();
+  const mRemembered = await evaluate("(async () => (await vt.loadLocalVault('account-a')) !== null)()");
+  results.push({
+    scenario: 'post-unmount-unlock-no-save',
+    expectedRemembered: false, actualRemembered: mRemembered,
+    pass: mRemembered === false,
+  });
+
+  // ---- Case N: legitimate reset carry-over is not skipped ----
+  await evaluate('vt.remount()');
+  await waitFor(() => evaluate("vt.vault && vt.vault.uid === 'account-a' && vt.vault.status !== 'loading'"), 'remounted for carry-over');
+  await resetAccount('account-a');
+  await evaluate(`(async () => {
+    const made = await vt.createVault("account-a", "pw-n1");
+    vt.shareN = await vt.sealToAccount(made.bundle.publicKey, "carry-session", "account-a", "carry-pw");
+    vt.sessions = [{ id: "carry-session", keyShare: vt.shareN }];
+    vt.shareCalls = [];
+    await vt.vault.commit(made);
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A unlocked for carry-over');
+  await evaluate(`(async () => {
+    const prepared = await vt.vault.prepare(true, 'pw-n2');
+    await vt.vault.commit(prepared);
+    return vt.vault.status;
+  })()`);
+  await waitFor(() => evaluate("vt.vault.status === 'unlocked'"), 'A reset completed');
+  await settle();
+  const nShareCalls = await evaluate('vt.shareCalls.length');
+  results.push({
+    scenario: 'legitimate-reset-carry-over',
+    expectedShareCalls: 1, actualShareCalls: nShareCalls,
+    pass: nShareCalls === 1,
+  });
 
   const pageError = await evaluate('vt.error');
   if (pageError) throw new Error('Page error: ' + pageError);
@@ -639,6 +714,7 @@ try {
       'storage-admission': 'stale-save-same-owner-new-key',
       'sync-guard': 'sync-uid-boundary-layout-effect',
       'unmount-invalidate': 'unmount-invalidates-pending-save',
+      'clear-fifo': 'clear-held-across-account-switch',
     };
     const targeted = TARGETS[mutation];
     const observed = results.find((result) => result.scenario === targeted);

@@ -134,6 +134,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
    * first await and checks it after; a stale continuation never publishes.
    */
   const lifecycle = useRef<{ uid: string; generation: number }>({ uid, generation: 0 });
+  const mounted = useRef(true);
 
   /*
    * Render-phase UID boundary: if the account changed since the last render,
@@ -169,9 +170,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* Unmount: invalidate all pending continuations. */
-  useEffect(() => () => {
-    lifecycle.current.generation++;
-    opened.current = null;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      lifecycle.current.generation++;
+      opened.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -234,7 +239,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const commit = useCallback(
     async (prepared: PreparedVault) => {
-      if (lifecycle.current.uid !== uid) return;
+      if (!mounted.current || lifecycle.current.uid !== uid) return;
       const previous = opened.current;
       const gen = lifecycle.current.generation;
       let vault: VaultRecord | null;
@@ -259,7 +264,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         }
         throw caught;
       }
-      if (lifecycle.current.generation !== gen) return;
+      if (!mounted.current || lifecycle.current.generation !== gen) return;
       /* The service answers with what it stored; it must be what was sent. */
       if (!vault || vault.publicKey !== prepared.bundle.publicKey) {
         throw new VaultError("damaged", "The vault that was saved is not the one made here. Reload and try again.");
@@ -270,8 +275,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         publicKey: vault.publicKey,
         version: vault.version,
         privateKey: prepared.opened.privateKey,
-      }, () => lifecycle.current.generation === gen);
-      if (lifecycle.current.generation !== gen) return;
+      }, () => mounted.current && lifecycle.current.generation === gen);
+      if (!mounted.current || lifecycle.current.generation !== gen) return;
       await becomeUnlocked(prepared.opened, kept, gen);
 
       /*
@@ -284,7 +289,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
        */
       if (previous && prepared.replaces !== undefined) {
         const postGen = lifecycle.current.generation;
-        await carryOver(uid, previous, prepared.opened, () => lifecycle.current.generation === postGen);
+        await carryOver(uid, previous, prepared.opened, () => mounted.current && lifecycle.current.generation === postGen);
       }
     },
     [uid, becomeUnlocked],
@@ -293,6 +298,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const unlock = useCallback(
     async (text: string) => {
       if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
+      if (!mounted.current || lifecycle.current.uid !== uid) return;
       const recovery = parseRecoveryKey(text);
       if (!recovery) {
         throw new VaultError(
@@ -303,14 +309,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       const gen = lifecycle.current.generation;
       try {
         const next = await openVault(uid, remote, recovery);
-        if (lifecycle.current.generation !== gen) return;
+        if (!mounted.current || lifecycle.current.generation !== gen) return;
         const kept = await saveLocalVault({
           uid,
           publicKey: next.publicKey,
           version: remote.version,
           privateKey: next.privateKey,
-        }, () => lifecycle.current.generation === gen);
-        if (lifecycle.current.generation !== gen) return;
+        }, () => mounted.current && lifecycle.current.generation === gen);
+        if (!mounted.current || lifecycle.current.generation !== gen) return;
         await becomeUnlocked(next, kept, gen);
       } finally {
         recovery.fill(0);
@@ -321,60 +327,60 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const keepOpened = useCallback(async (next: OpenedVault, gen?: number) => {
     if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
-    if (lifecycle.current.uid !== uid) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     const myGen = gen ?? lifecycle.current.generation;
     const kept = await saveLocalVault({
       uid,
       publicKey: next.publicKey,
       version: remote.version,
       privateKey: next.privateKey,
-    }, () => lifecycle.current.generation === myGen);
-    if (lifecycle.current.generation !== myGen) return;
+    }, () => mounted.current && lifecycle.current.generation === myGen);
+    if (!mounted.current || lifecycle.current.generation !== myGen) return;
     await becomeUnlocked(next, kept, myGen);
   }, [uid, remote, becomeUnlocked]);
 
   const unlockWithPassword = useCallback(async (password: string) => {
     if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
-    if (lifecycle.current.uid !== uid) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     const gen = lifecycle.current.generation;
     const next = await openVaultWithPassword(uid, remote, password);
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     await keepOpened(next, gen);
   }, [uid, remote, keepOpened]);
 
   const unlockWithPasskey = useCallback(async () => {
     if (!remote) throw new VaultError("damaged", "There is no vault to unlock. Reload and try again.");
-    if (lifecycle.current.uid !== uid) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     const gen = lifecycle.current.generation;
     const next = await unlockVaultWithPasskey(uid, remote);
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     await keepOpened(next, gen);
   }, [uid, remote, keepOpened]);
 
   const setPassword = useCallback(async (recoveryKey: string, password: string) => {
     if (!remote) throw new VaultError("damaged", "There is no vault to update. Reload and try again.");
-    if (lifecycle.current.uid !== uid) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     const gen = lifecycle.current.generation;
     const recoveryWrap = await addVaultPassword(uid, remote, recoveryKey, password);
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     const saved = (await updateVaultUnlocks(recoveryWrap, remote.version)).vault;
     if (!saved) throw new Error("The vault update did not return a vault.");
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     setRemote(saved);
     const next = await openVaultWithPassword(uid, saved, password);
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     await keepOpened(next, gen);
   }, [uid, remote, keepOpened]);
 
   const addPasskey = useCallback(async (password: string, label = "Passkey") => {
     if (!remote) throw new VaultError("damaged", "There is no vault to update. Reload and try again.");
-    if (lifecycle.current.uid !== uid) return;
+    if (!mounted.current || lifecycle.current.uid !== uid) return;
     const gen = lifecycle.current.generation;
     const recoveryWrap = await registerVaultPasskey(uid, user?.email ?? uid, remote, password, label);
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     const saved = (await updateVaultUnlocks(recoveryWrap, remote.version)).vault;
     if (!saved) throw new Error("The vault update did not return a vault.");
-    if (lifecycle.current.generation !== gen) return;
+    if (!mounted.current || lifecycle.current.generation !== gen) return;
     setRemote(saved);
   }, [uid, user?.email, remote]);
 
@@ -402,9 +408,10 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const openContent = useCallback(async (sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}) => {
     const key = opened.current;
     if (!key) return null;
+    const gen = lifecycle.current.generation;
     const value = await openSessionContent(key.privateKey, sessionId, uid,
       envelope.generation, envelope.observedAt, envelope);
-    return opened.current === key ? value : null;
+    return opened.current === key && lifecycle.current.generation === gen ? value : null;
   }, [uid]);
 
   const sealTo = useCallback(
