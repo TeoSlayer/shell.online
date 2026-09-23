@@ -135,6 +135,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
    */
   const lifecycle = useRef<{ uid: string; generation: number }>({ uid, generation: 0 });
   const mounted = useRef(true);
+  const preparedOwner = useRef(new WeakMap<PreparedVault, { uid: string; generation: number }>());
 
   /*
    * Render-phase UID boundary: if the account changed since the last render,
@@ -231,8 +232,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const prepare = useCallback(
     async (reset: boolean, password: string): Promise<PreparedVault> => {
+      if (!mounted.current || lifecycle.current.uid !== uid) throw new VaultError("damaged", "There is no vault to prepare. Reload and try again.");
       const made = await createVault(uid, password);
-      return { ...made, replaces: reset && remote ? remote.version : undefined };
+      const prepared: PreparedVault = { ...made, replaces: reset && remote ? remote.version : undefined };
+      preparedOwner.current.set(prepared, { uid, generation: lifecycle.current.generation });
+      return prepared;
     },
     [uid, remote],
   );
@@ -240,6 +244,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const commit = useCallback(
     async (prepared: PreparedVault) => {
       if (!mounted.current || lifecycle.current.uid !== uid) return;
+      const owner = preparedOwner.current.get(prepared);
+      if (owner && (owner.uid !== uid || owner.generation !== lifecycle.current.generation)) return;
       const previous = opened.current;
       const gen = lifecycle.current.generation;
       let vault: VaultRecord | null;

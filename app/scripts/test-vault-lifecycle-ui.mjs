@@ -98,9 +98,15 @@ const overlayPlugin = {
       if (mutation === 'storage-admission') {
         transformed = transformed.split('if (isCurrent && !isCurrent()) return false;').join('if (false && isCurrent && !isCurrent()) return false;');
       }
-      const clearTarget = 'await enqueue(uid, async () => {\n    try {\n      const database = await openDatabase();';
+      const clearTarget = '  await enqueue(uid, async () => {\n    try {\n      const database = await openDatabase();';
       if (transformed.includes(clearTarget)) {
-        transformed = transformed.replace(clearTarget, 'await enqueue(uid, async () => {\n    try {\n      const __cg = globalThis.__clearGate;\n      if (__cg && __cg.armed) { __cg.armed = false; __cg.entered = true; await __cg.wait; }\n      const database = await openDatabase();');
+        if (mutation === 'clear-fifo') {
+          transformed = transformed.replace(clearTarget, '  await enqueue(uid, async () => {\n    try {\n      const __cg = globalThis.__clearGate;\n      if (__cg && __cg.armed) { __cg.armed = false; __cg.entered = true; await __cg.wait; }\n      if (__cg && __cg.entered) return;\n      const database = await openDatabase();');
+        } else {
+          transformed = transformed.replace(clearTarget, '  await enqueue(uid, async () => {\n    try {\n      const __cg = globalThis.__clearGate;\n      if (__cg && __cg.armed) { __cg.armed = false; __cg.entered = true; await __cg.wait; }\n      const database = await openDatabase();');
+        }
+      } else if (mutation === 'clear-fifo') {
+        throw new Error('clear-fifo: source replacement target not found');
       }
       return transformed + `
 export async function saveLocalVault(...args) {
