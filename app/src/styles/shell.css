@@ -445,6 +445,25 @@
   overflow: hidden;
 }
 
+/*
+ * A session is a surface, not a document with a margin.
+ *
+ * `.shell-content` keeps a comfortable gutter either side, which is right for
+ * a column of text and wrong for a terminal: it is space the grid cannot draw
+ * in, and it is why the conversation and the terminal both stopped short of
+ * the rail rather than starting where it ends. The tab line above keeps the
+ * gutter, because that is a row of controls and does want one.
+ */
+.shell-content:has(.panes) {
+  padding-inline: 0;
+}
+
+.shell-content:has(.panes) > .terminal-bar,
+.shell-content:has(.panes) > .renderer-warning,
+.shell-content:has(.panes) > .session-panel-summary {
+  padding-inline: clamp(22px, 2.4vw, 34px);
+}
+
 .shell:has(.panes) .shell-main,
 .shell-content:has(.panes) {
   min-height: 0;
@@ -607,6 +626,28 @@
     overflow: hidden;
     padding-bottom: 0;
   }
+
+  /*
+   * The keyboard takes the navigation row with it here too, and for a harder
+   * reason than on a phone: a phone held sideways with the keyboard up has
+   * around 190px of visible viewport, and this row plus the tab bar above the
+   * pane ate three quarters of it. What was left was 43px of conversation
+   * under a composer -- a canvas too short to hold one message. Nobody
+   * navigates away mid-sentence, so the row goes and the pane gets its height.
+   */
+  :root[data-keyboard="open"] .rail {
+    display: none;
+  }
+
+  /*
+   * And the row it occupied goes with it. The rail is the `auto` row at the
+   * top of this grid, so hiding it alone leaves the template's two rows to be
+   * claimed by one child: the workspace inherits `auto`, sizes to its content
+   * instead of to the space, and the pane collapses to nothing.
+   */
+  :root[data-keyboard="open"] .shell {
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 @media (min-width: 761px) and (max-width: 900px) and (max-height: 600px) {
@@ -730,25 +771,6 @@
   }
 
   /*
-   * A session is the one page that does not shrink for a keyboard.
-   *
-   * The terminal in it is a grid of a fixed number of columns, so a pane that
-   * changes size refits that grid to a smaller font: text that shrinks as you
-   * start typing, and blank screen where the grid no longer reaches. Coming
-   * back it refits again, and the bar arrives a centimetre from where it
-   * left. `--typing-height` is what the visible page was before the keyboard
-   * covered it; see lib/app-height.ts, which publishes it app-wide so that it
-   * is right before a pane exists -- a session opened with the keyboard
-   * already up has nothing to hold otherwise.
-   *
-   * Every other page shrinks, which is the right answer for a document with a
-   * form in it, and is what keeps the bar in one place across all of them.
-   */
-  :root[data-pane="open"][data-keyboard="open"] .shell {
-    height: var(--typing-height, var(--visible-height, calc(100dvh / var(--zoom))));
-  }
-
-  /*
    * And nothing outside the column scrolls, which is what keeps that
    * measurement true. The visible viewport can be scrolled inside the layout
    * one, and a phone does exactly that when it decides a focused field would
@@ -802,7 +824,13 @@
     grid-row: 2;
     z-index: 40;
     height: auto;
-    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+    /*
+     * Tighter than it was. The bar is a row of the column now rather than
+     * something floating over it, so it does not need the air a floating
+     * thing needs to read as separate -- and what it had was a finger's
+     * height of empty paper under four short words.
+     */
+    padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--line);
     background: var(--paper);
     flex-direction: row;
@@ -824,35 +852,6 @@
    */
   :root[data-keyboard="open"] .rail {
     display: none;
-  }
-
-  /*
-   * Except in a session, where it goes invisible rather than going away.
-   *
-   * A document page shrinks to the space above the keyboard, so its bar has
-   * to leave or it would be under one. A session does not shrink: the
-   * terminal in it is a grid of a fixed number of columns, and a pane that
-   * changes size refits that grid to a different font. Taking the bar out of
-   * the layout is such a change -- its row collapses, the pane grows into it,
-   * and the refit coming back is the bar arriving a centimetre from where it
-   * started.
-   *
-   * So the row stays and only the bar stops being drawn. `display: none` and
-   * `display: flex` were both wrong in their own direction: the first resizes
-   * the pane, and the second leaves a bar that can be scrolled to. A session
-   * is taller than the visible page while a keyboard is up, and a phone
-   * scrolls the visible page to keep a focused field in view -- which on a
-   * terminal walked the bar up into the middle of the canvas.
-   */
-  :root[data-pane="open"][data-keyboard="open"] .rail {
-    /*
-     * Both, and both are load-bearing. `display` restores the row the general
-     * rule above took away, so the pane keeps its size; `visibility` is what
-     * stops the bar being drawn in it.
-     */
-    display: flex;
-    visibility: hidden;
-    pointer-events: none;
   }
 
   /* The wordmark, the copy-command hint and the account row all live in the

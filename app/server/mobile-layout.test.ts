@@ -116,27 +116,74 @@ describe("the phone bottom bar", () => {
     expect(hidden).not.toMatch(/translateY/);
   });
 
+});
+
+const chat = readFileSync(new URL("../src/styles/chat.css", import.meta.url), "utf8");
+
+describe("the conversation under an open keyboard", () => {
   /*
-   * Except in a session, where the row stays and only the bar stops being
-   * drawn. Collapsing the row resizes the pane, and a pane that changes size
-   * refits the terminal's grid to a different font; leaving the bar drawn is
-   * worse still, because a session is taller than the visible page while a
-   * keyboard is up and a phone scrolls the visible page to follow a focused
-   * field -- which walked the bar up into the middle of the canvas.
+   * The keyboard is subtracted exactly once, by the shell.
+   *
+   * Every breakpoint sizes the shell to the visible viewport -- `--visible-height`
+   * on a phone, `--app-height` less `--keyboard-inset` on a tablet -- so the foot
+   * of the surface is already the top of the keyboard. The composer used to add
+   * `--keyboard-inset` to its own dock as well, from when the shell stayed
+   * screen-height and the box had to climb out from under the keyboard alone.
+   * The two together lifted it by the height of the keyboard twice: the field
+   * landed a third of the way up a 508px screen with the conversation pushed
+   * off the top of it.
    */
-  it("keeps the bar's row in a session but stops drawing it", () => {
-    const session =
-      phone.match(/:root\[data-pane="open"\]\[data-keyboard="open"\] \.rail\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    /* The row stays (display) and the bar stops being drawn (visibility). */
-    expect(session).toMatch(/display:\s*flex/);
-    expect(session).toMatch(/visibility:\s*hidden/);
-    expect(session).not.toMatch(/display:\s*none/);
+  it("subtracts the keyboard once, in the shell, and not again in the composer", () => {
+    expect(css).toMatch(/--visible-height|--keyboard-inset/);
+    /* Comments off: this file explains the bug it is guarding against. */
+    expect(chat.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(/--keyboard-inset/);
   });
 
-  /* And the session is the one page that does not shrink for the keyboard. */
-  it("holds a session's height while somebody is typing in it", () => {
-    const typing =
-      phone.match(/:root\[data-pane="open"\]\[data-keyboard="open"\] \.shell\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    expect(typing).toMatch(/height:\s*var\(--typing-height/);
+  /*
+   * A phone held sideways with the keyboard up leaves under 200px of viewport.
+   * The thread is a flex item whose padding clears the composer, and a flex
+   * item's default `min-height: auto` refuses to shrink below that padding --
+   * so the bottom of the thread, where every new message lands, hung below the
+   * pane where nothing draws.
+   */
+  it("lets the thread shrink below the padding that clears the composer", () => {
+    const scroll = chat.match(/\n\.chat-scroll\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(scroll).toMatch(/min-height:\s*0/);
+  });
+
+  /*
+   * Landscape is the tablet layout, where the bar is the `auto` row at the top
+   * of the shell's grid rather than the last row. Hiding it alone left the
+   * template's two rows to one child: the workspace inherited `auto`, sized
+   * itself to its content, and the pane collapsed to nothing.
+   */
+  it("gives the row the bar held back to the workspace, not to nothing", () => {
+    const tablet = css.match(/@media\s*\(max-width:\s*900px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(tablet).toMatch(/:root\[data-keyboard="open"\] \.rail\s*\{\s*display:\s*none/);
+    const rows = tablet.match(/:root\[data-keyboard="open"\] \.shell\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    expect(rows).toMatch(/grid-template-rows:\s*minmax\(0, 1fr\)/);
+  });
+});
+
+describe("the width of the conversation", () => {
+  /*
+   * The pane starts where the rail ends, so one gutter is the whole of the
+   * inset: an edge, not a container. It had a 940px measure centred inside a
+   * pane already inset from the window, which read on a laptop as a strip of
+   * paper down both sides of everything -- and taking the measure off without
+   * putting a gutter back clipped the rounded corners against the window.
+   */
+  it("insets the thread and the box it talks to by the same one distance", () => {
+    expect(chat).toMatch(/--chat-gutter-x:\s*12px/);
+    const scroll = chat.match(/\n\.chat-scroll\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(scroll).toMatch(/padding:\s*4px var\(--chat-gutter-x\)/);
+    const composer = chat.match(/\n\.chat-composer\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(composer).toMatch(/right:\s*var\(--chat-gutter-x\)/);
+    expect(composer).toMatch(/left:\s*var\(--chat-gutter-x\)/);
+  });
+
+  /* And the pane itself keeps no padding of its own beside the rail. */
+  it("starts the pane where the rail ends", () => {
+    expect(css).toMatch(/\.shell-content:has\(\.panes\)\s*\{[\s\S]*?padding-inline:\s*0/);
   });
 });

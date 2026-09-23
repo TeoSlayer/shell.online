@@ -289,6 +289,23 @@ export function TerminalPane({
     const node = mount.current;
     const measureCell = measure.current;
     if (!activeRef.current || !term || !node || !measureCell) return;
+    /*
+     * Not while a keyboard is up.
+     *
+     * The pane shrinks to the room above the keyboard, as every page does,
+     * and the grid is a fixed number of columns -- so refitting it into that
+     * smaller box picks a smaller font. The text you are typing at shrinks as
+     * the keyboard arrives, the grid stops reaching the edge of the pane, and
+     * coming back it is refitted again to something that need not land on the
+     * same pixel.
+     *
+     * A keyboard is something that covers the foot of a session, not
+     * something that resizes the session. So the terminal keeps the size it
+     * had; the pane clips it, and its own scrollback is what moves. The
+     * measurement it is holding is still true when the keyboard goes away,
+     * which is why nothing has to be put back afterwards.
+     */
+    if (document.documentElement.dataset.keyboard === "open") return;
     try {
       const box = terminalBox(node);
       if (box.width === 0 || box.height === 0) return;
