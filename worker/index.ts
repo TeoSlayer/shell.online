@@ -3965,13 +3965,15 @@ export function secureAssetResponse(response: Response, pathname: string, hostna
   const headers = new Headers(response.headers);
   const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
   const gaAllowed = isHtmlDocument && hostname === "shell.online" && isPublicAnalyticsPath(pathname);
+  const xAllowed = gaAllowed && pathname === "/";
+  const xCollectors = xAllowed ? " https://analytics.twitter.com https://t.co https://ads-twitter.com https://ads-api.twitter.com" : "";
   const posthogAllowed = gaAllowed || (isHtmlDocument && hostname === "shell.online" && /^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(pathname));
   headers.set("Content-Security-Policy", [
     "default-src 'self'",
-    `script-src 'self'${gaAllowed ? " https://www.googletagmanager.com" : ""}`,
+    `script-src 'self'${gaAllowed ? " https://www.googletagmanager.com" : ""}${xAllowed ? " https://static.ads-twitter.com" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}${posthogAllowed ? " https://us.i.posthog.com" : ""}`,
-    `img-src 'self' data:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}`,
+    `connect-src 'self' wss: ws:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}${posthogAllowed ? " https://us.i.posthog.com" : ""}${xCollectors}`,
+    `img-src 'self' data:${gaAllowed ? " https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com" : ""}${xCollectors}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",

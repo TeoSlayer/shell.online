@@ -36,7 +36,7 @@ export function isGpcOrDnt(): boolean {
   return false;
 }
 
-function hasAnalyticsOptOut(cookieString?: string): boolean {
+export function hasAnalyticsOptOut(cookieString?: string): boolean {
   const source = cookieString ?? document.cookie;
   for (const part of source.split(";")) {
     const eq = part.indexOf("=");

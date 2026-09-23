@@ -29,6 +29,18 @@ function csp(response: Response): string {
 }
 
 describe("secureAssetResponse CSP Google Analytics endpoints", () => {
+  it("allows exact X SDK/collector origins only on public HTML", () => {
+    const policy = csp(secureAssetResponse(htmlResponse(), "/", "shell.online"));
+    expect(policy.split("; ").find(s => s.startsWith("script-src"))).toContain("https://static.ads-twitter.com");
+    for (const directive of ["img-src", "connect-src"]) {
+      const sources = policy.split("; ").find(s => s.startsWith(directive));
+      for (const host of ["analytics.twitter.com", "t.co", "ads-twitter.com", "ads-api.twitter.com"]) expect(sources).toContain(`https://${host}`);
+    }
+    for (const [path, host] of [["/docs/", "shell.online"], ["/cli/", "shell.online"], ["/s/abcdefghijklmnopqrstuvwxyz012345", "shell.online"], ["/", "app.shell.online"], ["/", "stats.shell.online"], ["/oauth/callback", "shell.online"]]) {
+      const privatePolicy = csp(secureAssetResponse(htmlResponse(), path, host));
+      expect(privatePolicy).not.toMatch(/twitter|t\.co|ads-twitter/);
+    }
+  });
   it("allows GA on public landing page (/) HTML on shell.online", () => {
     const res = secureAssetResponse(htmlResponse(), "/", "shell.online");
     const policy = csp(res);

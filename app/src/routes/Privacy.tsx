@@ -70,7 +70,7 @@ export function Privacy() {
         <div className="terms-masthead">
           <h1>Privacy Policy</h1>
           <p className="terms-updated">
-            Effective: 11 September 2026 · Last updated: 14 September 2026
+            Effective: 11 September 2026 · Last updated: 23 September 2026
           </p>
           <p className="terms-lede">
             This policy explains what personal data <b>Vulture Labs, Inc.</b>{" "}
@@ -333,6 +333,21 @@ export function Privacy() {
         </Section>
 
         <Section id="analytics">
+          <p>
+            The public shell.online landing page uses the X
+            advertising pixel to measure visits from ads. It is not loaded on
+            documentation, account, vault, terminal or stats pages. We suppress full page URLs
+            and referrers and disable automatic button, form, data-layer and
+            timed-engagement capture. X can receive an advertising click ID,
+            network address, browser/device information and its cookie identifiers;
+            its cookies may apply across shell.online subdomains. Browser Do Not
+            Track, Global Privacy Control and saved analytics opt-outs prevent
+            us from loading this tag. We do not supply email addresses, phone
+            numbers, session credentials or terminal content to X. See the{" "}
+            <a href="https://x.com/en/privacy" rel="noreferrer">X Privacy Policy</a>{" "}
+            for X&rsquo;s handling of advertising data. A measured visit is not
+            proof of a human visit or an installation.
+          </p>
           <p>
             The public site, web app, game and shared-terminal viewer use
             PostHog (US hosting) for page views and explicit product actions.

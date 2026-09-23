@@ -65,6 +65,62 @@ with collection intercepted rather than sent. Verify one page view, correct
 source/medium, copy and CTA events, and no private URL fields. Mocked `dataLayer`
 tests alone do not prove what Google's script transmits.
 
+## X advertising pixel
+
+The public pixel ID is `rfilf`. Only the eligible public landing page
+initializes it, once per document. Documentation, account, vault, terminal, stats, local-preview,
+unknown-query and private-fragment pages do not. GPC, DNT and saved analytics
+opt-outs suppress initialization. A missing/blocked vendor script must not stop
+the page from working.
+
+Before `twq('config', 'rfilf')`, the integration sets `page_location` to the fixed
+public URL `https://shell.online/` (also replacing any original referrer)
+and disables automatic button capture, advanced matching, data-layer tracking
+and dwell/page-leave tracking. The real vendor-script browser gate verifies
+these switches: they are not a guarantee about future vendor script changes.
+X receives its own advertising click/cookie identifiers and normal browser/
+network metadata. Unlike our finite source buckets, it can receive a valid
+`twclid`; its cookies may be shared across shell.online subdomains. We do not
+provide emails, phones, account identifiers or terminal information.
+
+This is **base-visit measurement**, not a claimed install/signup conversion.
+Copying a command, downloading an installer, reporting installation success and
+starting a session are different actions. Set up corresponding real events in
+X Events Manager before wiring event-specific `tw-rfilf-…` IDs. No placeholder
+event is sent, and there is no second `track PageView` on top of `config`.
+Only the fixed landing URL is sent; no query strings or fragments. X's
+auto-created Landing Page Views and Site Visits use the base pixel; no extra
+conversion event ID or Conversion API token is needed for this scope.
+
+The Conversion API is not enabled. Its token is a server secret, never a browser
+variable, checked-in config, CLI argument, log field or public pixel setting.
+Rotate any token exposed in chat. A future server integration requires an actual
+event ID, a verified action, an intentionally collected matching identifier,
+bounded retries and the same `conversion_id` on browser/server copies of one
+action. Do not invent identifiers, send synthetic live conversions, or bypass
+browser opt-outs through the server.
+
+### Pixel verification
+
+| Destination | Scope | What the gate checks |
+| --- | --- | --- |
+| GA4 `G-101HMD03VD` | Public landing/docs | One page view; canonical URL/referrer; copy and CTA separate from installs |
+| X `rfilf` | Public landing only | One base event per collector; URL/form redaction; no automatic events; private-page and opt-out exclusions |
+| PostHog US | Explicit public/app/viewer events | Real browser metadata; route templates; no replay/content; anonymous identity lifecycle |
+| First-party statistics | Public actions and operational milestones | Fixed event/target/source; loads, copies, downloads and reported installs kept separate |
+
+Run `node scripts/test-x-pixel-browser.mjs` and
+`node scripts/test-posthog-browser.mjs` after building the site/app. Set
+`X_PIXEL_LIVE=1` / `POSTHOG_LIVE=1` to exercise deployed assets. Collection is
+intercepted in these gates: passing proves browser behavior, not ingestion into
+an advertiser account. Verify received activity separately in X Events Manager,
+GA4 Realtime and PostHog Live Events using one deliberate operator visit.
+Ad blockers can suppress these services; do not proxy around them or label
+missing events as confirmed bounces.
+
+Vendor references: [X website tracking](https://business.x.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites)
+and [page-location controls](https://business.x.com/en/help/campaign-measurement-and-analytics/conversion-tracking-for-websites/about-conversion-tracking).
+
 ## Platform product analytics (PostHog)
 
 PostHog receives explicit, content-free events from the public site, docs,

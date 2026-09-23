@@ -1,4 +1,5 @@
 import { initAnalytics, trackPublicEvent } from "./analytics";
+import { initXPixel } from "./x-pixel";
 import { observeProductPage } from "./posthog";
 import "./home.css";
 import { agentCommand, PLATFORM_BRANDS } from "./landing-brands";
@@ -13,6 +14,7 @@ const commands = {
 export function initLanding(): void {
   document.documentElement.classList.add("home-root");
   initAnalytics();
+  initXPixel();
   observeProductPage();
   const proofs = document.querySelectorAll<HTMLButtonElement>("[data-proof]");
   proofs.forEach((button) =>
