@@ -21,10 +21,13 @@ export function ProductAnalytics() {
     previous.current = next;
   }, [user?.uid, initializing]);
   useEffect(() => {
+    // Restoring a persisted login is not a second visit. Wait for the provider's
+    // initial answer; later real account switches start a fresh anonymous view.
+    if (initializing) return;
     // Defer to avoid React StrictMode's setup/cleanup probe counting a visit twice.
     let end: (() => void) | undefined;
     const timer = setTimeout(() => { end = observeProductPage(); finishPage.current = end; }, 0);
     return () => { clearTimeout(timer); end?.(); finishPage.current = undefined; };
-  }, [pathname, user?.uid]);
+  }, [pathname, user?.uid, initializing]);
   return null;
 }
