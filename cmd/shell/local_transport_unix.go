@@ -28,9 +28,19 @@ func listenLocalControl(id string) (net.Listener, error) {
 }
 
 func secureLocalControlSocket(path string, listener net.Listener) (net.Listener, error) {
+	// net.UnixListener's default close unlinks by name, even if that name has
+	// since been rebound. Disable it so ownership cleanup is inode-checked.
+	if unix, ok := listener.(*net.UnixListener); ok {
+		unix.SetUnlinkOnClose(false)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		_ = listener.Close()
-		_ = os.Remove(path)
+		removeOwnedLocalFile(path, info)
 		return nil, err
 	}
 	return listener, nil
@@ -111,4 +121,28 @@ func localSessionDirectory() (string, error) {
 
 func localSessionSocketPath(directory, id string) string {
 	return filepath.Join(directory, id+".sock")
+}
+
+// localControlSocketInfo reports the bound control socket's path and inode so a
+// cleanup can remove it only when it is still the exact file that was created.
+func localControlSocketInfo(directory, id string) (string, os.FileInfo) {
+	path := localSessionSocketPath(directory, id)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", nil
+	}
+	return path, info
+}
+
+// localSocketOwnershipHolds reports whether the socket at path is still the
+// one we bound. A same-name replacement (a later launch) is not ours.
+func localSocketOwnershipHolds(path string, info os.FileInfo) bool {
+	if info == nil || path == "" {
+		return false
+	}
+	current, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(current, info)
 }

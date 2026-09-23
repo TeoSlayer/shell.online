@@ -111,21 +111,36 @@ func TestPersistentSessionGeneratesAndReusesBrowserPassword(t *testing.T) {
 
 	path := filepath.Join(t.TempDir(), "session.json")
 	client := api.NewClient(server.URL, "test")
-	first, password, err := preparePersistentSession(context.Background(), client, path, "bash", false, true, "")
+	prepared, err := preparePersistentSession(path, false, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := prepared.persist(path); err != nil {
+		t.Fatal(err)
+	}
+	first, err := prepared.resume(context.Background(), client, "bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	password := prepared.password
 	if len(password) != 10 || !strings.Contains(first.ShareURL, "#salt=") {
 		t.Fatalf("generated password/share = %q, %q", password, first.ShareURL)
 	}
-	second, reused, err := preparePersistentSession(context.Background(), client, path, "bash", false, true, "")
+	prepared, err = preparePersistentSession(path, false, true, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reused != password || second.ShareURL != first.ShareURL {
-		t.Fatalf("persistent access changed: password %q/%q, URL %q/%q", password, reused, first.ShareURL, second.ShareURL)
+	if err := prepared.persist(path); err != nil {
+		t.Fatal(err)
 	}
-	if _, _, err := preparePersistentSession(context.Background(), client, path, "bash", false, true, "different"); err == nil {
+	second, err := prepared.resume(context.Background(), client, "bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.password != password || second.ShareURL != first.ShareURL {
+		t.Fatalf("persistent access changed: password %q/%q, URL %q/%q", password, prepared.password, first.ShareURL, second.ShareURL)
+	}
+	if _, err := preparePersistentSession(path, false, true, "different"); err == nil {
 		t.Fatal("accepted a replacement password for existing persistent state")
 	}
 }

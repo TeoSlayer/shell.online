@@ -24,6 +24,11 @@ import (
 type managedLocalSession struct {
 	record         localSessionRecord
 	listener       net.Listener
+	recordPath     string
+	recordInfo     os.FileInfo
+	socketPath     string
+	socketInfo     os.FileInfo
+	closed         bool
 	stop           chan struct{}
 	stopOnce       sync.Once
 	close          sync.Once
@@ -85,11 +90,18 @@ func (session *managedLocalSession) BindPasswordRotation(rotate func(string) (st
 func (session *managedLocalSession) UpdateCredentials(shareURL, password string) error {
 	session.terminalMu.Lock()
 	defer session.terminalMu.Unlock()
+	if session.closed {
+		return fmt.Errorf("session is closed")
+	}
 	previousURL, previousPassword := session.record.ShareURL, session.record.Password
 	session.record.ShareURL, session.record.Password = shareURL, password
 	directory, err := localSessionDirectory()
 	if err == nil {
-		err = writeLocalSessionRecord(directory, session.record)
+		info, writeErr := writeLocalSessionRecordOwned(directory, session.record)
+		if writeErr == nil {
+			session.recordInfo = info
+		}
+		err = writeErr
 	}
 	if err != nil {
 		session.record.ShareURL, session.record.Password = previousURL, previousPassword
@@ -137,6 +149,9 @@ func startLocalSession(record localSessionRecord) (localSessionControl, error) {
 		cleanupLocalControl(record.ID)
 		return nil, err
 	}
+	session.recordPath = localSessionRecordPath(directory, record.ID)
+	session.recordInfo, _ = os.Lstat(session.recordPath)
+	session.socketPath, session.socketInfo = localControlSocketInfo(directory, record.ID)
 	go session.serve()
 	return session, nil
 }
@@ -229,16 +244,15 @@ func (session *managedLocalSession) Close() error {
 	session.close.Do(func() {
 		closeError = session.listener.Close()
 		session.terminalMu.Lock()
+		session.closed = true
 		if session.attached != nil {
 			_ = session.attached.Close()
 			session.attached = nil
 		}
+		recordPath, recordInfo := session.recordPath, session.recordInfo
 		session.terminalMu.Unlock()
-		directory, err := localSessionDirectory()
-		if err == nil {
-			cleanupLocalControl(session.record.ID)
-			_ = os.Remove(localSessionRecordPath(directory, session.record.ID))
-		}
+		removeOwnedLocalFile(session.socketPath, session.socketInfo)
+		removeOwnedLocalFile(recordPath, recordInfo)
 	})
 	if errors.Is(closeError, net.ErrClosed) {
 		return nil
@@ -805,33 +819,48 @@ func localSessionRecordPath(directory, id string) string {
 }
 
 func writeLocalSessionRecord(directory string, record localSessionRecord) error {
+	_, err := writeLocalSessionRecordOwned(directory, record)
+	return err
+}
+
+// writeLocalSessionRecordOwned publishes the record and returns the inode it
+// actually wrote, so the caller can own exactly that file (not a later
+// occupant of the same path).
+func writeLocalSessionRecordOwned(directory string, record localSessionRecord) (os.FileInfo, error) {
 	temporary, err := os.CreateTemp(directory, ".session-*.json")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
-		return err
+		return nil, err
 	}
 	if err := json.NewEncoder(temporary).Encode(record); err != nil {
 		_ = temporary.Close()
-		return err
+		return nil, err
 	}
 	if err := temporary.Sync(); err != nil {
 		_ = temporary.Close()
-		return err
+		return nil, err
 	}
 	if err := temporary.Close(); err != nil {
-		return err
+		return nil, err
 	}
 	if err := securePrivateStateFile(temporaryPath); err != nil {
-		return err
+		return nil, err
+	}
+	info, err := os.Lstat(temporaryPath)
+	if err != nil {
+		return nil, err
 	}
 	path := localSessionRecordPath(directory, record.ID)
 	if err := replaceFileAtomically(temporaryPath, path); err != nil {
-		return err
+		return nil, err
 	}
-	return securePrivateStateFile(path)
+	if err := securePrivateStateFile(path); err != nil {
+		return nil, err
+	}
+	return info, nil
 }

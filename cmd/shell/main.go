@@ -177,12 +177,44 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 
 	client := api.NewClient(strings.TrimRight(*server, "/"), "shell/"+version)
 	var session api.Session
+	var reservation *localSessionReservation
+	defer func() { reservation.Close() }()
 	if *persistentState != "" {
-		session, password, err = preparePersistentSession(
-			signalContext, client, *persistentState, filepath.Base(command[0]), *readOnly, true, password,
-		)
+		var prepared *preparedPersistentSession
+		prepared, err = preparePersistentSession(*persistentState, *readOnly, true, password)
+		if err == nil {
+			reservation, err = reserveLocalSession(prepared.state.ID)
+			if err != nil {
+				err = fmt.Errorf("local session management unavailable: %w", err)
+			}
+		}
+		if err == nil {
+			err = prepared.persist(*persistentState)
+		}
+		if err == nil {
+			err = reservation.check()
+			if err != nil {
+				err = fmt.Errorf("local session management unavailable: %w", err)
+			}
+		}
+		if err == nil {
+			session, err = prepared.resume(signalContext, client, filepath.Base(command[0]))
+			password = prepared.password
+		}
 	} else {
-		if encrypted && password == "" {
+		// The relay chooses ephemeral IDs. Prove local bind/write capability
+		// before creating one, then reserve the returned ID before proceeding.
+		var preflight *localSessionReservation
+		var probeID string
+		probeID, err = randomPersistentToken(24)
+		if err == nil {
+			preflight, err = reserveLocalSession(probeID)
+		}
+		if err != nil {
+			err = fmt.Errorf("local session management unavailable: %w", err)
+		}
+		defer preflight.Close()
+		if err == nil && encrypted && password == "" {
 			password, err = e2ee.GenerateBrowserPassword()
 		}
 		if err == nil {
@@ -194,9 +226,16 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 			if err == nil {
 				session, err = client.CreateSession(signalContext, filepath.Base(command[0]), *readOnly, encrypted, false, true)
 			}
+			if err == nil {
+				reservation, err = reserveLocalSession(session.ID)
+				if err != nil {
+					err = fmt.Errorf("local session management unavailable: %w", err)
+				}
+			}
 			session.Cipher = frameCipher
 			session.ShareURL += encryptionFragment
 		}
+		preflight.Close()
 	}
 	if err != nil {
 		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: err.Error()})
@@ -227,7 +266,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		deadline := closeDeadline
 		closesAt = &deadline
 	}
-	control, controlError := startLocalSession(localSessionRecord{
+	control, controlError := reservation.finalize(localSessionRecord{
 		ID:              session.ID,
 		Name:            sessionName,
 		ShareURL:        session.ShareURL,
@@ -241,23 +280,23 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		StartedAt:       processStartedAt,
 		ClosesAt:        closesAt,
 	})
+	// A local ownership/control refusal is fatal for foreground and background
+	// alike: the remote session may already have been resumed, so continuing
+	// without local control would leave it with no owner.
 	if controlError != nil {
-		if isBackgroundChild() {
-			sendBackgroundResult(backgroundLaunchResult{OK: false, Error: "local session management: " + controlError.Error()})
-			return 1
-		}
+		sendBackgroundResult(backgroundLaunchResult{OK: false, Error: "local session management: " + controlError.Error()})
 		fmt.Fprintf(stderr, "shell: local session management unavailable: %v\n", controlError)
-	} else {
-		defer control.Close()
-		wireMcpControl(control, client, session, processContext)
-		go func() {
-			select {
-			case <-control.StopRequested():
-				cancelProcess()
-			case <-processContext.Done():
-			}
-		}()
+		return 1
 	}
+	defer control.Close()
+	wireMcpControl(control, client, session, processContext)
+	go func() {
+		select {
+		case <-control.StopRequested():
+			cancelProcess()
+		case <-processContext.Done():
+		}
+	}()
 
 	// Publish to the linked account, if this machine has one. Nothing below is
 	// fatal: sharing a terminal must not depend on the accounts service.

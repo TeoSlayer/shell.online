@@ -18,6 +18,15 @@ func localPipePath(id string) string {
 	return `\\.\pipe\shell-online-` + id
 }
 
+// localControlSocketInfo reports the control channel's path and inode. Named
+// pipes are removed when the listener closes, so there is no file to track.
+func localControlSocketInfo(directory, id string) (string, os.FileInfo) { return "", nil }
+
+// localSocketOwnershipHolds: on Windows the bound named pipe's exclusivity is
+// the authority (a same-name replacement cannot bind while we hold it), so no
+// filesystem check is needed.
+func localSocketOwnershipHolds(path string, info os.FileInfo) bool { return true }
+
 func listenLocalControl(id string) (net.Listener, error) {
 	token, err := windows.OpenCurrentProcessToken()
 	if err != nil {
