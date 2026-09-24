@@ -70,7 +70,7 @@ async function handler({requestId,request}){
 }
 try{
   browser=await launchChromeTransport({profile});
-  const port=Number((await readFile(join(profile,'DevToolsActivePort'),'utf8')).split('\n')[0]);
+  const port=browser.debuggingPort;
   const pages=await(await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   socket=new WebSocket(pages.find(p=>p.type==='page').webSocketDebuggerUrl);
   socket.onmessage=({data})=>{const m=JSON.parse(data),p=pending.get(m.id);if(p){pending.delete(m.id);m.error?p.reject(Error('CDP error')):p.resolve(m.result);}if(m.method==='Fetch.requestPaused')void handler(m.params).catch(e=>errors.push(e.message));};

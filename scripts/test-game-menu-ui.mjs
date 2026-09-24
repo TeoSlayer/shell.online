@@ -114,7 +114,7 @@ try {
   await until(() => browser.evaluate('Boolean(document.getElementById("opener"))'), "fixture mount");
 
   // Dispatch real browser key events; synthetic DOM events do not perform Tab's default action.
-  const port = Number((await readFile(join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]);
+  const port = browser.debuggingPort;
   const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   keyboardSocket = new WebSocket(pages.find((page) => page.type === "page").webSocketDebuggerUrl);
   await new Promise((done, reject) => { keyboardSocket.onopen = done; keyboardSocket.onerror = reject; });

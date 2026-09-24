@@ -7,12 +7,13 @@
 // horizontal overflow.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
+import { chromeStartup } from '../../scripts/lib/browser-transport.mjs';
 
 const profile = await mkdtemp(join(tmpdir(), 'shell-title-ui-'));
 const TEST_ENTRY_ID = 'virtual:session-title-test-entry';
@@ -89,15 +90,9 @@ try {
   chrome = spawn(process.env.SHELL_CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
     '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0',
     `--user-data-dir=${profile}`, 'about:blank',
-  ], { stdio: 'ignore' });
-  let launchError;
-  chrome.on('error', (error) => { launchError = error; });
-  let debuggingPort;
-  await waitFor(async () => {
-    if (launchError) throw new Error('Chrome could not start');
-    try { debuggingPort = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); return debuggingPort > 0; }
-    catch { return false; }
-  }, 'Chrome startup');
+    /* Piped so the port can be read from what Chrome says; see chromeStartup. */
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const debuggingPort = await chromeStartup(chrome, profile).port();
   const pages = await (await fetch(`http://127.0.0.1:${debuggingPort}/json/list`)).json();
   socket = new WebSocket(pages.find((page) => page.type === 'page').webSocketDebuggerUrl);
   socket.onmessage = ({ data }) => {

@@ -82,7 +82,7 @@ async function handle({ requestId, request }) {
 async function blank() { await browser.navigate('about:blank'); await delay(250); }
 try {
   browser = await launchChromeTransport({ profile });
-  const port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]);
+  const port = browser.debuggingPort;
   const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   socket = new WebSocket(pages.find(p => p.type === 'page').webSocketDebuggerUrl);
   socket.onmessage = ({ data }) => {

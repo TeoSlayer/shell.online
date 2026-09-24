@@ -61,6 +61,55 @@ const closeDriver = (driver) => new Promise((resolve) => {
   });
 });
 
+/**
+ * Where a headless Chrome is listening, from whichever source answers first.
+ *
+ * Chrome publishes its debugging port twice: it writes `DevToolsActivePort`
+ * into the user data directory, and it prints `DevTools listening on ws://...`
+ * to stderr. Every caller here used to read only the file, and on a CI runner
+ * that is the one that does not always arrive -- the job failed with an opaque
+ * "Timed out: Chrome startup" while the diagnostic printed underneath it said,
+ * in Chrome's own words, that it was listening on port 39069. Twenty seconds
+ * spent watching for a file that was never going to appear.
+ *
+ * So both are watched, and the first answer wins. The file is still read
+ * because it is the one that survives a caller that did not pipe stderr.
+ *
+ * `spawn` must be given a piped stderr for the second source to exist; a
+ * caller that ignores stderr still works, on the file alone.
+ */
+export function chromeStartup(chrome, profile, { timeoutMs = 30000 } = {}) {
+  let text = '';
+  let announced = 0;
+  chrome.stderr?.on('data', (chunk) => {
+    text = (text + chunk.toString()).slice(-4000);
+    const listening = /DevTools listening on ws:\/\/[^:]+:(\d+)\//.exec(text);
+    if (listening) announced = Number(listening[1]);
+  });
+  let launchError;
+  chrome.on('error', (error) => { launchError = error; });
+  return {
+    /** What Chrome said on its way up, for a failure worth reading. */
+    diagnostics: () => text,
+    port: async () => {
+      const end = Date.now() + timeoutMs;
+      while (Date.now() < end) {
+        if (launchError) throw new Error('Chrome could not start', { cause: launchError });
+        if (chrome.exitCode !== null || chrome.signalCode !== null) {
+          throw new Error(`Chrome exited during startup (${chrome.exitCode ?? chrome.signalCode}): ${text}`);
+        }
+        if (announced > 0) return announced;
+        try {
+          const written = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]);
+          if (written > 0) return written;
+        } catch { /* not written yet, or never will be */ }
+        await delay(50);
+      }
+      throw new Error(`Timed out: Chrome startup\n${text}`);
+    },
+  };
+}
+
 export async function launchChromeTransport({ profile }) {
   const chrome = spawn(process.env.SHELL_CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
     '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0',
@@ -68,19 +117,10 @@ export async function launchChromeTransport({ profile }) {
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   // These are isolated synthetic fixtures. Keep a bounded startup diagnostic
   // so CI reports a browser crash instead of waiting out an opaque timeout.
-  let startupStderr = '';
-  chrome.stderr.on('data', chunk => { startupStderr = (startupStderr + chunk.toString()).slice(-4000); });
+  const startup = chromeStartup(chrome, profile);
   const pending = new Map();
   let nextId = 0;
   let socket;
-  const waitFor = async (check, label) => {
-    const end = Date.now() + 20000;
-    while (Date.now() < end) {
-      if (await check()) return;
-      await delay(50);
-    }
-    throw new Error(`Timed out: ${label}`);
-  };
   const request = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++nextId;
     const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 15000);
@@ -101,20 +141,9 @@ export async function launchChromeTransport({ profile }) {
       if (chrome.exitCode === null && chrome.signalCode === null) { chrome.kill('SIGKILL'); await exited; }
     }
   };
-  let launchError;
-  chrome.on('error', (error) => { launchError = error; });
+  let debuggingPort;
   try {
-    let debuggingPort;
-    await waitFor(async () => {
-      if (launchError) throw new Error('Chrome could not start', { cause: launchError });
-      if (chrome.exitCode !== null || chrome.signalCode !== null) {
-        throw new Error(`Chrome exited during startup (${chrome.exitCode ?? chrome.signalCode}): ${startupStderr}`);
-      }
-      try {
-        debuggingPort = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]);
-        return debuggingPort > 0;
-      } catch { return false; }
-    }, 'Chrome startup');
+    debuggingPort = await startup.port();
     const pages = await (await fetch(`http://127.0.0.1:${debuggingPort}/json/list`)).json();
     socket = new WebSocket(pages.find((page) => page.type === 'page').webSocketDebuggerUrl);
     socket.onmessage = ({ data }) => {
@@ -128,7 +157,7 @@ export async function launchChromeTransport({ profile }) {
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   } catch (error) {
     await stopChrome();
-    throw new Error(`${error.message}\n${startupStderr}`, { cause: error });
+    throw new Error(`${error.message}\n${startup.diagnostics()}`, { cause: error });
   }
   const evaluate = async (expression) => {
     const value = await request('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
@@ -141,6 +170,8 @@ export async function launchChromeTransport({ profile }) {
   };
   return {
     name: 'chrome',
+    /* Where this browser is listening, so a caller never re-reads the file. */
+    debuggingPort,
     evaluate,
     // Pass values through CDP's argument channel, never interpolate them into
     // JavaScript. fn must be a locally defined fixture function.
