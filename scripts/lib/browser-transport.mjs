@@ -65,7 +65,11 @@ export async function launchChromeTransport({ profile }) {
   const chrome = spawn(process.env.SHELL_CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
     '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0',
     `--user-data-dir=${profile}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  // These are isolated synthetic fixtures. Keep a bounded startup diagnostic
+  // so CI reports a browser crash instead of waiting out an opaque timeout.
+  let startupStderr = '';
+  chrome.stderr.on('data', chunk => { startupStderr = (startupStderr + chunk.toString()).slice(-4000); });
   const pending = new Map();
   let nextId = 0;
   let socket;
@@ -102,7 +106,10 @@ export async function launchChromeTransport({ profile }) {
   try {
     let debuggingPort;
     await waitFor(async () => {
-      if (launchError) throw new Error('Chrome could not start');
+      if (launchError) throw new Error('Chrome could not start', { cause: launchError });
+      if (chrome.exitCode !== null || chrome.signalCode !== null) {
+        throw new Error(`Chrome exited during startup (${chrome.exitCode ?? chrome.signalCode}): ${startupStderr}`);
+      }
       try {
         debuggingPort = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]);
         return debuggingPort > 0;
