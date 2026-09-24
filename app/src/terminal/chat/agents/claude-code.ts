@@ -67,11 +67,34 @@ const SPOKE = /^⏺\s+(.*)$/u;
  *
  * The spinner cycles through a whole block of stars and sparkles rather than
  * one glyph, so the range is matched rather than the handful anybody happens
- * to have seen. The tip and the update line have no marker at all and are
- * matched on what they say, which is the only thing they have.
+ * to have seen -- and the range was still too narrow. A real session spun
+ * through `✢` (U+2722), nine code points below where the range started, and
+ * one unrecognised spinner is not one missing line: a status line that is not
+ * recognised is a line that *changes* inside the region the repaint reader
+ * compares, which breaks the match between one frame and the next and gives
+ * the entire screen out again. That is every message in the session arriving
+ * a second time, and a third, for as long as the agent is thinking.
+ *
+ * So the block is matched wide enough to hold the whole of the dingbat stars,
+ * and SPINNER below catches the shape as well as the glyph, because the next
+ * version of the program may well spin through something else again.
+ *
+ * The tip and the update line have no marker at all and are matched on what
+ * they say, which is the only thing they have.
  */
 const STATUS =
-  /^(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓·⋯]|Tip:|Update installed\b|Restart to update\b)/u;
+  /^(?:[\u2720-\u274F✓✔✗✘⚠⏵⏸⏹◐◑◒◓·⋯]|Tip:|Update installed\b|Restart to update\b)/u;
+
+/**
+ * A spinner by its shape rather than by its glyph.
+ *
+ * One symbol, a space, and a word that trails off: `✢ Jitterbugging…`,
+ * `✽ Flowing… (8m 57s · ↓ 10.8k tokens)`. Nothing an agent says looks like
+ * that -- what it says starts with `⏺`, and what somebody typed starts with
+ * `❯` -- so this can be read as furniture without knowing which glyph this
+ * week's spinner happens to use.
+ */
+const SPINNER = /^\s*[^\p{L}\p{N}\s]\s+\p{L}[\p{L}\u2019']*…/u;
 
 /**
  * The same, anywhere on the line.
@@ -144,6 +167,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
    * three or four of them.
    */
   private prompting: string[] | null = null;
+
+  /** The last prompt given out, until the agent answers it; see `sent`. */
+  private lastSent: string | null = null;
   private previewing = false;
   private fence: string | null = null;
 
@@ -207,6 +233,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     this.fence = null;
     this.open = [];
     this.prompting = null;
+    this.lastSent = null;
     this.started = false;
     this.spoken = false;
   }
@@ -246,6 +273,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       if (spoke) {
         this.started = true;
         this.spoken = true;
+        this.lastSent = null;
         this.close(utterances);
         if (spoke[1].trim()) this.open.push(spoke[1]);
         this.fence = fenceAt(spoke[1]);
@@ -253,7 +281,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
 
       /* Not an utterance, and most of it changes every frame. */
-      if (STATUS.test(line) || STATUS_TAIL.test(line)) {
+      if (furniture(line)) {
         this.close(utterances);
         continue;
       }
@@ -265,30 +293,31 @@ export class ClaudeCodeAdapter implements AgentAdapter {
        */
       if (!this.started) continue;
 
-      /*
-       * A blank line ends what was being said rather than being kept in it.
-       *
-       * It is the break every program agrees on and the one a person already
-       * reads as the end of a thought, so it is where one message stops and
-       * the next begins -- the same rule the line-oriented half of this
-       * renderer applies, for the same reason. An agent listing a directory
-       * says what it found, then the directories, then the pipes, then the
-       * sockets, and a person reading that in a chat reads five things.
-       */
-      if (line.trim() === "") {
+      /* The box that is typed into, when a frame still holds part of it. */
+      if (RULE.test(line)) {
         this.close(utterances);
         continue;
       }
 
       /*
-       * Indented, before the agent has said anything in this turn: a tool,
-       * and the one line it reported. "Listed 1 directory", "Read 412 lines".
+       * Inside the block the marker opened, blank rows and all.
+       *
+       * One `⏺` is one message. That is the shape of this program's output --
+       * a marker, then everything it has to say about that one thing, over
+       * however many rows with however many blank lines between them -- and
+       * reading it any other way is reading something the program did not
+       * write. A blank line used to end the message here, a rule borrowed
+       * from the line-oriented half of this renderer where it is right and
+       * here is not: one answer with a paragraph break in it arrived as two
+       * messages, a list with air around it as four, and a tool's result as a
+       * message with nothing to say what it belonged to.
+       *
+       * A row with no block open belongs to nothing: the banner between the
+       * header and the first prompt, whatever is left of the furniture around
+       * the composer. There is nothing to attach it to, and on a screen that
+       * is repainted it is the part most likely to change.
        */
-      if (!this.spoken && this.open.length === 0 && INDENTED.test(line)) {
-        utterances.push({ kind: "tool", text: line.trim(), lines: [] });
-        continue;
-      }
-
+      if (this.open.length === 0) continue;
       this.open.push(line);
       this.fence = fenceAt(line);
     }
@@ -313,7 +342,21 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     this.prompting = null;
     if (!rows || rows.length === 0) return;
     const text = unwrap(rows).join("\n").trim();
-    if (text) into.push({ kind: "sent", text, lines: [] });
+    if (!text) return;
+    /*
+     * One prompt per turn.
+     *
+     * A prompt is read off the screen, and a screen can show the same one
+     * twice: it is in the box while it is being typed, in the conversation
+     * once it is sent, and on the way between the two a repaint can offer it
+     * again from a join the reader had to guess at. What cannot happen is the
+     * same prompt twice with nothing in between -- the agent answers every
+     * one of them -- so a repeat before the agent has said anything is the
+     * same prompt, read a second time.
+     */
+    if (text === this.lastSent) return;
+    this.lastSent = text;
+    into.push({ kind: "sent", text, lines: [] });
   }
 
   /** What the agent is saying, as it stands. Kept open so it can grow. */
@@ -454,6 +497,11 @@ function plain(text: string): TranscriptLine {
   return { text, runs: text ? [{ text }] : [] };
 }
 
+/** Anything the program says about itself rather than about the work. */
+function furniture(line: string): boolean {
+  return STATUS.test(line) || STATUS_TAIL.test(line) || SPINNER.test(line);
+}
+
 /** Ignore changing chrome before comparing frames, not after deduplication. */
 function normalize(frame: readonly string[]): string[] {
   let fence: string | null = null;
@@ -463,7 +511,7 @@ function normalize(frame: readonly string[]): string[] {
       return line;
     }
     fence = fenceAt(SPOKE.exec(line)?.[1] ?? line);
-    return !fence && (STATUS.test(line) || STATUS_TAIL.test(line)) ? "✻" : line;
+    return !fence && furniture(line) ? "✻" : line;
   });
 }
 

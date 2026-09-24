@@ -94,12 +94,22 @@ describe("taking the interface off", () => {
 });
 
 describe("reading a real exchange", () => {
-  it("gives the prompt, the tool and what the agent said", () => {
+  /*
+   * One marker is one message, and a row with no marker over it is not a
+   * message at all. The blank line inside an answer used to end it, which is
+   * how a single reply arrived as four: the sentence, the directories, the
+   * pipes, the sockets. It is one thing the agent said and it arrives as one.
+   */
+  it("gives the prompt and the whole of what the agent said, as one message", () => {
     const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE));
     expect(shaped[0]).toBe("sent:list the files in this directory, then say done");
-    expect(shaped[1]).toBe("tool:Listed 1 directory");
-    expect(shaped[2]).toContain("received");
-    expect(shaped[2]).toContain("Here's what's in /private/tmp:");
+    expect(shaped[1]).toContain("received");
+    expect(shaped[1]).toContain("Here's what's in /private/tmp:");
+    /* The whole answer, blank lines and all, in that one message. */
+    expect(shaped[1]).toContain("Directories");
+    expect(shaped[1]).toContain("Named pipes");
+    expect(shaped[1]).toContain("Done.");
+    expect(shaped.filter((u) => u.startsWith("received")).length).toBe(1);
   });
 
   /*

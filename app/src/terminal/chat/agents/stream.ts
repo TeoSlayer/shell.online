@@ -102,24 +102,87 @@ export class RepaintReader {
   }
 
   /**
-   * How much of the head of this frame has already been given out.
+   * How much of this frame has already been given out.
    *
-   * The longest match wins. A short one is almost always a coincidence -- one
-   * blank line, or a row of the same box character -- and taking it would give
-   * out the rest of the frame a second time.
+   * Read as "find where we left off", not "the history must still be the head
+   * of the screen". The difference is the whole of this class working or not.
+   *
+   * It used to require every line already given out to match the head of the
+   * frame. That holds only while nothing above the conversation changes, and
+   * on a real screen something always does: a spinner, a tip that appears and
+   * goes, a status line counting seconds. One line different anywhere above,
+   * and the match fell to nothing and the entire screen was given out again --
+   * which downstream is every message in the session arriving a second time,
+   * and a third, for as long as the agent is thinking. That is the duplication
+   * somebody was looking at.
+   *
+   * What is actually needed is one anchor: the tail of what was given out,
+   * found anywhere in this frame. Everything after it is new, and whatever
+   * changed above it does not matter, because it has been given out already
+   * and is not being given out again.
+   *
+   * The longest anchor wins, and the latest position of it, so that a line
+   * repeated on screen resolves to the most recent one. An anchor of nothing
+   * but blank lines is no anchor at all -- blanks are everywhere -- so it must
+   * hold something that was actually said.
    */
   private overlap(frame: readonly string[]): number {
-    // A partial repaint or a flush can make the next frame a strict subset
-    // of committed rows. Compare the whole frame before withholding its tail.
-    for (let start = this.given.length - frame.length; start >= 0; start -= 1) {
-      if (matches(this.given, start, frame, frame.length)) return frame.length;
-    }
     const most = Math.min(this.given.length, frame.length);
     for (let length = most; length > 0; length -= 1) {
-      if (matches(this.given, this.given.length - length, frame, length)) return length;
+      const from = this.given.length - length;
+      if (!said(this.given, from, length)) continue;
+      for (let at = frame.length - length; at >= 0; at -= 1) {
+        if (matches(this.given, from, frame.slice(at), length)) return at + length;
+      }
+    }
+    return this.rejoin(frame);
+  }
+
+  /**
+   * Where this frame rejoins the conversation, when the tail is no help.
+   *
+   * The anchor above is the end of what was given out, and it only works
+   * while the end of what was given out is still on the screen. Some of it
+   * does not stay: this program draws a tip in a box under the conversation
+   * and then takes it away again, so the last rows given were rows that no
+   * longer exist anywhere, no anchor was found, and a frame holding the whole
+   * session was handed over as though none of it had been seen. That is the
+   * screen arriving again from the top -- the splash, every prompt, every
+   * answer -- for as long as the agent keeps working.
+   *
+   * A conversation only grows, so any row already given out is old wherever
+   * it now sits. The last row of this frame that has been given before is
+   * therefore the join, and everything under it is new. The row above it has
+   * to agree where both have one, because a single line on its own is a thing
+   * a screen repeats -- and a blank row, or a status line already flattened to
+   * a placeholder, is no evidence at all.
+   */
+  private rejoin(frame: readonly string[]): number {
+    for (let at = frame.length - 1; at >= 0; at -= 1) {
+      if (!distinct(frame[at])) continue;
+      for (let seen = this.given.length - 1; seen >= 0; seen -= 1) {
+        if (this.given[seen] !== frame[at]) continue;
+        const above = at > 0 && seen > 0 && distinct(frame[at - 1]);
+        if (above && this.given[seen - 1] !== frame[at - 1]) continue;
+        return at + 1;
+      }
     }
     return 0;
   }
+}
+
+/** A row specific enough to recognise a place by. */
+function distinct(line: string): boolean {
+  const text = line.trim();
+  return text !== "" && text !== "\u273B";
+}
+
+/** Whether a run of given-out lines holds anything but blank rows. */
+function said(given: readonly string[], from: number, length: number): boolean {
+  for (let index = 0; index < length; index += 1) {
+    if (given[from + index].trim() !== "") return true;
+  }
+  return false;
 }
 
 function matches(given: readonly string[], from: number, frame: readonly string[], length: number): boolean {

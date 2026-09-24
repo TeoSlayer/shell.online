@@ -325,3 +325,19 @@ describe("a program nothing can read as messages", () => {
     expect(transcript).not.toContain('"screen"');
   });
 });
+
+describe("a box you can see what you type in", () => {
+  /*
+   * The box used to forward each key straight to the program whenever a
+   * program owned the screen, which is every agent session. The justification
+   * was that you could watch the keys land in the program's own input box,
+   * inside the grid this renderer mirrored. That mirror is gone -- a grid does
+   * not go on a phone and is not drawn any more -- so a forwarded key went
+   * somewhere nothing displays: on a laptop you typed a prompt to an agent and
+   * the box stayed empty.
+   */
+  it("composes a line instead of forwarding keys", () => {
+    expect(view).toMatch(/private composes\(\): boolean \{\s*return true;/);
+    expect(view).not.toContain("bytesForKey(event)");
+  });
+});
