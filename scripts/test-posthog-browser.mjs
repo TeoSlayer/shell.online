@@ -20,6 +20,27 @@ const cdp=(method,params={})=>new Promise((resolve,reject)=>{
   socket.send(JSON.stringify({id,method,params}));
 });
 const wait=async(check,label)=>{const end=Date.now()+15000;while(Date.now()<end){if(await check())return;await delay(60);}throw Error('Timeout: '+label);};
+// Where one phase stops and the next begins.
+//
+// An event is tagged with whatever `phase` holds when its request arrives, so
+// a boundary is only real once the wire is quiet. A pageleave still crossing
+// it when the label changed was stamped with the next phase and then checked
+// against that phase's user agent -- which, for the three phases that override
+// the agent, is an iPhone the previous page never claimed to be. A fixed
+// hundred milliseconds was the guess; this waits for the thing itself.
+const settle=async(quiet=700,cap=8000)=>{
+  // The blank document has to actually be the live one first: `Page.navigate`
+  // resolves when the navigation is accepted, not when the page it is leaving
+  // has finished sending what it sends on the way out.
+  await wait(async()=>await browser.evaluate('location.href')==='about:blank','blank document');
+  const end=Date.now()+cap;
+  let seen=events.length,since=Date.now();
+  while(Date.now()<end){
+    await delay(50);
+    if(events.length!==seen){seen=events.length;since=Date.now();continue;}
+    if(Date.now()-since>=quiet)return;
+  }
+};
 const mime={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.woff2':'font/woff2','.json':'application/json'};
 const built=await build({
   absWorkingDir:join(base,'app'),bundle:true,write:false,format:'esm',platform:'browser',jsx:'automatic',
@@ -149,7 +170,7 @@ try{
     ['x-browser-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Twitter for iPhone/10.0'});"],
     ['crawler-ua', "Object.defineProperty(navigator,'userAgent',{get:()=> 'Googlebot/2.1 (+http://www.google.com/bot.html)'});"],
   ]) {
-    await browser.navigate('about:blank'); await delay(100);
+    await browser.navigate('about:blank'); await settle();
     phase=label;
     const override=await cdp('Page.addScriptToEvaluateOnNewDocument', { source });
     await browser.navigate('https://shell.online/');
@@ -161,7 +182,7 @@ try{
     await cdp('Page.removeScriptToEvaluateOnNewDocument',{identifier:override.identifier});
   }
   reports.push('actual Chrome + emulated Safari/X/crawler user agents preserved, one pageview each');
-  await browser.navigate('about:blank'); await delay(150);
+  await browser.navigate('about:blank'); await settle();
   phase='optout';
   await cdp('Network.setCookie',{name:'shell_analytics_opt_out',value:'1',url:'https://shell.online/',path:'/',secure:true});
   await browser.navigate('https://shell.online/'); await delay(600);
