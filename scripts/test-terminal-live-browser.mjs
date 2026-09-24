@@ -488,7 +488,12 @@ try {
     const levers = [
       ["refresh", "t.refresh(0, t.rows - 1);"],
       ["same-resize", "t.resize(t.cols, t.rows);"],
-      ["row-cycle", "t.resize(t.cols, t.rows + 1); t.resize(t.cols, t.rows);"],
+      // The row count is read before it is changed. `t.rows` after the first
+      // resize is already the new one, so the second call asked for the size
+      // it had just been given and the terminal stayed a row taller -- which
+      // is not a cycle, and left the buffer with a row the check below then
+      // reported as changed content.
+      ["row-cycle", "const rows = t.rows; t.resize(t.cols, rows + 1); t.resize(t.cols, rows);"],
       ["font-nudge", "const f = t.options.fontSize; t.options.fontSize = f + 0.25; t.options.fontSize = f;"],
       ["layer-nudge", "const s = document.getElementById('live-stage'); s.style.transform = 'translateZ(0)'; s.getBoundingClientRect(); s.style.transform = '';"],
     ];
@@ -501,6 +506,15 @@ try {
       if (trial.paint.borderGaps.length === 0 && !cleared) cleared = name;
     }
     const after = await readBuffer();
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      console.log(`DIFF grid ${before.cols}x${before.rows} -> ${after.cols}x${after.rows}`);
+      const most = Math.max(before.lines.length, after.lines.length);
+      for (let row = 0; row < most; row += 1) {
+        if (before.lines[row] !== after.lines[row]) {
+          console.log(`DIFF row ${row}: ${JSON.stringify(before.lines[row])} -> ${JSON.stringify(after.lines[row])}`);
+        }
+      }
+    }
     check(JSON.stringify(before) === JSON.stringify(after), "rebuild levers leave the buffer content unchanged");
     check(cleared !== null, `rebuild lever clears the stale rows (cleared by: ${cleared ?? "none"})`);
     console.log(`REBUILD stale rows cleared by: ${cleared ?? "none"}`);
