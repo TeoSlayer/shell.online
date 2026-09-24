@@ -290,6 +290,23 @@ export class Transcript {
   }
 
   /** Forgets everything. Used when the relay replays a session from the top. */
+  /**
+   * Puts back what this device remembers of this session.
+   *
+   * Before anything is read from the screen, and only into an empty
+   * transcript: what is restored is the conversation as it stood when the tab
+   * was last open, and what arrives next is the session carrying on. Every
+   * restored message is closed -- whatever was being written then is finished
+   * or gone now, and either way this is not the place it grows.
+   */
+  restore(messages: readonly Message[]): void {
+    if (this.items.length > 0 || messages.length === 0) return;
+    this.items = messages.slice(-MAX_MESSAGES).map((message) => ({ ...message, open: false }));
+    this.nextId = this.items.reduce((highest, message) => Math.max(highest, message.id), 0) + 1;
+    this.open = null;
+    this.rev += 1;
+  }
+
   clear(): void {
     this.items = [];
     this.open = null;

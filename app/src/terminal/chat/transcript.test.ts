@@ -426,3 +426,70 @@ describe("unchanged agent frames", () => {
     expect(transcript.messages[0].lines[0].runs).toEqual(runs);
   });
 });
+
+describe("what a device remembers of a session", () => {
+  /*
+   * A transcript is built by reading the screen, and a reload starts from
+   * whatever the relay replays -- the screen, not the conversation. What was
+   * said before that is only anywhere if the device that watched kept it.
+   */
+  it("puts back a conversation from before the reload", () => {
+    const earlier = new Transcript();
+    earlier.submitted("npm test", 1000);
+    earlier.output([plainLine("all passed")], 1100);
+    earlier.close(2000);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    expect(texts(now)).toEqual(["npm test", "all passed"]);
+  });
+
+  /*
+   * Whatever was being written when the tab closed is finished or gone by the
+   * time it opens again, and either way this is not where it grows: an open
+   * message put back open would take the next line of a different session.
+   */
+  it("puts everything back closed", () => {
+    const earlier = new Transcript();
+    earlier.output([plainLine("half a thought")], 1000);
+    expect(earlier.messages.some((message) => message.open)).toBe(true);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    expect(now.messages.every((message) => !message.open)).toBe(true);
+  });
+
+  /*
+   * The load races the first bytes off the socket, and is allowed to: a
+   * session already talking keeps what it is saying rather than having a
+   * remembered conversation dropped underneath it.
+   */
+  it("refuses to overwrite a session that has already started talking", () => {
+    const earlier = new Transcript();
+    earlier.submitted("from before", 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.submitted("from now", 2000);
+    now.restore(earlier.messages);
+    expect(texts(now)).toEqual(["from now"]);
+  });
+
+  it("carries on numbering past what it put back", () => {
+    const earlier = new Transcript();
+    earlier.submitted("one", 1000);
+    earlier.close(1100);
+    const highest = Math.max(...earlier.messages.map((message) => message.id));
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    const next = now.submitted("two", 3000);
+    expect(next.id).toBeGreaterThan(highest);
+  });
+
+  it("does nothing with nothing", () => {
+    const now = new Transcript();
+    now.restore([]);
+    expect(now.messages).toEqual([]);
+  });
+});

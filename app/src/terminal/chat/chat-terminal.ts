@@ -26,6 +26,7 @@ import { ChatView } from "./chat-view";
 import { ScreenReader, paletteFromTheme, type ReaderTerminal } from "./screen-reader";
 import { Transcript, type TranscriptLine } from "./transcript";
 import { adapterFor, type AgentAdapter } from "./agents";
+import { ChatHistory } from "./chat-history";
 
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -109,6 +110,22 @@ export class ChatTerminal {
   private semantic = false;
   private disposed = false;
 
+  /**
+   * What this device remembers of this session, once there is somewhere to
+   * keep it. Attached after construction because the renderer factory takes
+   * xterm's options and a session's identity is not one of them.
+   */
+  private history: ChatHistory | null = null;
+
+  /**
+   * Messages about this viewing rather than about the session.
+   *
+   * The line saying nothing was kept on this device is true of the moment it
+   * is said and of no moment after it: kept, it comes back on the next visit
+   * underneath the history it says does not exist.
+   */
+  private readonly unkept = new Set<number>();
+
   constructor(options: TerminalOptions) {
     this.inner = new XtermTerminal({
       ...options,
@@ -158,6 +175,35 @@ export class ChatTerminal {
     });
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
+  }
+
+  /**
+   * Keeps this session's conversation on this device, and puts back what is
+   * already there.
+   *
+   * Called once, by whoever knows which session this is. The load races the
+   * first bytes off the socket and is allowed to: `restore` refuses a
+   * transcript that already has something in it, so a session that starts
+   * talking before the cache comes back keeps what it is saying and drops
+   * what it remembered, which is the right way round.
+   */
+  rememberAs(sessionId: string, secret: string | null): void {
+    if (this.history || !ChatHistory.available()) return;
+    this.history = new ChatHistory(sessionId, secret);
+    void this.history.load().then((messages) => {
+      if (this.disposed) return;
+      if (messages && messages.length > 0) {
+        this.transcript.restore(messages);
+      } else {
+        const said = this.transcript.noticed(
+          "Nothing from this session is kept on this device. What follows starts here.",
+          Date.now(),
+          "gap",
+        );
+        this.unkept.add(said.id);
+      }
+      this.schedule();
+    });
   }
 
   write(data: string | Uint8Array, callback?: () => void): void {
@@ -215,6 +261,12 @@ export class ChatTerminal {
 
   dispose(): void {
     this.disposed = true;
+    /*
+     * The last thing said is written before the tab goes. Everything else is
+     * written on a timer, and a tab closing is exactly the moment that timer
+     * has not fired yet.
+     */
+    void this.history?.flush().finally(() => this.history?.dispose());
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.quiet) clearTimeout(this.quiet);
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
@@ -529,6 +581,12 @@ export class ChatTerminal {
         }
       }
       this.view?.render(this.transcript.messages, this.transcript.revision);
+      /* Kept once the burst it belongs to is over; see chat-history.ts. */
+      this.history?.save(
+        this.unkept.size === 0
+          ? this.transcript.messages
+          : this.transcript.messages.filter((message) => !this.unkept.has(message.id)),
+      );
     });
   }
 }

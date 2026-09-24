@@ -383,6 +383,14 @@ export function TerminalPane({
       convertEol: false,
       scrollback: 5000,
       theme: terminalTheme(renderer, appPrefersDark()),
+      /*
+       * Which session this is, so the chat renderer can put back what this
+       * device has already seen of it. The secret is the one from the share
+       * link, which is what locks the cache: a conversation kept on a disk is
+       * readable by exactly the people who could read the session it came
+       * from. See chat/chat-history.ts.
+       */
+      session: sessionId ? { id: sessionId, secret: encryptionFragment(shareUrl) || null } : undefined,
     });
     term.open(node);
     terminal.current = term;

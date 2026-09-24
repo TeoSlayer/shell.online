@@ -10,7 +10,16 @@ export type TerminalRenderer = "xterm" | "refstream" | "chat";
 
 const RENDERERS: readonly TerminalRenderer[] = ["xterm", "refstream", "chat"];
 export const DEFAULT_TERMINAL_RENDERER: TerminalRenderer = "xterm";
-type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
+type TerminalOptions = ITerminalOptions &
+  ITerminalInitOnlyOptions & {
+    /**
+     * Which session this is, for the renderers that keep something per
+     * session. Only the chat renderer does: it keeps the conversation on the
+     * device that watched it, locked with the session's own secret where
+     * there is one. See chat/chat-history.ts.
+     */
+    session?: { id: string; secret: string | null };
+  };
 
 export interface TerminalSurface {
   readonly cols: number;
@@ -67,7 +76,15 @@ export function createTerminal(renderer: TerminalRenderer, options: TerminalOpti
     return new RefstreamTerminal(options) as unknown as TerminalSurface;
   }
   if (renderer === "chat") {
-    return new ChatTerminal(options) as unknown as TerminalSurface;
+    const chat = new ChatTerminal(options);
+    /*
+     * The conversation this device has already seen of this session, put back
+     * before anything new arrives; see chat/chat-history.ts. The session's
+     * identity is not one of xterm's options, so it is handed over here,
+     * where both are in scope.
+     */
+    if (options.session) chat.rememberAs(options.session.id, options.session.secret);
+    return chat as unknown as TerminalSurface;
   }
   return new XtermTerminal({ ...options, allowProposedApi: true }) as unknown as TerminalSurface;
 }

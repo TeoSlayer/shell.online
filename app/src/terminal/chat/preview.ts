@@ -280,6 +280,15 @@ const terminal: TerminalSurface = createTerminal(which, {
   rows: GRID.rows,
   convertEol: false,
   scrollback: 5000,
+  /*
+   * "?remember=<id>" gives the preview a session identity, which is what the
+   * chat renderer keeps its history against. Without one it keeps nothing,
+   * which is right for a harness that would otherwise fill a disk with
+   * scripted conversations -- and wrong for looking at the history itself.
+   */
+  session: params.get("remember")
+    ? { id: params.get("remember") as string, secret: params.get("secret") }
+    : undefined,
   theme: {
     background: "#f3f1e9",
     foreground: "#191b18",
