@@ -20,7 +20,7 @@ import { watchKeyboardInset } from "../keyboard-inset";
 import { watchAppHeight } from "../../lib/app-height";
 import { fittedTerminal } from "../terminal-fit";
 import { cellMeasurer, terminalBox } from "../terminal-metrics";
-import { DESKTOP_TERMINAL_GRID } from "../terminal-grid";
+import { DESKTOP_TERMINAL_GRID, WIDE_DESKTOP_TERMINAL_GRID } from "../terminal-grid";
 
 /*
  * Before anything reads the viewport, which is why it is the first statement
@@ -265,12 +265,19 @@ watchKeyboardInset(panes);
  * one can be checked against the other rather than assumed not to reach it.
  */
 const params = new URLSearchParams(window.location.search);
+/*
+ * Which session grid to draw. A session's grid is the relay's to choose and
+ * the host's to open, so it cannot be changed from here -- but what 160x48
+ * looks like in this window is exactly the question worth asking before
+ * offering it, and there is no way to ask it from a session.
+ */
+const GRID = params.get("grid") === "wide" ? WIDE_DESKTOP_TERMINAL_GRID : DESKTOP_TERMINAL_GRID;
 const which = params.get("renderer") === "xterm" ? "xterm" : "chat";
 
 const terminal: TerminalSurface = createTerminal(which, {
   fontFamily: 'ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace',
-  cols: DESKTOP_TERMINAL_GRID.cols,
-  rows: DESKTOP_TERMINAL_GRID.rows,
+  cols: GRID.cols,
+  rows: GRID.rows,
   convertEol: false,
   scrollback: 5000,
   theme: {
@@ -301,7 +308,7 @@ const measureCell = cellMeasurer(FONT);
 function refit(): void {
   const box = terminalBox(screen);
   if (box.width === 0 || box.height === 0) return;
-  const fitted = fittedTerminal(box, DESKTOP_TERMINAL_GRID, measureCell, {
+  const fitted = fittedTerminal(box, GRID, measureCell, {
     pixelRatio: window.devicePixelRatio,
     maxLineHeight: 1.35,
   });

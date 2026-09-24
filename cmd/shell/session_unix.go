@@ -25,11 +25,16 @@ import (
 )
 
 const (
-	outputBatchInterval    = 10 * time.Millisecond
-	outputBatchBytes       = 32 * 1024
-	snapshotBytes          = 512 * 1024
-	desktopTerminalCols    = 120
-	desktopTerminalRows    = 36
+	outputBatchInterval = 10 * time.Millisecond
+	outputBatchBytes    = 32 * 1024
+	snapshotBytes       = 512 * 1024
+	desktopTerminalCols = 120
+	desktopTerminalRows = 36
+	// The wider desktop grid, offered only to a relay that asked for it. A
+	// terminal shows what fits in its grid and nothing else, and on a wide
+	// screen 120x36 was the amount of work you could see at once.
+	wideDesktopCols        = 160
+	wideDesktopRows        = 48
 	mobileTerminalCols     = 80
 	mobileTerminalRows     = 40
 	legacyMobileRows       = 24
@@ -922,6 +927,7 @@ func sharedTerminalSize() terminalGrid {
 
 func isCanonicalTerminalSize(cols, rows uint16) bool {
 	return (cols == desktopTerminalCols && rows == desktopTerminalRows) ||
+		(cols == wideDesktopCols && rows == wideDesktopRows) ||
 		(cols == mobileTerminalCols && (rows == mobileTerminalRows || rows == legacyMobileRows))
 }
 

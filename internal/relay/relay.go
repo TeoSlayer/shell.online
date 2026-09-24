@@ -130,9 +130,13 @@ func (connection *Connection) run(firstResult chan<- error) {
 func (connection *Connection) dial() (*websocket.Conn, *http.Response, error) {
 	header := make(http.Header)
 	header.Set("Authorization", "Bearer "+connection.hostToken)
-	// Lets the relay choose the taller portrait grid without sending it to an
-	// older CLI that only knows the original 80x24 compatibility size.
-	header.Set("X-Shell-Terminal-Grid", "80x40")
+	// Every grid this CLI will open a pty at, so the relay can choose one
+	// without sending it to a CLI that would ignore it: an older build knows
+	// only the 80x24 compatibility size, and one older still than that knows
+	// nothing of the wider desktop grid and would keep serving 120x36 while
+	// the app drew 160x48. The value was a single size and reads as a list of
+	// one, which is what keeps those builds working.
+	header.Set("X-Shell-Terminal-Grid", "80x40,160x48")
 	return websocket.Dial(connection.ctx, connection.endpoint, &websocket.DialOptions{HTTPHeader: header})
 }
 

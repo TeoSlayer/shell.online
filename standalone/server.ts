@@ -10,7 +10,12 @@ import { viewerFrameAction } from "../shared/session-access";
 import { viewerAdmission } from "../shared/session-capacity";
 import { disconnectedSessionExpiry, PERSISTENT_TTL_MS, SESSION_TTL_MS } from "../shared/session-lifetime";
 import { persistentSessionID } from "../shared/persistent-session";
-import { terminalGridForDevices } from "../shared/terminal-grid";
+import {
+  MOBILE_TERMINAL_GRID,
+  WIDE_DESKTOP_TERMINAL_GRID,
+  advertisesGrid,
+  terminalGridForDevices,
+} from "../shared/terminal-grid";
 import { documentationAssetPath } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
 
@@ -59,6 +64,8 @@ interface Attachment {
   device?: string;
   portrait?: boolean;
   supportsPortraitGrid?: boolean;
+  /** Whether the host's CLI will open the wider desktop grid; see terminal-grid.ts. */
+  supportsWideGrid?: boolean;
   snapshotRequestedAt?: number;
   terminalCols?: number;
   terminalRows?: number;
@@ -179,7 +186,14 @@ class SessionRelay {
       this.hostAttachment = {
         role,
         id: 0,
-        supportsPortraitGrid: request.headers["x-shell-terminal-grid"] === "80x40",
+        supportsPortraitGrid: advertisesGrid(
+          request.headers["x-shell-terminal-grid"] as string | undefined,
+          MOBILE_TERMINAL_GRID,
+        ),
+        supportsWideGrid: advertisesGrid(
+          request.headers["x-shell-terminal-grid"] as string | undefined,
+          WIDE_DESKTOP_TERMINAL_GRID,
+        ),
       };
       this.meta.status = "connected";
       this.meta.expiresAt = Date.now() + (this.meta.persistent ? PERSISTENT_TTL_MS : SESSION_TTL_MS);
@@ -420,7 +434,11 @@ class SessionRelay {
 
   private broadcastGrid(): void {
     const devices = [...this.viewers.values()].map((viewer) => viewer.portrait ? "portrait" : viewer.device ?? "unknown");
-    const grid = terminalGridForDevices(devices, this.hostAttachment?.supportsPortraitGrid === true);
+    const grid = terminalGridForDevices(
+      devices,
+      this.hostAttachment?.supportsPortraitGrid === true,
+      this.hostAttachment?.supportsWideGrid === true,
+    );
     const sockets: [WebSocket, Attachment][] = [...this.viewers.entries()];
     if (this.host && this.hostAttachment) sockets.push([this.host, this.hostAttachment]);
     for (const [socket, attachment] of sockets) {

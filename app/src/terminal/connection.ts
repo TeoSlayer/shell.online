@@ -2,6 +2,7 @@ import { Opcode, encodeFrame, isSnapshotOpcode } from "./protocol";
 import { BrowserFrameCipher, E2EEReplayError, parseEncryptionFragment, type EncryptionFragment } from "./e2ee";
 import {
   DESKTOP_TERMINAL_GRID,
+  WIDE_DESKTOP_TERMINAL_GRID,
   LEGACY_MOBILE_TERMINAL_GRID,
   MOBILE_TERMINAL_GRID,
   type TerminalGrid,
@@ -399,7 +400,12 @@ export class TerminalConnection {
    */
   private adoptGrid(cols: unknown, rows: unknown): void {
     if (typeof cols !== "number" || typeof rows !== "number") return;
-    const grid = [DESKTOP_TERMINAL_GRID, MOBILE_TERMINAL_GRID, LEGACY_MOBILE_TERMINAL_GRID].find(
+    const grid = [
+      DESKTOP_TERMINAL_GRID,
+      WIDE_DESKTOP_TERMINAL_GRID,
+      MOBILE_TERMINAL_GRID,
+      LEGACY_MOBILE_TERMINAL_GRID,
+    ].find(
       (candidate) => candidate.cols === cols && candidate.rows === rows,
     );
     if (!grid) return;
