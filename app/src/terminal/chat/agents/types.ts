@@ -93,5 +93,8 @@ export interface AgentAdapter {
    */
   flush(): AgentUtterance[];
 
+  /** Preview an idle tail without treating a network pause as a message boundary. */
+  settle(): AgentUtterance[];
+
   reset(): void;
 }

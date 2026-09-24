@@ -60,10 +60,13 @@ export class RepaintReader {
      * blank space under it grew or shrank by a row.
      */
     const settled = trimTrailingBlanks(frame);
+    // Erasing and repainting often span transport chunks. A shorter prefix
+    // is an incomplete paint, not a replacement for the latest live tail.
+    if (settled.length < this.pending.length && matches(this.pending, 0, settled, settled.length)) return [];
     this.pending = settled;
     /* The last line is still being written; see the note at the top. */
     if (settled.length <= 1) return [];
-    return this.give(settled.slice(0, -1));
+    return this.give(settled, settled.length - 1);
   }
 
   /**
@@ -84,11 +87,17 @@ export class RepaintReader {
     this.pending = [];
   }
 
-  private give(lines: readonly string[]): string[] {
-    const fresh = lines.slice(this.overlap(lines));
+  /** Uncommitted rows, for a reversible quiet-time preview. */
+  preview(): string[] {
+    return this.pending.slice(this.overlap(this.pending));
+  }
+
+  private give(lines: readonly string[], end = lines.length): string[] {
+    const fresh = lines.slice(this.overlap(lines), end);
     if (fresh.length === 0) return [];
     this.given.push(...fresh);
-    if (this.given.length > REMEMBERED) this.given.splice(0, this.given.length - REMEMBERED);
+    const remembered = Math.max(REMEMBERED, lines.length);
+    if (this.given.length > remembered) this.given.splice(0, this.given.length - remembered);
     return fresh;
   }
 
@@ -100,6 +109,11 @@ export class RepaintReader {
    * out the rest of the frame a second time.
    */
   private overlap(frame: readonly string[]): number {
+    // A partial repaint or a flush can make the next frame a strict subset
+    // of committed rows. Compare the whole frame before withholding its tail.
+    for (let start = this.given.length - frame.length; start >= 0; start -= 1) {
+      if (matches(this.given, start, frame, frame.length)) return frame.length;
+    }
     const most = Math.min(this.given.length, frame.length);
     for (let length = most; length > 0; length -= 1) {
       if (matches(this.given, this.given.length - length, frame, length)) return length;

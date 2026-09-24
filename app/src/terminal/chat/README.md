@@ -508,3 +508,29 @@ refusals, the column and the bar.
 `transcript.ts`, `paragraphs.ts`, `screen-reader.ts` and `keys.ts` are tested
 without a browser, which is most of why they are separate from the two files
 that need one.
+
+## Streaming regression boundaries
+
+The normal-buffer reader keeps a high-water marker: visiting an earlier row
+must not rewind already-released output. Alternate-screen overlap is measured
+against the whole frame before withholding the live row, including contained
+and temporarily shortened repaints. The comparison window retains at least a
+whole terminal frame.
+
+A quiet period previews the uncommitted tail without closing the paragraph or
+advancing the reader. The next frame can replace that tail, and only an actual
+boundary or program exit commits it. Changing status furniture is normalized
+before overlap detection. Prompt continuations stop at answer markers, and
+fenced output keeps its blank lines and literal markers.
+
+Scroll following pauses on wheel, touch, pointer, or keyboard intent, before
+native scrolling can be delayed. Incoming output cannot turn following back
+on. Scrolling down to the end or choosing **Jump to latest** resumes it. The
+view owns anchor restoration and converts viewport coordinates through CSS
+zoom; streaming plain text updates its existing text node.
+
+Run `npx vitest run src/terminal/chat` from `app/` for parser regressions.
+`node app/scripts/test-chat-renderer-ui.mjs` runs the real DOM and emulator
+checks at desktop and mobile sizes in CI. The same fixture is available at
+`/scripts/fixtures/chat-regression.html` in the development server; it is not
+a production build entry.

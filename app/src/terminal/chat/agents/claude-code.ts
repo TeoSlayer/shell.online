@@ -144,6 +144,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
    * three or four of them.
    */
   private prompting: string[] | null = null;
+  private previewing = false;
+  private fence: string | null = null;
 
   /**
    * Whether Claude Code is what is drawing this screen.
@@ -170,7 +172,29 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   }
 
   read(frame: readonly TranscriptLine[]): AgentUtterance[] {
-    return this.classify(this.reader.read(strip(frame.map((line) => line.text))));
+    const utterances = this.classify(this.reader.read(normalize(strip(frame.map((line) => line.text)))));
+    if (this.previewing) {
+      const preview = this.settle();
+      if (preview.length) {
+        if (utterances.at(-1)?.kind === "received" && utterances.at(-1)?.open) utterances.pop();
+        utterances.push(...preview);
+      }
+    }
+    return utterances;
+  }
+
+  settle(): AgentUtterance[] {
+    this.previewing = true;
+    // A 400ms pause can occur mid-token. Preview it, but leave both the reader
+    // and classifier at their committed boundary so a later repaint replaces
+    // the preview rather than appending a second copy. Prompts and tools are
+    // not published until their boundary arrives.
+    const state = { open: [...this.open], prompting: this.prompting && [...this.prompting],
+      started: this.started, spoken: this.spoken, fence: this.fence };
+    const preview = this.classify(this.reader.preview());
+    Object.assign(this, state);
+    return preview.length === 1 && preview[0].kind === "received"
+      ? [{ ...preview[0], open: true }] : [];
   }
 
   flush(): AgentUtterance[] {
@@ -179,6 +203,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   reset(): void {
     this.reader.reset();
+    this.previewing = false;
+    this.fence = null;
     this.open = [];
     this.prompting = null;
     this.started = false;
@@ -188,6 +214,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   private classify(lines: readonly string[], ending = false): AgentUtterance[] {
     const utterances: AgentUtterance[] = [];
     for (const line of lines) {
+      if (this.fence) {
+        this.open.push(line);
+        if (closesFence(line, this.fence)) this.fence = null;
+        continue;
+      }
       const prompt = PROMPT.exec(line);
       if (prompt) {
         this.started = true;
@@ -204,7 +235,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
        * marker of its own is the rest of what was typed.
        */
       if (this.prompting) {
-        if (line.trim() !== "" && !STATUS.test(line) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
+        if (INDENTED.test(line) && !SPOKE.test(line) && !STATUS.test(line.trimStart()) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
           this.prompting.push(line.trim());
           continue;
         }
@@ -217,6 +248,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         this.spoken = true;
         this.close(utterances);
         if (spoke[1].trim()) this.open.push(spoke[1]);
+        this.fence = fenceAt(spoke[1]);
         continue;
       }
 
@@ -258,6 +290,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
 
       this.open.push(line);
+      this.fence = fenceAt(line);
     }
 
     if (ending) {
@@ -301,7 +334,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     while (held.length > 0 && held[held.length - 1].trim() === "") held.pop();
     if (held.length === 0) return null;
     const dedented = dedent(held);
-    const preformatted = looksPreformatted(dedented.map(plain));
+    const preformatted = dedented.some((line) => fenceAt(line) !== null) || looksPreformatted(dedented.map(plain));
     /*
      * Only prose is put back together. Where the spacing is carrying meaning
      * -- a table, a tree, a diff -- the row breaks are the meaning.
@@ -402,15 +435,16 @@ export function unwrap(lines: readonly string[]): string[] {
   const widest = Math.max(0, ...lines.map((line) => line.length));
   if (widest < 24) return [...lines];
   const joined: string[] = [];
-  for (const line of lines) {
-    const previous = joined[joined.length - 1];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const previous = lines[index - 1];
     const wrapped =
       previous !== undefined &&
       previous.trim() !== "" &&
       previous.length >= widest - 2 &&
       line.trim() !== "" &&
       !STARTS_ITEM.test(line);
-    if (wrapped) joined[joined.length - 1] = `${previous} ${line.trim()}`;
+    if (wrapped) joined[joined.length - 1] += ` ${line.trim()}`;
     else joined.push(line);
   }
   return joined;
@@ -418,4 +452,26 @@ export function unwrap(lines: readonly string[]): string[] {
 
 function plain(text: string): TranscriptLine {
   return { text, runs: text ? [{ text }] : [] };
+}
+
+/** Ignore changing chrome before comparing frames, not after deduplication. */
+function normalize(frame: readonly string[]): string[] {
+  let fence: string | null = null;
+  return frame.map(line => {
+    if (fence) {
+      if (closesFence(line, fence)) fence = null;
+      return line;
+    }
+    fence = fenceAt(SPOKE.exec(line)?.[1] ?? line);
+    return !fence && (STATUS.test(line) || STATUS_TAIL.test(line)) ? "✻" : line;
+  });
+}
+
+function fenceAt(line: string): string | null {
+  return /^\s*(`{3,}|~{3,})/.exec(line)?.[1] ?? null;
+}
+
+function closesFence(line: string, fence: string): boolean {
+  const close = /^\s*(`{3,}|~{3,})\s*$/.exec(line)?.[1];
+  return !!close && close[0] === fence[0] && close.length >= fence.length;
 }

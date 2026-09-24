@@ -163,7 +163,9 @@ export class ScreenReader {
       lines.push(this.compose(rows, buffer));
     }
 
-    this.remark(terminal, limit);
+    // Cursor movement is not new output. Keep the high-water marker when a
+    // TUI visits earlier rows, otherwise returning to the bottom replays them.
+    if (limit >= start) this.remark(terminal, limit);
     return { lines, gap };
   }
 

@@ -263,3 +263,15 @@ describe("a reset", () => {
     expect(read(reader, grid)).toEqual(["one"]);
   });
 });
+
+describe('cursor-only repaints', () => {
+  it('does not rewind released output when the cursor visits an earlier row', () => {
+    const reader = new ScreenReader();
+    const grid = new Grid().print('one', 'two', 'three', 'prompt');
+    expect(read(reader, grid)).toEqual(['one', 'two', 'three']);
+    grid.cursorOn(0);
+    expect(read(reader, grid)).toEqual([]);
+    grid.cursorOn(3);
+    expect(read(reader, grid)).toEqual([]);
+  });
+});

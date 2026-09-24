@@ -221,6 +221,7 @@ jobs:
           SHELL_CHROME_BIN: /usr/bin/google-chrome
       - name: Terminal pixels, cursor, scrollback and refit gates
         run: |
+          node app/scripts/test-chat-renderer-ui.mjs
           node app/scripts/test-terminal-paint-ui.mjs
           node scripts/test-terminal-scroll-ui.mjs
           node app/scripts/test-terminal-refit-ui.mjs

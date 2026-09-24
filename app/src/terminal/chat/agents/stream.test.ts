@@ -110,3 +110,37 @@ describe("the line a program finished on", () => {
     expect(reader.flush()).toEqual(["four"]);
   });
 });
+
+describe('repaint boundaries', () => {
+  it('does not replay a flushed frame when painting resumes', () => {
+    const reader = new RepaintReader();
+    reader.read(['one', 'two', 'three']);
+    reader.flush();
+    expect(reader.read(['one', 'two', 'three'])).toEqual([]);
+    expect(reader.flush()).toEqual([]);
+  });
+
+  it('does not replay a temporarily shortened frame', () => {
+    const reader = new RepaintReader();
+    reader.read(['one', 'two', 'three', 'four']);
+    expect(reader.read(['one', 'two'])).toEqual([]);
+    expect(reader.read(['one', 'two', 'three', 'four', 'five'])).toEqual(['four']);
+  });
+
+  it('compares the full screen before withholding its live row', () => {
+    const reader = new RepaintReader();
+    reader.read(['same', 'same', 'live']);
+    reader.flush();
+    expect(reader.read(['same', 'same', 'live'])).toEqual([]);
+  });
+});
+
+
+it("remembers at least one full frame when the terminal is taller than the history window", () => {
+  const reader = new RepaintReader();
+  const frame = Array.from({ length: 450 }, (_, n) => `row ${n}`);
+  reader.read(frame);
+  expect(reader.read(frame)).toEqual([]);
+  expect(reader.flush()).toEqual(["row 449"]);
+  expect(reader.read(frame)).toEqual([]);
+});

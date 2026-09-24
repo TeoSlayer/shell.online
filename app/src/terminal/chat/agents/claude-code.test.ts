@@ -8,7 +8,7 @@ import {
   CLAUDE_WRAPPED_PROMPT,
 } from "./fixtures/claude-code";
 import { adapterFor } from "./index";
-import { plainLine } from "../transcript";
+import { Transcript, plainLine } from "../transcript";
 
 /*
  * Everything below reads one of two frames captured from Claude Code itself.
@@ -316,5 +316,97 @@ describe("a prompt the terminal had to wrap", () => {
   it("still reads what the agent said back", () => {
     const said = shape(read(new ClaudeCodeAdapter(), CLAUDE_WRAPPED_PROMPT)).join("\n");
     expect(said).toContain("acknowledged");
+  });
+});
+
+describe('streaming parser boundaries', () => {
+  it('does not consume an answer marker as part of an adjacent prompt', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const said = [...read(adapter, ['❯ hello', '⏺ answer', '  more', '✻ Done']), ...adapter.flush()];
+    expect(said.find(u => u.kind === 'sent')?.text).toBe('hello');
+    expect(said.some(u => u.kind === 'received' && u.lines.some(l => l.text.includes('answer')))).toBe(true);
+  });
+
+  it('does not join a deliberate short line after an already unwrapped paragraph', () => {
+    expect(unwrap(['This is a sentence that reaches the terminal edge exactly', 'and continues.', 'New paragraph.'])).toEqual([
+      'This is a sentence that reaches the terminal edge exactly and continues.', 'New paragraph.',
+    ]);
+  });
+});
+
+describe('quiet-time previews through the transcript', () => {
+  it('keeps one growing message through repeated idle pauses and repaints', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    const feed = (utterances: ReturnType<ClaudeCodeAdapter['read']>) => {
+      for (const utterance of utterances) transcript.fromAgent(utterance, 1);
+    };
+    feed(read(adapter, ['❯ question', '', '⏺ partial']));
+    feed(adapter.settle());
+    const id = transcript.messages.find(m => m.kind === 'received')!.id;
+    for (const answer of ['partial', 'partial answer', 'partial answer complete']) {
+      feed(read(adapter, ['❯ question', '', `⏺ ${answer}`]));
+      feed(adapter.settle());
+      expect(transcript.messages.filter(m => m.kind === 'received')).toHaveLength(1);
+      expect(transcript.messages.find(m => m.id === id)?.lines.map(l => l.text)).toEqual([answer]);
+    }
+    feed(adapter.flush());
+    expect(transcript.messages.filter(m => m.kind === 'received')).toHaveLength(1);
+    expect(transcript.messages.find(m => m.id === id)?.open).toBe(false);
+  });
+
+  it('does not shrink the preview between paints and the next quiet timer', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    const feed = (rows: ReturnType<ClaudeCodeAdapter['read']>) => rows.forEach(u => transcript.fromAgent(u, 1));
+    feed(read(adapter, ['⏺ first row', '  live tail']));
+    feed(adapter.settle());
+    const before = JSON.stringify(transcript.messages);
+    feed(read(adapter, ['⏺ first row', '  live tail']));
+    expect(JSON.stringify(transcript.messages)).toBe(before);
+  });
+
+  it('does not replay previous paragraphs when a spinner or header changes', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    const frame = (n: number) => [`Tip: suggestion ${n}`, '❯ question', '', '⏺ first answer', '', `✻ Working ${n}`, '', '⏺ second answer', '  more'];
+    for (let n = 0; n < 10; n++) {
+      for (const u of read(adapter, frame(n))) transcript.fromAgent(u, n);
+      for (const u of adapter.settle()) transcript.fromAgent(u, n);
+    }
+    expect(transcript.messages.filter(m => m.kind === 'sent')).toHaveLength(1);
+    expect(transcript.messages.filter(m => m.kind === 'received')).toHaveLength(2);
+  });
+});
+
+describe('fenced output', () => {
+  it('keeps blank lines and prompt-like text inside a code block', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    for (const u of [...read(adapter, ['⏺ ```text', '  first', '', '  ❯ literal prompt', '  ⏺ literal bullet', '  ✓ literal result', '  ```', '✻ Done']), ...adapter.flush()]) {
+      transcript.fromAgent(u, 1);
+    }
+    const messages = transcript.messages.filter(m => m.kind === 'received');
+    expect(messages).toHaveLength(1);
+    expect(messages[0].preformatted).toBe(true);
+    expect(messages[0].lines.map(l => l.text)).toContain('');
+    expect(messages[0].lines.map(l => l.text).join('\n')).toContain('literal prompt');
+  });
+});
+
+
+describe("fragmented repaint", () => {
+  it("keeps an idle preview visible while the screen is cleared and rebuilt", () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    const feed = (rows: ReturnType<ClaudeCodeAdapter["read"]>) => rows.forEach(u => transcript.fromAgent(u, 1));
+    feed(read(adapter, ["⏺ first row", "  live tail"]));
+    feed(adapter.settle());
+    const before = JSON.stringify(transcript.messages);
+    for (const rows of [[], ["⏺ first row"], ["⏺ first row", "  live tail"]]) {
+      feed(read(adapter, rows));
+      feed(adapter.settle());
+      expect(JSON.stringify(transcript.messages)).toBe(before);
+    }
   });
 });

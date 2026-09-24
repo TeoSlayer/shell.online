@@ -118,6 +118,10 @@ export class ChatView {
   private drawnRevision = -1;
   /** Follows the newest message until the reader scrolls away from it. */
   private sticking = true;
+  private lastScrollTop = 0;
+  private touchY: number | null = null;
+  private pointerDown = false;
+  private resumeOnScroll = false;
   private direct = false;
   /** Columns the session's grid is, for sizing a mirrored program to fit. */
   private columns = 0;
@@ -157,12 +161,11 @@ export class ChatView {
 
     this.scroller = el("div", "chat-scroll");
     /*
-     * A message arriving must not move what somebody is reading. The browser
-     * will hold the scroll position against content inserted above the
-     * viewport if it is allowed to pick an anchor, and the thread is exactly
-     * the case that is for.
+     * We restore a message anchor ourselves, including mobile CSS zoom.
+     * Native anchoring would apply a second correction after layout.
      */
-    this.scroller.style.overflowAnchor = "auto";
+    this.scroller.style.overflowAnchor = "none";
+    this.scroller.tabIndex = 0;
     /*
      * Something to look at before there is anything to read.
      *
@@ -302,6 +305,13 @@ export class ChatView {
     this.resizes?.observe(this.composer);
 
     this.scroller.addEventListener("scroll", this.onScroll);
+    this.scroller.addEventListener("wheel", this.onWheel, { passive: true });
+    this.scroller.addEventListener("touchstart", this.onTouchStart, { passive: true });
+    this.scroller.addEventListener("touchmove", this.onTouchMove, { passive: true });
+    this.scroller.addEventListener("pointerdown", this.onPointerDown);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+    this.scroller.addEventListener("keydown", this.onScrollKey);
     this.composer.addEventListener("submit", this.onSubmit);
     this.input.addEventListener("keydown", this.onKeyDown);
     this.input.addEventListener("beforeinput", this.onInsert);
@@ -318,7 +328,8 @@ export class ChatView {
     if (this.disposed || revision === this.drawnRevision) return;
     this.drawnRevision = revision;
     /*
-     * Measured now, not remembered.
+     * Follow only when the reader has not paused following and is still at
+     * the bottom. Input intent can arrive before the native scroll event.
      *
      * `sticking` is maintained from scroll events, and a phone does not
      * deliver those while a flick is still gliding -- iOS batches them and
@@ -328,7 +339,7 @@ export class ChatView {
      * bottom": the thread was pulled back down out from under them. The
      * scroller can be asked directly, and it always knows.
      */
-    const wasAtBottom = this.atBottom();
+    const wasAtBottom = this.sticking && !this.pointerDown && this.atBottom();
     this.sticking = wasAtBottom;
     /*
      * Where the reader is looking, so it can be put back.
@@ -376,6 +387,7 @@ export class ChatView {
       this.hold(anchor);
       this.jump.hidden = false;
     }
+    this.lastScrollTop = this.scroller.scrollTop;
   }
 
   /** Whether the thread is close enough to its end to be following it. */
@@ -401,7 +413,11 @@ export class ChatView {
     if (!anchor || !anchor.el.isConnected) return;
     const top = this.scroller.getBoundingClientRect().top;
     const drift = anchor.el.getBoundingClientRect().top - top - anchor.offset;
-    if (drift !== 0) this.scroller.scrollTop += drift;
+    // Bounding boxes include CSS zoom (used by the mobile layout); scrollTop
+    // is in layout pixels. Convert before restoring the reading position.
+    const scale = this.scroller.offsetHeight > 0
+      ? this.scroller.getBoundingClientRect().height / this.scroller.offsetHeight : 1;
+    if (Math.abs(drift) > 0.5 && scale > 0) this.scroller.scrollTop += drift / scale;
   }
 
   /** The reason typing is refused, or null when the viewer may type. */
@@ -493,6 +509,13 @@ export class ChatView {
     this.root.style.removeProperty("--chat-composer-height");
     this.root.style.removeProperty("--chat-mirror-size");
     this.scroller.removeEventListener("scroll", this.onScroll);
+    this.scroller.removeEventListener("wheel", this.onWheel);
+    this.scroller.removeEventListener("touchstart", this.onTouchStart);
+    this.scroller.removeEventListener("touchmove", this.onTouchMove);
+    this.scroller.removeEventListener("pointerdown", this.onPointerDown);
+    window.removeEventListener("pointerup", this.onPointerUp);
+    window.removeEventListener("pointercancel", this.onPointerUp);
+    this.scroller.removeEventListener("keydown", this.onScrollKey);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
     this.input.removeEventListener("beforeinput", this.onInsert);
@@ -707,6 +730,12 @@ export class ChatView {
       const signature = lineSignature(line);
       const existing = rows[index] as HTMLElement | undefined;
       if (existing && existing.dataset?.sig === signature) continue;
+      if (existing && existing.childNodes.length === 1 && existing.firstChild?.nodeType === Node.TEXT_NODE
+          && line.runs.length <= 1 && !styled(line.runs[0])) {
+        existing.firstChild.nodeValue = line.text || " ";
+        existing.dataset.sig = signature;
+        continue;
+      }
       const fresh = lineNode(line);
       fresh.dataset.sig = signature;
       if (existing) body.replaceChild(fresh, existing);
@@ -765,8 +794,52 @@ export class ChatView {
     if (!existing) node.el.querySelector(".chat-bubble")?.append(chip);
   }
 
+  private pauseFollowing(): void {
+    this.sticking = false;
+    this.resumeOnScroll = false;
+    this.jump.hidden = false;
+  }
+
+  private readonly onWheel = (event: WheelEvent): void => {
+    if (event.deltaY < 0) this.pauseFollowing();
+    else if (event.deltaY > 0) this.resumeOnScroll = true;
+  };
+
+  private readonly onPointerDown = (): void => {
+    this.pointerDown = true;
+    this.pauseFollowing();
+  };
+
+  private readonly onPointerUp = (): void => { this.pointerDown = false; };
+
+  private readonly onTouchStart = (event: TouchEvent): void => {
+    this.touchY = event.touches[0]?.clientY ?? null;
+    this.pauseFollowing();
+  };
+
+  private readonly onTouchMove = (event: TouchEvent): void => {
+    const y = event.touches[0]?.clientY;
+    if (y !== undefined && this.touchY !== null) {
+      if (y > this.touchY) this.pauseFollowing();
+      else if (y < this.touchY) this.resumeOnScroll = true;
+    }
+    this.touchY = y ?? null;
+  };
+
+  private readonly onScrollKey = (event: KeyboardEvent): void => {
+    if (event.target !== this.scroller) return;
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key) || (event.key === " " && event.shiftKey)) {
+      this.pauseFollowing();
+    } else if (["ArrowDown", "PageDown", "End", " "].includes(event.key)) {
+      this.resumeOnScroll = true;
+    }
+  };
+
   private readonly onScroll = (): void => {
-    this.sticking = this.atBottom();
+    const top = this.scroller.scrollTop;
+    if (!this.atBottom()) this.sticking = false;
+    else if (this.resumeOnScroll && top > this.lastScrollTop) this.sticking = true;
+    this.lastScrollTop = top;
     this.jump.hidden = this.sticking;
   };
 

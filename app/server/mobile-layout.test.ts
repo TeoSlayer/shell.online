@@ -257,7 +257,7 @@ describe("the conversation as it is being written", () => {
    * somebody who had just started scrolling up was "at the bottom".
    */
   it("asks the scroller where it is instead of remembering", () => {
-    expect(view).toMatch(/const wasAtBottom = this\.atBottom\(\)/);
+    expect(view).toMatch(/const wasAtBottom = .*this\.atBottom\(\)/);
     expect(view).toContain("private anchor()");
     expect(view).toContain("private hold(");
   });
