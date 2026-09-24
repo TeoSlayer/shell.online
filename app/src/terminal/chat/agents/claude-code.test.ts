@@ -38,8 +38,54 @@ describe("recognising the program", () => {
    * a session asked to list a directory reported "✳ List directory files".
    * The glyph in front of it is what stays.
    */
+  /*
+   * Every title a real session actually set, in the order it set them. The
+   * glyph turns with the work exactly as the spinner does, and the name is
+   * replaced by whatever is being worked on -- so `✳` alone recognised the
+   * first three and none of the rest.
+   */
   it("knows it by the title after the title becomes a summary of the work", () => {
-    expect(new ClaudeCodeAdapter().matches([], "✳ List directory files")).toBe(true);
+    for (const title of [
+      "✳ Claude Code",
+      "◐ Claude Code",
+      "◑ Claude Code",
+      "◐ One",
+      "◑ One",
+      "◑ List directory files",
+      "◐ Session acknowledgment",
+      "✳ List directory files",
+    ]) {
+      expect(new ClaudeCodeAdapter().matches([], title)).toBe(true);
+    }
+  });
+
+  /*
+   * The session somebody opens rather than starts: already running, header
+   * long since scrolled away, nothing said since it last finished. There is a
+   * prompt on the screen and no `⏺` to pair it with, and with the title
+   * unrecognised this was read as a program nothing could read -- which is
+   * how an agent that was talking got "A full-screen program is running".
+   */
+  it("knows it from a waiting session with no title and nothing said yet", () => {
+    const waiting = [
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "────────────────────────────────────────",
+      "  ⏵⏵ auto mode on (shift+tab to cycle)",
+    ];
+    expect(new ClaudeCodeAdapter().matches(waiting)).toBe(true);
+  });
+
+  it("does not claim a pager that happens to draw a rule", () => {
+    expect(
+      new ClaudeCodeAdapter().matches([
+        "────────────────────────────────────────",
+        "some file content",
+        "────────────────────────────────────────",
+        ":",
+      ]),
+    ).toBe(false);
   });
 
   /*

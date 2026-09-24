@@ -122,9 +122,21 @@ const FURNITURE = /^\s*(?:[\u2731-\u2743✓✔✗✘⚠⏵⏸⏹◐◑◒◓]|Ti
  *
  * The title is not the program's name for long: it becomes a summary of
  * whatever is being worked on, so a session that had been asked to list a
- * directory reported `✳ List directory files`. The glyph stays.
+ * directory reported `✳ List directory files`.
+ *
+ * And the glyph does not stay, which is what this got wrong. It turns with
+ * the work, exactly as the spinner on the screen does: the titles a real
+ * session set were `✳ Claude Code`, then `◐ Claude Code`, `◑ Claude Code`,
+ * and then `◐ One` and `◑ List directory files` once it had something to
+ * report. Matching `✳` alone left every one of those unrecognised.
+ *
+ * It matters more than a missed name, because the title is the only thing
+ * that survives: the header scrolls away, and a session somebody opens is
+ * usually one already running. With the title unrecognised and the header
+ * gone, a conversation was read as a program nobody could read at all --
+ * "A full-screen program is running" over an agent that was talking.
  */
-const TITLE_MARK = /[✳✻]/u;
+const TITLE_MARK = /[✳✻◐◑◒◓]/u;
 
 /** A row that begins something rather than continuing something. */
 const STARTS_ITEM = /^\s*(?:[-*+•‣◦]\s|\d+[.)]\s|>\s|#{1,6}\s)/u;
@@ -194,7 +206,16 @@ export class ClaudeCodeAdapter implements AgentAdapter {
      * while the composer is, and a conversation long enough to fill the grid
      * pushes it off -- which is the case an adapter most needs to recognise.
      */
-    return frame.some((line) => SPOKE.test(line)) && frame.some((line) => PROMPT.test(line));
+    if (frame.some((line) => SPOKE.test(line)) && frame.some((line) => PROMPT.test(line))) return true;
+    /*
+     * Or the box it is typed into, which is this program's own shape: two
+     * full-width rules with a prompt between them, and nothing else on those
+     * rows. It is here for the session that has said nothing yet -- opened,
+     * or waiting, with the header already scrolled off -- where there is no
+     * `⏺` anywhere to pair the prompt with and the screen would otherwise be
+     * unreadable to us.
+     */
+    return composerAt(frame) >= 0;
   }
 
   read(frame: readonly TranscriptLine[]): AgentUtterance[] {
@@ -495,6 +516,19 @@ export function unwrap(lines: readonly string[]): string[] {
 
 function plain(text: string): TranscriptLine {
   return { text, runs: text ? [{ text }] : [] };
+}
+
+/**
+ * Where this program's input box is, or -1.
+ *
+ * Two full-width rules with exactly one prompt row between them. Nothing else
+ * this renderer meets draws that.
+ */
+function composerAt(frame: readonly string[]): number {
+  for (let at = 0; at + 2 < frame.length; at += 1) {
+    if (RULE.test(frame[at]) && PROMPT.test(frame[at + 1]) && RULE.test(frame[at + 2])) return at;
+  }
+  return -1;
 }
 
 /** Anything the program says about itself rather than about the work. */

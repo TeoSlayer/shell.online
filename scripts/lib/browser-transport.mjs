@@ -110,14 +110,39 @@ export function chromeStartup(chrome, profile, { timeoutMs = 30000 } = {}) {
   };
 }
 
+/**
+ * Starts a headless Chrome and waits for it to say where it is listening.
+ *
+ * Once, and then once more. A browser that has neither written its port file
+ * nor printed a word in thirty seconds is not slow, it is stuck -- it has
+ * happened twice on CI, the second time with nothing on stderr at all -- and
+ * the thing that fixes a stuck process is a new one. The second attempt gets
+ * its own profile directory, because whatever the first one left behind is a
+ * candidate for what it got stuck on.
+ */
+async function startChrome(profile) {
+  let last;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const dir = attempt === 0 ? profile : `${profile}-retry`;
+    const chrome = spawn(process.env.SHELL_CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
+      '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0',
+      `--user-data-dir=${dir}`, 'about:blank',
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    // These are isolated synthetic fixtures. Keep a bounded startup diagnostic
+    // so CI reports a browser crash instead of waiting out an opaque timeout.
+    const startup = chromeStartup(chrome, dir);
+    try {
+      return { chrome, startup, debuggingPort: await startup.port() };
+    } catch (error) {
+      last = error;
+      if (chrome.exitCode === null && chrome.signalCode === null) chrome.kill('SIGKILL');
+    }
+  }
+  throw last;
+}
+
 export async function launchChromeTransport({ profile }) {
-  const chrome = spawn(process.env.SHELL_CHROME_BIN ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
-    '--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0',
-    `--user-data-dir=${profile}`, 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe'] });
-  // These are isolated synthetic fixtures. Keep a bounded startup diagnostic
-  // so CI reports a browser crash instead of waiting out an opaque timeout.
-  const startup = chromeStartup(chrome, profile);
+  const { chrome, startup, debuggingPort } = await startChrome(profile);
   const pending = new Map();
   let nextId = 0;
   let socket;
@@ -141,9 +166,7 @@ export async function launchChromeTransport({ profile }) {
       if (chrome.exitCode === null && chrome.signalCode === null) { chrome.kill('SIGKILL'); await exited; }
     }
   };
-  let debuggingPort;
   try {
-    debuggingPort = await startup.port();
     const pages = await (await fetch(`http://127.0.0.1:${debuggingPort}/json/list`)).json();
     socket = new WebSocket(pages.find((page) => page.type === 'page').webSocketDebuggerUrl);
     socket.onmessage = ({ data }) => {
