@@ -6,6 +6,7 @@ import "../../../web/vendor/refstream/v0.1.0-alpha.5/ui.css";
 import { TerminalConnection, type ConnectionStatus, type HostState } from "./connection";
 import { hostIsAway, hostNotice } from "./host-presence";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
+import { layoutParameter } from "./wide-grid";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
@@ -433,7 +434,19 @@ export function TerminalPane({
     const pulseTimer = window.setInterval(updatePulse, 1000);
     document.addEventListener("visibilitychange", updatePulse);
     connected = new TerminalConnection({
-      url: target.url,
+      /*
+       * Plus what this window can draw. The session's grid is the widest one
+       * its smallest viewer can render, so a viewer that can take the wider
+       * desktop grid says so and one that cannot says nothing; see
+       * wide-grid.ts. The relay picks the wide grid only when every viewer
+       * watching has said it.
+       */
+      url:
+        target.url +
+        layoutParameter(
+          mount.current?.getBoundingClientRect() ?? null,
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
       fragment: encryptionFragment(shareUrl),
       events: {
         onStatus: (next, message) => {

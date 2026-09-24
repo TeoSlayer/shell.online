@@ -66,6 +66,8 @@ interface Attachment {
   supportsPortraitGrid?: boolean;
   /** Whether the host's CLI will open the wider desktop grid; see terminal-grid.ts. */
   supportsWideGrid?: boolean;
+  /** Whether this viewer's window can draw the wider grid; see wide-grid.ts. */
+  wide?: boolean;
   snapshotRequestedAt?: number;
   terminalCols?: number;
   terminalRows?: number;
@@ -214,6 +216,8 @@ class SessionRelay {
       colorIndex: (guestNumber - 1) % 8,
       device: mobileUserAgent(request.headers["user-agent"]) ? "mobile" : "desktop",
       portrait: new URL(request.url ?? "/", "http://relay").searchParams.get("layout") === "portrait",
+      /* A viewer that can draw the wider grid; one that cannot says nothing. */
+      wide: new URL(request.url ?? "/", "http://relay").searchParams.get("layout") === "wide",
     };
     this.viewers.set(socket, attachment);
     sendJSON(socket, this.statusMessage());
@@ -434,10 +438,20 @@ class SessionRelay {
 
   private broadcastGrid(): void {
     const devices = [...this.viewers.values()].map((viewer) => viewer.portrait ? "portrait" : viewer.device ?? "unknown");
+    /*
+     * The host has to be able to open the wider grid and every viewer has to
+     * be able to draw it; see the note in worker/index.ts. One window too
+     * small to land 160 columns on pixels is a session nobody in it can read.
+     */
+    const viewers = [...this.viewers.values()];
+    const everyViewerDrawsWide =
+      this.hostAttachment?.supportsWideGrid === true &&
+      viewers.length > 0 &&
+      viewers.every((viewer) => viewer.wide === true);
     const grid = terminalGridForDevices(
       devices,
       this.hostAttachment?.supportsPortraitGrid === true,
-      this.hostAttachment?.supportsWideGrid === true,
+      everyViewerDrawsWide,
     );
     const sockets: [WebSocket, Attachment][] = [...this.viewers.entries()];
     if (this.host && this.hostAttachment) sockets.push([this.host, this.hostAttachment]);

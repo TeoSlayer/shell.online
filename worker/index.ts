@@ -269,6 +269,8 @@ interface SocketAttachment {
   supportsPortraitGrid?: boolean;
   /** Whether the host's CLI will open the wider desktop grid; see terminal-grid.ts. */
   supportsWideGrid?: boolean;
+  /** Whether this viewer's window can draw the wider grid; see wide-grid.ts. */
+  wide?: boolean;
 }
 
 interface TrafficWindow {
@@ -1730,9 +1732,25 @@ export class TerminalSession extends DurableObject<Env> {
       });
     const hosts = this.state.getWebSockets("host").filter((socket) => socket.readyState === 1);
     const supportsPortraitGrid = hosts.some((socket) => readAttachment(socket)?.supportsPortraitGrid === true);
-    const supportsWideGrid = hosts.some((socket) => readAttachment(socket)?.supportsWideGrid === true);
-    const grid = terminalGridForDevices(devices, supportsPortraitGrid, supportsWideGrid);
+    const grid = terminalGridForDevices(devices, supportsPortraitGrid, this.everyViewerDrawsWide());
     return { cols: grid.cols, rows: grid.rows };
+  }
+
+  /**
+   * Whether the wider desktop grid may be used at all right now.
+   *
+   * The host has to be able to open it, and every viewer watching has to be
+   * able to draw it. Not "some viewer": the grid is the session's, so one
+   * window too small to land 160 columns on pixels is a session nobody in it
+   * can read, and the smallest viewer therefore decides. A viewer that claims
+   * nothing is counted as unable, which is what keeps every other client and
+   * every older app on the size they have today.
+   */
+  private everyViewerDrawsWide(): boolean {
+    const hosts = this.state.getWebSockets("host").filter((socket) => socket.readyState === 1);
+    if (!hosts.some((socket) => readAttachment(socket)?.supportsWideGrid === true)) return false;
+    const viewers = this.state.getWebSockets("viewer").filter((socket) => socket.readyState === 1);
+    return viewers.length > 0 && viewers.every((socket) => readAttachment(socket)?.wide === true);
   }
 
   // Keep the allocated model's grid in sync with the negotiated viewer grid (a viewer connecting
@@ -3053,6 +3071,8 @@ export class TerminalSession extends DurableObject<Env> {
       client: analyticsContext.client,
       referrer: analyticsContext.referrer,
       portrait: role === "viewer" && new URL(request.url).searchParams.get("layout") === "portrait",
+      /* A viewer that can draw the wider grid; one that cannot says nothing. */
+      wide: role === "viewer" && new URL(request.url).searchParams.get("layout") === "wide",
       supportsPortraitGrid:
         role === "host" && advertisesGrid(request.headers.get("X-Shell-Terminal-Grid"), MOBILE_TERMINAL_GRID),
       supportsWideGrid:
@@ -3933,8 +3953,7 @@ export class TerminalSession extends DurableObject<Env> {
       });
     const liveHosts = this.state.getWebSockets("host").filter((socket) => socket.readyState === 1);
     const supportsPortraitGrid = liveHosts.some((socket) => readAttachment(socket)?.supportsPortraitGrid === true);
-    const supportsWideGrid = liveHosts.some((socket) => readAttachment(socket)?.supportsWideGrid === true);
-    const grid = terminalGridForDevices(devices, supportsPortraitGrid, supportsWideGrid);
+    const grid = terminalGridForDevices(devices, supportsPortraitGrid, this.everyViewerDrawsWide());
     const message = JSON.stringify({
       type: "terminal_size",
       ...grid,

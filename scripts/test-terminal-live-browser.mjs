@@ -516,6 +516,15 @@ try {
       }
     }
     check(JSON.stringify(before) === JSON.stringify(after), "rebuild levers leave the buffer content unchanged");
+    if (cleared === null) {
+      const rows = await evaluate(`(() => {
+        const t = liveTest.terms.a; const b = t.buffer.active; const out = [];
+        for (let i = 0; i < t.rows; i++) { const l = b.getLine(b.viewportY + i); out.push(i + ': ' + JSON.stringify((l ? l.translateToString(true) : '').slice(0, 24))); }
+        return { cols: t.cols, rows: t.rows, out };
+      })()`);
+      console.log(`STALE grid ${rows.cols}x${rows.rows}`);
+      for (const row of rows.out) console.log("STALE " + row);
+    }
     check(cleared !== null, `rebuild lever clears the stale rows (cleared by: ${cleared ?? "none"})`);
     console.log(`REBUILD stale rows cleared by: ${cleared ?? "none"}`);
   } else {
