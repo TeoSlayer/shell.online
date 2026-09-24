@@ -893,3 +893,153 @@
 .chat-body[data-shape="pre"] {
   touch-action: pan-x pan-y;
 }
+
+/* --- the program is working ------------------------------------- */
+
+/*
+ * Under the last message, not over it. A session that is busy used to look
+ * exactly like one that had finished and one that had broken: the thread
+ * simply stopped. This follows the spinner the program draws itself, so it is
+ * true for as long as the program says it is and no longer.
+ */
+.chat-thinking {
+  display: flex;
+  padding: 2px 4px 10px;
+  margin-top: -2px;
+  align-items: center;
+  gap: 8px;
+  color: var(--faint);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.chat-thinking[hidden] { display: none; }
+
+.chat-thinking-label {
+  letter-spacing: 0.01em;
+}
+
+/* --- what the agent wrote, as what it wrote ---------------------- */
+
+/*
+ * An agent writes Markdown into a terminal, which shows it as characters:
+ * `**bold**` with the stars, `## Heading` with the hashes, a code block as
+ * three backticks and some rows. Read as a conversation it should look like
+ * what it is. See markdown.ts, which builds these as nodes and never as HTML.
+ */
+.chat-body[data-shape="rich"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  white-space: normal;
+}
+
+.chat-body[data-shape="rich"] > :first-child { margin-top: 0; }
+.chat-body[data-shape="rich"] > :last-child { margin-bottom: 0; }
+
+.md-paragraph {
+  margin: 0;
+  line-height: 1.5;
+}
+
+/*
+ * Headings carry by weight and colour rather than by size. A conversation is
+ * already a column of short blocks, and a heading three times the size of the
+ * text under it reads as a new page rather than as a label for the next
+ * paragraph.
+ */
+.md-heading {
+  margin: 2px 0 0;
+  color: var(--ink);
+  font-size: 1em;
+  font-weight: 640;
+  letter-spacing: -0.005em;
+}
+
+.md-heading[data-level="1"],
+.md-heading[data-level="2"] {
+  font-size: 1.06em;
+  font-weight: 680;
+}
+
+.md-list {
+  padding-left: 1.15em;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.md-list li + li { margin-top: 3px; }
+
+.md-quote {
+  padding-left: 10px;
+  border-left: 2px solid var(--line-strong);
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.md-strong { font-weight: 650; }
+
+.md-em { font-style: italic; }
+
+.md-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Inline code is a word in a sentence: marked, not boxed. */
+.md-code {
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.md-codeblock {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.md-codelang {
+  display: block;
+  padding: 5px 10px 0;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.md-pre {
+  overflow-x: auto;
+  padding: 8px 10px 10px;
+  margin: 0;
+  /*
+   * Sideways rather than wrapped, and a swipe across it is a swipe rather
+   * than a pinch; the same rule the preformatted blocks above use.
+   */
+  touch-action: pan-x pan-y;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/*
+ * A comment, a string and a number: lexical in every language worth printing,
+ * and what the eye uses to find its place. Keywords are deliberately not
+ * coloured -- the set differs per language, and a wrong colour is worse than
+ * none. Tuned to sit inside the app's palette rather than a syntax theme's.
+ */
+.md-comment { color: var(--faint); font-style: italic; }
+.md-string { color: color-mix(in srgb, var(--terminal-green, #2f6d29) 88%, var(--ink)); }
+.md-number { color: color-mix(in srgb, var(--terminal-magenta, #8a3aa3) 76%, var(--ink)); }
+
+@media (pointer: coarse), (max-width: 760px) {
+  /* A phone reads the same blocks with a little more air between them. */
+  .chat-body[data-shape="rich"] { gap: 9px; }
+  .md-pre { font-size: 12px; }
+}

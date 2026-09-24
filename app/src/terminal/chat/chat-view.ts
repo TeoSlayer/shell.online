@@ -14,6 +14,7 @@
  */
 
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
+import { looksMarkdown, renderMarkdown } from "./markdown";
 
 export interface ChatViewOptions {
   /** A line the viewer wants to run. */
@@ -55,6 +56,8 @@ interface Rendered {
   message: Message;
   revision: number;
   lines: number;
+  /** Whether this has been re-read as Markdown, which happens once. */
+  rich?: boolean;
 }
 
 export class ChatView {
@@ -62,6 +65,7 @@ export class ChatView {
   private readonly scroller: HTMLElement;
   private readonly thread: HTMLElement;
   private readonly waiting: HTMLElement;
+  private readonly thinking: HTMLElement;
   private readonly composer: HTMLFormElement;
   private readonly input: HTMLTextAreaElement;
   private readonly send: HTMLButtonElement;
@@ -135,11 +139,26 @@ export class ChatView {
     waitingLabel.textContent = "Waiting for the session";
     this.waiting.append(waitingDots, waitingLabel);
 
+    /*
+     * The same shape as the waiting indicator, at the end of the thread
+     * rather than in the middle of an empty one: the agent has said things
+     * already and is working on the next one.
+     */
+    this.thinking = el("div", "chat-thinking");
+    this.thinking.setAttribute("role", "status");
+    this.thinking.hidden = true;
+    const thinkingDots = el("div", "chat-waiting-dots");
+    thinkingDots.setAttribute("aria-hidden", "true");
+    for (let dot = 0; dot < 3; dot += 1) thinkingDots.append(el("span", "chat-waiting-dot"));
+    const thinkingLabel = el("span", "chat-thinking-label");
+    thinkingLabel.textContent = "Thinking";
+    this.thinking.append(thinkingDots, thinkingLabel);
+
     this.thread = el("div", "chat-thread");
     this.thread.setAttribute("role", "log");
     this.thread.setAttribute("aria-live", "polite");
     this.thread.setAttribute("aria-label", "Session transcript");
-    this.scroller.append(this.waiting, this.thread);
+    this.scroller.append(this.waiting, this.thread, this.thinking);
 
     this.jump = el("button", "chat-jump") as HTMLButtonElement;
     this.jump.type = "button";
@@ -381,6 +400,20 @@ export class ChatView {
   }
 
   /**
+   * Whether the program is working on something right now.
+   *
+   * It follows the spinner the program itself draws, so it is true for
+   * exactly as long as the program says it is, and it sits under the last
+   * message rather than replacing anything: what has already been said stays
+   * readable while the next thing is being written.
+   */
+  setThinking(on: boolean): void {
+    if (this.thinking.hidden !== on) return;
+    this.thinking.hidden = !on;
+    if (on && this.sticking) this.scroller.scrollTop = this.scroller.scrollHeight;
+  }
+
+  /**
    * Direct mode, for as long as a full-screen program owns the screen.
    *
    * A program that draws its own interface reads keys, not lines, so the box
@@ -579,6 +612,26 @@ export class ChatView {
      */
     node.el.dataset.copyable =
       message.preformatted || message.lines.length > 2 ? "true" : "false";
+
+    /*
+     * Finished, and worth reading as what it is.
+     *
+     * An agent writes Markdown into a terminal, which cannot show it: the
+     * stars and the hashes and the backticks arrive as characters. Rendered
+     * once, when the message is closed, rather than on every frame while it
+     * grows -- the row-by-row path below is what keeps a growing answer from
+     * flickering, and a message that is still being written is not finished
+     * enough to re-read as blocks anyway.
+     */
+    if (!message.open && !node.rich && looksMarkdown(text(message))) {
+      node.rich = true;
+      body.dataset.shape = "rich";
+      node.el.dataset.shape = "rich";
+      renderMarkdown(body, text(message));
+      this.fold(node, message);
+      this.stamp(node, message);
+      return;
+    }
 
     /*
      * Only the rows that actually changed are touched.
@@ -895,6 +948,11 @@ function lineSignature(line: TranscriptLine): string {
       ].join("\u0000"),
     )
     .join("\u0001");
+}
+
+/** What a message says, as one string, for the Markdown pass. */
+function text(message: Message): string {
+  return message.lines.map((line) => line.text).join("\n");
 }
 
 function lineNode(line: TranscriptLine): HTMLElement {

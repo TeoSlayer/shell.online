@@ -182,6 +182,9 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   /** The last prompt given out, until the agent answers it; see `sent`. */
   private lastSent: string | null = null;
+
+  /** Whether the last frame had a spinner on it; see `working`. */
+  private spinning = false;
   private previewing = false;
   private fence: string | null = null;
 
@@ -218,7 +221,17 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return composerAt(frame) >= 0;
   }
 
+  get working(): boolean {
+    return this.spinning;
+  }
+
   read(frame: readonly TranscriptLine[]): AgentUtterance[] {
+    /*
+     * Read from the whole screen rather than from the conversation, because
+     * the spinner is drawn under the conversation, next to the box -- which
+     * is the part `strip` takes off before any of this is read.
+     */
+    this.spinning = frame.some((line) => SPINNER.test(line.text));
     const utterances = this.classify(this.reader.read(normalize(strip(frame.map((line) => line.text)))));
     if (this.previewing) {
       const preview = this.settle();
@@ -255,6 +268,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     this.open = [];
     this.prompting = null;
     this.lastSent = null;
+    this.spinning = false;
     this.started = false;
     this.spoken = false;
   }

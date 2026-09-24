@@ -65,6 +65,17 @@ export interface AgentAdapter {
   readonly confident: boolean;
 
   /**
+   * Whether the program is working right now, as of the last frame read.
+   *
+   * Not a guess from timing: these programs say so, with a spinner they draw
+   * while they think and take away when they stop. The conversation has
+   * nothing to show during that -- the answer is not written yet -- so
+   * without this a session that is busy looks exactly like one that has
+   * finished and one that has broken.
+   */
+  readonly working?: boolean;
+
+  /**
    * Whether this adapter recognises the program drawing this screen.
    *
    * Asked of the whole frame rather than of a session's declared kind,

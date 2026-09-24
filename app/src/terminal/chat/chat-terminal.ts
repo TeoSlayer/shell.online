@@ -380,6 +380,7 @@ export class ChatTerminal {
         this.agent = null;
       }
       this.unreadable = false;
+      this.view?.setThinking(false);
       this.view?.setDirect(false);
       /*
        * Reading resumes where it stopped. The alternate screen is a second
@@ -444,6 +445,7 @@ export class ChatTerminal {
     if (!this.agent) return;
 
     for (const utterance of this.agent.read(lines)) this.transcript.fromAgent(utterance, now);
+    this.view?.setThinking(this.agent.working === true);
     this.armAgentQuiet();
   }
 
