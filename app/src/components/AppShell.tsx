@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   Terminal, Desktop, User, UsersThree, ClockCounterClockwise, SignOut, Copy, Check, Warning, ChatCircleDots,
-  GameController,
+  GameController, Plugs,
 } from "@phosphor-icons/react";
 import { Inbox } from "./Inbox";
 import { Avatar } from "./Avatar";
@@ -182,6 +182,17 @@ function AccountMenu() {
             <User size={16} />
             Account
           </Link>
+          {/* The MCP setup guide lives on the docs site, so it opens beside the app. */}
+          <a
+            href="https://shell.online/agents/"
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <Plugs size={16} />
+            Add MCP
+          </a>
           {/* Always one click away, from the rail and from the phone's top bar alike. */}
           <button
             type="button"
