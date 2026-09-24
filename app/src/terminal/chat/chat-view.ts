@@ -400,29 +400,22 @@ export class ChatView {
     this.setDisabled(this.disabled);
   }
 
-  /**
-   * The box always composes a line. It never forwards keys as they are hit.
+  /*
+   * There is no forwarding mode any more, so there is no question to ask.
    *
-   * A full-screen program reads keys, so forwarding them was right for as long
-   * as you could watch them land: what you typed was painted into the
-   * program's own input box, inside the grid this renderer used to mirror.
-   * On a phone that grid never fit the screen, so the box stayed empty and you
-   * typed a prompt to an agent you could not see -- which is why a touch
-   * screen was made to compose.
+   * The box used to forward each key straight to the program whenever a
+   * program owned the screen, which is every agent session. That was right
+   * while the grid those keys landed in was mirrored into the thread: you
+   * could watch them arrive. The mirror is gone -- a grid does not go on a
+   * phone, and a program that cannot be read as messages now gets a line
+   * saying so -- and a forwarded key went somewhere nothing displays. On a
+   * phone that had already been fixed by composing; on a laptop it meant
+   * typing a prompt to an agent and watching an empty box.
    *
-   * The grid is not drawn at all now. A program that cannot be read as
-   * messages gets a line saying so and pointing at the terminal renderer, so a
-   * forwarded key goes somewhere nothing displays, on a pointer exactly as it
-   * did on a phone. The same answer therefore applies to both: compose, show
-   * the line, and send it when it is finished.
-   *
-   * What that gives up is keys as keys -- the arrows, and the control keys,
-   * which are the chips above the box and were already the only way to reach
-   * them here. Ctrl-C still interrupts, from the composing path below.
+   * What composing gives up is keys as keys: the arrows, and the control
+   * keys, which are the chips above the box and were already the only way to
+   * reach them here. Ctrl-C still interrupts, from the keydown rule below.
    */
-  private composes(): boolean {
-    return true;
-  }
 
   focus(): void {
     this.input.focus();

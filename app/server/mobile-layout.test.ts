@@ -337,7 +337,7 @@ describe("a box you can see what you type in", () => {
    * the box stayed empty.
    */
   it("composes a line instead of forwarding keys", () => {
-    expect(view).toMatch(/private composes\(\): boolean \{\s*return true;/);
-    expect(view).not.toContain("bytesForKey(event)");
+    expect(view).not.toContain("composes()");
+    expect(view).not.toContain("bytesForKey");
   });
 });
