@@ -507,84 +507,6 @@
   align-items: flex-start;
 }
 
-/* --- a full-screen program -------------------------------------- */
-
-/*
- * vim, top, or a coding agent drawing its own interface. None of that
- * is an utterance, so it gets one card that mirrors the screen while
- * the program runs and keeps its last frame afterwards.
- */
-.chat-screen {
-  overflow: hidden;
-  width: 100%;
-  border: 1px solid var(--terminal-line);
-  border-radius: var(--radius-panel);
-  background: var(--terminal);
-}
-
-.chat-screen-head {
-  display: flex;
-  padding: 7px 13px;
-  border-bottom: 1px solid var(--terminal-line);
-  color: var(--terminal-muted);
-  font-family: var(--sans);
-  font-size: 11px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.chat-screen-head > span:first-child {
-  overflow: hidden;
-  color: var(--terminal-ink);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-screen-state {
-  padding: 1px 8px;
-  border-radius: var(--radius-chip);
-  background: color-mix(in srgb, var(--terminal-ink) 14%, transparent);
-  color: var(--terminal-ink);
-  flex: none;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.chat-screen-host {
-  /*
-   * A session grid is forty rows tall. Shown whole, one editor would push
-   * every message before it off the top of the page, so the card keeps a
-   * screenful and scrolls the rest.
-   */
-  max-height: calc(58vh / var(--zoom, 1));
-  overflow: auto;
-  padding: 10px 13px 12px;
-  color: var(--terminal-ink);
-  font-family: var(--mono);
-  /*
-   * Sized so the session's whole width is on the screen; see ChatView's
-   * fitMirrors. It was a fixed size, which on a phone put a third of an
-   * eighty-column program on the glass and the rest past the right edge. The
-   * fallback is the size it always was, for the frame before the first
-   * measurement and for anything that is not a phone.
-   */
-  font-size: var(--chat-mirror-size, 12px);
-  line-height: 1.42;
-  scrollbar-width: thin;
-  white-space: pre;
-  overscroll-behavior: contain;
-}
-
-/* Finished: still legible, plainly over. */
-.chat-screen-host.is-still { opacity: 0.72; }
-
-.chat-msg[data-kind="screen"][data-open="false"] .chat-screen-state {
-  background: color-mix(in srgb, var(--terminal-muted) 22%, transparent);
-  color: var(--terminal-muted);
-}
-
 /* --- the floating box ------------------------------------------- */
 
 .chat-composer {
@@ -921,27 +843,6 @@
   }
 
   /*
-   * One scroller, not two.
-   *
-   * The card used to keep a screenful and scroll the rest, which on a desktop
-   * is a reasonable way to stop an editor pushing the conversation off the
-   * top. On a phone it was two nested scrollers: a 352px grid inside a 338px
-   * box inside a thread that also scrolled, so the thing you were reading
-   * moved whichever one you caught. The card is now as tall as the program it
-   * is mirroring and the thread is the only thing that scrolls vertically.
-   *
-   * Sideways is still the card's own, because 80 columns of monospace in 390
-   * pixels is under five pixels a character and there is no font size that
-   * fixes that. That is what the agent parsers are for; until one covers a
-   * given program, its grid is a grid.
-   */
-  .chat-screen-host {
-    max-height: none;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  /*
    * There is no pointer to reveal the meta row with, so on a phone it is
    * always there -- and something always there must not sit on top of the
    * output. Overlaid in the corner it covered the first line of every answer
@@ -983,14 +884,12 @@
 }
 
 /*
- * The two things in a conversation wide enough to be swiped sideways: a
- * listing kept exactly as it was written, and the mirror of a full-screen
- * program. A swipe across either of them starts as two points on the glass,
- * and without this the browser reads the second one as a pinch and zooms the
- * whole session instead of scrolling the block. Panning in both directions is
- * still allowed; only the zoom is refused.
+ * A listing kept exactly as it was written is wide enough to be swiped
+ * sideways. A swipe across one starts as two points on the glass, and without
+ * this the browser reads the second as a pinch and zooms the whole session
+ * instead of scrolling the block. Panning in both directions is still
+ * allowed; only the zoom is refused.
  */
-.chat-body[data-shape="pre"],
-.chat-screen-host {
+.chat-body[data-shape="pre"] {
   touch-action: pan-x pan-y;
 }

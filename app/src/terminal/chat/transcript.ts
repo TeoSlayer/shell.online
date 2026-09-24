@@ -34,7 +34,7 @@ import type { AgentUtterance } from "./agents/types";
  * an agent look as though it sat thinking for two minutes, and it is its own
  * kind rather than a message because it is shown as one line and a result.
  */
-export type MessageKind = "sent" | "received" | "notice" | "screen" | "tool";
+export type MessageKind = "sent" | "received" | "notice" | "tool";
 
 /** A run of characters that share one appearance, as the process painted it. */
 export interface StyleRun {
@@ -64,17 +64,13 @@ export interface Message {
   at: number;
   /** "sent" and "notice" say everything in one string. */
   text: string;
-  /** "received" and a finished "screen" keep their rows. */
+  /** "received" keeps its rows. */
   lines: TranscriptLine[];
   /** A closed message never takes another line. */
   open: boolean;
   /** The exit status, when the shell publishes command markers. */
   exitCode?: number;
   tone?: NoticeTone;
-  /** "screen" only: whether the full-screen program is still running. */
-  live?: boolean;
-  /** "screen" only: what was running, when that is known. */
-  title?: string;
   /**
    * Whether this message's spacing is carrying meaning: a listing, a tree, a
    * diff. Preformatted messages are shown in a monospace block that scrolls;
@@ -446,60 +442,6 @@ export class Transcript {
   }
 
   /**
-   * A full-screen program took the alternate screen.
-   *
-   * Nothing it draws is a message: vim, top and a coding agent's own interface
-   * are a grid being repainted, and slicing that into bubbles produces
-   * nonsense. So the conversation gets one card, and the card gets a real
-   * terminal inside it for as long as the program runs.
-   */
-  screenOpened(title: string, at: number): Message {
-    this.close(at);
-    const message = this.push({
-      kind: "screen",
-      at,
-      text: title,
-      lines: [],
-      open: true,
-      live: true,
-      title,
-    });
-    this.open = message;
-    return message;
-  }
-
-  /**
-   * What the full-screen program is showing right now.
-   *
-   * The card mirrors the alternate screen as text rather than hosting a second
-   * emulator: the bytes are already being parsed once, and reading the grid
-   * that parse produced costs nothing extra and cannot fall out of step with
-   * it. It also means the last mirror taken before the program exits is
-   * exactly the still image to keep.
-   */
-  screenPainted(lines: readonly TranscriptLine[], at: number): void {
-    const card = this.open?.kind === "screen" ? this.open : null;
-    if (!card || !card.live) return;
-    card.lines = lines.slice();
-    this.touch(card);
-    this.lastGrewAt = at;
-  }
-
-  /** The program exited and gave the screen back. What it last showed is kept. */
-  screenClosed(snapshot: readonly TranscriptLine[] | null, at: number): void {
-    const card = this.open?.kind === "screen" ? this.open : lastScreen(this.items);
-    if (card) {
-      card.live = false;
-      /* Null keeps the last mirror, which is the frame the program left behind. */
-      if (snapshot) card.lines = snapshot.slice();
-      card.open = false;
-      this.touch(card);
-    }
-    this.open = null;
-    this.lastGrewAt = at;
-  }
-
-  /**
    * Closes the open message if the process has been quiet long enough. Returns
    * true when something changed, so a caller can skip a redraw.
    */
@@ -518,8 +460,6 @@ export class Transcript {
       this.open = null;
       return;
     }
-    /* A live screen card is closed by the program exiting, not by a pause. */
-    if (this.open.kind === "screen" && this.open.live) return;
     this.open.open = false;
     this.touch(this.open);
     this.open = null;
@@ -658,13 +598,6 @@ function differs(had: readonly TranscriptLine[], next: readonly TranscriptLine[]
     }
   }
   return false;
-}
-
-function lastScreen(items: readonly Message[]): Message | null {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    if (items[index].kind === "screen" && items[index].live) return items[index];
-  }
-  return null;
 }
 
 /** A line with no styling, which is what most output is and all tests need. */
