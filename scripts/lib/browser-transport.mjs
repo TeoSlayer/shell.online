@@ -94,11 +94,11 @@ export async function launchChromeTransport({ profile }) {
     for (const handler of pending.values()) handler.reject(new Error('Browser canary stopped'));
     pending.clear();
     socket?.close();
-    if (chrome.exitCode === null) {
+    if (chrome.exitCode === null && chrome.signalCode === null) {
       const exited = new Promise((resolve) => chrome.once('exit', resolve));
       chrome.kill('SIGTERM');
       await Promise.race([exited, delay(3000)]);
-      if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await exited; }
+      if (chrome.exitCode === null && chrome.signalCode === null) { chrome.kill('SIGKILL'); await exited; }
     }
   };
   let launchError;
@@ -128,7 +128,7 @@ export async function launchChromeTransport({ profile }) {
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   } catch (error) {
     await stopChrome();
-    throw error;
+    throw new Error(`${error.message}\n${startupStderr}`, { cause: error });
   }
   const evaluate = async (expression) => {
     const value = await request('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
