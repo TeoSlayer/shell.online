@@ -48,35 +48,6 @@ function touchScreen(): boolean {
 /** Rows a finished answer shows before it is folded. */
 const COLLAPSE_AFTER = 40;
 
-/**
- * The sizes a mirrored grid is allowed to be drawn at.
- *
- * A program nobody has written an adapter for is shown as the grid it is: an
- * editor, a pager, `top`. The grid's width is the session's and is shared
- * with every other viewer, so it cannot be reflowed to a phone -- which
- * leaves the font as the only thing that can make eighty columns fit a
- * screen a third of that wide.
- *
- * The floor is where it stops trying, and it is set by legibility rather than
- * by fitting. Eighty columns only fit a phone at about six pixels, which is
- * not small text but absent text; a legible strip that can be swiped is worth
- * more than an illegible page that cannot. So under the floor the card keeps
- * the floor's size and scrolls sideways, and the fitting is what takes a
- * tablet, a landscape phone and a narrower grid from clipped to whole.
- */
-const MIRROR_MAX_PX = 12;
-const MIRROR_MIN_PX = 9;
-
-/**
- * How wide a character is as a fraction of its font size, for the monospace
- * faces this app ships. Close enough to choose a size with; the grid is
- * measured by the browser afterwards either way.
- */
-const MONO_ADVANCE = 0.6;
-
-/** What the card spends on its own border and padding, either side. */
-const MIRROR_GUTTER_PX = 28;
-
 /** A pause long enough that the next message deserves a time of its own. */
 const TIME_BREAK_MS = 5 * 60_000;
 
@@ -120,7 +91,6 @@ export class ChatView {
   private sticking = true;
   private direct = false;
   /** Columns the session's grid is, for sizing a mirrored program to fit. */
-  private columns = 0;
   private disabled: string | null = null;
   private history: string[] = [];
   private historyAt = -1;
@@ -295,7 +265,6 @@ export class ChatView {
                 );
               }
             }
-            this.fitMirrors();
             if (this.sticking) this.scroller.scrollTop = this.scroller.scrollHeight;
           });
     this.resizes?.observe(this.scroller);
@@ -459,30 +428,6 @@ export class ChatView {
     return !this.direct || this.touch;
   }
 
-  /**
-   * How wide the session's grid is, so a program drawn as a grid can be
-   * sized to fit rather than clipped at the edge of the screen.
-   */
-  setColumns(columns: number): void {
-    if (this.columns === columns) return;
-    this.columns = columns;
-    this.fitMirrors();
-  }
-
-  /**
-   * Picks a font size at which the whole width of the grid is on the screen.
-   *
-   * Only ever smaller than the size it would otherwise be drawn at, and never
-   * smaller than the floor: past that, sideways is the honest answer.
-   */
-  private fitMirrors(): void {
-    const room = this.scroller.clientWidth - MIRROR_GUTTER_PX;
-    if (this.columns <= 0 || room <= 0) return;
-    const fitted = room / this.columns / MONO_ADVANCE;
-    const size = Math.max(MIRROR_MIN_PX, Math.min(MIRROR_MAX_PX, Math.floor(fitted * 10) / 10));
-    this.root.style.setProperty("--chat-mirror-size", `${size}px`);
-  }
-
   focus(): void {
     this.input.focus();
   }
@@ -491,7 +436,6 @@ export class ChatView {
     this.disposed = true;
     this.resizes?.disconnect();
     this.root.style.removeProperty("--chat-composer-height");
-    this.root.style.removeProperty("--chat-mirror-size");
     this.scroller.removeEventListener("scroll", this.onScroll);
     this.composer.removeEventListener("submit", this.onSubmit);
     this.input.removeEventListener("keydown", this.onKeyDown);
@@ -513,8 +457,8 @@ export class ChatView {
 
     /*
      * Continues the turn above it: same speaker, close enough in time, and
-     * not a screen card or a notice, both of which are events in their own
-     * right rather than something said.
+     * not a notice, which is an event in its own right rather than something
+     * said.
      */
     const grouped =
       previous !== null &&
@@ -530,9 +474,6 @@ export class ChatView {
       el.append(stamp);
     }
 
-    if (message.kind === "screen") {
-      return { el, body: this.screenCard(el, message), message, revision: -1, lines: 0 };
-    }
     if (message.kind === "notice") {
       return { el, body: this.noticeCard(el, message), message, revision: -1, lines: 0 };
     }
@@ -605,24 +546,6 @@ export class ChatView {
     return card;
   }
 
-  private screenCard(el: HTMLElement, message: Message): HTMLElement {
-    const card = document.createElement("div");
-    card.className = "chat-screen";
-    const head = document.createElement("div");
-    head.className = "chat-screen-head";
-    const title = document.createElement("span");
-    title.textContent = message.title || "Full-screen program";
-    const state = document.createElement("span");
-    state.className = "chat-screen-state";
-    state.textContent = "live";
-    head.append(title, state);
-    const host = document.createElement("div");
-    host.className = "chat-screen-host";
-    card.append(head, host);
-    el.append(card);
-    return card;
-  }
-
   private update(node: Rendered, message: Message): void {
     node.revision = message.revision;
     node.message = message;
@@ -641,34 +564,6 @@ export class ChatView {
       const detail = body.querySelector<HTMLElement>(".chat-tool-detail");
       const said = message.lines.map((line) => line.text).join(" · ");
       if (detail && detail.textContent !== said) detail.textContent = said;
-      return;
-    }
-
-    if (message.kind === "screen") {
-      const state = body.querySelector<HTMLElement>(".chat-screen-state");
-      if (state) state.textContent = message.live ? "live" : "exited";
-      const host = body.querySelector<HTMLElement>(".chat-screen-host");
-      if (host) {
-        host.classList.toggle("is-still", !message.live);
-        /*
-         * Row by row, by signature. A repainting grid has no stable *rows* --
-         * row four of vim is a different line of the file one keystroke later
-         * -- but it has stable *content*: almost every row of a forty-row
-         * screen is identical from one frame to the next, and replacing all
-         * forty to change one is a screen that flickers under a cursor.
-         */
-        const grid = host.childNodes;
-        for (let index = 0; index < message.lines.length; index += 1) {
-          const signature = lineSignature(message.lines[index]);
-          const was = grid[index] as HTMLElement | undefined;
-          if (was && was.dataset?.sig === signature) continue;
-          const fresh = lineNode(message.lines[index]);
-          fresh.dataset.sig = signature;
-          if (was) host.replaceChild(fresh, was);
-          else host.append(fresh);
-        }
-        while (grid.length > message.lines.length) host.removeChild(grid[grid.length - 1]);
-      }
       return;
     }
 

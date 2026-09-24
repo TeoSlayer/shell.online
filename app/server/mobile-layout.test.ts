@@ -184,7 +184,9 @@ describe("the width of the conversation", () => {
 
   /* And the pane itself keeps no padding of its own beside the rail. */
   it("starts the pane where the rail ends", () => {
-    expect(css).toMatch(/\.shell-content:has\(\.panes:not\(\[hidden\]\)\)\s*\{\s*padding-inline:\s*0/);
+    expect(css).toMatch(
+      /\.shell-content:has\(\.panes:not\(\[hidden\]\) \.pane\[data-active="true"\]\[data-renderer="chat"\]\)\s*\{\s*padding-inline:\s*0/,
+    );
   });
 });
 
@@ -200,14 +202,11 @@ describe("the canvas", () => {
    * the first row. It read as the canvas being inset inside a container.
    */
   it("begins at the tab line, with the renderer tab in the line rather than over it", () => {
-    expect(terminal).toMatch(/\.shell-content:has\(\.panes:not\(\[hidden\]\)\)\s*\{\s*padding-top:\s*0/);
-    expect(terminal).toMatch(
-      /\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \.terminal-bar\s*\{\s*margin-bottom:\s*0/,
-    );
-    expect(terminal).toMatch(
-      /\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \.tab-renderer\s*\{[\s\S]*?position:\s*static/,
-    );
-    expect(terminal).toMatch(/\.panes \.pane\s*\{\s*padding:\s*0/);
+    const chatPane = String.raw`\.shell-content:has\(\.panes:not\(\[hidden\]\) \.pane\[data-active="true"\]\[data-renderer="chat"\]\)`;
+    expect(terminal).toMatch(new RegExp(`${chatPane}\\s*\\{\\s*padding-top:\\s*0`));
+    expect(terminal).toMatch(new RegExp(`${chatPane} \\.terminal-bar\\s*\\{\\s*margin-bottom:\\s*0`));
+    expect(terminal).toMatch(new RegExp(`${chatPane} \\.tab-renderer\\s*\\{[\\s\\S]*?position:\\s*static`));
+    expect(terminal).toMatch(/\.panes \.pane\[data-renderer="chat"\]\s*\{\s*padding:\s*0/);
   });
 
   /*
@@ -284,5 +283,45 @@ describe("the sessions list, with tabs open behind it", () => {
       expect(stripping.length).toBeGreaterThan(0);
       for (const rule of stripping) expect(rule).toContain(":not([hidden])");
     }
+  });
+});
+
+describe("the two renderers", () => {
+  /*
+   * A conversation is the page and wants the whole of it. A terminal is a grid
+   * with a hard edge, and run flush to the tab line and the window it reads as
+   * output that has overflowed rather than as something laid out. So the
+   * padding a conversation does not want is taken from a conversation only,
+   * and the tab line follows the pane that is in front: the renderer picker
+   * hangs over the corner of a terminal, where there is padding for it to
+   * cover, and sits in the line above a conversation, where there is not.
+   */
+  it("take the padding off a conversation and leave it on a terminal", () => {
+    const stripped = [
+      ...(css.match(/\.shell-content:has\(\.panes[^{]*\{[^}]*padding-(?:inline|top)[^}]*\}/g) ?? []),
+      ...(terminal.match(/\.shell-content:has\(\.panes[^{]*\{[^}]*padding-(?:inline|top)[^}]*\}/g) ?? []),
+    ];
+    expect(stripped.length).toBeGreaterThan(0);
+    for (const rule of stripped) expect(rule).toContain('[data-renderer="chat"]');
+    /* And the pane's own padding, which is what clears the renderer picker. */
+    expect(terminal).not.toMatch(/\.panes \.pane\s*\{\s*padding:\s*0/);
+  });
+});
+
+describe("a program nothing can read as messages", () => {
+  /*
+   * There is no grid in a conversation. This renderer used to mirror an
+   * unadapted full-screen program into the thread as the grid it is, and a
+   * grid is the one thing it cannot show: eighty columns will not go on a
+   * phone at a size anybody can read, so what arrived was a wall of broken
+   * rows inside a second scroller. It says what is running instead.
+   */
+  it("is a line of text, not a picture of a screen", () => {
+    expect(chat).not.toMatch(/chat-screen|chat-mirror-size/);
+    expect(view).not.toContain("screenCard");
+    expect(view).not.toContain("fitMirrors");
+    const transcript = readFileSync(new URL("../src/terminal/chat/transcript.ts", import.meta.url), "utf8");
+    expect(transcript).not.toContain("screenOpened");
+    expect(transcript).not.toContain('"screen"');
   });
 });

@@ -384,10 +384,13 @@ try {
       assert(Math.abs(after.pane-before.pane)<1,'Pane returns to exactly the original height');
       assert.equal(after.screen,before.screen,'Terminal returns to exactly the original rendering');
       /*
-       * The renderer picker sits in the tab line now rather than hanging
-       * below its right end over the corner of the canvas, which is what the
-       * pane's old 28px of top padding was there to keep it off. It has to
-       * still be on the screen, and still inside the line.
+       * Where the renderer picker sits depends on which renderer is in front.
+       *
+       * Above a conversation it is in the tab line: the conversation is the
+       * page and starts at that line, so there is no padding below it for the
+       * picker to hang over. Above a terminal it hangs below the line as it
+       * always has, over the pane's own top padding, which is what that
+       * padding is for. Either way it is on the screen and not clipped.
        */
       const picker=await browser.call(()=>{
         const tab=document.querySelector('.tab-renderer');
@@ -399,7 +402,11 @@ try {
       });
       assert(picker,'The renderer picker is rendered');
       assert(picker.w>0&&picker.h>0&&picker.onScreen,'The renderer picker is on the screen');
-      assert(picker.within,'The renderer picker sits inside the tab line, not over the canvas');
+      if (renderer==='chat') {
+        assert(picker.within,'Above a conversation the picker sits inside the tab line');
+      } else {
+        assert(!picker.within,'Above a terminal the picker keeps its place below the tab line');
+      }
       console.log(`PASS ${renderer}/${theme}: synthetic keyboard shrinks the pane, holds the terminal and hides/restores navigation`);
     }
   }

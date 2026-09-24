@@ -686,10 +686,25 @@ button.tab {
  * list so switching back is instant, so a workspace merely *containing* a
  * pane is also every visit to the list -- which took the list's own heading
  * and margins away with it.
+ *
+ * And on a chat pane, because the two renderers do not want the same thing. A
+ * conversation is the page: bubbles carry their own shape and their own
+ * spacing, so paper around them is paper around nothing. A terminal is a grid
+ * with a hard edge, and run flush to the tab line and the window it reads as
+ * something that has overflowed rather than something that has been laid out.
+ * The tab line follows the active pane for the same reason -- the renderer
+ * picker hangs over the corner of a terminal, where there is padding for it,
+ * and sits in the line above a conversation, where there is not.
  */
-.shell-content:has(.panes:not([hidden])) { padding-top: 0; }
-.shell-content:has(.panes:not([hidden])) .terminal-bar { margin-bottom: 0; }
-.shell-content:has(.panes:not([hidden])) .tab-renderer {
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) {
+  padding-top: 0;
+}
+
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) .terminal-bar {
+  margin-bottom: 0;
+}
+
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) .tab-renderer {
   position: static;
   height: 44px;
   padding-left: 6px;
@@ -697,13 +712,19 @@ button.tab {
   border-radius: 0;
   align-self: center;
 }
-.panes .pane { padding: 0; }
 
-/* In a short window the tab line is tighter still. */
+.panes .pane[data-renderer="chat"] { padding: 0; }
+
+/* In a short window the renderer belongs beside the tabs, not hanging over
+   a second row -- for either renderer, because the room is short either way.
+   Reclaim decoration space without changing the shared grid. */
 @media (max-width: 900px) and (max-height: 600px) {
   :root[data-pane="open"] .topbar { min-height: calc(48px + env(safe-area-inset-top)); }
-  :root[data-pane="open"] .terminal-bar { padding-inline: 6px; }
+  :root[data-pane="open"] .shell-content { padding-top: 0; }
+  :root[data-pane="open"] .terminal-bar { margin-bottom: 0; padding-inline: 6px; }
+  .tab-renderer { position: static; height: 44px; padding-left: 6px; border: 0; border-radius: 0; }
   .tab-renderer select { max-width: 120px; }
+  .pane { padding: 4px 0; }
 }
 
 /* ---------------------------------------------------------------

@@ -81,9 +81,13 @@ if (!/--chat-gutter:/.test(appChatStylesheet) || !/padding: var\(--chat-gutter\)
  * switching back to one is instant, which makes a workspace merely containing
  * a pane true on the list as well -- and the list lost the margins every other
  * page in the application has.
+ *
+ * And a *chat* pane. A conversation is the page and wants the whole of it; a
+ * terminal is a grid with a hard edge, and run flush to the window it reads as
+ * output that has overflowed rather than as a surface that was laid out.
  */
-if (!/\.shell-content:has\(\.panes:not\(\[hidden\]\)\) \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
-  throw new Error("A session surface must be full-bleed at every width, not only on a phone");
+if (!/\.shell-content:has\(\.panes:not\(\[hidden\]\) \.pane\[data-active="true"\]\[data-renderer="chat"\]\) \{[^}]*padding-inline: 0;/s.test(appShellStylesheet)) {
+  throw new Error("A conversation must be full-bleed at every width, not only on a phone");
 }
 /*
  * One scroller. A session's scrolling belongs to the pane, and an `auto`
@@ -110,13 +114,13 @@ if (!/@media \(pointer: coarse\), \(max-width: 760px\)\s*\{\s*\.chat-input\s*\{\
 /*
  * Nothing in the composer waits for a double tap, and a double tap without
  * this is the browser zooming the page in on the box somebody was aiming at.
- * The two blocks in a conversation wide enough to be swiped sideways need the
- * same, or the second finger of a swipe is read as a pinch.
+ * A listing kept as it was written is wide enough to be swiped sideways and
+ * needs the same, or the second finger of a swipe is read as a pinch.
  */
 if (!/\.chat-composer \{[^}]*touch-action: manipulation;/s.test(appChatStylesheet)) {
   throw new Error("The chat composer must refuse double-tap zoom");
 }
-if (!/\.chat-screen-host \{\s*touch-action: pan-x pan-y;/.test(appChatStylesheet)) {
+if (!/\.chat-body\[data-shape="pre"\] \{\s*touch-action: pan-x pan-y;/.test(appChatStylesheet)) {
   throw new Error("Blocks that scroll sideways must refuse pinch zoom");
 }
 
@@ -205,21 +209,18 @@ if (!/\.chat-sent \.chat-bubble,\s*\.chat-received \.chat-bubble \{\s*max-width:
   throw new Error("Message bubbles need a gutter on the far side, or they read as panels");
 }
 /*
- * A full-screen program is the ordinary case on this product, not the
- * exception: every agent it runs draws one. The card that mirrors an
- * unadapted one must not keep a screenful and scroll the rest on a phone,
- * because that is two nested scrollers and the outer one moves the thing
- * being read.
+ * And nothing in a conversation is a grid.
+ *
+ * A full-screen program is the ordinary case on this product -- every agent
+ * it runs draws one -- and this renderer used to mirror an unadapted one into
+ * the thread as the grid it is. A grid is the one thing it cannot show:
+ * eighty columns will not go on a phone at a size anybody can read, so what
+ * arrived was a wall of broken rows, inside a second scroller, in the middle
+ * of a conversation. A program that cannot be read as messages says so in a
+ * line instead.
  */
-if (!/\.chat-screen-host \{\s*max-height: none;/.test(appChatStylesheet)) {
-  throw new Error("A mirrored program must not nest a second vertical scroller inside the thread on a phone");
-}
-/*
- * And it is sized so the session's whole width is on the screen where that is
- * possible at a legible size; see ChatView.fitMirrors.
- */
-if (!appChatStylesheet.includes("font-size: var(--chat-mirror-size")) {
-  throw new Error("A mirrored program must be fitted to the session's columns, not drawn at a fixed size");
+if (/chat-screen|chat-mirror-size/.test(appChatStylesheet)) {
+  throw new Error("The conversation must not mirror a full-screen program as a grid");
 }
 
 /* The bar holds a row of the session column, so it has to be told to leave. */

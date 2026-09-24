@@ -170,29 +170,30 @@ describe("an interrupted command", () => {
 });
 
 describe("a full-screen program", () => {
-  it("gets one live card rather than a message per repaint", () => {
+  /*
+   * There is no card for one any more, and no kind of message that holds a
+   * grid. This renderer used to mirror the alternate screen into the thread,
+   * and a grid is the one thing it cannot show: eighty columns will not go on
+   * a phone at a size anybody can read, so what arrived in the middle of a
+   * conversation was a wall of broken rows. What a program that cannot be
+   * read as messages gets is a line saying it is running.
+   */
+  it("has no kind of its own to be drawn as", () => {
     const transcript = new Transcript();
     transcript.submitted("vim notes.md", 1000);
-    transcript.screenOpened("vim notes.md", 1010);
-    transcript.screenPainted([plainLine("first frame")], 1020);
-    transcript.screenPainted([plainLine("second frame")], 1030);
+    transcript.noticed("vim notes.md is running. Switch this session to the terminal renderer to see it.", 1010);
 
-    const cards = transcript.messages.filter((message) => message.kind === "screen");
-    expect(cards).toHaveLength(1);
-    expect(cards[0].live).toBe(true);
-    expect(cards[0].lines.map((line) => line.text)).toEqual(["second frame"]);
+    expect(transcript.messages.map((message) => message.kind)).toEqual(["sent", "notice"]);
+    expect(transcript.messages.some((message) => message.lines.length > 1)).toBe(false);
   });
 
-  it("keeps the frame it exited on, and is not closed by a pause", () => {
+  it("says what is running once, not once a frame", () => {
     const transcript = new Transcript();
-    transcript.screenOpened("top", 1000);
-    transcript.screenPainted([plainLine("last frame")], 1010);
-    expect(transcript.settle(9999)).toBe(false);
+    transcript.noticed("top is running. Switch this session to the terminal renderer to see it.", 1000);
 
-    transcript.screenClosed(null, 1020);
-    const card = transcript.messages.find((message) => message.kind === "screen");
-    expect(card?.live).toBe(false);
-    expect(card?.lines.map((line) => line.text)).toEqual(["last frame"]);
+    const notices = transcript.messages.filter((message) => message.kind === "notice");
+    expect(notices).toHaveLength(1);
+    expect(notices[0].text).toContain("terminal renderer");
   });
 });
 

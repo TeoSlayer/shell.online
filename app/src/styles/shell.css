@@ -458,14 +458,18 @@
  * mounted while the list is in front of them -- that is what makes switching
  * back instant -- so `:has(.panes)` is true on the sessions list too, and the
  * list lost the margins every other page in the application has.
+ *
+ * And a chat pane. A conversation is the page and wants the whole of it; a
+ * terminal is a grid with a hard edge, and flush against the window it reads
+ * as output that has overflowed rather than as a surface.
  */
-.shell-content:has(.panes:not([hidden])) {
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) {
   padding-inline: 0;
 }
 
-.shell-content:has(.panes:not([hidden])) > .terminal-bar,
-.shell-content:has(.panes:not([hidden])) > .renderer-warning,
-.shell-content:has(.panes:not([hidden])) > .session-panel-summary {
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) > .terminal-bar,
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) > .renderer-warning,
+.shell-content:has(.panes:not([hidden]) .pane[data-active="true"][data-renderer="chat"]) > .session-panel-summary {
   padding-inline: clamp(22px, 2.4vw, 34px);
 }
 

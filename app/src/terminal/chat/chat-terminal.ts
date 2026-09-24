@@ -99,8 +99,8 @@ export class ChatTerminal {
    * identity: a header is printed once and scrolls away, and a title stays.
    */
   private windowTitle = "";
-  /** Whether a mirror card is open for a program no adapter could read. */
-  private mirroring = false;
+  /** Whether this screen has already been reported as unreadable; see `painted`. */
+  private unreadable = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
   /** Lines and Returns waiting to go out as separate events; see `enter`. */
   private outbox: string[] = [];
@@ -156,7 +156,6 @@ export class ChatTerminal {
       onSubmit: (text) => this.submit(text),
       onKeys: (bytes) => this.type(bytes),
     });
-    this.view.setColumns(this.inner.cols);
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
   }
@@ -186,7 +185,7 @@ export class ChatTerminal {
     this.agentQuiet = null;
     this.agent?.reset();
     this.agent = null;
-    this.mirroring = false;
+    this.unreadable = false;
     this.replaying = true;
     this.transcript.beginReplay();
     this.reader.rewind();
@@ -199,7 +198,6 @@ export class ChatTerminal {
 
   resize(cols: number, rows: number): void {
     this.inner.resize(cols, rows);
-    this.view?.setColumns(cols);
     this.schedule();
   }
 
@@ -344,7 +342,7 @@ export class ChatTerminal {
 
     if (alternate && !this.onScreen) {
       this.onScreen = true;
-      this.mirroring = false;
+      this.unreadable = false;
       this.agent = null;
       /*
        * The shell's quiet rule does not apply to a screen. Left armed, it
@@ -374,11 +372,8 @@ export class ChatTerminal {
         for (const utterance of this.agent.flush()) this.transcript.fromAgent(utterance, now);
         this.agent.reset();
         this.agent = null;
-      } else {
-        /* Null keeps the frame the exit handler caught on the way out. */
-        this.transcript.screenClosed(null, now);
       }
-      this.mirroring = false;
+      this.unreadable = false;
       this.view?.setDirect(false);
       /*
        * Reading resumes where it stopped. The alternate screen is a second
@@ -400,9 +395,14 @@ export class ChatTerminal {
    * The first one decides how the rest are treated, because the program
    * drawing them does not change while it is running. If an adapter
    * recognises it, the conversation it is drawing is read out of it and
-   * arrives as messages. If none does -- an editor, a pager, `top`, an agent
-   * nobody has written an adapter for -- the screen is mirrored as a grid,
-   * which is what this renderer did for everything before.
+   * arrives as messages.
+   *
+   * If none does -- an editor, a pager, `top` -- nothing is drawn for it here.
+   * This renderer used to mirror the grid into a card, and a grid is the one
+   * thing it cannot show: eighty columns will not go on a phone at a size
+   * anybody can read, so what arrived was a wall of broken rows in the middle
+   * of a conversation. A line saying what is running, and where to go to see
+   * it, is more use than a picture of it nobody can read.
    */
   private painted(lines: TranscriptLine[], now: number): void {
     if (!this.agent) {
@@ -424,23 +424,18 @@ export class ChatTerminal {
          * the source. The renderer menu on the pane is the way back to the
          * screen itself.
          */
-        /*
-         * The card that was mirroring the grid goes: what it was showing is
-         * about to arrive as messages, and both would be the same thing
-         * twice.
-         */
-        this.transcript.screenClosed(null, now);
         this.transcript.noticed(`Reading ${this.agent.title} as messages.`, now);
-      } else if (!this.mirroring) {
-        this.mirroring = true;
-        this.transcript.screenOpened(this.lastCommand || "Full-screen program", now);
+      } else if (!this.unreadable) {
+        this.unreadable = true;
+        const what = this.lastCommand || "A full-screen program";
+        this.transcript.noticed(
+          `${what} is running. Switch this session to the terminal renderer to see it.`,
+          now,
+        );
       }
     }
 
-    if (!this.agent) {
-      this.transcript.screenPainted(lines, now);
-      return;
-    }
+    if (!this.agent) return;
 
     for (const utterance of this.agent.read(lines)) this.transcript.fromAgent(utterance, now);
     this.armAgentQuiet();

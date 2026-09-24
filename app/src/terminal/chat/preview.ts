@@ -228,7 +228,15 @@ panes.className = "panes";
 const page = document.createElement("div");
 page.className = "pane";
 page.dataset.active = "true";
-page.dataset.renderer = "chat";
+/*
+ * The renderer this pane is showing, as the workspace marks it. The layout
+ * reads it: a conversation is the page and gets the whole of it, a terminal
+ * keeps the paper around its grid, and the tab line above follows whichever
+ * is in front. A harness that always said "chat" could not show the half of
+ * that which is about the terminal.
+ */
+page.dataset.renderer =
+  new URLSearchParams(window.location.search).get("renderer") === "xterm" ? "xterm" : "chat";
 
 const screen = document.createElement("div");
 screen.className = "pane-screen";
