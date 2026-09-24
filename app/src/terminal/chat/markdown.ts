@@ -28,6 +28,22 @@ const BULLET = /^(\s*)[-*+]\s+(.+)$/u;
 const NUMBERED = /^(\s*)(\d+)[.)]\s+(.+)$/u;
 const QUOTE = /^\s*>\s?(.*)$/u;
 
+/**
+ * A row of something drawn rather than written.
+ *
+ * Box and block characters: the shapes a terminal makes a table, a tree or a
+ * frame out of. A program asked to print a Markdown table prints one of these
+ * -- the pipes and dashes are gone by the time it reaches a screen, and what
+ * arrives is `┌───┬───┐` and the rows under it.
+ */
+const DRAWN = /[\u2500-\u259F\u2800-\u28FF]/u;
+
+/** A table still written as Markdown: `| one | two |`. */
+const PIPE_ROW = /^\s*\|.*\|\s*$/u;
+
+/** The row under a pipe table's heading: `|---|:--:|`. */
+const PIPE_RULE = /^\s*\|[\s:|-]+\|\s*$/u;
+
 /** Whether this text has anything in it worth rendering as Markdown. */
 export function looksMarkdown(text: string): boolean {
   return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|`{3,})|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:/u.test(text);
@@ -117,6 +133,36 @@ function blocks(lines: readonly string[]): Node[] {
       continue;
     }
 
+    /*
+     * Drawn, so kept exactly as drawn.
+     *
+     * Every row of a box table is a line of its own and none of them is
+     * prose, so the paragraph rule below -- which joins consecutive rows with
+     * a space, because that is what a terminal's wrapping needs undone --
+     * turned a table into `┌───┬───┐ │ │ │ ├───┼───┤` on one line. Rows that
+     * are drawn are never joined to anything.
+     */
+    if (DRAWN.test(line)) {
+      const rows: string[] = [];
+      while (at < lines.length && lines[at].trim() !== "" && DRAWN.test(lines[at])) {
+        rows.push(lines[at]);
+        at += 1;
+      }
+      out.push(drawnBlock(rows.join("\n")));
+      continue;
+    }
+
+    /* A table still in Markdown, which an agent writing to a file produces. */
+    if (PIPE_ROW.test(line) && at + 1 < lines.length && PIPE_RULE.test(lines[at + 1])) {
+      const rows: string[] = [];
+      while (at < lines.length && PIPE_ROW.test(lines[at])) {
+        rows.push(lines[at]);
+        at += 1;
+      }
+      out.push(pipeTable(rows));
+      continue;
+    }
+
     if (line.trim() === "") {
       at += 1;
       continue;
@@ -137,7 +183,58 @@ function blocks(lines: readonly string[]): Node[] {
 }
 
 function starts(line: string): boolean {
-  return FENCE.test(line) || HEADING.test(line) || BULLET.test(line) || NUMBERED.test(line) || QUOTE.test(line);
+  return (
+    FENCE.test(line) ||
+    HEADING.test(line) ||
+    BULLET.test(line) ||
+    NUMBERED.test(line) ||
+    QUOTE.test(line) ||
+    DRAWN.test(line) ||
+    PIPE_ROW.test(line)
+  );
+}
+
+/** Something a terminal drew: kept row for row, and scrolled rather than wrapped. */
+function drawnBlock(source: string): HTMLElement {
+  const block = document.createElement("pre");
+  block.className = "md-drawn";
+  block.textContent = source;
+  return block;
+}
+
+/**
+ * A Markdown table, as a table.
+ *
+ * Cells are split on the pipes, the heading rule is dropped, and every cell is
+ * read for the emphasis and code inside it. A ragged row is not an error: the
+ * short one gets fewer cells, which is what it says.
+ */
+function pipeTable(rows: readonly string[]): HTMLElement {
+  const cellsOf = (row: string) =>
+    row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  const table = document.createElement("table");
+  table.className = "md-table";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const cell of cellsOf(rows[0])) {
+    const th = document.createElement("th");
+    th.append(...inline(cell));
+    headRow.append(th);
+  }
+  head.append(headRow);
+  table.append(head);
+  const body = document.createElement("tbody");
+  for (const row of rows.slice(2)) {
+    const tr = document.createElement("tr");
+    for (const cell of cellsOf(row)) {
+      const td = document.createElement("td");
+      td.append(...inline(cell));
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  if (body.childNodes.length > 0) table.append(body);
+  return table;
 }
 
 /**

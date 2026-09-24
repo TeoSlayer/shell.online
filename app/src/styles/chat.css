@@ -1043,3 +1043,87 @@
   .chat-body[data-shape="rich"] { gap: 9px; }
   .md-pre { font-size: 12px; }
 }
+
+/*
+ * Something a terminal drew: a box table, a tree, a frame. Kept row for row
+ * and scrolled sideways rather than wrapped, because the rows are the shape
+ * and a wrapped row is a different picture. See markdown.ts, which stopped
+ * joining these into a paragraph.
+ */
+.md-drawn {
+  overflow-x: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  margin: 0;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  touch-action: pan-x pan-y;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+/* A table still written as Markdown, drawn as the table it describes. */
+.md-table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  touch-action: pan-x pan-y;
+  font-size: 0.96em;
+}
+
+.md-table th,
+.md-table td {
+  padding: 5px 10px 5px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md-table th {
+  color: var(--ink);
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.md-table tr:last-child td { border-bottom: 0; }
+
+@media (pointer: coarse), (max-width: 760px) {
+  .md-drawn { font-size: 12px; }
+  .md-table { font-size: 0.92em; }
+  .md-table th, .md-table td { padding-right: 14px; }
+}
+
+/*
+ * Set solid, because it was drawn on a grid.
+ *
+ * A terminal puts every row directly on the one above it, and a box table is
+ * only a box because of that: give it the leading prose wants and the
+ * verticals stop meeting the horizontals, and what was a table becomes a
+ * field of little dashes. The same goes for a tree, a frame, or a progress
+ * bar built out of braille.
+ */
+.chat-body[data-shape="pre"][data-drawn="true"] {
+  /* Whole numbers only: half a pixel of rounding per row is a visible seam. */
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/*
+ * A table built from a drawing sits inside the block the drawing was in, so
+ * it is given the page's own text face and a little room. The block keeps the
+ * monospace for the rows around it -- a listing either side of a table is
+ * still a listing -- and the table stops inheriting the 12px it was drawn at.
+ */
+.chat-body[data-shape="pre"] .md-table {
+  width: 100%;
+  margin: 4px 0 6px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+
+.chat-body[data-shape="pre"] .md-table th,
+.chat-body[data-shape="pre"] .md-table td {
+  padding: 4px 12px 4px 0;
+}

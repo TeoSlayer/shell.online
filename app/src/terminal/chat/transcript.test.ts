@@ -493,3 +493,114 @@ describe("what a device remembers of a session", () => {
     expect(now.messages).toEqual([]);
   });
 });
+
+describe("a prompt this browser sent", () => {
+  const sent = (transcript: Transcript, text: string, at: number) =>
+    transcript.fromAgent({ kind: "sent", text, lines: [] }, at);
+
+  /*
+   * The echo queue is consumed by the first line that matches, which is right
+   * for a shell: a command echoes once. An agent's screen is not a log -- the
+   * prompt stays on it, and a repaint working out where it left off can hand
+   * the same row over again. The queue was empty by then, so the second
+   * reading arrived as a second bubble for a prompt sent once.
+   */
+  it("is not shown twice when the screen offers it back again", () => {
+    const transcript = new Transcript();
+    transcript.submitted("npm test", 1000);
+    sent(transcript, "npm test", 1100);
+    sent(transcript, "npm test", 1200);
+    sent(transcript, "npm test", 5000);
+    expect(texts(transcript)).toEqual(["npm test"]);
+  });
+
+  /* A prompt typed into the terminal itself matches nothing and still arrives. */
+  it("does not swallow a prompt nobody here sent", () => {
+    const transcript = new Transcript();
+    transcript.submitted("npm test", 1000);
+    sent(transcript, "npm test", 1100);
+    sent(transcript, "git status", 1200);
+    expect(texts(transcript)).toEqual(["npm test", "git status"]);
+  });
+
+  /* Sending the same thing much later is a thing somebody did, not an echo. */
+  it("stops suppressing it once the turn is long over", () => {
+    const transcript = new Transcript();
+    transcript.submitted("npm test", 1000);
+    sent(transcript, "npm test", 1100);
+    sent(transcript, "npm test", 1000 + 16 * 60_000);
+    expect(texts(transcript)).toEqual(["npm test", "npm test"]);
+  });
+
+  it("forgets it when the conversation is cleared", () => {
+    const transcript = new Transcript();
+    transcript.submitted("npm test", 1000);
+    transcript.clear();
+    sent(transcript, "npm test", 1100);
+    expect(texts(transcript)).toEqual(["npm test"]);
+  });
+});
+
+describe("a reload, which is a connection, which is a replay", () => {
+  /*
+   * The relay replays the session's screen whenever a viewer connects, and
+   * the transcript is rebuilt from it -- so everything the previous
+   * connection had built is dropped. The history is not something a
+   * connection built: it is what happened before one. Dropped with the rest,
+   * it made the cache useless, because a reload connects and connecting
+   * replays: the conversation came back and went again in the same second.
+   */
+  it("keeps what this device remembered when the session replays", () => {
+    const earlier = new Transcript();
+    earlier.submitted("from before the reload", 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.output([plainLine("the screen, replayed")], 2000);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["from before the reload", "the screen, replayed"]);
+  });
+
+  it("keeps it through more than one reconnection", () => {
+    const earlier = new Transcript();
+    earlier.submitted("remembered", 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.endReplay();
+    now.beginReplay();
+    now.endReplay();
+    expect(texts(now)).toEqual(["remembered"]);
+  });
+
+  /* Numbering carries on past it, so a replayed message cannot collide. */
+  it("does not reuse the identity of a remembered message", () => {
+    const earlier = new Transcript();
+    earlier.submitted("remembered", 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    const fresh = now.submitted("new", 2000);
+    expect(now.messages.filter((message) => message.id === fresh.id)).toHaveLength(1);
+  });
+
+  /* And a clear is still a clear. */
+  it("forgets it when the conversation is cleared outright", () => {
+    const earlier = new Transcript();
+    earlier.submitted("remembered", 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.clear();
+    now.beginReplay();
+    expect(now.messages).toEqual([]);
+  });
+});

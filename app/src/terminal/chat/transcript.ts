@@ -128,6 +128,13 @@ const SHAPE_SETTLES_AFTER = 50;
 /** Commands typed ahead of the process are remembered in order, up to this many. */
 const MAX_PENDING_ECHOES = 8;
 
+/**
+ * How long a prompt sent from this browser keeps suppressing its own
+ * reflection off the screen. A turn, generously: long enough to cover an
+ * agent thinking, short enough that sending the same thing later is news.
+ */
+const LOCAL_ECHO_MS = 15 * 60_000;
+
 interface PendingEcho {
   text: string;
   /** Lines left to look for it in. */
@@ -139,6 +146,34 @@ export class Transcript {
   private nextId = 1;
   private open: Message | null = null;
   private echoes: PendingEcho[] = [];
+
+  /**
+   * The last thing sent from this browser, kept after its echo is matched.
+   *
+   * The queue above is consumed by the first line that matches, which is
+   * right for a shell -- a command echoes once. An agent's screen is not a
+   * log: the prompt stays on it, and a repaint that has to work out where it
+   * left off can hand the same row over again. The queue was empty by then,
+   * so the second reading arrived as a second bubble for a prompt somebody
+   * sent once.
+   *
+   * So what this browser sent is also remembered, and a prompt read off the
+   * screen that matches it is never a message: the one the sender already has
+   * is the one they sent. A prompt typed into the terminal itself matches
+   * nothing here and arrives as it always did.
+   */
+  private lastLocal: { text: string; at: number } | null = null;
+
+  /**
+   * What this device remembered of the session, kept apart from the rest.
+   *
+   * A replay is the relay sending the session's screen again, and the
+   * transcript is rebuilt from it -- so everything this connection had built
+   * is dropped. The history is not something this connection built: it is
+   * what happened before it, and dropping it made the cache useless, because
+   * a reload connects, and connecting replays. It goes back on the front.
+   */
+  private remembered: readonly Message[] = [];
   /** The shell's current prompt, when it publishes one. Empty otherwise. */
   private prompt = "";
   /**
@@ -246,6 +281,7 @@ export class Transcript {
        * of commands waiting to be recognised.
        */
       if (this.consumedAsEcho(plainLine(utterance.text))) return null;
+      if (this.isLocalRepeat(utterance.text, at)) return null;
       return this.push({ kind: "sent", at, text: utterance.text, lines: [], open: false });
     }
     if (utterance.kind === "tool") {
@@ -301,13 +337,20 @@ export class Transcript {
    */
   restore(messages: readonly Message[]): void {
     if (this.items.length > 0 || messages.length === 0) return;
-    this.items = messages.slice(-MAX_MESSAGES).map((message) => ({ ...message, open: false }));
+    this.remembered = messages.slice(-MAX_MESSAGES).map((message) => ({ ...message, open: false }));
+    this.items = this.remembered.map((message) => ({ ...message }));
     this.nextId = this.items.reduce((highest, message) => Math.max(highest, message.id), 0) + 1;
     this.open = null;
     this.rev += 1;
   }
 
+  /**
+   * Everything, including what was remembered. `beginReplay` puts the
+   * remembered part back; a clear on its own is meant to leave nothing.
+   */
   clear(): void {
+    this.lastLocal = null;
+    this.remembered = [];
     this.items = [];
     this.open = null;
     this.echoes = [];
@@ -325,8 +368,23 @@ export class Transcript {
    * them. So the transcript is rebuilt in full and the view is told once.
    */
   beginReplay(): void {
+    const remembered = this.remembered;
     this.replaying = true;
     this.clear();
+    /* The conversation from before this connection outlives the replay. */
+    this.remembered = remembered;
+    this.items = remembered.map((message) => ({ ...message }));
+    /*
+     * Never backwards. Identity is what the view caches its nodes by, so a
+     * replay that started numbering again would handed it the id of a message
+     * it still had on screen, and the node for one message would be reused to
+     * draw a different one.
+     */
+    this.nextId = Math.max(
+      this.nextId,
+      this.items.reduce((highest, message) => Math.max(highest, message.id), 0) + 1,
+    );
+    if (this.items.length > 0) this.rev += 1;
   }
 
   endReplay(): void {
@@ -347,6 +405,7 @@ export class Transcript {
     if (looked) {
       this.echoes.push({ text: looked, patience: ECHO_PATIENCE_LINES });
       if (this.echoes.length > MAX_PENDING_ECHOES) this.echoes.shift();
+      this.lastLocal = { text: looked, at };
     }
     return this.push({ kind: "sent", at, text, lines: [], open: false });
   }
@@ -490,6 +549,21 @@ export class Transcript {
    * `echoMatches` below holds what counts as an echo of one command. This
    * holds which commands are still worth asking about.
    */
+  /**
+   * Whether this is the screen showing back what this browser just sent.
+   *
+   * Held for a while rather than for one line, because a prompt sits on an
+   * agent's screen for as long as the turn lasts and may be read again in
+   * that time. A window rather than for ever, so that sending the same thing
+   * again an hour later is a thing somebody did and not an echo.
+   */
+  private isLocalRepeat(text: string, at: number): boolean {
+    const local = this.lastLocal;
+    if (!local) return false;
+    if (at - local.at > LOCAL_ECHO_MS) return false;
+    return echoMatches(text.trimEnd(), local.text);
+  }
+
   private consumedAsEcho(line: TranscriptLine): boolean {
     if (this.echoes.length === 0) return false;
     const text = line.text.trimEnd();

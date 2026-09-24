@@ -96,7 +96,54 @@ async function run() {
   await write('\x1b[?1049l');
   await tick();
   assert(host.querySelectorAll('.chat-received').length === 1, 'Exiting alternate screen does not duplicate answer');
-  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit';
+
+  /*
+   * A table, in the same message as the prose around it.
+   *
+   * One `⏺` is one message, so an answer that says something and then draws a
+   * table is one message holding both -- and a message holding any Markdown
+   * at all is re-read as Markdown when it closes. The paragraph rule there
+   * joins consecutive rows with a space, which is what undoes a terminal's
+   * wrapping and what turned a table into
+   * `┌───┬───┐ │ │ │ ├───┼───┤` on a single line. Rows that are drawn are
+   * never joined to anything.
+   */
+  terminal.reset();
+  const table = [
+    '⏺ The three PRs from your last message:',
+    '  ┌──────────┬───────────────┐',
+    '  │ commit   │ what          │',
+    '  ├──────────┼───────────────┤',
+    '  │ ae1812c  │ chat history  │',
+    '  │ 79a129c  │ wide grid     │',
+    '  └──────────┴───────────────┘',
+    '  Done.',
+  ];
+  await write('\x1b]0;Claude Code\x07\x1b[?1049h\x1b[2J\x1b[H' + ['❯ question', ''].concat(table, ['', '────────────────────', '❯', '────────────────────']).join('\r\n'));
+  await tick();
+  await new Promise(resolve => setTimeout(resolve, 900));
+  await tick();
+  await tick();
+  const answer = host.querySelector('.chat-received .chat-body');
+  assert(!!answer, 'The answer holding a table is in the thread');
+  /*
+   * Built, not printed. Kept as text a drawn table only looks like one in a
+   * font whose box glyphs tile the cell exactly, which is why a terminal
+   * draws them itself; a browser's `│` is shorter than its cell, so the
+   * verticals never meet the horizontals.
+   */
+  const built = answer!.querySelector('table.md-table');
+  assert(!!built, `A drawn table is built as a table (kids=${[...answer!.children].map(c => c.className || c.tagName).join('/')})`);
+  const heads = [...built!.querySelectorAll('th')].map(cell => cell.textContent);
+  assert(JSON.stringify(heads) === '["commit","what"]', `The heading row is the heading (got ${JSON.stringify(heads)})`);
+  const cells = [...built!.querySelectorAll('tbody tr')].map(row => [...row.children].map(cell => cell.textContent));
+  assert(JSON.stringify(cells) === '[["ae1812c","chat history"],["79a129c","wide grid"]]', `Every cell lands in its own column (got ${JSON.stringify(cells)})`);
+  assert(!answer!.textContent!.includes('├'), 'The drawing itself is gone, not printed alongside');
+  assert(answer!.textContent!.includes('Done.'), 'What was written around the table is still there');
+  await write('\x1b[?1049l');
+  await tick();
+
+  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table';
 }
 
 document.querySelector<HTMLButtonElement>('#run')!.onclick = () => {

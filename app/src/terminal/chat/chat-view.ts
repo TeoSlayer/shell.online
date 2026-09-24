@@ -15,6 +15,7 @@
 
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
 import { looksMarkdown, renderMarkdown } from "./markdown";
+import { boxTableAt, buildBoxTable, hasBoxTable } from "./boxed";
 
 export interface ChatViewOptions {
   /** A line the viewer wants to run. */
@@ -32,6 +33,12 @@ const COMPOSING = 229;
 
 /** Rows a finished answer shows before it is folded. */
 const COLLAPSE_AFTER = 40;
+
+/**
+ * A character a terminal draws a shape with rather than writes a word with.
+ * Box and block glyphs, and braille, which is what progress bars are made of.
+ */
+const DRAWN = /[\u2500-\u259F\u2800-\u28FF]/u;
 
 /** A pause long enough that the next message deserves a time of its own. */
 const TIME_BREAK_MS = 5 * 60_000;
@@ -58,6 +65,8 @@ interface Rendered {
   lines: number;
   /** Whether this has been re-read as Markdown, which happens once. */
   rich?: boolean;
+  /** The drawing this was last built from, so an unchanged one is not rebuilt. */
+  boxed?: string;
 }
 
 export class ChatView {
@@ -604,6 +613,46 @@ export class ChatView {
     body.dataset.shape = message.preformatted ? "pre" : "prose";
     node.el.dataset.shape = body.dataset.shape;
     /*
+     * Drawn rather than written, and drawn on a grid.
+     *
+     * A box table, a tree, a progress frame: the program laid those out
+     * expecting each row to sit directly on the one above, because in a
+     * terminal it does. Given the leading prose wants, the verticals stop
+     * meeting the horizontals and the box comes apart into a field of little
+     * dashes -- which is what a table looked like here. Rows that were drawn
+     * are set solid so the lines join up again.
+     */
+    if (message.preformatted) {
+      const drawn = message.lines.some((line) => DRAWN.test(line.text));
+      if (drawn) body.dataset.drawn = "true";
+      else delete body.dataset.drawn;
+      /*
+       * A table is built rather than printed.
+       *
+       * Kept as text it only looks like a table in a font whose box glyphs
+       * tile the cell exactly, which is why a terminal draws those glyphs
+       * itself rather than trusting the font. A browser's do not tile: `│` is
+       * drawn shorter than its cell, so the verticals never meet the
+       * horizontals and the table reads as a field of dashes. Read back into
+       * a real table it tiles by construction, wraps on a phone, and can be
+       * read aloud. Rebuilt whole when it changes, which for a drawing is the
+       * only honest unit -- there are no stable rows in a table that gained a
+       * column.
+       */
+      if (hasBoxTable(message.lines)) {
+        const signature = message.lines.map((line) => line.text).join("\n");
+        if (node.boxed !== signature) {
+          node.boxed = signature;
+          body.replaceChildren(...boxed(message.lines));
+        }
+        node.lines = message.lines.length;
+        this.fold(node, message);
+        this.stamp(node, message);
+        return;
+      }
+      node.boxed = undefined;
+    }
+    /*
      * Copy belongs on the things worth copying. Now that an answer arrives as
      * several short messages rather than one block, a control on every one of
      * them was a column of buttons down the side of the conversation. A
@@ -948,6 +997,27 @@ function lineSignature(line: TranscriptLine): string {
       ].join("\u0000"),
     )
     .join("\u0001");
+}
+
+/**
+ * The rows of a message, with any table in it built as a table and everything
+ * else kept as the line it is.
+ */
+function boxed(lines: readonly TranscriptLine[]): Node[] {
+  const text = lines.map((line) => line.text);
+  const out: Node[] = [];
+  let at = 0;
+  while (at < text.length) {
+    const table = boxTableAt(text, at);
+    if (table) {
+      out.push(buildBoxTable(table));
+      at += table.length;
+      continue;
+    }
+    out.push(lineNode(lines[at]));
+    at += 1;
+  }
+  return out;
 }
 
 /** What a message says, as one string, for the Markdown pass. */
