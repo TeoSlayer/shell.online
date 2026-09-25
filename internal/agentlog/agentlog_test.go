@@ -40,7 +40,7 @@ func message(role, text string) map[string]any {
 func TestReadsOnlyWhatIsNew(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	write(t, path, message("user", "first"))
-	reader := Follow(path)
+	reader := &jsonlReader{path: path, decode: ClaudeCode{}.decode}
 
 	events, err := reader.Read()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestLeavesAHalfWrittenRecord(t *testing.T) {
 	if err := os.WriteFile(path, append(mustRead(t, path), []byte(`{"type":"assistant","mess`)...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	reader := Follow(path)
+	reader := &jsonlReader{path: path, decode: ClaudeCode{}.decode}
 	events, _ := reader.Read()
 	if len(events) != 1 {
 		t.Fatalf("read %+v, want only the whole record", events)
@@ -118,7 +118,7 @@ func TestKeepsEverythingThatIsNotTheConversation(t *testing.T) {
 		write(t, path, record)
 	}
 	write(t, path, message("user", "said out loud"))
-	events, _ := Follow(path).Read()
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
 	if len(events) != 1 || events[0].Text != "said out loud" {
 		t.Fatalf("read %+v, want only the message", events)
 	}
@@ -134,7 +134,7 @@ func TestNamesAToolWithoutItsInput(t *testing.T) {
 			map[string]any{"type": "tool_use", "name": "Bash", "input": map[string]any{"command": "rm -rf /secret"}},
 		}},
 	})
-	events, _ := Follow(path).Read()
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
 	if len(events) != 1 || events[0].Kind != KindTool || events[0].Text != "Bash" {
 		t.Fatalf("read %+v", events)
 	}
@@ -164,7 +164,7 @@ func TestFindsTheSessionStartedInThisDirectory(t *testing.T) {
 	write(t, filepath.Join(theirs, "other.jsonl"), map[string]any{"type": "session", "cwd": "/tmp/theirs"})
 	write(t, filepath.Join(mine, "wanted.jsonl"), map[string]any{"type": "session", "cwd": "/tmp/mine"})
 
-	path, err := FindClaudeCode(home, "/tmp/mine", time.Now().Add(-time.Minute))
+	path, err := openClaudeCode(t, home, "/tmp/mine", time.Now().Add(-time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestFindsTheSessionStartedInThisDirectory(t *testing.T) {
 		t.Fatalf("found %s", path)
 	}
 
-	if _, err := FindClaudeCode(home, "/tmp/nobody", time.Now().Add(-time.Minute)); err != ErrNoTranscript {
+	if _, err := openClaudeCode(t, home, "/tmp/nobody", time.Now().Add(-time.Minute)); err != ErrNoTranscript {
 		t.Fatalf("err = %v, want ErrNoTranscript", err)
 	}
 }
@@ -190,7 +190,7 @@ func TestIgnoresATranscriptOlderThanTheSession(t *testing.T) {
 	if err := os.Chtimes(path, old, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FindClaudeCode(home, "/tmp/mine", time.Now().Add(-time.Minute)); err != ErrNoTranscript {
+	if _, err := openClaudeCode(t, home, "/tmp/mine", time.Now().Add(-time.Minute)); err != ErrNoTranscript {
 		t.Fatalf("err = %v, want ErrNoTranscript", err)
 	}
 }
@@ -219,7 +219,7 @@ func TestCarriesAQuestionAndItsOptions(t *testing.T) {
 			}},
 		}},
 	})
-	events, _ := Follow(path).Read()
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
 	if len(events) != 1 || events[0].Kind != KindChoice {
 		t.Fatalf("read %+v", events)
 	}
@@ -251,11 +251,21 @@ func TestOnlyTheAskingToolsCarryTheirInput(t *testing.T) {
 			}},
 		}},
 	})
-	events, _ := Follow(path).Read()
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
 	if len(events) != 1 || events[0].Kind != KindTool || events[0].Choice != nil {
 		t.Fatalf("read %+v", events)
 	}
 	if events[0].Text != "Bash" {
 		t.Fatalf("text = %q", events[0].Text)
 	}
+}
+
+// openClaudeCode is the path the adapter resolved, or the error it gave.
+func openClaudeCode(t *testing.T, home, dir string, since time.Time) (string, error) {
+	t.Helper()
+	reader, err := ClaudeCode{}.Open(home, dir, since)
+	if err != nil {
+		return "", err
+	}
+	return reader.(*jsonlReader).path, nil
 }
