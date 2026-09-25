@@ -23,7 +23,7 @@ func TestCheckTextRejectsActiveContent(t *testing.T) {
 		"see http://x", "HTTPS://EVIL.EXAMPLE", "go to www.evil.test", "ftp://host/file", "javascript://x",
 		"visit account-verify.com", "open evil.io/login", "paste into docs.google.com",
 		"send it to a@b.co", "![x](y)", "[x](y)", "`cmd`", "<script>", "</b>", "<a href=x>",
-		"ok​there", "ok‮", "tab\there", "bell\a", "",
+		"ok\u200bthere", "ok\u202e", "tab\there", "bell\a", "",
 	} {
 		if err := CheckText(value, MaxSummaryRunes, true); err == nil {
 			t.Errorf("%q passed the guard", value)
@@ -37,7 +37,7 @@ func TestCleanTextProducesGuardPassingText(t *testing.T) {
 		"Mail me at x@y.com or visit evil.com/login":                              "Mail me at (address removed) or visit (link removed)",
 		"<b>bold</b> ![img](http://t/x.png)":                                      "bold img",
 		"```bash\nnpm test\n```\nAll green.":                                      "npm test\n\nAll green.",
-		"line‮evil​\r\nnext\ttab":                                        "lineevil\nnext tab",
+		"line\u202eevil\u200b\r\nnext\ttab":                                                 "lineevil\nnext tab",
 		"> quoted\n# heading":                                                     "quoted\nheading",
 	}
 	for input, want := range cases {

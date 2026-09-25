@@ -206,9 +206,11 @@ func TestVerifierRejections(t *testing.T) {
 		"not stable": func(_, c map[string]any) {
 			c["submods"].(map[string]any)["confidential_space"] = map[string]any{"support_attributes": []string{"LATEST"}}
 		},
-		"sev hardware":   func(_, c map[string]any) { c["hwmodel"] = "GCP_AMD_SEV" },
-		"not cs":         func(_, c map[string]any) { c["swname"] = "GCE" },
-		"digest":         func(_, c map[string]any) { c["submods"].(map[string]any)["container"] = map[string]any{"image_digest": "sha256:" + strings.Repeat("0", 64)} },
+		"sev hardware": func(_, c map[string]any) { c["hwmodel"] = "GCP_AMD_SEV" },
+		"not cs":       func(_, c map[string]any) { c["swname"] = "GCE" },
+		"digest": func(_, c map[string]any) {
+			c["submods"].(map[string]any)["container"] = map[string]any{"image_digest": "sha256:" + strings.Repeat("0", 64)}
+		},
 		"nonce mismatch": func(_, c map[string]any) { c["eat_nonce"] = []string{KeyNonce(otherKey)} },
 		"no nonce":       func(_, c map[string]any) { delete(c, "eat_nonce") },
 		"alg none":       func(h, _ map[string]any) { h["alg"] = "none" },

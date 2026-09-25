@@ -136,10 +136,22 @@ func TestSummaryBindingsAndPurpose(t *testing.T) {
 		t.Fatalf("round trip: %v", err)
 	}
 	for name, open := range map[string]func() error{
-		"session":    func() error { _, err := openSummary(recipient, "other", "owner", "gen", value.ObservedAt, sender, sealed); return err },
-		"recipient":  func() error { _, err := openSummary(recipient, "session", "other", "gen", value.ObservedAt, sender, sealed); return err },
-		"generation": func() error { _, err := openSummary(recipient, "session", "owner", "gen2", value.ObservedAt, sender, sealed); return err },
-		"time":       func() error { _, err := openSummary(recipient, "session", "owner", "gen", value.ObservedAt+1, sender, sealed); return err },
+		"session": func() error {
+			_, err := openSummary(recipient, "other", "owner", "gen", value.ObservedAt, sender, sealed)
+			return err
+		},
+		"recipient": func() error {
+			_, err := openSummary(recipient, "session", "other", "gen", value.ObservedAt, sender, sealed)
+			return err
+		},
+		"generation": func() error {
+			_, err := openSummary(recipient, "session", "owner", "gen2", value.ObservedAt, sender, sealed)
+			return err
+		},
+		"time": func() error {
+			_, err := openSummary(recipient, "session", "owner", "gen", value.ObservedAt+1, sender, sealed)
+			return err
+		},
 		"purpose": func() error {
 			_, err := openEnvelope(recipient, sender, "sr1."+sealed[4:], requestPrefix, "shell.online session content v1", summaryAAD("session", "owner", "gen", value.ObservedAt))
 			return err
@@ -167,7 +179,7 @@ func TestSummaryValidation(t *testing.T) {
 		"title line":   mutate(func(v *Summary) { v.Title = "a\nb" }),
 		"long summary": mutate(func(v *Summary) { v.Summary = strings.Repeat("a", 481) }),
 		"tab":          mutate(func(v *Summary) { v.Summary = "a\tb" }),
-		"bidi":         mutate(func(v *Summary) { v.Summary = "safe ‮gnp.exe" }),
+		"bidi":         mutate(func(v *Summary) { v.Summary = "safe \u202egnp.exe" }),
 		"url":          mutate(func(v *Summary) { v.Summary = "Open https://evil.example/x now" }),
 		"domain":       mutate(func(v *Summary) { v.Summary = "Visit evil-login.com to continue" }),
 		"email":        mutate(func(v *Summary) { v.Summary = "Mail root@example.org" }),
