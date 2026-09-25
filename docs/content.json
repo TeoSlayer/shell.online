@@ -1,5 +1,5 @@
 {
-  "version": "0.23.1",
+  "version": "0.23.2",
   "pages": {
     "docs": {
       "eyebrow": "Quick start",
@@ -142,11 +142,11 @@
           "Install Git and Go 1.26.8 first. Clone the release tag, not an unpinned development branch. This builds the CLI only: you do not need Node.js or a local web server to use the hosted service. The Go build downloads the dependencies pinned by go.mod and go.sum.\n\nThe commands below assume a new checkout directory. On macOS, Linux and other Unix systems:",
           [
             [
-              "git clone --depth 1 --branch v0.23.1 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.1\" -o shell ./cmd/shell\n./shell --version",
-              "Expect version 0.23.1. Then use ./shell codex, ./shell claude, or your own command from this directory."
+              "git clone --depth 1 --branch v0.23.2 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.2\" -o shell ./cmd/shell\n./shell --version",
+              "Expect version 0.23.2. Then use ./shell codex, ./shell claude, or your own command from this directory."
             ],
             [
-              "git clone --depth 1 --branch v0.23.1 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.1\" -o shell.exe ./cmd/shell\n.\\shell.exe --version",
+              "git clone --depth 1 --branch v0.23.2 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.23.2\" -o shell.exe ./cmd/shell\n.\\shell.exe --version",
               "Windows PowerShell: run these instead. Then use .\\shell.exe codex or another installed command."
             ],
             [

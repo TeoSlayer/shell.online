@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.23.2] — 2026-09-25
+
 ### Changed
 
 - A terminal fills the window it runs in. `shell` in the foreground and
@@ -20,6 +22,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - The session owner can press "Fit to my screen" to run the program at their
   pane's size. It never grows past an attached local terminal. A session started
   from the browser opens at the size of the pane that started it.
+- In the chat renderer, answering an agent's multiple-choice question sends the
+  option's own number, as the menu draws it.
 
 ### Fixed
 
