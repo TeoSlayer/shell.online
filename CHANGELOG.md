@@ -4,6 +4,31 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- The installer runs a `shell` command once it has installed, by the new
+  executable's full path, so one pasted line can install and link a machine
+  before its install directory is on PATH:
+  `curl -fsSL https://shell.online/install | sh -s -- auth`. Piped into `sh`,
+  the command gets the terminal for its prompts; with no terminal it gets no
+  input rather than the rest of the script.
+
+### Changed
+
+- The empty Machines page and the app guide's "Link your computer" card give
+  that one line instead of two separate steps. Remote start stays a separate
+  choice at the prompt.
+- `shell auth` waits 15 minutes for the browser instead of 5. A first link can
+  mean signing in, creating a vault and confirming its recovery key, and five
+  minutes ran out partway through. When it does run out it now says to run
+  `shell auth` again.
+
+### Fixed
+
+- Signing in from the header link of the sign-up page returns to the terminal
+  link request that sent you there. It used to land on the sessions list, with
+  the terminal still waiting for a callback that was never coming.
+
 ## [0.23.2] — 2026-09-25
 
 ### Changed

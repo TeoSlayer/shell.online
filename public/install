@@ -11,6 +11,12 @@ set -eu
 # SHELL_ONLINE_INSTALL_CHECK=1: every request then carries the user agent
 # shell.online-install-check, which the site counts as a monitor and not as
 # a person, and nothing is reported.
+#
+# Anything after the script's own name is a shell command to run once the
+# install is done, by the new executable's full path, so it works before the
+# install directory is on PATH:
+#
+#   curl -fsSL https://shell.online/install | sh -s -- auth --allow-remote-start
 curl_agent=
 wget_agent=
 if [ "${SHELL_ONLINE_INSTALL_CHECK:-0}" = 1 ]; then
@@ -244,6 +250,21 @@ fi
 
 "$target" --version
 report ok
+
+if [ "$#" -gt 0 ]; then
+  printf '\nRunning: shell %s\n' "$*"
+  # exec replaces this shell, so the EXIT trap would never run: clean up first.
+  rm -rf "$temporary_dir"
+  trap - EXIT HUP INT TERM
+  # Piped into sh, this script's stdin is the script itself. Give the command
+  # the terminal when there is one, so it can prompt, and otherwise nothing:
+  # never the rest of this script.
+  if (: </dev/tty) 2>/dev/null; then
+    exec "$target" "$@" </dev/tty
+  fi
+  exec "$target" "$@" </dev/null
+fi
+
 printf '\nNext:\n'
 printf '  shell <your-command>   Run it in the background and print its browser link\n'
 printf '  shell help             See the guided start, share, and stop flow\n'
