@@ -49,7 +49,14 @@ func said(role, text string) map[string]any {
 // collected runs the tap against a home directory and returns the frames it sent.
 func collected(t *testing.T, home, dir string, wait time.Duration) [][]byte {
 	t.Helper()
+	/*
+	 * Both, because os.UserHomeDir reads a different one per platform:
+	 * USERPROFILE on Windows, HOME everywhere else. Setting only HOME left the
+	 * tap looking in the real profile on a Windows runner, finding nothing,
+	 * and sending nothing -- which is exactly what the test then reported.
+	 */
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var mu sync.Mutex
