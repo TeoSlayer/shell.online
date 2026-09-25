@@ -14,6 +14,11 @@ const switches: { key: keyof SessionAutomationConsent; label: string; help: stri
     help: "Reuse an existing agent response as a title and summary, at most once a day. No extra prompt or model call. Requires a supported, updated host and your unlocked vault; other sessions are skipped.",
   },
   {
+    key: "summariesEnabled",
+    label: "Summaries",
+    help: "Show a short summary when you hover this session. Agent sessions are summarized from the agent’s own transcript on your machine. For other commands, your host removes controls and redacts likely secrets, then sends the recent output encrypted to an attested summarizer enclave that your host verifies first. Only you can read the result; turning this off deletes it.",
+  },
+  {
     key: "dailyBriefingTeamAccess",
     label: "Team briefing delivery (not available yet)",
     help: "Saves your preference for future team delivery. Briefings remain visible only to you in this version.",

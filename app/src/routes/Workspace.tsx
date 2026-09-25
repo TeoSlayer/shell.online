@@ -16,6 +16,9 @@ import {
 } from "../lib/session-view";
 import { sessionSummary, sessionTitle } from "../lib/session-title";
 import {useSessionContents, withSessionContent} from "../lib/use-session-contents";
+import {useSessionSummaries} from "../lib/use-session-summaries";
+import {SessionSummaryHover} from "../components/SessionSummaryHover";
+import type {SessionSummary} from "../lib/session-summary-crypto";
 import {SessionSummaryText} from "../components/SessionSummaryText";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionStartGuide } from "../components/SessionStartGuide";
@@ -181,6 +184,8 @@ export function Workspace() {
   const [rawSessions, setSessions] = useState<SessionRecord[] | null>(null);
   const sessionContents = useSessionContents(rawSessions);
   const sessions = rawSessions?.map(session => withSessionContent(session, sessionContents[session.id])) ?? null;
+  /* Decrypted in this page's memory only; the hover card reads, never requests. */
+  const sessionSummaries = useSessionSummaries(rawSessions);
   const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1064,6 +1069,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
                 {liveRead.length > 0 && (
@@ -1080,6 +1086,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
                 {finished.length > 0 && (
@@ -1096,6 +1103,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
               </>
@@ -1159,6 +1167,7 @@ function SessionGroup({
   onKill,
   onRemove,
   onAssign,
+  summaries,
 }: {
   heading: string;
   sessions: SessionRecord[];
@@ -1172,6 +1181,7 @@ function SessionGroup({
   onKill: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uids: string[]) => void;
+  summaries: Record<string, SessionSummary>;
 }) {
   /*
    * Which commands are shown in full. Collapsed by default: an agent command
@@ -1222,6 +1232,7 @@ function SessionGroup({
                 }}
               >
                 <td>
+                  <SessionSummaryHover session={session} summary={summaries[session.id]} now={now}>
                   <Link className="table-subject" to={`/sessions/${session.id}`}>
                     {/* The kind of thing running, in colour while it runs. */}
                     <img
@@ -1236,6 +1247,7 @@ function SessionGroup({
                     </span>
                     <SessionLock session={session} />
                   </Link>
+                  </SessionSummaryHover>
                   {/*
                     * A genuine two-line summary when the record carries one,
                     * and the truthful empty state when it does not. The command
