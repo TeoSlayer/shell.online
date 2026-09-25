@@ -849,11 +849,30 @@
      * something floating over it, so it does not need the air a floating
      * thing needs to read as separate -- and what it had was a finger's
      * height of empty paper under four short words.
+     *
+     * And no safe-area inset here, which is what was raising it. The inset
+     * exists to keep content off the home indicator, and in a browser tab
+     * nothing is near it: the shell is sized to the *visible* viewport, which
+     * already stops above the browser's own bottom chrome. Added anyway, it
+     * put a home indicator's worth of paper under four short words and lifted
+     * the bar off the bottom of the screen on every page. Standalone is the
+     * case that needs it, and it is below.
      */
-    padding: 3px 6px calc(3px + env(safe-area-inset-bottom));
+    padding: 3px 6px;
     border-top: 1px solid var(--line);
     background: var(--paper);
     flex-direction: row;
+  }
+
+  /*
+   * Saved to a home screen there is no browser chrome, so the strip the home
+   * indicator lives in is the shell's own and the bar has to stay off it.
+   * This is the only place the inset belongs.
+   */
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    .rail {
+      padding-bottom: calc(3px + env(safe-area-inset-bottom));
+    }
   }
 
   /*

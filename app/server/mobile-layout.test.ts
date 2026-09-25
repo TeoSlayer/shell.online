@@ -341,3 +341,47 @@ describe("a box you can see what you type in", () => {
     expect(view).not.toContain("bytesForKey");
   });
 });
+
+describe("the bar at the foot of a phone", () => {
+  /* The phone rules, which are the last block keyed on that width. */
+  const phone = css.slice(css.lastIndexOf("@media (max-width: 760px) {"));
+
+  /*
+   * No safe-area inset in a browser tab. The inset exists to keep content off
+   * the home indicator, and in a tab nothing is near it: the shell is sized to
+   * the *visible* viewport, which already stops above the browser's own bottom
+   * chrome. Added anyway it put a home indicator's worth of paper under four
+   * short words and lifted the bar off the bottom of the screen on every page.
+   */
+  it("sits on the bottom of the screen, not above it", () => {
+    const rail = phone.match(/\n {2}\.rail\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
+    expect(rail).toMatch(/padding:\s*3px 6px;/);
+    expect(rail).not.toContain("safe-area-inset-bottom");
+  });
+
+  /* Saved to a home screen there is no chrome, so the strip is the shell's. */
+  it("keeps clear of the home indicator where there is nothing else to", () => {
+    expect(phone).toMatch(
+      /@media \(display-mode: standalone\)[^{]*\{\s*\.rail\s*\{\s*padding-bottom:\s*calc\(3px \+ env\(safe-area-inset-bottom\)\)/,
+    );
+  });
+});
+
+describe("a keyboard arriving", () => {
+  /*
+   * A keyboard is not a burst. The browser reports the visible viewport once
+   * per frame while it animates, and each report is already the size the
+   * screen has just been painted at -- so deferring the write to the next
+   * frame left the shell a step behind for the whole animation. Measured at
+   * about 24px a frame: the bar and the box below the fold, catching up, over
+   * and over. That is the jump.
+   */
+  it("is followed in the frame it happened, not the next one", () => {
+    const hook = readFileSync(new URL("../src/lib/app-height.ts", import.meta.url), "utf8");
+    expect(hook).toMatch(/visualViewport\?\.addEventListener\("resize", follow\)/);
+    expect(hook).toMatch(/visualViewport\?\.addEventListener\("scroll", follow\)/);
+    /* And a window resize, which is a real burst, still coalesces. */
+    expect(hook).toMatch(/window\.addEventListener\("resize", apply\)/);
+    expect(hook).toMatch(/const follow = \(\) => \{[\s\S]*?cancelAnimationFrame\(frame\)[\s\S]*?measure\(\);/);
+  });
+});

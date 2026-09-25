@@ -141,9 +141,9 @@ export function watchAppHeight(): () => void {
   };
 
   /*
-   * One write per frame, however many events landed in it. A keyboard or a
-   * toolbar arriving is a burst of resize and scroll events, and laying the
-   * page out for each of them is work that can only be seen as stutter.
+   * One write per frame, however many events landed in it. A window resize is
+   * a burst -- a drag of the corner is dozens of them -- and laying the page
+   * out for each is work that can only be seen as stutter.
    */
   const apply = () => {
     if (frame) return;
@@ -153,6 +153,27 @@ export function watchAppHeight(): () => void {
     });
   };
 
+  /**
+   * The visible viewport is written the moment it moves, not a frame later.
+   *
+   * A keyboard arriving is not a burst: the browser reports it once per frame
+   * while it animates, and each report is already the size the screen has
+   * just been painted at. Deferring the write to the next frame therefore
+   * meant the shell spent the whole animation one step behind the viewport --
+   * measured at about 24px a frame, which is the bar and the box sitting
+   * below the fold and then catching up, over and over, for the length of the
+   * animation. That is the jump.
+   *
+   * It costs one style write per frame, which is what the animation is for.
+   */
+  const follow = () => {
+    if (frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+    measure();
+  };
+
   measure();
   window.addEventListener("resize", apply);
   window.addEventListener("orientationchange", apply);
@@ -160,16 +181,16 @@ export function watchAppHeight(): () => void {
    * iOS changes the layout viewport when its toolbar collapses without always
    * firing a window resize for it; the visual viewport notices either way.
    */
-  window.visualViewport?.addEventListener("resize", apply);
+  window.visualViewport?.addEventListener("resize", follow);
 
-  window.visualViewport?.addEventListener("scroll", apply);
+  window.visualViewport?.addEventListener("scroll", follow);
 
   return () => {
     if (frame) cancelAnimationFrame(frame);
     window.removeEventListener("resize", apply);
     window.removeEventListener("orientationchange", apply);
-    window.visualViewport?.removeEventListener("resize", apply);
-    window.visualViewport?.removeEventListener("scroll", apply);
+    window.visualViewport?.removeEventListener("resize", follow);
+    window.visualViewport?.removeEventListener("scroll", follow);
     root.style.removeProperty(PROPERTY);
     root.style.removeProperty(VISIBLE);
     root.style.removeProperty(TYPING);
