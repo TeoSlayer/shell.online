@@ -4,6 +4,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Sessions started from the browser on macOS no longer run at background
+  priority. The launch agent ran the daemon as a Background job, and every
+  session it started inherited the lowest CPU priority and throttled disk reads,
+  so on a machine short of memory an idle session could take 5-30 seconds to
+  echo a keystroke. Existing installs keep the old agent until you run
+  `shell service install`; `shell service status` says when that is needed.
+
 ## [0.23.2] — 2026-09-25
 
 ### Changed

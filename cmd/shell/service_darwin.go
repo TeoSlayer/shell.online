@@ -80,8 +80,13 @@ func servicePlist(self string, environment map[string]string) string {
   <true/>
   <key>ThrottleInterval</key>
   <integer>10</integer>
-` + variables.String() + `  <key>ProcessType</key>
-  <string>Background</string>
+` + variables.String() + `  <!-- Interactive, not Background. Every session started from the browser is
+       this job's child and inherits its limits, and Background clamps them to
+       the lowest CPU priority and throttles their disk reads. That includes
+       reading swapped memory back in, so a session left idle for a while
+       takes seconds to echo a keystroke once the machine is short of memory. -->
+  <key>ProcessType</key>
+  <string>Interactive</string>
 </dict>
 </plist>
 `
@@ -107,6 +112,23 @@ func installService(self string, environment map[string]string) (string, error) 
 		return "", fmt.Errorf("load the launch agent: %v: %s", err, strings.TrimSpace(string(output)))
 	}
 	return path, nil
+}
+
+// serviceNeedsRefresh reports an agent written by a version that ran the
+// daemon as a Background job.
+//
+// Not rewritten automatically: reloading the agent restarts the daemon, and a
+// restart re-keys it (see restartDaemon), so it waits for the person to ask.
+func serviceNeedsRefresh() bool {
+	path, installed := serviceInstalled()
+	if !installed {
+		return false
+	}
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(contents), "<string>Background</string>")
 }
 
 // restartService asks launchd to replace the running daemon.

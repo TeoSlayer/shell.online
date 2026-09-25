@@ -106,6 +106,10 @@ func installService(self string, environment map[string]string) (string, error) 
 //
 // Not waited on, also for the same reason. `systemctl restart` blocks until
 // the unit is up again, and a login has nothing to do with that answer.
+// serviceNeedsRefresh is always false here: no version of the unit ever
+// lowered the daemon's priority.
+func serviceNeedsRefresh() bool { return false }
+
 func restartService() bool {
 	if _, installed := serviceInstalled(); !installed {
 		return false

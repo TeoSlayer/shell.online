@@ -113,3 +113,44 @@ func TestInstallRefusesATemporaryBinary(t *testing.T) {
 		t.Fatal("a refused install should leave no service behind")
 	}
 }
+
+// Sessions started from the browser are children of this job and inherit its
+// ProcessType. Background put them at the lowest CPU priority with throttled
+// disk reads, and an idle session then took seconds to page itself back in.
+func TestServicePlistRunsSessionsInteractively(t *testing.T) {
+	plist := servicePlist("/usr/local/bin/shell", map[string]string{})
+	if !strings.Contains(plist, "<key>ProcessType</key>\n  <string>Interactive</string>") {
+		t.Fatalf("expected an Interactive process type, got:\n%s", plist)
+	}
+	if strings.Contains(plist, "<string>Background</string>") {
+		t.Fatalf("the daemon must not run as a Background job, got:\n%s", plist)
+	}
+}
+
+func TestServiceNeedsRefreshSpotsABackgroundAgent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if serviceNeedsRefresh() {
+		t.Fatal("no agent is installed, so nothing needs refreshing")
+	}
+
+	path, _ := serviceInstalled()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create the LaunchAgents directory: %v", err)
+	}
+	current := servicePlist("/usr/local/bin/shell", map[string]string{})
+	if err := os.WriteFile(path, []byte(current), 0o644); err != nil {
+		t.Fatalf("write the agent: %v", err)
+	}
+	if serviceNeedsRefresh() {
+		t.Fatal("an agent written by this version needs no refresh")
+	}
+
+	old := strings.Replace(current, "<string>Interactive</string>", "<string>Background</string>", 1)
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatalf("write the agent: %v", err)
+	}
+	if !serviceNeedsRefresh() {
+		t.Fatal("an agent that runs the daemon as Background should need a refresh")
+	}
+}

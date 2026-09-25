@@ -17,6 +17,8 @@ func serviceInstalled() (string, bool) { return "", false }
 
 func restartService() bool { return false }
 
+func serviceNeedsRefresh() bool { return false }
+
 func installService(string, map[string]string) (string, error) {
 	return "", errServiceUnsupported
 }

@@ -160,5 +160,9 @@ func serviceStatusCommand(stdout io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "Installed at %s\n", path)
+	if serviceNeedsRefresh() {
+		fmt.Fprintln(stdout, "It runs sessions at background priority, which makes idle ones slow to respond.")
+		fmt.Fprintln(stdout, "Run 'shell service install' to refresh it. Running sessions keep the old priority until restarted.")
+	}
 	return 0
 }
