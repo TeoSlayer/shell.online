@@ -17,7 +17,7 @@ func TestStripTerminal(t *testing.T) {
 		"abc\b\bX":                                         "aX",
 		"crlf\r\nline":                                     "crlf\nline",
 		"\u009b31mc1\u009dtitle\u009cafter":                "c1after",
-		"bidi\u202eevil\u200bzw\x07bell":                             "bidievilzwbell",
+		"bidi\u202eevil\u200bzw\x07bell":                   "bidievilzwbell",
 		"a\n\n\n\n\nb":                                     "a\n\nb",
 		"trailing   \nspace\t":                             "trailing\nspace",
 		"unterminated \x1b]8;;https://evil":                "unterminated",

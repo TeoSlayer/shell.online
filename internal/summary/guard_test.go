@@ -37,7 +37,7 @@ func TestCleanTextProducesGuardPassingText(t *testing.T) {
 		"Mail me at x@y.com or visit evil.com/login":                              "Mail me at (address removed) or visit (link removed)",
 		"<b>bold</b> ![img](http://t/x.png)":                                      "bold img",
 		"```bash\nnpm test\n```\nAll green.":                                      "npm test\n\nAll green.",
-		"line\u202eevil\u200b\r\nnext\ttab":                                                 "lineevil\nnext tab",
+		"line\u202eevil\u200b\r\nnext\ttab":                                       "lineevil\nnext tab",
 		"> quoted\n# heading":                                                     "quoted\nheading",
 	}
 	for input, want := range cases {
