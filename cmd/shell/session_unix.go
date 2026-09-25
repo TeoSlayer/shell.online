@@ -101,6 +101,7 @@ func runSharedProcess(
 	onPasswordRotated func(string, string),
 	fileService *sharedFileService,
 	flowSink mcpFlowSink,
+	outputTap func([]byte),
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
@@ -314,6 +315,9 @@ func runSharedProcess(
 			if count > 0 {
 				chunk := append([]byte(nil), buffer[:count]...)
 				_, _ = stdout.Write(chunk)
+				if outputTap != nil {
+					outputTap(chunk)
+				}
 				if control != nil {
 					control.PublishOutput(chunk)
 				} else {
