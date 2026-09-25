@@ -154,6 +154,46 @@ func TestTheTapDoesNotSendWhatItWasNotAskedTo(t *testing.T) {
 	}
 }
 
+/*
+ * Every frame fits what the relay will accept.
+ *
+ * The relay refuses an agent frame over 256KB and closes the socket that sent
+ * it, so counting events is not enough: forty messages at the 32KB each is
+ * capped at is 1.28MB. A long conversation of long answers would have
+ * disconnected the host rather than arriving.
+ */
+func TestEveryFrameFitsWhatTheRelayAccepts(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "work")
+	var records []map[string]any
+	for i := 0; i < 30; i++ {
+		records = append(records, said("assistant", strings.Repeat("x", 30_000)))
+	}
+	session(t, home, dir, records...)
+
+	frames := collected(t, home, dir, 2*time.Second)
+	if len(frames) < 5 {
+		t.Fatalf("frames = %d, want the conversation split across several", len(frames))
+	}
+	for _, frame := range frames {
+		if len(frame) > agentTapMaxFrameBytes {
+			t.Fatalf("a frame of %d bytes, want <= %d", len(frame), agentTapMaxFrameBytes)
+		}
+	}
+	/* And all of it arrived: nothing was dropped to make the frames fit. */
+	seen := 0
+	for _, frame := range frames {
+		var batch agentTapFrame
+		if err := json.Unmarshal(frame[1:], &batch); err != nil {
+			t.Fatal(err)
+		}
+		seen += len(batch.Events)
+	}
+	if seen != 30 {
+		t.Fatalf("events = %d, want 30", seen)
+	}
+}
+
 /* A long conversation arrives as many ordinary frames, not one enormous one. */
 func TestTheTapBatches(t *testing.T) {
 	home := t.TempDir()

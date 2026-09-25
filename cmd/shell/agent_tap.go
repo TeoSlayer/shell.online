@@ -61,6 +61,21 @@ const agentTapLookback = 6 * time.Hour
 // enormous one.
 const agentTapMaxBatch = 40
 
+/*
+ * And a cap on the frame itself, which is the one that matters.
+ *
+ * The relay refuses an agent frame over 256KB and closes the socket that sent
+ * it. Counting events alone does not stay under that: forty messages at the
+ * 32KB each is capped at would be 1.28MB, so a long conversation of long
+ * answers would have disconnected the host rather than arriving. Batches are
+ * therefore built by size, and the count is only a second bound.
+ *
+ * Under the relay's limit with room to spare, because what is measured here
+ * is the payload and what the relay measures is the frame after it has been
+ * sealed.
+ */
+const agentTapMaxFrameBytes = 160 * 1024
+
 // agentTapFrame is what a viewer receives.
 type agentTapFrame struct {
 	// Harness names the adapter that read this, so a viewer can say where the
@@ -118,17 +133,58 @@ func followAgentRecord(ctx context.Context, dir string, send func([]byte) bool) 
 			reader = nil
 			continue
 		}
-		for start := 0; start < len(events); start += agentTapMaxBatch {
-			end := min(start+agentTapMaxBatch, len(events))
-			payload, err := json.Marshal(agentTapFrame{Harness: adapter.Name(), Events: events[start:end]})
-			if err != nil {
-				break
-			}
-			if !send(protocol.Frame(protocol.AgentEvent, payload)) {
-				return
-			}
+		if !sendBatches(adapter.Name(), events, send) {
+			return
 		}
 	}
+}
+
+/*
+ * Sends events in frames that fit.
+ *
+ * A batch grows until the next event would take it over the limit, and then
+ * goes. One event is smaller than the limit by construction -- the record
+ * reader caps a message at 32KB -- so a batch always holds at least one and
+ * this always makes progress.
+ *
+ * Returns false when the connection has gone, which is the caller's signal to
+ * stop.
+ */
+func sendBatches(harness string, events []agentlog.Event, send func([]byte) bool) bool {
+	batch := make([]agentlog.Event, 0, agentTapMaxBatch)
+	flush := func() bool {
+		if len(batch) == 0 {
+			return true
+		}
+		payload, err := json.Marshal(agentTapFrame{Harness: harness, Events: batch})
+		batch = batch[:0]
+		if err != nil || len(payload) > agentTapMaxFrameBytes {
+			/* Refused rather than sent: a frame the relay would close the
+			 * socket over is worse than a gap in the conversation. */
+			return true
+		}
+		return send(protocol.Frame(protocol.AgentEvent, payload))
+	}
+	size := 0
+	for _, event := range events {
+		/* The text plus what the fields around it cost, generously. */
+		cost := len(event.Text) + 256
+		if event.Choice != nil {
+			cost += len(event.Choice.Question) + len(event.Choice.Header)
+			for _, option := range event.Choice.Options {
+				cost += len(option) + 8
+			}
+		}
+		if len(batch) > 0 && (size+cost > agentTapMaxFrameBytes || len(batch) >= agentTapMaxBatch) {
+			if !flush() {
+				return false
+			}
+			size = 0
+		}
+		batch = append(batch, event)
+		size += cost
+	}
+	return flush()
 }
 
 // workingDirectory is where this session is running, which is the only thing
