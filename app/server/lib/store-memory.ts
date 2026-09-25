@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { CONTENT_INTERVAL_MS, contentPublisher, type SessionContent, type SessionContentPolicy, type ContentWriteResult } from "./session-content";
+import { SUMMARY_INTERVAL_MS, SUMMARY_TICKET_INTERVAL_MS, type SessionSummary, type SessionSummaryPolicy, type SummaryTicketClaim, type SummaryWriteResult } from "./session-summary";
 import {
   MCP_FLOW_LIMIT,
   mcpFlowAllowedBindings,
@@ -97,6 +98,7 @@ function withoutSessionUid(entry: PasswordRequest & { sessionUid: string }): Pas
 
 interface Shape {
   sessionContent: { sessionUid: string; sessionId: string; generation: string; content?: SessionContent; publishedAt?: number }[];
+  sessionSummaries: { sessionUid: string; sessionId: string; generation: string; summary?: SessionSummary; publishedAt?: number; ticketIssuedAt?: number }[];
   mcpFlows: McpFlowRow[];
   jevConsents: { orgId: string; ownerUid: string; externalAnalysis: boolean; updatedAt: number; updatedBy: string }[];
   jevAssessments: { orgId: string; ownerUid: string; sessionId: string; startedAt: number; snapshot: AssessmentSnapshot }[];
@@ -127,6 +129,7 @@ interface Shape {
 
 const EMPTY: Shape = {
   sessionContent: [],
+  sessionSummaries: [],
   mcpFlows: [],
   jevConsents: [], jevAssessments: [], jevBudget: [],
   mcpTeamGrants: [],
@@ -204,6 +207,7 @@ export class MemoryStore implements Store {
         tokens: parsed.tokens ?? [],
         sessions: parsed.sessions ?? [],
         sessionContent: parsed.sessionContent ?? [],
+        sessionSummaries: parsed.sessionSummaries ?? [],
         mcpFlows: parsed.mcpFlows ?? [],
         jevConsents: parsed.jevConsents ?? [],
         jevAssessments: parsed.jevAssessments ?? [],
@@ -435,6 +439,7 @@ export class MemoryStore implements Store {
     if (!session || (session.ownerUid ?? session.uid) !== ownerUid || !session.encrypted) return null;
     session.shareUrl = shareUrl;
     this.invalidateContent(session);
+    this.invalidateSummary(session);
     session.keyShares = [...shares];
     this.flush();
     return session;
@@ -455,7 +460,10 @@ export class MemoryStore implements Store {
       const previous = this.data.accountKeys[index];
       if (previous.version !== key.version || previous.publicKey !== key.publicKey) {
         for (const session of this.data.sessions) {
-          if ((session.ownerUid ?? session.uid) === key.uid) this.invalidateContent(session);
+          if ((session.ownerUid ?? session.uid) === key.uid) {
+            this.invalidateContent(session);
+            this.invalidateSummary(session);
+          }
         }
       }
       this.data.accountKeys[index] = { ...key };
@@ -539,6 +547,7 @@ export class MemoryStore implements Store {
     data.commands = data.commands.filter((entry) => entry.uid !== uid);
     data.sessions = data.sessions.filter((entry) => entry.uid !== uid);
     data.sessionContent = data.sessionContent.filter((entry) => data.sessions.some((session) => session.uid === entry.sessionUid && session.id === entry.sessionId));
+    data.sessionSummaries = data.sessionSummaries.filter((entry) => data.sessions.some((session) => session.uid === entry.sessionUid && session.id === entry.sessionId));
     for (const session of data.sessions) {
       if (session.keyShares) {
         session.keyShares = session.keyShares.filter((share) => share.uid !== uid);
@@ -550,6 +559,7 @@ export class MemoryStore implements Store {
       }
       if (session.ownerUid === uid) {
         this.invalidateContent(session);
+        this.invalidateSummary(session);
         session.ownerUid = session.uid;
       }
     }
@@ -680,6 +690,65 @@ export class MemoryStore implements Store {
     if (!session) return null;
     const content = this.data.sessionContent.find((item) => item.sessionUid === session.uid && item.sessionId === session.id)?.content;
     return content ? { ...content } : null;
+  }
+
+  private invalidateSummary(session: SessionRecord): void {
+    const entry = this.data.sessionSummaries.find((item) => item.sessionUid === session.uid && item.sessionId === session.id);
+    if (entry) {
+      entry.generation = randomBytes(16).toString("hex");
+      delete entry.summary;
+      delete entry.publishedAt;
+    }
+  }
+
+  private summaryState(session: SessionRecord) {
+    let entry = this.data.sessionSummaries.find((item) => item.sessionUid === session.uid && item.sessionId === session.id);
+    if (!entry) {
+      entry = { sessionUid: session.uid, sessionId: session.id, generation: randomBytes(16).toString("hex") };
+      this.data.sessionSummaries.push(entry);
+      this.flush();
+    }
+    return entry;
+  }
+
+  async sessionSummaryPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionSummaryPolicy | null> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && contentPublisher(item, orgId, ownerUid, deviceId));
+    if (!session) return null;
+    const state = this.summaryState(session);
+    return { enabled: session.summariesEnabled === true, ownerUid, generation: state.generation,
+      nextPublishAt: state.publishedAt === undefined ? 0 : state.publishedAt + SUMMARY_INTERVAL_MS };
+  }
+
+  async putSessionSummary(orgId: string, sessionId: string, ownerUid: string, deviceId: string, summary: SessionSummary, now = Date.now()): Promise<SummaryWriteResult> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && contentPublisher(item, orgId, ownerUid, deviceId));
+    if (!session) return "missing";
+    if (!session.summariesEnabled) return "disabled";
+    const state = this.summaryState(session);
+    if (summary.generation !== state.generation) return "stale";
+    if (state.summary && state.summary.observedAt === summary.observedAt && state.summary.senderPublicKey === summary.senderPublicKey && state.summary.sealed === summary.sealed) return "stored";
+    if (state.publishedAt !== undefined && now < state.publishedAt + SUMMARY_INTERVAL_MS) return "limited";
+    state.summary = { ...summary };
+    state.publishedAt = now;
+    this.flush();
+    return "stored";
+  }
+
+  async getSessionSummary(orgId: string, sessionId: string, ownerUid: string): Promise<SessionSummary | null> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && item.orgId === orgId && (item.ownerUid ?? item.uid) === ownerUid && item.summariesEnabled);
+    if (!session) return null;
+    const summary = this.data.sessionSummaries.find((item) => item.sessionUid === session.uid && item.sessionId === session.id)?.summary;
+    return summary ? { ...summary } : null;
+  }
+
+  async claimSummaryTicket(orgId: string, sessionId: string, ownerUid: string, deviceId: string, now = Date.now()): Promise<SummaryTicketClaim> {
+    const session = this.data.sessions.find((item) => item.id === sessionId && contentPublisher(item, orgId, ownerUid, deviceId));
+    if (!session) return { result: "missing" };
+    if (!session.summariesEnabled) return { result: "disabled" };
+    const state = this.summaryState(session);
+    if (state.ticketIssuedAt !== undefined && now < state.ticketIssuedAt + SUMMARY_TICKET_INTERVAL_MS) return { result: "limited" };
+    state.ticketIssuedAt = now;
+    this.flush();
+    return { result: "issued", generation: state.generation, ownerUid };
   }
 
   /* ---- MCP flow feed ---- */
@@ -1114,7 +1183,10 @@ export class MemoryStore implements Store {
     );
     if (index >= 0) {
       const existing = this.data.sessions[index];
-      if (existing.shareUrl !== session.shareUrl || existing.origin !== session.origin || existing.orgId !== session.orgId || existing.ownerUid !== session.ownerUid) this.invalidateContent(existing);
+      if (existing.shareUrl !== session.shareUrl || existing.origin !== session.origin || existing.orgId !== session.orgId || existing.ownerUid !== session.ownerUid) {
+        this.invalidateContent(existing);
+        this.invalidateSummary(existing);
+      }
       const hadAssignment = existing.assigneeUids !== undefined;
       /*
        * A restart is a new incarnation (new started-at) and a handoff is a new
@@ -1203,6 +1275,7 @@ export class MemoryStore implements Store {
     const session = this.data.sessions.find((entry) => entry.id === id && entry.uid === uid);
     if (!session) return null;
     if ((["dailyBriefingEnabled", "shareUrl", "origin", "ownerUid", "orgId"] as const).some((key) => key in patch && patch[key] !== session[key])) this.invalidateContent(session);
+    if ((["summariesEnabled", "shareUrl", "origin", "ownerUid", "orgId"] as const).some((key) => key in patch && patch[key] !== session[key])) this.invalidateSummary(session);
     /*
      * A snapshot belongs to one session incarnation under one owner. A close,
      * an ownership change or a generation change invalidates it here, so a
@@ -1287,6 +1360,11 @@ export class MemoryStore implements Store {
       session.dailyBriefingEnabled = consent.dailyBriefingEnabled;
     }
     if (consent.dailyBriefingTeamAccess !== undefined) session.dailyBriefingTeamAccess = consent.dailyBriefingTeamAccess;
+    if (consent.summariesEnabled !== undefined) {
+      // Off purges the stored summary; either direction starts a new generation.
+      if (!!session.summariesEnabled !== consent.summariesEnabled) this.invalidateSummary(session);
+      session.summariesEnabled = consent.summariesEnabled;
+    }
     this.flush();
     return session;
   }
@@ -1331,7 +1409,10 @@ export class MemoryStore implements Store {
 
   async deleteSession(orgId: string, id: string): Promise<boolean> {
     const deleted = this.data.sessions.find((item) => item.orgId === orgId && item.id === id);
-    if (deleted) this.data.sessionContent = this.data.sessionContent.filter((item) => item.sessionUid !== deleted.uid || item.sessionId !== id);
+    if (deleted) {
+      this.data.sessionContent = this.data.sessionContent.filter((item) => item.sessionUid !== deleted.uid || item.sessionId !== id);
+      this.data.sessionSummaries = this.data.sessionSummaries.filter((item) => item.sessionUid !== deleted.uid || item.sessionId !== id);
+    }
     await this.revokeMcpTeamSession(orgId, id);
     const before = this.data.sessions.length;
     this.data.sessions = this.data.sessions.filter(
