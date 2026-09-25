@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.23.3] — 2026-09-25
+
 ### Fixed
 
 - Sessions started from the browser on macOS no longer run at background
