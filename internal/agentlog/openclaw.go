@@ -37,8 +37,8 @@ func (o OpenClaw) Open(home, dir string, since time.Time) (Reader, error) {
 		filepath.Join(home, ".openclaw", "agents", "*", "sessions", "*.trajectory.jsonl"),
 		filepath.Join(home, ".openclaw", "*", "sessions", "*.trajectory.jsonl"),
 	} {
-		path, err := newestStartedIn(pattern, dir, since, func(path, dir string) bool {
-			return headStates(path, dir, func(line []byte) (string, bool) {
+		path, err := newestStartedIn(pattern, dir, since, func(path string) string {
+			return headStates(path, func(line []byte) (string, bool) {
 				if stated, ok := jsonField(line, "workspaceDir"); ok {
 					return stated, true
 				}

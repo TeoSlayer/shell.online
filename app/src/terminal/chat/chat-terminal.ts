@@ -27,6 +27,7 @@ import { ScreenReader, paletteFromTheme, type ReaderTerminal } from "./screen-re
 import { Transcript, type TranscriptLine } from "./transcript";
 import { adapterFor, type AgentAdapter } from "./agents";
 import { ChatHistory } from "./chat-history";
+import { messageFor as recordMessage, readBatch } from "./agent-record";
 
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -102,6 +103,15 @@ export class ChatTerminal {
   private windowTitle = "";
   /** Whether this screen has already been reported as unreadable; see `painted`. */
   private unreadable = false;
+
+  /**
+   * Whether the agent's own record is speaking.
+   *
+   * Once it is, the screen is not read for the conversation any more. See
+   * `fromRecord`: a record is the conversation, a screen is a picture of part
+   * of one, and reading both draws every turn twice.
+   */
+  private recorded = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
   /** Lines and Returns waiting to go out as separate events; see `enter`. */
   private outbox: string[] = [];
@@ -172,6 +182,7 @@ export class ChatTerminal {
     this.view = new ChatView(element, {
       onSubmit: (text) => this.submit(text),
       onKeys: (bytes) => this.type(bytes),
+      onChoose: (index, label) => this.choose(index, label),
     });
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
@@ -206,6 +217,35 @@ export class ChatTerminal {
     });
   }
 
+  /**
+   * The conversation the agent itself recorded, from the host.
+   *
+   * Once one of these arrives the screen stops being read: a record is the
+   * conversation and a screen is a picture of part of one, and where both
+   * exist there is nothing to gain by drawing both. The terminal keeps
+   * running underneath -- this only changes what the chat is built from.
+   */
+  fromRecord(payload: Uint8Array): void {
+    if (this.disposed) return;
+    const batch = readBatch(payload);
+    if (!batch) return;
+    const changed = this.transcript.fromRecord(
+      batch.events.map((event) => ({ seq: event.seq, message: recordMessage(event) })),
+    );
+    if (!this.recorded) {
+      this.recorded = true;
+      /*
+       * Whatever was read off the screen before the record arrived is a worse
+       * account of the same conversation, and keeping both shows every turn
+       * twice.
+       */
+      this.agent?.reset();
+      this.agent = null;
+      this.view?.setThinking(false);
+    }
+    if (changed) this.schedule();
+  }
+
   write(data: string | Uint8Array, callback?: () => void): void {
     this.inner.write(data, () => {
       this.drain();
@@ -232,6 +272,10 @@ export class ChatTerminal {
     this.agent?.reset();
     this.agent = null;
     this.unreadable = false;
+    /*
+     * A replay is the screen again, not the record. What the record has
+     * already said stands, and the next batch carries on from where it was.
+     */
     this.replaying = true;
     this.transcript.beginReplay();
     this.reader.rewind();
@@ -304,6 +348,25 @@ export class ChatTerminal {
    * echo back off the grid, which is guesswork the moment a program stops
    * echoing, as every password prompt does.
    */
+  /**
+   * Answers a question the agent is waiting on.
+   *
+   * A choice prompt is drawn as a numbered menu and a bare digit picks from
+   * it -- watched happening, not inferred. The digit is sent as a keystroke
+   * rather than as a line: the menu is not waiting for a Return, and sending
+   * one would answer the *next* question too.
+   *
+   * What was chosen is said out loud in the conversation, because a button
+   * that empties itself and leaves no trace is a session where nobody can
+   * tell what was answered.
+   */
+  private choose(index: number, label: string): void {
+    if (this.options.disableStdin || index < 0 || index > 8) return;
+    this.transcript.submitted(label, Date.now());
+    this.type(String.fromCharCode("1".charCodeAt(0) + index));
+    this.schedule();
+  }
+
   private submit(text: string): void {
     if (this.options.disableStdin) return;
     /*
@@ -464,6 +527,8 @@ export class ChatTerminal {
    * it, is more use than a picture of it nobody can read.
    */
   private painted(lines: TranscriptLine[], now: number): void {
+    /* The record is the conversation; the screen is a picture of part of one. */
+    if (this.recorded) return;
     if (!this.agent) {
       /*
        * Asked again on every frame until something answers, rather than once

@@ -604,3 +604,41 @@ describe("a reload, which is a connection, which is a replay", () => {
     expect(now.messages).toEqual([]);
   });
 });
+
+describe("the agent's own record", () => {
+  const recorded = (seq: number, text: string, kind: "sent" | "received" = "received") => ({
+    seq,
+    message: { kind, at: 1000 + seq, text: kind === "sent" ? text : "", lines: kind === "sent" ? [] : [plainLine(text)], open: false },
+  });
+
+  it("becomes the conversation", () => {
+    const transcript = new Transcript();
+    expect(transcript.fromRecord([recorded(1, "npm test", "sent"), recorded(2, "all passed")])).toBe(true);
+    expect(texts(transcript)).toEqual(["npm test", "all passed"]);
+    expect(transcript.isRecorded).toBe(true);
+  });
+
+  /*
+   * Events carry their position, so a batch that arrives twice -- a reconnect,
+   * a replay, a host that resent -- changes nothing.
+   */
+  it("says the same thing once however many times it arrives", () => {
+    const transcript = new Transcript();
+    transcript.fromRecord([recorded(1, "one"), recorded(2, "two")]);
+    expect(transcript.fromRecord([recorded(1, "one"), recorded(2, "two")])).toBe(false);
+    expect(transcript.fromRecord([recorded(2, "two"), recorded(3, "three")])).toBe(true);
+    expect(texts(transcript)).toEqual(["one", "two", "three"]);
+  });
+
+  it("is forgotten when the conversation is cleared", () => {
+    const transcript = new Transcript();
+    transcript.fromRecord([recorded(1, "one")]);
+    transcript.clear();
+    expect(transcript.isRecorded).toBe(false);
+    expect(transcript.fromRecord([recorded(1, "one")])).toBe(true);
+  });
+
+  it("knows it has not heard from a record yet", () => {
+    expect(new Transcript().isRecorded).toBe(false);
+  });
+});

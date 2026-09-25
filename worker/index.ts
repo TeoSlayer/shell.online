@@ -130,6 +130,13 @@ import {
 export { StatsStore };
 
 const MAX_LIVE_FRAME_BYTES = 64 * 1024;
+/*
+ * An agent event frame is JSON carrying at most a batch of a conversation's
+ * messages. Its own cap rather than the output one: a mistake here is a
+ * different shape of mistake, and the number should say what is expected
+ * rather than what happened to be nearby.
+ */
+const MAX_AGENT_EVENT_BYTES = 256 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
 const LEGACY_ENCRYPTION_OVERHEAD_BYTES = 29;
@@ -3382,6 +3389,23 @@ export class TerminalSession extends DurableObject<Env> {
         // Observe surface: while the ephemeral model is allocated, decrypt and append the plaintext
         // so shell_output/shell_wait/shell_screen stay current. Fire-and-forget per frame.
         if (this.mcpModel) void this.mcpAppendOutput(frame);
+        return;
+
+      /*
+       * The conversation an agent recorded, on its way to every viewer.
+       *
+       * Forwarded exactly as Output is and for the same reason: it is sealed
+       * with the session's frame cipher before it reaches here, so this
+       * cannot read it and does not try. It is capped on its own rather than
+       * borrowing the output cap, because it is JSON and a different shape of
+       * mistake would be a different size.
+       */
+      case Opcode.AgentEvent:
+        if (frame.byteLength > MAX_AGENT_EVENT_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
+          safeClose(socket, 4009, "agent event frame too large");
+          return;
+        }
+        this.broadcastBinary(frame, "viewer");
         return;
 
       case Opcode.Snapshot: {

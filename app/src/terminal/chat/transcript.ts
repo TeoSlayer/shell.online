@@ -79,6 +79,14 @@ export interface Message {
   preformatted?: boolean;
   /** Bumped whenever this message's contents change, so a view can skip redraws. */
   revision: number;
+  /**
+   * The options an agent is waiting on an answer to.
+   *
+   * Only on a message built from an agent's own record, which states the
+   * question and every option it drew. A screen can only be read for the menu
+   * it painted; a record says what the menu means.
+   */
+  choice?: { question: string; header: string; options: string[] };
 }
 
 /**
@@ -163,6 +171,9 @@ export class Transcript {
    * nothing here and arrives as it always did.
    */
   private lastLocal: { text: string; at: number } | null = null;
+
+  /** The furthest position seen from the agent's own record; see fromRecord. */
+  private recorded = 0;
 
   /**
    * What this device remembered of the session, kept apart from the rest.
@@ -348,8 +359,43 @@ export class Transcript {
    * Everything, including what was remembered. `beginReplay` puts the
    * remembered part back; a clear on its own is meant to leave nothing.
    */
+  /**
+   * Everything the agent itself recorded, replacing what was read off its
+   * screen.
+   *
+   * A record is the conversation; a screen is a picture of part of one. Where
+   * both exist the record wins outright rather than being merged, because
+   * merging means deciding which of two accounts of the same sentence is the
+   * real one -- and the screen's account is the one that cannot see past the
+   * top of the grid.
+   *
+   * Events carry their own position, so a batch that arrives twice is a batch
+   * that changes nothing.
+   */
+  fromRecord(events: readonly { seq: number; message: Omit<Message, "id" | "revision"> }[]): boolean {
+    let changed = false;
+    for (const event of events) {
+      if (event.seq > 0 && event.seq <= this.recorded) continue;
+      this.recorded = Math.max(this.recorded, event.seq);
+      this.items.push({ ...event.message, id: this.nextId++, revision: 0 });
+      changed = true;
+    }
+    if (!changed) return false;
+    if (this.items.length > MAX_MESSAGES) this.items.splice(0, this.items.length - MAX_MESSAGES);
+    this.open = null;
+    this.agentOwned = false;
+    this.rev += 1;
+    return true;
+  }
+
+  /** Whether this conversation is coming from the agent's own record. */
+  get isRecorded(): boolean {
+    return this.recorded > 0;
+  }
+
   clear(): void {
     this.lastLocal = null;
+    this.recorded = 0;
     this.remembered = [];
     this.items = [];
     this.open = null;

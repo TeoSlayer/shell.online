@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -55,6 +56,13 @@ func (r *jsonlReader) Read() ([]Event, error) {
 		}
 		r.seq++
 		event.Seq = r.seq
+		event.Text = clamp(event.Text)
+		if event.Choice != nil {
+			event.Choice.Question = clamp(event.Choice.Question)
+			if len(event.Choice.Options) > maxOptions {
+				event.Choice.Options = event.Choice.Options[:maxOptions]
+			}
+		}
 		events = append(events, event)
 	}
 	return events, nil
@@ -68,7 +76,43 @@ func (r *jsonlReader) Read() ([]Event, error) {
  * and so does a dash already in the path, and a session started at `/` is a
  * directory called `-`. The record states where it was started; it is asked.
  */
-func newestStartedIn(pattern, dir string, since time.Time, statesDir func(path, dir string) bool) (string, error) {
+/*
+ * Whether a file has already been looked at, and what it said.
+ *
+ * Deciding which record belongs to a session means opening candidates and
+ * reading the top of each, and a session that never runs an agent asks that
+ * question for as long as it lives. A machine that has been used for a while
+ * has hundreds of candidates, so asked every second it is real work for an
+ * answer that cannot have changed: a record states the directory it was
+ * started in once, at the top, and never restates it.
+ *
+ * So the answer is kept against the file's modification time. A file that has
+ * not changed is not reopened; one that has is asked again.
+ */
+var scanned sync.Map // path -> scanResult
+
+type scanResult struct {
+	at time.Time
+	// dir is what the record itself says it was started in, which is a fact
+	// about the file and not about the question being asked of it. Caching the
+	// answer to "does this belong to /x" instead would answer for /y too.
+	dir string
+}
+
+// statedDir returns the directory a record says it was started in, reading the
+// file only when it has changed since the last time it was asked.
+func statedDir(path string, at time.Time, read func(path string) string) string {
+	if cached, ok := scanned.Load(path); ok {
+		if result, ok := cached.(scanResult); ok && result.at.Equal(at) {
+			return result.dir
+		}
+	}
+	stated := read(path)
+	scanned.Store(path, scanResult{at: at, dir: stated})
+	return stated
+}
+
+func newestStartedIn(pattern, dir string, since time.Time, read func(path string) string) (string, error) {
 	entries, err := filepath.Glob(pattern)
 	if err != nil || len(entries) == 0 {
 		return "", ErrNoTranscript
@@ -83,7 +127,8 @@ func newestStartedIn(pattern, dir string, since time.Time, statesDir func(path, 
 		if err != nil || info.ModTime().Before(since) {
 			continue
 		}
-		if !statesDir(path, dir) {
+		stated := statedDir(path, info.ModTime(), read)
+		if stated == "" || filepath.Clean(stated) != filepath.Clean(dir) {
 			continue
 		}
 		found = append(found, candidate{path: path, at: info.ModTime()})
@@ -95,13 +140,13 @@ func newestStartedIn(pattern, dir string, since time.Time, statesDir func(path, 
 	return found[0].path, nil
 }
 
-// headStates reads the first lines of a record looking for the directory it
+// headStates reads the first lines of a record for the directory it says it
 // was started in. A whole file is not worth reading for something stated at
 // the top of it.
-func headStates(path, dir string, field func(line []byte) (string, bool)) bool {
+func headStates(path string, field func(line []byte) (string, bool)) string {
 	file, err := os.Open(path)
 	if err != nil {
-		return false
+		return ""
 	}
 	defer file.Close()
 	scanner := bufio.NewScanner(file)
@@ -111,9 +156,9 @@ func headStates(path, dir string, field func(line []byte) (string, bool)) bool {
 		if !ok || stated == "" {
 			continue
 		}
-		return filepath.Clean(stated) == filepath.Clean(dir)
+		return stated
 	}
-	return false
+	return ""
 }
 
 // jsonField pulls one top-level string from a record without decoding the rest.

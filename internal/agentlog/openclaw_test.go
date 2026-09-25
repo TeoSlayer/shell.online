@@ -3,8 +3,10 @@ package agentlog
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 /*
@@ -193,5 +195,107 @@ func TestEveryAdapterCanBeAsked(t *testing.T) {
 		}
 		/* nil is a real answer; the call simply has to exist. */
 		_ = adapter.Answer(0)
+	}
+}
+
+/*
+ * A message is not a file. The record is written by the agent running in the
+ * session -- the same trust domain as the terminal's output -- but an answer
+ * with a pasted file in it should not become a frame nobody budgeted for.
+ */
+func TestAMessageIsCappedBeforeItIsSent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	write(t, path, map[string]any{
+		"type":      "assistant",
+		"timestamp": "2026-09-25T12:00:00.000Z",
+		"message":   map[string]any{"role": "assistant", "content": strings.Repeat("é", 400_000)},
+	})
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
+	if len(events) != 1 {
+		t.Fatalf("events = %d", len(events))
+	}
+	if len(events[0].Text) > 32*1024 {
+		t.Fatalf("text = %d bytes, want <= 32k", len(events[0].Text))
+	}
+	/* Cut on a rune boundary, so what arrives is still text. */
+	if !utf8.ValidString(events[0].Text) {
+		t.Fatal("the cut left invalid utf-8")
+	}
+}
+
+/* And a menu is bounded, however long the record says it is. */
+func TestAMenuIsBounded(t *testing.T) {
+	options := make([]any, 0, 200)
+	for i := 0; i < 200; i++ {
+		options = append(options, map[string]any{"label": "option"})
+	}
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	write(t, path, map[string]any{
+		"type":      "assistant",
+		"timestamp": "2026-09-25T12:00:00.000Z",
+		"message": map[string]any{"role": "assistant", "content": []any{
+			map[string]any{"type": "tool_use", "name": "AskUserQuestion", "input": map[string]any{
+				"questions": []any{map[string]any{"question": "pick", "options": options}},
+			}},
+		}},
+	})
+	events, _ := (&jsonlReader{path: path, decode: ClaudeCode{}.decode}).Read()
+	if len(events) != 1 || events[0].Choice == nil {
+		t.Fatalf("events = %+v", events)
+	}
+	if len(events[0].Choice.Options) > 12 {
+		t.Fatalf("options = %d", len(events[0].Choice.Options))
+	}
+}
+
+/*
+ * A record states the directory it was started in once, at the top, and never
+ * restates it -- so asking again costs a file open for an answer that cannot
+ * have changed. A session that never runs an agent asks for as long as it
+ * lives, against every candidate on the machine.
+ *
+ * What is cached is what the file said, not whether it matched: caching the
+ * answer to "does this belong to /x" would answer for /y too.
+ */
+func TestAFileIsReadOnceUntilItChanges(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", "-p")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "s.jsonl")
+	write(t, path, map[string]any{"type": "session", "cwd": "/tmp/one"})
+
+	reads := 0
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(string) string {
+		reads++
+		return "/tmp/one"
+	}
+	for i := 0; i < 5; i++ {
+		if got := statedDir(path, info.ModTime(), read); got != "/tmp/one" {
+			t.Fatalf("statedDir = %q", got)
+		}
+	}
+	if reads != 1 {
+		t.Fatalf("read the file %d times, want 1", reads)
+	}
+
+	/* The same file, asked about a different directory, is not re-read and
+	 * still says what it said. */
+	if got := statedDir(path, info.ModTime(), read); got != "/tmp/one" || reads != 1 {
+		t.Fatalf("statedDir = %q after %d reads", got, reads)
+	}
+
+	/* Changed, and it is asked again. */
+	later := info.ModTime().Add(time.Second)
+	if got := statedDir(path, later, func(string) string { reads++; return "/tmp/two" }); got != "/tmp/two" {
+		t.Fatalf("after a change statedDir = %q", got)
+	}
+	if reads != 2 {
+		t.Fatalf("reads = %d, want 2", reads)
 	}
 }

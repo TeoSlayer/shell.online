@@ -293,6 +293,15 @@ func runSharedProcess(
 
 	outputKicks := make(chan struct{}, 64)
 	outputEmitter := newOutputEmitter(connection, outputRing, frameCipher)
+	/*
+	 * The conversation an agent records, alongside the screen it draws.
+	 *
+	 * Sealed by the same emitter and therefore by the same cipher as output,
+	 * so the relay forwards it without being able to read it. It finds
+	 * nothing until an agent is actually running here, which for a session
+	 * that stays a shell is for ever; see cmd/shell/agent_tap.go.
+	 */
+	go followAgentRecord(relayContext, workingDirectory(), outputEmitter.sendFrame)
 	batchDone := make(chan struct{})
 	go batchOutput(relayContext, outputKicks, outputEmitter, batchDone)
 

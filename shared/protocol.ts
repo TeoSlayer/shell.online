@@ -19,6 +19,10 @@ export const enum Opcode {
   // host->DO acknowledgement for a Send frame, echoing the operation id, the dispatch token, and
   // a result code.
   SendAck = 0x0d,
+  // host->viewer frame carrying the conversation an agent has recorded, as JSON, sealed with the
+  // same frame cipher as Output. A full-screen agent's conversation cannot be recovered from its
+  // screen; every agent keeps a machine-readable record of it on the host. See internal/agentlog.
+  AgentEvent = 0x0e,
 }
 
 export const MAX_INPUT_CHUNK = 16 * 1024;

@@ -29,6 +29,13 @@ type TerminalOptions = ITerminalOptions &
   };
 
 export interface TerminalSurface {
+  /**
+   * The conversation an agent recorded, when the renderer can use one.
+   *
+   * Only the chat renderer implements it: an emulator draws the screen the
+   * agent painted and has nothing to do with a record of what it meant.
+   */
+  fromRecord?(payload: Uint8Array): void;
   readonly cols: number;
   readonly rows: number;
   options: {

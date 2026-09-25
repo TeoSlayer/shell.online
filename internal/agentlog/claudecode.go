@@ -43,8 +43,8 @@ func (ClaudeCode) Answer(index int) []byte {
 
 func (c ClaudeCode) Open(home, dir string, since time.Time) (Reader, error) {
 	pattern := filepath.Join(home, ".claude", "projects", "*", "*.jsonl")
-	path, err := newestStartedIn(pattern, dir, since, func(path, dir string) bool {
-		return headStates(path, dir, func(line []byte) (string, bool) { return jsonField(line, "cwd") })
+	path, err := newestStartedIn(pattern, dir, since, func(path string) string {
+		return headStates(path, func(line []byte) (string, bool) { return jsonField(line, "cwd") })
 	})
 	if err != nil {
 		return nil, err

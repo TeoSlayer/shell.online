@@ -582,6 +582,12 @@ export function TerminalPane({
           });
         },
         onFileFrame: (frame) => { fileClient.handle(frame); },
+        /*
+         * The conversation the agent recorded, for the renderer that can read
+         * one. An emulator has no use for it: it draws the screen the agent
+         * painted, which is the thing the record exists to replace.
+         */
+        onAgentEvents: (payload) => { term.fromRecord?.(payload); },
         onReadOnly: (value) => {
           setReadOnly(value);
           term.options.disableStdin = value || !canTypeRef.current;

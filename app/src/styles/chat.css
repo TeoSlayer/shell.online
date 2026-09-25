@@ -1127,3 +1127,47 @@
 .chat-body[data-shape="pre"] .md-table td {
   padding: 4px 12px 4px 0;
 }
+
+/* --- a question the agent is waiting on -------------------------- */
+
+/*
+ * The options an agent offered, as buttons. Only ever drawn from its own
+ * record, which states the question and every option: a menu read off a
+ * screen is a menu somebody has guessed at, and guessing wrong here presses a
+ * button nobody chose.
+ */
+.chat-choices {
+  display: flex;
+  margin-top: 9px;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-choice {
+  padding: 7px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-chip);
+  background: var(--white);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 520;
+  /* A whole finger on a phone, where these are most of the interface. */
+  min-height: 40px;
+  transition: transform 140ms var(--ease), background 140ms var(--ease);
+}
+
+.chat-choice:hover { background: color-mix(in srgb, var(--ink) 5%, var(--white)); }
+
+.chat-choice:active { transform: translateY(1px); }
+
+.chat-choice:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* Answered: what was chosen stays legible, the rest fades rather than going. */
+.chat-choices[data-answered] .chat-choice:disabled { opacity: 0.32; }
+
+.chat-choices[data-answered] .chat-choice:disabled:not([hidden]) { transform: none; }

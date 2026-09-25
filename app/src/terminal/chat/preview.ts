@@ -366,8 +366,11 @@ let scripted = true;
 let pending = "";
 /* Set by takeOver, so a case being set up is not typed over by the tour. */
 let abandoned = false;
+/* Everything the renderer sent to the program, so a harness can check it. */
+const sent: string[] = [];
 
 terminal.onData((data) => {
+  sent.push(data);
   if (scripted) return;
   for (const character of data) {
     if (character === "\x03") {
@@ -470,6 +473,14 @@ function wait(ms: number): Promise<void> {
  */
 (window as unknown as { session: unknown }).session = {
   write: (data: string) => terminal.write(data),
+  /*
+   * The conversation an agent recorded, as the host would send it. The chat
+   * renderer takes this instead of reading the screen; see agent-record.ts.
+   */
+  record: (batch: unknown) =>
+    terminal.fromRecord?.(new TextEncoder().encode(JSON.stringify(batch))),
+  /* What a chosen option actually sent to the program. */
+  typed: () => sent,
   /* The renderer itself, so its state can be inspected while a case is open. */
   inside: terminal,
   reset: () => terminal.reset(),

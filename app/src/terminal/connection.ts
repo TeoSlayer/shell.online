@@ -25,6 +25,13 @@ export interface HostState {
 }
 
 export interface ConnectionEvents {
+  /**
+   * The conversation an agent has recorded, as JSON bytes.
+   *
+   * Sent by the host beside the terminal's output and sealed with the same
+   * cipher, so it arrives only where the output does. See internal/agentlog.
+   */
+  onAgentEvents?(payload: Uint8Array): void;
   onStatus(status: ConnectionStatus, detail?: string): void;
   /*
    * The machine's state, which is not this viewer's connection state. A viewer
@@ -365,6 +372,15 @@ export class TerminalConnection {
       this.options.events.onData(frame.subarray(1), false);
     } else if (opcode === Opcode.FileResponse) {
       this.options.events.onFileFrame?.(frame);
+    } else if (opcode === Opcode.AgentEvent) {
+      /*
+       * The conversation an agent recorded, which arrives beside the screen it
+       * drew. Decrypted here like every other frame -- the relay forwarded it
+       * without being able to read it -- and handed on as data rather than as
+       * anything this decides to trust: see the renderer, which checks the
+       * shape of every event before drawing it.
+       */
+      this.options.events.onAgentEvents?.(frame.subarray(1));
     }
   }
 

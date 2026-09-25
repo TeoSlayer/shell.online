@@ -16,6 +16,7 @@ package agentlog
 import (
 	"errors"
 	"time"
+	"unicode/utf8"
 )
 
 // Kind is what a record says happened.
@@ -61,6 +62,34 @@ type Event struct {
 	Seq int `json:"seq"`
 	// Choice is set when the agent is waiting for the person to pick one.
 	Choice *Choice `json:"choice,omitempty"`
+}
+
+/*
+ * What one event may be, at the source.
+ *
+ * The record is written by the agent running in the session, so it is the
+ * same trust domain as the terminal's output -- but a message is not a file,
+ * and an agent that pastes one into its own answer should not turn into a
+ * frame nobody budgeted for. Capped here as well as downstream, because the
+ * cheapest place to not send something is before sending it.
+ */
+const maxEventText = 32 * 1024
+
+// maxOptions bounds a menu. Questions run to four; anything near this is not
+// a menu a person is being asked to read.
+const maxOptions = 12
+
+// clamp cuts a message to what is worth sending, on a rune boundary so what
+// arrives is still text.
+func clamp(text string) string {
+	if len(text) <= maxEventText {
+		return text
+	}
+	cut := maxEventText
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 // ErrNoTranscript means nothing on this machine looks like this session.
