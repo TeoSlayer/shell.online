@@ -687,6 +687,76 @@ describe("session registry", () => {
     expect((await call("PUT", `${path}/content`, { auth: tokens.access_token, body })).status).toBe(409);
   });
 
+  it("publishes owner-only summaries under their own consent and interval", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const path = `/api/cli/sessions/${session.id}`;
+    const off = await call("GET", `${path}/summary-policy`, { auth: tokens.access_token });
+    expect(off.status).toBe(200);
+    expect(off.body.enabled).toBe(false);
+    // Daily-briefing consent is not summary consent.
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { dailyBriefingEnabled: true } });
+    expect((await call("GET", `${path}/summary-policy`, { auth: tokens.access_token })).body.enabled).toBe(false);
+    const automation = await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: true } });
+    expect(automation.body).toMatchObject({ summariesEnabled: true, dailyBriefingEnabled: true });
+    const policy = await call("GET", `${path}/summary-policy`, { auth: tokens.access_token });
+    expect(policy.body).toMatchObject({ enabled: true, nextPublishAt: 0, ownerUid: expect.any(String) });
+    const body = { generation: policy.body.generation, observedAt: 1000, senderPublicKey: P256_PUBLIC_KEY_A, sealed: `ss1.${SESSION_SHARE_A}` };
+    expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body })).status).toBe(200);
+    expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body })).status).toBe(200);
+    expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body: { ...body, observedAt: 1001 } })).status).toBe(429);
+    expect((await call("GET", `/api/sessions/${session.id}/summary`, { auth: await idToken() })).body).toEqual(body);
+    expect((await call("GET", `/api/sessions/${session.id}/content`, { auth: await idToken() })).status).toBe(404);
+    expect(JSON.stringify((await call("GET", "/api/sessions", { auth: await idToken() })).body)).not.toContain(body.sealed);
+    for (const bad of [
+      { ...body, sealed: `sc1.${SESSION_SHARE_A}` },
+      { ...body, sealed: `ss1.${base64url(Buffer.alloc(6142))}` },
+      { ...body, title: "plaintext" },
+      { ...body, generation: "x" },
+    ]) expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body: bad })).status).toBe(400);
+    const otherMachine = await login({ label: "another machine" });
+    expect((await call("GET", `${path}/summary-policy`, { auth: otherMachine.access_token })).status).toBe(404);
+    expect((await call("PUT", `${path}/summary`, { auth: otherMachine.access_token, body })).status).toBe(404);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: false } });
+    expect((await call("GET", `/api/sessions/${session.id}/summary`, { auth: await idToken() })).status).toBe(404);
+    expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body })).status).toBe(403);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: true } });
+    expect((await call("PUT", `${path}/summary`, { auth: tokens.access_token, body })).status).toBe(409);
+    expect((await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: "yes" } })).status).toBe(400);
+  });
+
+  it("issues signed summary tickets only with a key, consent and quota", async () => {
+    const tokens = await login();
+    await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
+    const path = `/api/cli/sessions/${session.id}`;
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: true } });
+    // No key configured: fail closed without consuming the slot.
+    expect((await call("POST", `${path}/summary-ticket`, { auth: tokens.access_token })).status).toBe(503);
+    const bad = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN], summaryTicketKey: "not-a-key" });
+    expect((await call("POST", `${path}/summary-ticket`, { auth: tokens.access_token }, bad)).status).toBe(503);
+    const seed = Buffer.from("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "hex").toString("base64url");
+    const keyed = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN], summaryTicketKey: seed });
+    expect((await call("POST", `${path}/summary-ticket`)).status).toBe(401);
+    const issued = await call("POST", `${path}/summary-ticket`, { auth: tokens.access_token }, keyed);
+    expect(issued.status).toBe(200);
+    expect(Object.keys(issued.body).sort()).toEqual(["generation", "ownerUid", "ticket"]);
+    const policy = await call("GET", `${path}/summary-policy`, { auth: tokens.access_token }, keyed);
+    expect(issued.body.generation).toBe(policy.body.generation);
+    const [, payload, signature] = issued.body.ticket.match(/^st1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/)!;
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    expect(claims).toMatchObject({ v: 1, uid: issued.body.ownerUid, session_id: session.id, generation: policy.body.generation });
+    const { createPublicKey, verify } = await import("node:crypto");
+    const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: Buffer.from("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "hex").toString("base64url") }, format: "jwk" });
+    expect(verify(null, Buffer.from(`st1.${payload}`), key, Buffer.from(signature, "base64url"))).toBe(true);
+    expect((await call("POST", `${path}/summary-ticket`, { auth: tokens.access_token }, keyed)).status).toBe(429);
+    const otherMachine = await login({ label: "another machine" });
+    expect((await call("POST", `${path}/summary-ticket`, { auth: otherMachine.access_token }, keyed)).status).toBe(404);
+    await call("PUT", `${path}/automation`, { auth: tokens.access_token, body: { summariesEnabled: false } });
+    expect((await call("POST", `${path}/summary-ticket`, { auth: tokens.access_token }, keyed)).status).toBe(403);
+    // The browser can neither mint tickets nor publish.
+    expect((await call("POST", `/api/sessions/${session.id}/summary-ticket`, { auth: await idToken() }, keyed)).status).not.toBe(200);
+  });
+
   it("registers from the CLI and lists in the web app", async () => {
     const tokens = await login();
     const created = await call("POST", "/api/sessions", { auth: tokens.access_token, body: session });
@@ -2491,7 +2561,7 @@ describe("CLI session automation settings", () => {
     expect((await call("PUT", cliPath, { body: { mcpTeamAccess: true } })).status).toBe(401);
   });
 
-  it("reads the three switches and nothing else", async () => {
+  it("reads the four switches and nothing else", async () => {
     const { tokens } = await orgWithColleague();
     const result = await call("GET", cliPath, { auth: tokens.access_token });
     expect(result.status).toBe(200);
@@ -2499,6 +2569,7 @@ describe("CLI session automation settings", () => {
       mcpTeamAccess: false,
       dailyBriefingEnabled: false,
       dailyBriefingTeamAccess: false,
+      summariesEnabled: false,
     });
   });
 
@@ -2577,6 +2648,7 @@ describe("CLI session automation settings", () => {
       mcpTeamAccess: true,
       dailyBriefingEnabled: false,
       dailyBriefingTeamAccess: true,
+      summariesEnabled: false,
     });
   });
 
@@ -2605,6 +2677,7 @@ describe("CLI session automation settings", () => {
       mcpTeamAccess: true,
       dailyBriefingEnabled: false,
       dailyBriefingTeamAccess: true,
+      summariesEnabled: false,
     });
   });
 

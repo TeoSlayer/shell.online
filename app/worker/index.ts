@@ -59,6 +59,8 @@ export interface Env {
   STATS_TOKEN?: string;
   /** Shared secret with the relay for live team MCP authorization checks. */
   MCP_TEAM_CHECK_TOKEN?: string;
+  /** Secret: b64u Ed25519 seed that signs summary tickets. Absent fails the ticket route closed. */
+  SUMMARY_TICKET_KEY?: string;
   /** Accounts the statistics leave out: ours, not customers'. See internal-accounts.ts. */
   STATS_EXCLUDE?: string;
 }
@@ -161,6 +163,7 @@ function routerFor(env: Env): NodeHandler {
     statsToken: env.STATS_TOKEN && env.STATS_TOKEN.length >= 32 ? env.STATS_TOKEN : undefined,
     jevApiKey: env.JEV_API_KEY?.trim() || undefined,
     mcpTeamCheckToken: env.MCP_TEAM_CHECK_TOKEN && env.MCP_TEAM_CHECK_TOKEN.length >= 32 ? env.MCP_TEAM_CHECK_TOKEN : undefined,
+    summaryTicketKey: env.SUMMARY_TICKET_KEY?.trim() || undefined,
     excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
     log: (message, error) => console.error(message, error),
     sessionLiveness: liveness,

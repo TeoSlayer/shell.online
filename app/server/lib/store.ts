@@ -1,5 +1,6 @@
 import type { Invite, Membership, Organization, Role } from "./orgs";
 import type { ContentWriteResult, SessionContent, SessionContentPolicy } from "./session-content";
+import type { SessionSummary, SessionSummaryPolicy, SummaryTicketClaim, SummaryWriteResult } from "./session-summary";
 import type { McpFlow, McpFlowEvent } from "./mcp-flows";
 import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
 import type { McpTeamGrantReport, McpTeamHostRequest, McpTeamRequest, McpTeamReportResult, McpTeamRequestResult } from "./mcp-team";
@@ -130,6 +131,12 @@ export interface Store {
   sessionContentPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionContentPolicy | null>;
   putSessionContent(orgId: string, sessionId: string, ownerUid: string, deviceId: string, content: SessionContent, now?: number): Promise<ContentWriteResult>;
   getSessionContent(orgId: string, sessionId: string, ownerUid: string): Promise<SessionContent | null>;
+  /* Owner-only summaries: the publisher is the session's own linked machine, as for content. */
+  sessionSummaryPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string, now?: number): Promise<SessionSummaryPolicy | null>;
+  putSessionSummary(orgId: string, sessionId: string, ownerUid: string, deviceId: string, summary: SessionSummary, now?: number): Promise<SummaryWriteResult>;
+  getSessionSummary(orgId: string, sessionId: string, ownerUid: string): Promise<SessionSummary | null>;
+  /** Records a ticket issuance, at most once per SUMMARY_TICKET_INTERVAL_MS per session. */
+  claimSummaryTicket(orgId: string, sessionId: string, ownerUid: string, deviceId: string, now?: number): Promise<SummaryTicketClaim>;
 
   /* ---- MCP flow feed ---- */
   /**

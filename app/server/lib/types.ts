@@ -291,13 +291,16 @@ export interface SessionRecord {
   mcpTeamAccess?: boolean;
   dailyBriefingEnabled?: boolean;
   dailyBriefingTeamAccess?: boolean;
+  summariesEnabled?: boolean;
 }
 
-/** The three independent automation switches a session owner may set. */
+/** The independent automation switches a session owner may set. */
 export interface SessionAutomationConsent {
   mcpTeamAccess: boolean;
   dailyBriefingEnabled: boolean;
   dailyBriefingTeamAccess: boolean;
+  /** Sanitized terminal output may go to the attested summarizer; results are owner-only. */
+  summariesEnabled: boolean;
 }
 
 /**
