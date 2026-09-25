@@ -40,7 +40,7 @@ function commit() {
   harness.pending = undefined;
   harness.cleanup = effect() || undefined;
 }
-function render(sessions: SessionRecord[] | null, effects = true) {
+function RenderHarness(sessions: SessionRecord[] | null, effects = true) {
   const result = useSessionSummaries(sessions);
   if (effects) commit();
   return result;
@@ -64,17 +64,17 @@ describe("session summaries", () => {
   });
 
   it("makes no request while locked or for sessions that are not eligible", async () => {
-    render([session({ summariesEnabled: false }), session({ id: "other", ownerUid: "another" })]); await settle();
+    RenderHarness([session({ summariesEnabled: false }), session({ id: "other", ownerUid: "another" })]); await settle();
     expect(harness.request).not.toHaveBeenCalled();
     harness.vault.status = "locked";
-    render([session()]); await settle();
+    RenderHarness([session()]); await settle();
     expect(harness.request).not.toHaveBeenCalled();
     expect(harness.vault.openSummary).not.toHaveBeenCalled();
   });
 
   it("reads the published envelope, decrypts it and polls", async () => {
-    expect(render([session()])).toEqual({}); await settle();
-    expect(render([session()])).toEqual({ s1: summary });
+    expect(RenderHarness([session()])).toEqual({}); await settle();
+    expect(RenderHarness([session()])).toEqual({ s1: summary });
     expect(harness.request).toHaveBeenCalledWith("/api/sessions/s1/summary", expect.anything());
     expect(harness.vault.openSummary).toHaveBeenCalledWith("s1", envelope);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -82,19 +82,19 @@ describe("session summaries", () => {
   });
 
   it.each(["lock", "disable", "uid", "vault key"])("hides decrypted summaries synchronously on %s", async (change) => {
-    render([session()]); await settle();
-    expect(render([session()])).toEqual({ s1: summary });
+    RenderHarness([session()]); await settle();
+    expect(RenderHarness([session()])).toEqual({ s1: summary });
     let records = [session()];
     if (change === "lock") harness.vault.status = "locked";
     if (change === "disable") records = [session({ summariesEnabled: false })];
     if (change === "uid") harness.vault.uid = "someone-else";
     if (change === "vault key") harness.vault.publicKey = "rotated";
-    expect(render(records, false)).toEqual({});
+    expect(RenderHarness(records, false)).toEqual({});
   });
 
   it("shows nothing when the envelope fails to open or the guard rejects it", async () => {
     harness.vault.openSummary.mockResolvedValue(null);
-    render([session()]); await settle();
-    expect(render([session()])).toEqual({});
+    RenderHarness([session()]); await settle();
+    expect(RenderHarness([session()])).toEqual({});
   });
 });

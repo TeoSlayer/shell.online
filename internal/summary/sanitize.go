@@ -143,7 +143,8 @@ var redactions = []redaction{
 	{regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b`), redacted},
 	{regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}\b`), redacted},
 	{regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`), redacted},
-	{regexp.MustCompile(`(?i)hooks\.slack\.com/services/[A-Za-z0-9/_-]+`), "hooks.slack.com/services/" + redacted},
+	// Slack incoming-webhook secrets are the path after /services/ (team, bot, token).
+	{regexp.MustCompile(`\bservices/T[A-Z0-9]{6,}/B[A-Z0-9]{6,}/[A-Za-z0-9]{16,}`), "services/" + redacted},
 	{regexp.MustCompile(`\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b`), redacted},
 	{regexp.MustCompile(`\bwhsec_[A-Za-z0-9]{16,}\b`), redacted},
 	{regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`), redacted},

@@ -99,3 +99,12 @@ func TestRedactLabel(t *testing.T) {
 		t.Fatalf("label not cleaned: %q", got)
 	}
 }
+
+func TestRedactsSlackWebhookSecret(t *testing.T) {
+	// Assembled at runtime so the synthetic URL never trips secret scanners.
+	webhook := "https://hooks." + "slack.com/services/" + "T0123ABCD/" + "B0456EFGH/" + "abcdefghijklmnopqrstuvwx"
+	got := Redact("posting to " + webhook + " now")
+	if strings.Contains(got, "abcdefghijklmnopqrstuvwx") || strings.Contains(got, "B0456EFGH") {
+		t.Fatalf("webhook secret survived: %q", got)
+	}
+}
