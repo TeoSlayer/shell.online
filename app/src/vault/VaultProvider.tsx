@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { openSessionContent, type SessionContent } from "../lib/session-content-crypto";
+import { openSessionSummary, type SessionSummary } from "../lib/session-summary-crypto";
 import { fetchSessions, fetchVault, saveVault, shareSessionKeys, updateVaultUnlocks, type VaultRecord } from "../lib/api";
 import {
   addVaultPassword,
@@ -78,6 +79,8 @@ interface VaultValue {
   /** Opens a password sealed to this person: to their vault, or to this browser's old key. */
   openShare(sessionId: string, share: SealedShare | undefined): Promise<string | null>;
   openContent(sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}): Promise<SessionContent | null>;
+  /** Opens an owner-only `ss1.` summary; null when locked, stale or failing the output guard. */
+  openSummary(sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}): Promise<SessionSummary | null>;
   /** Seals a password to a colleague's vault. Null when they have none. */
   sealTo(
     recipient: { uid: string; accountKey?: string },
@@ -429,6 +432,16 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     return opened.current === key && lifecycle.current.generation === gen ? value : null;
   }, [uid]);
 
+  const openSummary = useCallback(async (sessionId: string, envelope: SealedShare & {generation: string; observedAt: number}) => {
+    if (!mounted.current || lifecycle.current.uid !== uid) return null;
+    const key = opened.current;
+    if (!key) return null;
+    const gen = lifecycle.current.generation;
+    const value = await openSessionSummary(key.privateKey, sessionId, uid,
+      envelope.generation, envelope.observedAt, envelope);
+    return opened.current === key && lifecycle.current.generation === gen ? value : null;
+  }, [uid]);
+
   const sealTo = useCallback(
     async (recipient: { uid: string; accountKey?: string }, sessionId: string, password: string) => {
       if (!recipient.accountKey) return null;
@@ -535,6 +548,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       retry,
       openShare,
       openContent,
+      openSummary,
       sealTo,
       keep,
       uid,
@@ -546,7 +560,7 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     [
       status, error, publicKey, print, remembered, remote, prepare, commit, unlock,
       unlockWithPassword, unlockWithPasskey, setPassword, addPasskey, retry,
-      openShare, openContent, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
+      openShare, openContent, openSummary, sealTo, keep, uid, lock, sealTeamKey, openTeamKey,
     ],
   );
 

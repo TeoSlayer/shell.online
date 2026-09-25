@@ -1,0 +1,20 @@
+{
+  "note": "ss1. vector: keys and nonce reused from internal/account/testdata/session-content-v1.json. AAD escapes U+2028/U+2029 as Go encoding/json does (SetEscapeHTML(false)); plaintext is compact JSON in struct order version,title,summary,state,source,observedAt.",
+  "accountPublicKey": "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+  "recipientPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE",
+  "senderPublicKey": "BHzyexiNA09-ilI4AwS1GsPAiWnid_IbNaYLSPxHZpl4B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+  "senderPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI",
+  "nonce": "AAECAwQFBgcICQoL",
+  "sessionId": "synthetic<&> session",
+  "recipientUid": "synthetic-owner",
+  "generation": "synthetic-generation-1",
+  "summary": {
+    "version": 1,
+    "title": "Tests passing after auth refactor",
+    "summary": "Ran the unit suite: 212 passed, 0 failed.\nNow idle at the prompt.",
+    "state": "waiting_for_input",
+    "source": "enclave",
+    "observedAt": 1800000000123
+  },
+  "sealed": "ss1.AAECAwQFBgcICQoLXwqsYh1iWSNWL8tpsartLgyrqknfhCF0Wcq5VdgADQEY6xrcBiBDQTRWSCRybyppJT9hllNZUxJViJQdo02z44AOxxNGpZ6aptzJrAEadFQSzjxwbdcJWfHpwnrlPQsx0onnZgLHPTrfM-TcPXwfs4z0T4TdMAQvSmd8o0lsBZfICaxQf9Myjl_KLPNoZ_XfKIhIfwwZJMlA5k9tf6MZ3T--M25olJuzZ7Nzhz5n3HGPJFGp91KGhYgSmZ_PDViqVu79_nUWJJgYUDj1RoyOd5d7FEZq0qlPv5ApaQThx62NtQ"
+}

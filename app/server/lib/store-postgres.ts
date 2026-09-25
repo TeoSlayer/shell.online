@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { CONTENT_INTERVAL_MS, contentPublisher, type SessionContent, type SessionContentPolicy, type ContentWriteResult } from "./session-content";
+import { SUMMARY_INTERVAL_MS, SUMMARY_TICKET_INTERVAL_MS, type SessionSummary, type SessionSummaryPolicy, type SummaryTicketClaim, type SummaryWriteResult } from "./session-summary";
 import {
   MCP_FLOW_GLOBAL_LIMIT,
   MCP_FLOW_LIMIT,
@@ -247,6 +248,7 @@ function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
     mcpTeamAccess: row.mcp_team_access,
     dailyBriefingEnabled: row.daily_briefing_enabled,
     dailyBriefingTeamAccess: row.daily_briefing_team_access,
+    summariesEnabled: row.summaries_enabled,
   }) as unknown as SessionRecord;
   /*
    * An empty list and an absent one mean different things to the browser: the
@@ -872,6 +874,65 @@ export class PostgresStore implements Store {
     const row = await this.row(`SELECT c.* FROM session_content c JOIN sessions s ON s.uid=c.session_uid AND s.id=c.session_id
       WHERE s.org_id=$1 AND s.id=$2 AND COALESCE(s.owner_uid,s.uid)=$3 AND s.daily_briefing_enabled=true AND c.sealed IS NOT NULL`, [orgId, sessionId, ownerUid]);
     return row ? { generation: row.generation as string, observedAt: row.observed_at as number, senderPublicKey: row.sender_public_key as string, sealed: row.sealed as string } : null;
+  }
+
+  /*
+   * Summaries mirror content: the session row is locked first, in the same
+   * order as the invalidation triggers, and the summary row is created on
+   * demand inside that transaction.
+   */
+  private async withSummarySession<T>(orgId: string, sessionId: string, ownerUid: string, deviceId: string, missing: T, action: (client: pg.PoolClient, session: SessionRecord, state: Row) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const found = await client.query<Row>("SELECT * FROM sessions WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 FOR UPDATE", [orgId, sessionId, ownerUid]);
+      const session = found.rows[0] ? toSession(found.rows[0], []) : null;
+      if (!session || !contentPublisher(session, orgId, ownerUid, deviceId)) {
+        await client.query("ROLLBACK");
+        return missing;
+      }
+      await client.query("INSERT INTO session_summary (session_uid, session_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [session.uid, sessionId]);
+      const state = await client.query<Row>("SELECT * FROM session_summary WHERE session_uid = $1 AND session_id = $2", [session.uid, sessionId]);
+      const result = await action(client, session, state.rows[0]);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try { await client.query("ROLLBACK"); } catch { /* Preserve original error. */ }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async sessionSummaryPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionSummaryPolicy | null> {
+    return this.withSummarySession<SessionSummaryPolicy | null>(orgId, sessionId, ownerUid, deviceId, null, async (_client, session, state) => ({
+      enabled: session.summariesEnabled === true, ownerUid, generation: state.generation as string,
+      nextPublishAt: state.published_at === null ? 0 : Number(state.published_at) + SUMMARY_INTERVAL_MS,
+    }));
+  }
+
+  async putSessionSummary(orgId: string, sessionId: string, ownerUid: string, deviceId: string, summary: SessionSummary, now = Date.now()): Promise<SummaryWriteResult> {
+    return this.withSummarySession<SummaryWriteResult>(orgId, sessionId, ownerUid, deviceId, "missing", async (client, session, state) => {
+      if (!session.summariesEnabled) return "disabled";
+      if (summary.generation !== state.generation) return "stale";
+      if (state.observed_at !== null && Number(state.observed_at) === summary.observedAt && state.sender_public_key === summary.senderPublicKey && state.sealed === summary.sealed) return "stored";
+      if (state.published_at !== null && now < Number(state.published_at) + SUMMARY_INTERVAL_MS) return "limited";
+      await client.query("UPDATE session_summary SET observed_at=$3, sender_public_key=$4, sealed=$5, published_at=$6 WHERE session_uid=$1 AND session_id=$2", [session.uid, sessionId, summary.observedAt, summary.senderPublicKey, summary.sealed, now]);
+      return "stored";
+    });
+  }
+
+  async getSessionSummary(orgId: string, sessionId: string, ownerUid: string): Promise<SessionSummary | null> {
+    const row = await this.row(`SELECT m.* FROM session_summary m JOIN sessions s ON s.uid=m.session_uid AND s.id=m.session_id
+      WHERE s.org_id=$1 AND s.id=$2 AND COALESCE(s.owner_uid,s.uid)=$3 AND s.summaries_enabled=true AND m.sealed IS NOT NULL`, [orgId, sessionId, ownerUid]);
+    return row ? { generation: row.generation as string, observedAt: Number(row.observed_at), senderPublicKey: row.sender_public_key as string, sealed: row.sealed as string } : null;
+  }
+
+  async claimSummaryTicket(orgId: string, sessionId: string, ownerUid: string, deviceId: string, now = Date.now()): Promise<SummaryTicketClaim> {
+    return this.withSummarySession<SummaryTicketClaim>(orgId, sessionId, ownerUid, deviceId, { result: "missing" }, async (client, session, state) => {
+      if (!session.summariesEnabled) return { result: "disabled" };
+      if (state.ticket_issued_at !== null && now < Number(state.ticket_issued_at) + SUMMARY_TICKET_INTERVAL_MS) return { result: "limited" };
+      await client.query("UPDATE session_summary SET ticket_issued_at=$3 WHERE session_uid=$1 AND session_id=$2", [session.uid, sessionId, now]);
+      return { result: "issued", generation: state.generation as string, ownerUid };
+    });
   }
 
   /* ---- MCP flow feed ---- */
@@ -2025,9 +2086,10 @@ export class PostgresStore implements Store {
         `UPDATE sessions
          SET mcp_team_access = COALESCE($4::boolean, mcp_team_access),
              daily_briefing_enabled = COALESCE($5::boolean, daily_briefing_enabled),
-             daily_briefing_team_access = COALESCE($6::boolean, daily_briefing_team_access)
+             daily_briefing_team_access = COALESCE($6::boolean, daily_briefing_team_access),
+             summaries_enabled = COALESCE($7::boolean, summaries_enabled)
          WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 RETURNING *`,
-        [orgId, sessionId, ownerUid, consent.mcpTeamAccess, consent.dailyBriefingEnabled, consent.dailyBriefingTeamAccess],
+        [orgId, sessionId, ownerUid, consent.mcpTeamAccess, consent.dailyBriefingEnabled, consent.dailyBriefingTeamAccess, consent.summariesEnabled],
       );
       row = updated.rows[0];
       if (row && consent.mcpTeamAccess === false) {
