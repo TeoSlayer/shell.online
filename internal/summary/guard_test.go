@@ -75,3 +75,26 @@ func TestInjectionLikeTextIsNeutralised(t *testing.T) {
 		t.Fatalf("cleaned text fails the guard: %v", err)
 	}
 }
+
+// The host gate must be at least as strict as the browser's, or the browser
+// silently drops summaries the host already published.
+func TestCheckTextMatchesBrowserRules(t *testing.T) {
+	reject := []string{
+		"See data:text/html,x", "Open javascript:alert(1)", "Uploaded to 203.0.113.7:8443",
+		"Build &lt;ok&gt;", "Ref [a] [b]", "Contact ops@example.internal", "Visit example.cloud",
+	}
+	for _, value := range reject {
+		if CheckText(value, 480, true) == nil {
+			t.Errorf("accepted %q", value)
+		}
+		if cleaned := CleanText(value, 480, true); cleaned != "" && CheckText(cleaned, 480, true) != nil {
+			t.Errorf("CleanText(%q) = %q still fails the gate", value, cleaned)
+		}
+	}
+	accept := []string{"Upgraded vite@6.0.0 and react@18.2.0", "Changed file: main.go", "Ran deploy.sh and parser.cc"}
+	for _, value := range accept {
+		if err := CheckText(value, 480, true); err != nil {
+			t.Errorf("rejected %q: %v", value, err)
+		}
+	}
+}

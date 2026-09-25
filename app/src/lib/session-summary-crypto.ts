@@ -38,9 +38,9 @@ const SURROGATE = /[\ud800-\udfff]/u;
  * e-mail or IP address, no Markdown link, image or fence, no HTML or entity.
  */
 const LINK_OR_MARKUP = [
-  /\b[a-z][a-z0-9+.-]{1,20}:\/\/|\bwww\.|\b(?:data|javascript|vbscript|file|mailto|tel|sms):/i,
+  /\b[a-z][a-z0-9+.-]{1,20}:\/\/|\bwww\.|\b(?:data|javascript|vbscript|file|mailto|tel|sms):\S/i,
   /\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud)\b/i,
-  /[^\s@]+@[^\s@]+\.[^\s@]+/,
+  /[^\s@]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/i,
   /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/,
   /<[a-z/!?][^>]*>|\]\(|!\[|```|\[[^\]]*\]\s*\[|&[a-z]+;|&#/i,
 ];

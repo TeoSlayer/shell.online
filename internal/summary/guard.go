@@ -20,15 +20,23 @@ var (
 	urlPattern = regexp.MustCompile(`(?i)(?:\b[a-z][a-z0-9+.-]{1,31}://|\bwww\.)[^\s<>"']*`)
 	// Bare domains on TLDs that are common in links but rare as file
 	// extensions (so main.go, deploy.sh and parser.cc survive).
-	domainPattern = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|dev|app|ai|co|xyz|info|biz|ru|cn|online|site|link|gg|top|club|us|uk|ly|tk|zip|mov|click|live|shop)\b(?:[/:?#][^\s<>"']*)?`)
-	emailPattern  = regexp.MustCompile(`(?i)\b[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+\b`)
-	imagePattern  = regexp.MustCompile(`!\[([^\]\n]{0,200})\]\([^)\n]*\)`)
-	linkPattern   = regexp.MustCompile(`\[([^\]\n]{0,200})\]\([^)\n]*\)`)
-	refPattern    = regexp.MustCompile(`(?m)^\s*\[[^\]\n]{1,100}\]:\s*\S+.*$`)
-	tagPattern    = regexp.MustCompile(`</?[A-Za-z!][^>\n]{0,500}>`)
-	fencePattern  = regexp.MustCompile("`{3,}[^\\n]*")
-	spacePattern  = regexp.MustCompile(`[ \t]+`)
-	blankPattern  = regexp.MustCompile(`\n{3,}`)
+	domainPattern = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud|club|us|zip|mov)\b(?:[/:?#][^\s<>"']*)?`)
+	// The last label must be alphabetic, so package specifiers such as
+	// vite@6.0.0 are not mistaken for addresses.
+	emailPattern = regexp.MustCompile(`(?i)[^\s@]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b`)
+	// Link schemes that need no "//"; a following non-space keeps prose such
+	// as "file: main.go" intact.
+	schemePattern  = regexp.MustCompile(`(?i)\b(?:data|javascript|vbscript|file|mailto|tel|sms):\S`)
+	ipPattern      = regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b`)
+	entityPattern  = regexp.MustCompile(`(?i)&[a-z]+;|&#`)
+	refLinkPattern = regexp.MustCompile(`\[[^\]]*\]\s*\[`)
+	imagePattern   = regexp.MustCompile(`!\[([^\]\n]{0,200})\]\([^)\n]*\)`)
+	linkPattern    = regexp.MustCompile(`\[([^\]\n]{0,200})\]\([^)\n]*\)`)
+	refPattern     = regexp.MustCompile(`(?m)^\s*\[[^\]\n]{1,100}\]:\s*\S+.*$`)
+	tagPattern     = regexp.MustCompile(`</?[A-Za-z!][^>\n]{0,500}>`)
+	fencePattern   = regexp.MustCompile("`{3,}[^\\n]*")
+	spacePattern   = regexp.MustCompile(`[ \t]+`)
+	blankPattern   = regexp.MustCompile(`\n{3,}`)
 )
 
 // ErrUnsafeText is returned by CheckText; the message says which rule failed
@@ -70,8 +78,16 @@ func CheckText(value string, maxRunes int, multiline bool) error {
 		return errors.New("control or format character")
 	case urlPattern.MatchString(value) || domainPattern.MatchString(value):
 		return errors.New("link")
+	case schemePattern.MatchString(value):
+		return errors.New("link")
 	case emailPattern.MatchString(value):
 		return errors.New("e-mail address")
+	case ipPattern.MatchString(value):
+		return errors.New("IP address")
+	case entityPattern.MatchString(value):
+		return errors.New("HTML entity")
+	case refLinkPattern.MatchString(value):
+		return errors.New("markdown reference link")
 	case strings.Contains(value, "](") || strings.Contains(value, "!["):
 		return errors.New("markdown link")
 	case strings.ContainsRune(value, '`'):
@@ -109,7 +125,13 @@ func CleanText(value string, maxRunes int, multiline bool) string {
 	value = refPattern.ReplaceAllString(value, "")
 	value = tagPattern.ReplaceAllString(value, "")
 	value = urlPattern.ReplaceAllString(value, "(link removed)")
+	value = schemePattern.ReplaceAllString(value, "(link removed)")
 	value = emailPattern.ReplaceAllString(value, "(address removed)")
+	value = ipPattern.ReplaceAllString(value, "(address removed)")
+	value = entityPattern.ReplaceAllString(value, "")
+	value = refLinkPattern.ReplaceAllStringFunc(value, func(match string) string {
+		return strings.TrimRight(match[:len(match)-1], " \t\n") + "; ["
+	})
 	value = domainPattern.ReplaceAllString(value, "(link removed)")
 	value = strings.NewReplacer("`", "", "](", "] (", "![", "[", "<", "‹", ">", "›").Replace(value)
 
