@@ -156,3 +156,42 @@ func TestEveryAdapterIsNamed(t *testing.T) {
 		t.Fatalf("adapters = %v", seen)
 	}
 }
+
+/*
+ * A question is drawn as a numbered menu and a bare digit picks from it --
+ * no Return, no arrow keys. Verified by driving a real session to a question
+ * and writing "1", which left the screen saying the question had been
+ * answered "Red", the first option.
+ */
+func TestAQuestionIsAnsweredWithItsDigit(t *testing.T) {
+	for index, want := range map[int]string{0: "1", 1: "2", 8: "9"} {
+		if got := string((ClaudeCode{}).Answer(index)); got != want {
+			t.Fatalf("Answer(%d) = %q, want %q", index, got, want)
+		}
+	}
+	/* Past nine there are no digits left, and a wrong one presses a button
+	 * nobody chose. No question this harness asks runs that long. */
+	for _, index := range []int{-1, 9, 40} {
+		if got := (ClaudeCode{}).Answer(index); got != nil {
+			t.Fatalf("Answer(%d) = %q, want nil", index, got)
+		}
+	}
+}
+
+/* A harness nobody has watched being answered says so rather than guessing. */
+func TestAnUnknownMenuIsNotGuessedAt(t *testing.T) {
+	if got := (OpenClaw{}).Answer(0); got != nil {
+		t.Fatalf("Answer(0) = %q, want nil", got)
+	}
+}
+
+/* Every adapter answers the interface, so a new one cannot forget a method. */
+func TestEveryAdapterCanBeAsked(t *testing.T) {
+	for _, adapter := range Adapters() {
+		if adapter.Name() == "" {
+			t.Fatal("an adapter with no name")
+		}
+		/* nil is a real answer; the call simply has to exist. */
+		_ = adapter.Answer(0)
+	}
+}

@@ -18,6 +18,14 @@ type OpenClaw struct{}
 
 func (OpenClaw) Name() string { return "openclaw" }
 
+/*
+ * Not yet. The records say what was asked, but nothing here has been driven to
+ * one of this harness's menus to see how it expects to be answered, and a
+ * guess would press a button nobody chose. Until that is watched happening,
+ * the chat lets somebody type their reply.
+ */
+func (OpenClaw) Answer(int) []byte { return nil }
+
 func (o OpenClaw) Open(home, dir string, since time.Time) (Reader, error) {
 	/*
 	 * Sessions live under an agent's own directory, and there is more than one

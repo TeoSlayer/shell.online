@@ -75,7 +75,8 @@ type Reader interface {
 	Read() ([]Event, error)
 }
 
-// Adapter knows where one harness keeps its records and how to read them.
+// Adapter knows where one harness keeps its records, how to read them, and
+// how its questions are answered.
 //
 // Adding a harness is writing one of these. Nothing else in the product
 // changes, because everything downstream sees Event and not a format.
@@ -87,6 +88,14 @@ type Adapter interface {
 	// session apart from one the same person ran in the same directory last
 	// week.
 	Open(home, dir string, since time.Time) (Reader, error)
+	// Answer returns what to write to the pty to pick option `index` of a
+	// Choice, or nil where this harness's menu is not understood.
+	//
+	// It belongs to the adapter because it is the same knowledge as the
+	// record's format: how this particular program expects to be talked to.
+	// A nil answer is not a failure -- it means the chat should let somebody
+	// type their reply instead of pressing a button.
+	Answer(index int) []byte
 }
 
 /*

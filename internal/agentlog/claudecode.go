@@ -17,6 +17,30 @@ type ClaudeCode struct{}
 
 func (ClaudeCode) Name() string { return "claude-code" }
 
+/*
+ * A question is drawn as a numbered menu and a bare digit picks from it --
+ * no Return, no arrow keys. Verified against a real one: driving a session to
+ * `AskUserQuestion` and writing "1" left the screen saying
+ *
+ *     ⏺ User answered Claude's questions:
+ *       ⎿  · Which colour do you prefer? → Red
+ *
+ * The menu holds more entries than the record does: the harness adds its own
+ * "Type something" and "Chat about this" underneath. The record's options come
+ * first and in order, so option `index` is digit `index+1`, and the additions
+ * sit beyond the ones anybody can press a button for.
+ *
+ * Past nine there are no digits left. No question this harness asks comes
+ * close -- they run to four -- but a menu that did would silently select the
+ * wrong thing, so it refuses instead.
+ */
+func (ClaudeCode) Answer(index int) []byte {
+	if index < 0 || index > 8 {
+		return nil
+	}
+	return []byte{byte('1' + index)}
+}
+
 func (c ClaudeCode) Open(home, dir string, since time.Time) (Reader, error) {
 	pattern := filepath.Join(home, ".claude", "projects", "*", "*.jsonl")
 	path, err := newestStartedIn(pattern, dir, since, func(path, dir string) bool {
