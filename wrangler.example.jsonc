@@ -4,7 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-08-19",
   "compatibility_flags": ["enable_request_signal"],
-  "vars": { "MCP_CONTROL_ENABLED": "0" },
+  "vars": { "MCP_CONTROL_ENABLED": "0", "POSTHOG_ENABLED": "0" },
   "workers_dev": true,
   "assets": {
     "directory": "./dist",

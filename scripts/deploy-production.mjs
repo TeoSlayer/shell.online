@@ -25,6 +25,12 @@ export function validateProductionConfig(config) {
       !["0", "1"].includes(config.vars?.MCP_CONTROL_ENABLED)) {
     throw new Error("production target, pinned account, or explicit control gate is invalid");
   }
+  // Wrangler replaces every Worker var on deploy. A config that omits the flag
+  // silently turns relay analytics off (installs, sessions, viewers, MCP), so
+  // the choice must be written down, the same way as the control gate.
+  if (!["0", "1"].includes(config.vars?.POSTHOG_ENABLED)) {
+    throw new Error("production config must set vars.POSTHOG_ENABLED to \"0\" or \"1\"");
+  }
 }
 
 export function deployProduction({ argv = [], configPath = resolve("wrangler.production.jsonc"), executor } = {}) {
