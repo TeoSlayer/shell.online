@@ -1,4 +1,5 @@
 import { hasAnalyticsOptOut, isGpcOrDnt, isPublicAnalyticsUrl } from "./analytics";
+import { isLandingPath } from "../shared/landing-paths";
 
 // Public advertiser ID, not the server-side Conversion API token.
 export const X_PIXEL_ID = "rfilf";
@@ -14,7 +15,7 @@ type PixelQueue = ((...args: unknown[]) => void) & {
 export function initXPixel(): void {
   try {
     const url = new URL(window.location.href);
-    if (url.pathname !== "/" || !isPublicAnalyticsUrl(url) || isGpcOrDnt() || hasAnalyticsOptOut()) return;
+    if (!isLandingPath(url.pathname) || !isPublicAnalyticsUrl(url) || isGpcOrDnt() || hasAnalyticsOptOut()) return;
     // The vendor extracts this value itself. Refuse malformed/unbounded click IDs.
     const clicks = url.searchParams.getAll("twclid");
     if (clicks.length > 1 || (clicks.length === 1 && !/^[A-Za-z0-9_-]{1,256}$/.test(clicks[0]))) return;
@@ -28,7 +29,7 @@ export function initXPixel(): void {
     w.twq = twq;
     // Keep landing-page attribution, never the raw query/fragment or referrer.
     // The vendor replaces both location and a nonempty referrer with this URL.
-    twq("set", { page_location: "https://shell.online/" });
+    twq("set", { page_location: `https://shell.online${url.pathname || "/"}` });
     // Disable vendor defaults that capture button text, form fields, dataLayer
     // events and timed engagement. These switches are verified against uwt.js
     // by the real-script browser gate, not just a mocked queue.

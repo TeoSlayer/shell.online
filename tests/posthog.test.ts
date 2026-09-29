@@ -165,6 +165,9 @@ describe("PostHog explicit capture boundary", () => {
     const payload = posthogPayload("$pageview", ID, { surface: "terminal", route: "terminal", target: SECRET, source: SECRET, url: SECRET, content: SECRET, token: SECRET, $current_url: SECRET, $set: { email: SECRET } });
     expect(JSON.stringify(payload)).not.toContain(SECRET);
     expect(payload?.properties.$current_url).toBe("https://shell.online/s/:session");
+    const start = posthogPayload("$pageview", ID, { surface: "landing", route: "start" });
+    expect(start?.properties).toMatchObject({ $current_url: "https://shell.online/start/", $pathname: "/start/", $host: "shell.online", route: "start" });
+    expect(posthogPayload("landing_cta", ID, { target: "start_share" })?.properties.target).toBe("start_share");
     expect(payload?.properties.$process_person_profile).toBe(false);
     expect(payload?.properties.$geoip_disable).toBe(true);
     expect(posthogPayload(SECRET, ID)).toBeNull();
@@ -174,6 +177,8 @@ describe("PostHog explicit capture boundary", () => {
     for (const url of ["http://shell.online/", "https://evil.shell.online/", "https://stats.shell.online/", "https://app.shell.online/auth/callback?code=SECRET", "https://shell.online:444/", "https://shell.online/unknown"]) expect(analyticsRoute(new URL(url))).toBeNull();
     expect(analyticsRoute(new URL(`https://app.shell.online/sessions/${SECRET}?token=${SECRET}`))).toEqual({ surface: "app", route: "session" });
     expect(analyticsRoute(new URL("https://app.shell.online/game"))).toEqual({ surface: "game", route: "game" });
+    expect(analyticsRoute(new URL("https://shell.online/start/?utm_source=x&utm_medium=paid_social"))).toEqual({ surface: "landing", route: "start" });
+    expect(analyticsRoute(new URL("https://shell.online/start/other"))).toBeNull();
   });
   it("uses a finite acquisition source, never a raw URL/campaign/click ID", () => {
     expect(analyticsSource(new URL(`https://shell.online/?twclid=${SECRET}`), "")).toBe("x");

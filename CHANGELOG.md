@@ -4,6 +4,16 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A one-screen landing page at `/start/` for paid traffic, to test against
+  the home page. It says what shell does in one line and gives the three
+  setup steps: install, start your agent (`shell claude`, or tap Codex,
+  Hermes, OpenCode or Cursor), and scan the QR code. On a phone, "Send these
+  steps to my laptop" opens the share sheet. The page gets the home page's
+  analytics and X pixel, is kept out of search results, and reports as its
+  own route (`start`, `landing_start` on the statistics dashboard).
+
 ### Fixed
 
 - `npm run deploy:production` refuses a config that does not set

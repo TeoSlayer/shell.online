@@ -18,8 +18,8 @@ const EVENTS = new Set([
 ]);
 const VALUES: Record<string, ReadonlySet<string>> = {
   surface: new Set(["landing", "docs", "terminal", "app", "game", "relay"]),
-  route: new Set(["landing", "docs", "terminal", "login", "signup", "reset", "feedback", "account", "sessions", "session", "audit", "team", "join", "terms", "privacy", "machines", "game", "cli_authorize"]),
-  target: new Set(["install", "brew_install", "source_build", "run", "docs_command", "share", "skill", "start_nav", "start_hero", "start_footer", "start_bottom", "demo", "github_star", "signup_nav", "signup_hero", "signup_team", "signup_footer", "github", "signup", "signin", "docs", "app", "feedback", "session", "machine", "team", "vault", "automation", "account", "command", "invite", "cli", "unknown"]),
+  route: new Set(["landing", "start", "docs", "terminal", "login", "signup", "reset", "feedback", "account", "sessions", "session", "audit", "team", "join", "terms", "privacy", "machines", "game", "cli_authorize"]),
+  target: new Set(["install", "brew_install", "source_build", "run", "docs_command", "share", "skill", "start_nav", "start_hero", "start_footer", "start_bottom", "start_share", "demo", "github_star", "signup_nav", "signup_hero", "signup_team", "signup_footer", "github", "signup", "signin", "docs", "app", "feedback", "session", "machine", "team", "vault", "automation", "account", "command", "invite", "cli", "unknown"]),
   source: new Set(["x", "google", "github", "reddit", "hacker_news", "bing", "youtube", "linkedin", "facebook", "instagram", "direct", "internal", "other", "app", "newsletter", "product_hunt", "discord", "slack", "mastodon", "bluesky", "podcast"]),
   device: new Set(["mobile", "tablet", "desktop", "bot", "cli", "unknown"]),
   outcome: new Set([...OPERATION_OUTCOMES, "unsupported_os", "unsupported_arch", "download_failed", "checksum_mismatch", "unknown", "matched", "limit", "reset", "revoked", "error", "busy", "too_large", "conflict", "in_flight", "delivered", "delivery_uncertain"]),
@@ -108,7 +108,7 @@ export function posthogPayload(event: string, id: string, input: Record<string, 
   if (properties.route) {
     // Templates only. Never location.href, document.title, referrer or a real session ID.
     const host = properties.surface === "app" || properties.surface === "game" ? "app.shell.online" : "shell.online";
-    const path = properties.route === "landing" ? "/" : properties.route === "terminal" ? "/s/:session" : properties.route === "session" ? "/sessions/:session" :
+    const path = properties.route === "landing" ? "/" : properties.route === "start" ? "/start/" : properties.route === "terminal" ? "/s/:session" : properties.route === "session" ? "/sessions/:session" :
       properties.route === "join" ? "/join/:invite" : properties.route === "cli_authorize" ? "/cli/authorize" :
       properties.route === "docs" && properties.guide ? `/${properties.guide}` : `/${properties.route}`;
     properties.$current_url = `https://${host}${path}`;
