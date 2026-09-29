@@ -4,6 +4,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- `npm run deploy:production` refuses a config that does not set
+  `POSTHOG_ENABLED` to `"0"` or `"1"`. Since 0.23.1 the relay has been
+  deployed with a config that left the flag out, and because Wrangler replaces
+  every Worker variable on deploy, relay analytics (downloads, installs,
+  sessions, viewers and MCP results) silently stopped on 23 September. The
+  accounts app was unaffected because its flag is committed. Production needs
+  `"POSTHOG_ENABLED": "1"` in `wrangler.production.jsonc` and a redeploy to
+  restore it.
+
 ## [0.23.3] — 2026-09-25
 
 ### Fixed
