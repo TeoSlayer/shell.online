@@ -35,8 +35,8 @@
 
       <div class="start-layout">
         <section class="start-intro">
-          <h1>Use any coding agent from your phone.</h1>
-          <p>Free and open source. No account needed.</p>
+          <h1 data-slot="headline">Use any coding agent from your phone.</h1>
+          <p data-slot="subline">Free and open source. No account needed.</p>
         </section>
 
         <section class="start-how" aria-labelledby="start-how-title">
@@ -62,7 +62,7 @@
                 <span class="start-step-title">Start your agent through shell</span>
               </div>
               <div class="start-command">
-                <code id="start-run">shell claude</code>
+                <code id="start-run" data-slot="run">shell claude</code>
                 <button type="button" class="start-copy" data-copy="run">Copy</button>
               </div>
               <p class="start-agents">or
@@ -83,7 +83,7 @@
       </div>
 
       <div class="start-send">
-        <button type="button" id="start-send">Send these steps to my laptop</button>
+        <button type="button" id="start-send" data-slot="send">Send these steps to my laptop</button>
         <p id="start-status" role="status" aria-live="polite"></p>
       </div>
     </main>

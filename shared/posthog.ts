@@ -96,6 +96,10 @@ export function posthogPayload(event: string, id: string, input: Record<string, 
   if (typeof input.campaign_source === "string" && VALUES.source.has(input.campaign_source) &&
       !["direct", "internal", "app", "other"].includes(input.campaign_source)) properties.utm_source = input.campaign_source;
   if (properties.medium) properties.utm_medium = properties.medium;
+  // A /start/ page key the site chose (defined in PostHog, or "default"), never raw campaign text.
+  if (typeof input.landing_variant === "string" && /^[a-z0-9][a-z0-9_-]{0,31}$/.test(input.landing_variant)) {
+    properties.landing_variant = input.landing_variant;
+  }
   if (typeof input.referrer_source === "string" && Object.hasOwn(REFERRERS, input.referrer_source)) {
     properties.$referring_domain = REFERRERS[input.referrer_source];
     properties.$referrer = `https://${REFERRERS[input.referrer_source]}/`;

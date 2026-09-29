@@ -265,6 +265,21 @@
   display: none;
 }
 
+/*
+ * The text an ad's page may replace stays hidden until the page is decided,
+ * so nobody sees the default wording flash into another. If the script never
+ * runs, it appears anyway after a moment.
+ */
+.start-root:not(.start-ready) [data-slot] {
+  visibility: hidden;
+  animation: start-reveal 0s linear 1.2s forwards;
+}
+@keyframes start-reveal {
+  to {
+    visibility: visible;
+  }
+}
+
 /* The smallest phones: keep the install command on one line. */
 @media (max-width: 379px) {
   .start-command code {

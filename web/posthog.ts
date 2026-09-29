@@ -84,11 +84,22 @@ function browserContext(): PosthogCaptureContext {
   return { source: "browser", userAgent, automated };
 }
 
+let landingVariant: string | null = null;
+
+/**
+ * Which version of /start/ this visit saw: a page key defined in PostHog, or
+ * "default". Set before the page view is sent, so every event carries it.
+ */
+export function setLandingVariant(key: string): void {
+  landingVariant = key;
+}
+
 function attribution(url: URL): Record<string, unknown> {
   // UTM values and referrers are classified locally; no raw campaigns, click IDs,
   // paths or account/query/fragment data go to the provider.
   return { source: publicSource(url, document.referrer), campaign_source: campaignSource(url),
-    medium: campaignMedium(url), referrer_source: classifyReferrer(document.referrer, url.origin) };
+    medium: campaignMedium(url), referrer_source: classifyReferrer(document.referrer, url.origin),
+    ...(landingVariant ? { landing_variant: landingVariant } : {}) };
 }
 
 export function trackProduct(event: string, input: Record<string, unknown> = {}): void {

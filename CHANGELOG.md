@@ -13,6 +13,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   steps to my laptop" opens the share sheet. The page gets the home page's
   analytics and X pixel, is kept out of search results, and reports as its
   own route (`start`, `landing_start` on the statistics dashboard).
+- Ad-specific versions of `/start/`, set up in PostHog without a deploy. An ad
+  links to `/start/?utm_content=<page>`, and the page takes that page's
+  headline, subline, step 2 agent and button text from the payload of the
+  `start-landing-pages` feature flag. An unknown page, or PostHog being slow or
+  blocked, shows the default page. Events from the visit record the page key
+  as `landing_variant`, so results can be compared page by page.
 
 ### Fixed
 

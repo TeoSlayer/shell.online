@@ -1,17 +1,35 @@
 import { initAnalytics, trackPublicEvent } from "./analytics";
 import { initXPixel } from "./x-pixel";
-import { observeProductPage } from "./posthog";
+import { observeProductPage, setLandingVariant } from "./posthog";
 import { agentCommand } from "./landing-brands";
+import { loadPage, requestedPage, type StartPage } from "./start-pages";
 
 const INSTALL = {
   unix: "curl -fsSL https://shell.online/install | sh",
   windows: "irm https://shell.online/install.ps1 | iex",
 } as const;
 
-/* The link a phone sends on. Plain, so the laptop visit is not counted as a second ad click. */
-const SHARE_URL = "https://shell.online/start/";
+/* The link a phone sends on. No ad source, so the laptop visit is not counted as a second ad click. */
+const START_URL = "https://shell.online/start/";
 
-export function initStart(): void {
+function applyPage(page: StartPage): void {
+  for (const [slot, text] of Object.entries(page)) {
+    const element = document.querySelector<HTMLElement>(`[data-slot="${slot}"]`);
+    // Text only: a page's wording is never markup.
+    if (element && typeof text === "string") element.textContent = text;
+  }
+}
+
+export async function initStart(): Promise<void> {
+  // Decide which page this is before anything is counted, so the page view says.
+  const key = requestedPage(new URL(window.location.href));
+  const page = await loadPage(key);
+  if (page) applyPage(page);
+  setLandingVariant(page ? key : "default");
+  document.documentElement.classList.add("start-ready");
+  // The laptop opens the same page the phone saw.
+  const SHARE_URL = page ? `${START_URL}?utm_content=${key}` : START_URL;
+
   initAnalytics();
   initXPixel();
   observeProductPage();
@@ -78,4 +96,4 @@ export function initStart(): void {
   });
 }
 
-initStart();
+void initStart();
