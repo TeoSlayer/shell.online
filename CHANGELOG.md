@@ -24,6 +24,17 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   accounts app was unaffected because its flag is committed. Production needs
   `"POSTHOG_ENABLED": "1"` in `wrangler.production.jsonc` and a redeploy to
   restore it.
+- Starting `claude` (or `opencode`) from the app no longer reopens an old
+  agent conversation. Any `shell` command starts the background daemon when
+  none is running, and it passed on its whole environment. Run from inside
+  Claude Code, that included the conversation's id, so every session the app
+  then asked for was treated as a handoff and forked that conversation instead
+  of starting fresh, until the daemon restarted. The daemon and the sessions it
+  starts no longer carry an agent conversation's identity, and a session the
+  app asks for never hands off. Typing `shell claude` inside Claude Code still
+  forks the conversation, as before. Machines already affected are fixed once
+  the new release's daemon replaces the running one (`shell service install`,
+  a restart, or signing in again).
 
 ## [0.23.3] — 2026-09-25
 
