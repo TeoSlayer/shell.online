@@ -1,0 +1,361 @@
+@font-face {
+  font-family: "Uncut Sans";
+  src: url("/fonts/uncut-sans-variable.woff2") format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+/* The one-screen landing page for paid traffic (/start/). Same palette as the home page. */
+.start-root {
+  --ink: #1c251f;
+  --muted: #586258;
+  --faint: #6b7468;
+  --paper: #f7f8f2;
+  --card: #ffffff;
+  --line: #e3e7dc;
+  --well: #f3f5ee;
+  --tint: #eef4d6;
+  --lime: #d5f568;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+.start-root body {
+  margin: 0;
+  background: var(--paper);
+  font-family: "Uncut Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+.start-root *,
+.start-root *::before,
+.start-root *::after {
+  box-sizing: border-box;
+}
+.start-root code,
+.start-root button[data-agent] {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+.start-root button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.start-root :focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.start {
+  min-height: 100dvh;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: max(16px, env(safe-area-inset-top)) 20px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+}
+.start-brand a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 650;
+  color: inherit;
+  text-decoration: none;
+}
+.start-mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--lime);
+  border: 1.5px solid var(--ink);
+}
+
+.start-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 22px;
+}
+.start-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-intro h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.03;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+.start-intro p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.start-how {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-how h2 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.start-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-step {
+  padding: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.start-number {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tint);
+  color: #3d4a3f;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.start-step-last .start-number {
+  background: var(--lime);
+  color: var(--ink);
+}
+.start-step-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.start-os {
+  display: none;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--well);
+}
+.start-os button {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.start-os button[aria-pressed="true"] {
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.start-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 9px;
+  background: var(--well);
+}
+.start-command code {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#start-run {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.start-copy {
+  display: none;
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #dce2d7;
+  background: var(--card);
+}
+
+.start-agents {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--faint);
+}
+.start-agents button {
+  min-height: 28px;
+  padding: 3px 7px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: #3d4a3f;
+}
+.start-agents button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--tint);
+}
+
+.start-send {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#start-send {
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 17px;
+  font-weight: 650;
+}
+#start-status:empty {
+  display: none;
+}
+#start-status {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.start-desktop-only {
+  display: none;
+}
+
+/*
+ * The text an ad's page may replace stays hidden until the page is decided,
+ * so nobody sees the default wording flash into another. If the script never
+ * runs, it appears anyway after a moment.
+ */
+.start-root:not(.start-ready) [data-slot] {
+  visibility: hidden;
+  animation: start-reveal 0s linear 1.2s forwards;
+}
+@keyframes start-reveal {
+  to {
+    visibility: visible;
+  }
+}
+
+/* The smallest phones: keep the install command on one line. */
+@media (max-width: 379px) {
+  .start-command code {
+    font-size: 10px;
+  }
+}
+
+/* A laptop: the steps sit beside the headline, copy buttons and the OS switch appear, and there is nothing to send. */
+@media (min-width: 900px) {
+  .start {
+    padding: 24px 64px 48px;
+    min-height: 100dvh;
+  }
+  .start-layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 72px;
+    align-items: center;
+    margin-top: 0;
+  }
+  .start-intro {
+    gap: 16px;
+  }
+  .start-how,
+  .start-steps {
+    gap: 12px;
+  }
+  .start-intro h1 {
+    font-size: 60px;
+    line-height: 1.02;
+  }
+  .start-intro p {
+    font-size: 18px;
+  }
+  .start-step {
+    padding: 18px 20px;
+    border-radius: 16px;
+    gap: 12px;
+  }
+  .start-number {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  .start-step-title {
+    font-size: 18px;
+  }
+  .start-os {
+    display: flex;
+  }
+  .start-command {
+    padding-left: 14px;
+    border-radius: 10px;
+  }
+  .start-command code,
+  #start-run {
+    font-size: 15px;
+    letter-spacing: 0;
+  }
+  .start-copy {
+    display: inline-block;
+  }
+  .start-agents {
+    font-size: 14px;
+  }
+  .start-agents button {
+    font-size: 13px;
+  }
+  .start-send {
+    display: none;
+  }
+  .start-phone-only {
+    display: none;
+  }
+  .start-desktop-only {
+    display: inline;
+  }
+}

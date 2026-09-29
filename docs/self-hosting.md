@@ -70,7 +70,10 @@ Objects, Rate Limiting, Analytics Engine, and static assets. Keep every
 documentation path in `run_worker_first`: a page served straight from the
 assets binding is never counted. `npm run deploy:production` refuses a
 production config that routes fewer of these paths through the Worker than
-`wrangler.example.jsonc` does.
+`wrangler.example.jsonc` does, or one that does not set `POSTHOG_ENABLED` to
+`"0"` or `"1"`. Wrangler replaces every Worker variable on deploy, so a config
+that leaves the flag out turns relay analytics off without any error. The
+example keeps it `"0"`; a self-hosted relay sends nothing to PostHog.
 
 The private statistics dashboard is optional and configured with Worker
 secrets (`npx wrangler secret put <NAME>`):

@@ -126,6 +126,7 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         documentation: resolve(import.meta.dirname, "web/documentation.html"),
+        start: resolve(import.meta.dirname, "start/index.html"),
       },
     },
   },

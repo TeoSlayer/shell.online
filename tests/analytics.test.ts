@@ -152,6 +152,8 @@ describe("analytics", () => {
 
   it("names every documentation page, and keeps unknown paths apart from 404s", () => {
     expect(documentTarget("/", 200, "0.15.1")).toBe("landing");
+    expect(documentTarget("/start/", 200, "0.15.1")).toBe("landing_start");
+    expect(documentTarget("/start/", 404, "0.15.1")).toBe("not_found");
     expect(documentTarget("/docs/", 200, "0.15.1")).toBe("docs");
     expect(documentTarget("/app/", 200, "0.15.1")).toBe("docs_app");
     expect(documentTarget("/cli/", 200, "0.15.1")).toBe("docs_cli");

@@ -14,8 +14,10 @@ try {
   Set-Content -NoNewline -Path (Join-Path $downloads "SHA256SUMS") -Value "$digest  $artifact`n"
 
   $server = Start-Process python -ArgumentList "-m", "http.server", "18787", "--bind", "127.0.0.1", "--directory", $root -PassThru -WindowStyle Hidden
-  $deadline = [DateTime]::UtcNow.AddSeconds(10)
+  # A cold hosted runner can take well over ten seconds to start Python.
+  $deadline = [DateTime]::UtcNow.AddSeconds(60)
   do {
+    if ($server.HasExited) { throw "The test download server (python -m http.server) exited with code $($server.ExitCode)" }
     try {
       Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:18787/downloads/SHA256SUMS" | Out-Null
       break

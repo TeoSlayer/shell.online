@@ -41,6 +41,15 @@ describe("secureAssetResponse CSP Google Analytics endpoints", () => {
       expect(privatePolicy).not.toMatch(/twitter|t\.co|ads-twitter/);
     }
   });
+  it("gives the /start/ landing page the home page's analytics and X origins, and keeps it out of search", () => {
+    const home = csp(secureAssetResponse(htmlResponse(), "/", "shell.online"));
+    const start = secureAssetResponse(htmlResponse(), "/start/", "shell.online");
+    expect(csp(start)).toBe(home);
+    expect(start.headers.get("X-Robots-Tag")).toBe("noindex, nofollow, noarchive");
+    for (const [path, host] of [["/start", "shell.online"], ["/start/x", "shell.online"], ["/start/", "app.shell.online"]]) {
+      expect(csp(secureAssetResponse(htmlResponse(), path, host))).not.toMatch(/twitter|googletagmanager/);
+    }
+  });
   it("allows GA on public landing page (/) HTML on shell.online", () => {
     const res = secureAssetResponse(htmlResponse(), "/", "shell.online");
     const policy = csp(res);

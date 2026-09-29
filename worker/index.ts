@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { isLandingPath } from "../shared/landing-paths";
 import { sendPosthog } from "../shared/posthog";
 import { relayOperation, httpOutcome, type OperationOutcome } from "../shared/analytics-operations";
 import { safeSource } from "../shared/public-attribution";
@@ -4219,7 +4220,7 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
 }
 
 function isPublicAnalyticsPath(pathname: string): boolean {
-  if (pathname === "/" || pathname === "") return true;
+  if (isLandingPath(pathname)) return true;
   return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
 }
 
@@ -4227,7 +4228,7 @@ export function secureAssetResponse(response: Response, pathname: string, hostna
   const headers = new Headers(response.headers);
   const isHtmlDocument = headers.get("Content-Type")?.toLowerCase().startsWith("text/html") ?? false;
   const gaAllowed = isHtmlDocument && hostname === "shell.online" && isPublicAnalyticsPath(pathname);
-  const xAllowed = gaAllowed && pathname === "/";
+  const xAllowed = gaAllowed && isLandingPath(pathname);
   const xCollectors = xAllowed ? " https://analytics.twitter.com https://t.co https://ads-twitter.com https://ads-api.twitter.com" : "";
   const posthogAllowed = gaAllowed || (isHtmlDocument && hostname === "shell.online" && /^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(pathname));
   headers.set("Content-Security-Policy", [

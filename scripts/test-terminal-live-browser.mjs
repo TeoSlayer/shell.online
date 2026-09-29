@@ -681,7 +681,9 @@ try {
   if (runtime) { try { process.kill(-runtime.pid, "SIGTERM"); } catch {} await delay(300); }
   try { await transport?.close(); } catch {}
   try { await vite?.close(); } catch {}
-  rmSync(temp, { recursive: true, force: true });
+  // Chrome may still be writing its profile here as it exits, which made this
+  // throw ENOTEMPTY after every check had passed. Node retries exactly that.
+  rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 process.exitCode = failed ? 1 : 0;
 

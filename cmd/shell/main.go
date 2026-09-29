@@ -160,7 +160,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	if len(command) == 0 {
 		command = []string{defaultShellCommand()}
 	}
-	launch := prepareCommandLaunch(command, os.Environ(), !*foreground)
+	launch := prepareCommandLaunch(command, os.Environ(), handoffAllowed(*foreground, os.Environ()))
 	command = launch.Arguments
 	fileService, err := openSharedFileService(*shareFiles, *filesRoot)
 	if err != nil {

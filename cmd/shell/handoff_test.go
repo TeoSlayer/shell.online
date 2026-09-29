@@ -233,3 +233,70 @@ func TestOpencodeAdapterFallsBackToContinueWhenUnresolvable(t *testing.T) {
 		t.Fatalf("arguments = %#v, want %#v", launch.Arguments, wantArguments)
 	}
 }
+
+func TestHarnessIdentityVariablesCoverEveryAdapter(t *testing.T) {
+	listed := map[string]bool{}
+	for _, name := range harnessIdentityVariables {
+		listed[name] = true
+	}
+	for _, adapter := range harnessAdapters {
+		// With a session id, every adapter rewrites without touching disk.
+		_, stripped, _ := adapter.Rewrite(adapter.Binary, testClaudeSessionID)
+		for _, name := range stripped {
+			if !listed[name] {
+				t.Errorf("%s strips %s, which harnessIdentityVariables does not list", adapter.Binary, name)
+			}
+		}
+	}
+	for _, name := range []string{"CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "OPENCODE", "OPENCODE_SESSION_ID"} {
+		if !listed[name] {
+			t.Errorf("harnessIdentityVariables does not list detection variable %s", name)
+		}
+	}
+}
+
+func TestDetachedEnvironmentDropsAgentConversationIdentity(t *testing.T) {
+	got := detachedEnvironment([]string{
+		"PATH=/usr/bin",
+		"CLAUDECODE=1",
+		"CLAUDE_CODE_CHILD_SESSION=1",
+		"CLAUDE_CODE_SESSION_ID=" + testClaudeSessionID,
+		"OPENCODE=1",
+		"OPENCODE_SESSION_ID=" + testOpencodeSessionID,
+		"HOME=/home/someone",
+		"SHELL_ONLINE_CONFIG=/tmp/config.json",
+	})
+	want := []string{"PATH=/usr/bin", "HOME=/home/someone", "SHELL_ONLINE_CONFIG=/tmp/config.json"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("detachedEnvironment = %#v, want %#v", got, want)
+	}
+}
+
+// Regression: a daemon first started from inside a Claude Code conversation
+// passed that conversation's id to every browser-started session, so starting
+// `claude` from the app forked that old conversation again, every time.
+func TestBrowserStartedSessionNeverForksAnAgentConversation(t *testing.T) {
+	inherited := []string{
+		"CLAUDECODE=1",
+		"CLAUDE_CODE_CHILD_SESSION=1",
+		"CLAUDE_CODE_SESSION_ID=" + testClaudeSessionID,
+		sessionOriginEnvironment + "=cmd_123",
+	}
+	// Even if the variables reach the session, the browser's request is not a handoff.
+	launch := prepareCommandLaunch([]string{"claude"}, inherited, handoffAllowed(false, inherited))
+	if launch.Handoff != "" || !reflect.DeepEqual(launch.Arguments, []string{"claude"}) {
+		t.Fatalf("browser-started claude handed off: %#v", launch)
+	}
+	// And they no longer reach it: the daemon and its sessions start without them.
+	if value := environmentValue(detachedEnvironment(inherited), "CLAUDE_CODE_SESSION_ID"); value != "" {
+		t.Fatalf("detached environment kept the conversation id %q", value)
+	}
+	// Typed inside Claude Code, `shell claude` still forks the conversation, as before.
+	typed := inherited[:3]
+	if launch := prepareCommandLaunch([]string{"claude"}, typed, handoffAllowed(false, typed)); launch.Handoff != claudeConversationHandoff {
+		t.Fatalf("typed shell claude no longer hands off: %#v", launch)
+	}
+	if handoffAllowed(true, typed) {
+		t.Fatal("a foreground launch must not hand off")
+	}
+}

@@ -199,6 +199,11 @@ function sizes(received: Array<string | Buffer>): Array<Record<string, unknown>>
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 40));
+/* Wait for what a test expects to arrive, not a fixed time a busy runner can overrun. */
+async function until(condition: () => boolean, timeout = 2000): Promise<void> {
+  const end = Date.now() + timeout;
+  while (!condition() && Date.now() < end) await new Promise((resolve) => setTimeout(resolve, 10));
+}
 
 describe("standalone relay with a host that owns its grid", () => {
   test("passes the host's grid on once per change and never resizes for a viewer", async () => {
@@ -216,6 +221,7 @@ describe("standalone relay with a host that owns its grid", () => {
     host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 173, rows: 51 }));
     await settle();
     phone.socket.close();
+    await until(() => sizes(desk.received).length > 0);
     await settle();
 
     expect(sizes(desk.received)).toEqual([{ type: "terminal_size", cols: 173, rows: 51, dynamic: true }]);
@@ -223,6 +229,8 @@ describe("standalone relay with a host that owns its grid", () => {
 
     host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 3, rows: 51 }));
     host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 90, rows: 30 }));
+    await until(() => sizes(desk.received).at(-1)?.cols === 90);
+    // Then long enough that a duplicate or an intermediate size would also have arrived.
     await settle();
     expect(sizes(desk.received).at(-1)).toEqual({ type: "terminal_size", cols: 90, rows: 30, dynamic: true });
     expect(sizes(desk.received)).toHaveLength(2);
