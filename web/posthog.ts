@@ -1,4 +1,5 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
+import { START_PATH } from "../shared/landing-paths";
 import { RELEASE_VERSION } from "../shared/release";
 import { sendPosthog, type PosthogCaptureContext } from "../shared/posthog";
 import { campaignMedium, campaignSource, classifyReferrer, publicSource } from "../shared/public-attribution";
@@ -29,6 +30,7 @@ export function analyticsRoute(url: URL): { surface: string; route: string; guid
   if (url.hostname === "shell.online") {
     if (/^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(url.pathname)) return { surface: "terminal", route: "terminal" };
     if (url.pathname === "/") return { surface: "landing", route: "landing" };
+    if (url.pathname === START_PATH) return { surface: "landing", route: "start" };
     const guide = resolveDocumentationRoute(url.pathname, RELEASE_VERSION);
     if (guide) return { surface: "docs", route: "docs", guide: guide.kind };
   }

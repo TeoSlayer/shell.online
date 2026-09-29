@@ -33,6 +33,7 @@
       "/e2ee/*",
       "/docker/*",
       "/self-hosting/*",
+      "/start/*",
       "/"
     ]
   },

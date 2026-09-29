@@ -2,6 +2,7 @@ import { resolveDocumentationRoute } from "../shared/documentation";
 import { RELEASE_VERSION } from "../shared/release";
 import { campaignMedium, isPublicEvent, publicSource } from "../shared/public-attribution";
 import { trackProduct } from "./posthog";
+import { isLandingPath, START_PATH } from "../shared/landing-paths";
 
 const GA_ID = "G-101HMD03VD";
 const LEGACY_CONSENT_COOKIE = "shell_analytics_consent";
@@ -10,7 +11,7 @@ const GA_COOKIE_MAX_AGE = 7_776_000; // 90 days
 const PUBLIC_HOST = "shell.online";
 
 function isPublicPath(pathname: string): boolean {
-  if (pathname === "/" || pathname === "") return true;
+  if (isLandingPath(pathname)) return true;
   return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
 }
 
@@ -60,6 +61,7 @@ function canonicalPageLocation(url: URL): string {
 
 function pageTitleFor(pathname: string): string {
   if (pathname === "/" || pathname === "") return "Your terminal, anywhere | shell.online";
+  if (pathname === START_PATH) return "Use any coding agent from your phone | shell.online";
   const guide = resolveDocumentationRoute(pathname, RELEASE_VERSION);
   if (guide) return `${guide.kind === "docs" ? "Getting started" : guide.kind} | shell.online docs`;
   return "shell.online";
@@ -105,7 +107,7 @@ export function initAnalytics(): void {
 
   if (!publicLoaded) {
     publicLoaded = true;
-    sendPublicEvent("page_loaded", url.pathname === "/" ? "landing" : "docs", url);
+    sendPublicEvent("page_loaded", isLandingPath(url.pathname) ? "landing" : "docs", url);
   }
 
   gtagLoaded = true;
