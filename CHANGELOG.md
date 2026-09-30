@@ -4,6 +4,46 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.24.0] — 2026-09-30
+
+### Added
+
+- The chat renderer reads a coding agent's own record of the conversation
+  instead of the screen it draws. A full-screen agent repaints a grid, so what
+  a viewer held was one screenful of a projection: history was gone, the
+  contents changed with the terminal's scroll position, and whether the agent
+  was working had to be inferred from a spinner that never says it has
+  stopped. Claude Code and OpenClaw both keep a machine-readable record of the
+  same conversation on the host, written per message and per tool step while a
+  turn is still running, and the CLI now follows that and sends it as its own
+  frame — sealed with the session's cipher, so the relay forwards it without
+  being able to read it. Once a record is speaking the screen is no longer
+  read for the conversation.
+
+  What travels is narrow: what was said, the *name* of a tool, and the
+  questions an agent is waiting on. Thinking, tool inputs and attachments stay
+  on the machine. A session that never runs an agent sends nothing.
+
+- Questions an agent asks are answered in the chat. They arrive with their
+  options, are drawn as buttons, and pressing one answers the program's own
+  menu. What was chosen is said out loud in the conversation.
+
+- The accounts section of the stats dashboard shows how far new accounts get:
+  linked a machine, ran a session, invited a teammate, came back another day.
+  The store answers each step while it still has the uid, so the dashboard
+  receives counts only.
+
+### Changed
+
+- Shell Keep: a larger field, a new HUD, training at the Forge, and touch
+  controls.
+
+### Fixed
+
+- Shell Keep's "Gather now" answered "internal error". The database only
+  allowed a command to be a start or a kill, while the rest of the system
+  already accepted the gathering's probe.
+
 ## [0.23.3] — 2026-09-25
 
 ### Fixed
