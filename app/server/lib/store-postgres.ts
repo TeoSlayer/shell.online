@@ -3021,7 +3021,13 @@ export class PostgresStore implements Store {
   }
 
   async accountActivity(isInternal: (email: string) => boolean = () => false): Promise<AccountActivity[]> {
-    const members = await this.rows("SELECT uid, email, joined_at FROM memberships");
+    const members = await this.rows(
+      `SELECT m.uid, m.email, m.joined_at,
+         EXISTS (SELECT 1 FROM cli_tokens t WHERE t.uid = m.uid) AS machine_linked,
+         EXISTS (SELECT 1 FROM sessions s WHERE s.uid = m.uid) AS session_started,
+         EXISTS (SELECT 1 FROM invites i WHERE i.created_by = m.uid) AS teammate_invited
+       FROM memberships m`,
+    );
     const days = await this.rows("SELECT uid, day FROM account_activity ORDER BY day");
     const byUid = new Map<string, number[]>();
     for (const row of days) {
@@ -3033,6 +3039,9 @@ export class PostgresStore implements Store {
       joinedAt: row.joined_at as number,
       days: byUid.get(row.uid as string) ?? [],
       internal: isInternal((row.email as string | null) ?? ""),
+      machineLinked: row.machine_linked === true,
+      sessionStarted: row.session_started === true,
+      teammateInvited: row.teammate_invited === true,
     }));
   }
 

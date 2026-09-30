@@ -50,6 +50,22 @@ export interface AccountPeriod {
   returning: number;
 }
 
+/**
+ * How far the accounts that signed up in the range got. Each step counts
+ * accounts, not things done, and is over the same accounts as `base`, so a
+ * step reads as a share of the sign-ups. The steps are not nested: an account
+ * can run a session from a teammate's machine without linking its own.
+ */
+export interface ActivationFunnel {
+  /** Accounts that signed up in the range. */
+  base: number;
+  machineLinked: number;
+  sessionStarted: number;
+  teammateInvited: number;
+  /** Used the app on two or more separate days, the sign-up day included. */
+  cameBack: number;
+}
+
 export interface AccountStats {
   /** Accounts there are now. */
   total: number;
@@ -78,6 +94,7 @@ export interface AccountStats {
   /** Accounts left out of every figure above because they are ours. */
   excluded: number;
   cohorts: RetentionCohort[];
+  activation: ActivationFunnel;
   /** Things done in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
   events: Record<string, number>;
 }
@@ -189,7 +206,8 @@ export function accountStats(
     activeSince,
     excluded,
     cohorts: buildRetentionCohorts(rows, now),
-    events: Object.fromEntries(events.map((entry) => [entry.event, entry.count])),
+    activation: activationFunnel(accounts, start, now),
+    events:Object.fromEntries(events.map((entry) => [entry.event, entry.count])),
   };
 }
 
@@ -235,6 +253,20 @@ function countPeriod(accounts: AccountActivity[], start: number, end: number): A
     if (!isNew) returning += 1;
   }
   return { total, newAccounts, active, returning };
+}
+
+/** The funnel over the accounts that signed up in [start, end). */
+function activationFunnel(accounts: AccountActivity[], start: number, end: number): ActivationFunnel {
+  const funnel: ActivationFunnel = { base: 0, machineLinked: 0, sessionStarted: 0, teammateInvited: 0, cameBack: 0 };
+  for (const account of accounts) {
+    if (account.joinedAt < start || account.joinedAt >= end) continue;
+    funnel.base += 1;
+    if (account.machineLinked) funnel.machineLinked += 1;
+    if (account.sessionStarted) funnel.sessionStarted += 1;
+    if (account.teammateInvited) funnel.teammateInvited += 1;
+    if (activeDays(account).length >= 2) funnel.cameBack += 1;
+  }
+  return funnel;
 }
 
 /*

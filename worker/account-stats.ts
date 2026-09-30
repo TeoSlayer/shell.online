@@ -1,4 +1,4 @@
-import type { StatsAccountPeriod, StatsAccounts, StatsAccountStats, StatsRange } from "../shared/stats";
+import type { StatsAccountActivation, StatsAccountPeriod,StatsAccounts, StatsAccountStats, StatsRange } from "../shared/stats";
 
 /*
  * The accounts app keeps the only exact count of people: accounts. It answers
@@ -71,6 +71,7 @@ export function completeAccountStats(body: Record<string, unknown>): StatsAccoun
     cohorts: (body.cohorts as StatsAccountStats["cohorts"]).filter((cohort) =>
       isObject(cohort) && typeof cohort.weekStart === "number" && typeof cohort.size === "number" &&
       Array.isArray(cohort.active)),
+    activation: isActivation(body.activation) ? body.activation : null,
     /* An older app answers without events; the dashboard then shows none rather than nothing. */
     events: isCountRecord(body.events) ? body.events : {},
   };
@@ -85,6 +86,12 @@ function dayCounts(value: unknown): { day: number; count: number }[] {
 function isAccountPeriod(value: unknown): value is StatsAccountPeriod {
   return isObject(value) && typeof value.total === "number" && typeof value.newAccounts === "number" &&
     typeof value.active === "number" && typeof value.returning === "number";
+}
+
+function isActivation(value: unknown): value is StatsAccountActivation {
+  return isObject(value) &&
+    ["base", "machineLinked", "sessionStarted", "teammateInvited", "cameBack"]
+      .every((key) => typeof value[key] === "number");
 }
 
 function isCountRecord(value: unknown): value is Record<string, number> {

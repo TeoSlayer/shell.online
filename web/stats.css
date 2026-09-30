@@ -1765,6 +1765,11 @@ html.stats-document #app {
   gap: 16px;
 }
 
+/* An odd panel out takes the whole row rather than leaving half of it empty. */
+.stats-people-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .stats-note {
   display: flex;
   margin: 0;

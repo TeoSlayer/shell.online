@@ -1844,6 +1844,9 @@ export class MemoryStore implements Store {
         .map((entry) => entry.day)
         .sort((left, right) => left - right),
       internal: isInternal(membership.email),
+      machineLinked: this.data.tokens.some((token) => token.uid === membership.uid),
+      sessionStarted: this.data.sessions.some((session) => session.uid === membership.uid),
+      teammateInvited: this.data.invites.some((invite) => invite.createdBy === membership.uid),
     }));
   }
 

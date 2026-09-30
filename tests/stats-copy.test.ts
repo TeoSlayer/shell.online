@@ -147,6 +147,7 @@ describe("accountsInsight", () => {
     activeSince: null,
     excluded: 0,
     cohorts: [],
+    activation: null,
     events: {},
     ...overrides,
   });

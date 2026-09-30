@@ -15,6 +15,7 @@ const complete = {
   activeSince: 86_400_000,
   excluded: 21,
   cohorts: [{ weekStart: 1, size: 2, active: [1] }],
+  activation: { base: 3, machineLinked: 2, sessionStarted: 1, teammateInvited: 0, cameBack: 1 },
   events: { machine_linked: 4 },
 };
 
@@ -77,6 +78,7 @@ describe("completeAccountStats", () => {
       engagementBase: 0,
       activeSince: null,
       excluded: 0,
+      activation: null,
       events: {},
     });
   });
@@ -88,10 +90,12 @@ describe("completeAccountStats", () => {
       previous: { total: 1 },
       engagement: [{ label: "one_day", value: 1 }, { label: 3, value: 1 }],
       events: { machine_linked: "many" },
+      activation: { base: 3, machineLinked: "two" },
     });
     expect(filled.newByDay).toEqual([{ day: 1, count: 2 }]);
     expect(filled.previous).toBeNull();
     expect(filled.engagement).toEqual([{ label: "one_day", value: 1 }]);
     expect(filled.events).toEqual({});
+    expect(filled.activation).toBeNull();
   });
 });

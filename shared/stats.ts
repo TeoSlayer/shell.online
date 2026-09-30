@@ -223,6 +223,15 @@ export interface StatsAccountEngagement {
   value: number;
 }
 
+/** How far the accounts that signed up in the range got, each step a count of those accounts. */
+export interface StatsAccountActivation {
+  base: number;
+  machineLinked: number;
+  sessionStarted: number;
+  teammateInvited: number;
+  cameBack: number;
+}
+
 /**
  * Aggregates the accounts app answers with, when the dashboard is linked to
  * it. Our own accounts are left out of every figure here before it is sent;
@@ -248,6 +257,8 @@ export interface StatsAccountStats {
   /** Accounts left out of every figure here because they are ours. */
   excluded: number;
   cohorts: StatsRetentionCohort[];
+  /** Null from an app too old to send it. */
+  activation: StatsAccountActivation | null;
   /** Things done in the app in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
   events: Record<string, number>;
 }
