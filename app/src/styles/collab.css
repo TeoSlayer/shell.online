@@ -401,6 +401,12 @@
   gap: 12px;
 }
 
+/*
+ * The section used to set no size at all, so its text inherited the browser's
+ * 16px and its <strong> the browser's 700, beside a page written at 13.5px
+ * with 560 for emphasis. It read as a different component. The scale is the
+ * page's own: 13.5px for the switch, 12.5px for the help and status below it.
+ */
 .session-automation-switch {
   display: flex;
   align-items: flex-start;
@@ -408,6 +414,12 @@
   min-height: 40px;
   padding-block: 4px;
   cursor: pointer;
+  font-size: 13.5px;
+}
+
+.session-automation-switch strong {
+  color: var(--ink);
+  font-weight: 560;
 }
 
 .session-automation-switch input {
@@ -422,11 +434,13 @@
   margin-top: 4px;
   line-height: 1.5;
   color: var(--muted);
+  font-size: 12.5px;
 }
 
 .session-automation-status {
   line-height: 1.5;
   color: var(--muted);
+  font-size: 12.5px;
 }
 
 .detail-heading {
