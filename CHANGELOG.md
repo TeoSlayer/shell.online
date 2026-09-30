@@ -19,6 +19,20 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- The blank rows in a message are collapsed across frames, not only within
+  one. A screen gains an empty row one frame at a time, so each call handed a
+  single blank over and neither could see the other's — the pairs survived
+  the first fix. Measured by replaying a session captured through a pty: one
+  message held nine rows and four were empty; the same bytes now render seven
+  rows with two, 144px where it was 180px.
+
+- A turn whose last frame still showed a spinner is no longer stuck. Whether
+  the agent is working is recomputed only when a frame arrives, so the
+  spinner that frame happened to catch left it working for ever, and the
+  commit waiting on it waited too. A spinner animates: a screen nobody has
+  repainted for over a second has one that has stopped. Stillness is now the
+  answer, and the wheel goes out with it.
+
 - A message no longer arrives with a screenful of blank space in it. While a
   command runs, the screen holds still except for a status line counting the
   seconds, so every repaint handed over the empty gap above that line again:

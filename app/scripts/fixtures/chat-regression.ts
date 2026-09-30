@@ -172,7 +172,37 @@ async function run() {
   /* And the wheel stops, because the screen did. */
   assert(host.querySelector<HTMLElement>('.chat-thinking')?.hidden !== false, 'A settled screen is not still thinking');
 
-  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry';
+  /*
+   * The last frame of a turn still has the spinner on it.
+   *
+   * A spinner animates, so a screen that has not been repainted for over a
+   * second is a screen whose spinner has stopped -- but `working` is only
+   * recomputed when a frame arrives, so the last frame's spinner left it
+   * true for ever and the commit never ran. Reported as output that only
+   * appears after refreshing the page, sometimes.
+   */
+  again.reset();
+  await write2('\x1b]0;✳ Claude Code\x07\x1b[?1049h' + screen('❯ ask', '', '⏺ the answer', '', '────────────────────', '❯', '────────────────────'));
+  await settle(1600);
+  /*
+   * Two new things at once, so the 400ms preview has nothing to offer: it
+   * only previews a lone open paragraph, and two utterances are not one.
+   * Without a commit this is a turn that never appears at all.
+   */
+  await write2(screen('❯ ask', '', '⏺ the answer', '', '⏺ a tool ran', '  ⎿  it did', '', '⏺ the last thing said', '✳ Working…', '────────────────────', '❯', '────────────────────'));
+  await settle(1800);
+  const ended = [...host.querySelectorAll('.chat-received .chat-body')].map(node => node.textContent);
+  assert(ended.some(text => (text ?? '').includes('the last thing said')),
+    `A turn whose last frame still showed a spinner is shown (got ${JSON.stringify(ended)})`);
+  /*
+   * And the wheel goes out. `working` is only recomputed when a frame
+   * arrives, so the spinner the last frame caught would otherwise keep it
+   * turning over a session that has finished.
+   */
+  assert(host.querySelector<HTMLElement>('.chat-thinking')?.hidden !== false,
+    'A screen at rest stops thinking even if its last frame held a spinner');
+
+  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry, spinner at rest';
 }
 
 document.querySelector<HTMLButtonElement>('#run')!.onclick = () => {

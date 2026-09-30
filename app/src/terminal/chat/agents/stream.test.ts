@@ -45,6 +45,28 @@ describe("reading a repainted screen as a log", () => {
     expect(reader.read(frame(3))).toEqual(["", "working - 3s"]);
   });
 
+  /*
+   * Measured on a session captured through a pty: one message held nine rows
+   * and four of them were empty, in pairs. Each frame contributed a single
+   * blank, so collapsing within a frame could not see the pair -- the rule
+   * has to hold across calls.
+   */
+  it("gives out one blank line where two frames each gave one", () => {
+    const reader = new RepaintReader();
+    expect(reader.read(["Running 1 shell command…", "", "cursor"]))
+      .toEqual(["Running 1 shell command…", ""]);
+    expect(reader.read(["Running 1 shell command…", "", "", "cursor"])).toEqual([]);
+    expect(reader.read(["Running 1 shell command…", "", "", "Reading 1 file…", "cursor"]))
+      .toEqual(["Reading 1 file…"]);
+  });
+
+  it("forgets that it ended blank when the screen is forgotten", () => {
+    const reader = new RepaintReader();
+    reader.read(["said", "", "cursor"]);
+    reader.reset();
+    expect(reader.read(["", "after the reset", "cursor"])).toEqual(["", "after the reset"]);
+  });
+
   it("still cuts paragraphs, which is what one blank line is for", () => {
     const reader = new RepaintReader();
     expect(reader.read(["one", "", "two", "", "three", "cursor"]))
