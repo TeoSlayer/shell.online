@@ -30,6 +30,28 @@ describe("reading a repainted screen as a log", () => {
   });
 
   /*
+   * A command running under a conversation: the screen holds still, the empty
+   * middle holds still, and a status line at the foot counts the seconds. The
+   * rows below the change are new every time, so the gap was handed over
+   * again on every repaint -- eighty blank rows for four seconds of work,
+   * inside one message, which a reader then had to scroll past.
+   */
+  it("gives out one blank line where a frame had a gap", () => {
+    const reader = new RepaintReader();
+    const gap = ["", "", "", "", "", "", "", ""];
+    const frame = (seconds: number) => ["said", ...gap, `working - ${seconds}s`, "cursor"];
+    expect(reader.read(frame(1))).toEqual(["said", "", "working - 1s"]);
+    expect(reader.read(frame(2))).toEqual(["", "working - 2s"]);
+    expect(reader.read(frame(3))).toEqual(["", "working - 3s"]);
+  });
+
+  it("still cuts paragraphs, which is what one blank line is for", () => {
+    const reader = new RepaintReader();
+    expect(reader.read(["one", "", "two", "", "three", "cursor"]))
+      .toEqual(["one", "", "two", "", "three"]);
+  });
+
+  /*
    * The case the whole module exists for. The conversation scrolls up through
    * the grid, so a line that was given out three frames ago is now nowhere on
    * the screen, and the frame starts partway through what is already known.

@@ -28,7 +28,6 @@ export interface ChatViewOptions {
    * The index is what the program's menu is numbered by; the label is only
    * for saying out loud what was chosen.
    */
-  onChoose(index: number, label: string): void;
 }
 
 /*
@@ -75,7 +74,6 @@ interface Rendered {
   /** The drawing this was last built from, so an unchanged one is not rebuilt. */
   boxed?: string;
   /** Whether this message's options have been drawn; they are drawn once. */
-  choices?: boolean;
 }
 
 export class ChatView {
@@ -724,46 +722,10 @@ export class ChatView {
     while (rows.length > message.lines.length) body.removeChild(rows[rows.length - 1]);
     node.lines = message.lines.length;
 
-    this.choices(node, message);
     this.fold(node, message);
     this.stamp(node, message);
   }
 
-  /**
-   * The options an agent is waiting on, as buttons.
-   *
-   * Only ever drawn from the agent's own record, which states the question and
-   * every option it offered. A menu read off a screen is a menu somebody has
-   * guessed at, and guessing wrong here presses a button nobody chose.
-   *
-   * The buttons are built once. They do not change while the question stands,
-   * and rebuilding them under a finger is how a tap lands on the wrong one.
-   */
-  private choices(node: Rendered, message: Message): void {
-    const offered = message.choice;
-    if (!offered || node.choices) return;
-    node.choices = true;
-    const group = el("div", "chat-choices");
-    group.setAttribute("role", "group");
-    group.setAttribute("aria-label", offered.header || "Choose an answer");
-    offered.options.forEach((option, index) => {
-      const button = el("button", "chat-choice") as HTMLButtonElement;
-      button.type = "button";
-      button.textContent = option;
-      /* The digit the program's own menu is drawn with; see agentlog. */
-      button.dataset.index = String(index);
-      ChatView.keepsFocus(button);
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        if (this.disabled) return;
-        group.dataset.answered = option;
-        for (const other of group.querySelectorAll("button")) (other as HTMLButtonElement).disabled = true;
-        this.options.onChoose(index, option);
-      });
-      group.append(button);
-    });
-    node.el.querySelector(".chat-bubble")?.append(group);
-  }
 
   /**
    * Folds an answer too long to read at once.

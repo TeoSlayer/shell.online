@@ -48,8 +48,27 @@ import type { AgentAdapter, AgentUtterance } from "./types";
 /** A full-width rule. Two of them bound the box that is typed into. */
 const RULE = /^[─━]{8,}\s*$/u;
 
-/** A prompt somebody typed. */
-const PROMPT = /^❯\s?(.*)$/u;
+/**
+ * A prompt somebody typed.
+ *
+ * Two markers. `❯` is what a captured frame of this program shows, at the
+ * caret and again beside the prompt once it has been sent. `>` is the same
+ * row as somebody else's terminal draws it, reported from a real session; a
+ * marker is a glyph in a font, and which glyph arrives is not ours to decide.
+ * Column zero either way, so a quote or a redirect inside what an agent says
+ * -- always indented under its own marker -- is not mistaken for one.
+ */
+const PROMPT = /^(?:❯|>)\s?(.*)$/u;
+
+/**
+ * A tool's result, which is the agent working and never what anybody typed.
+ *
+ * It is drawn indented, directly under the row that started it, and an
+ * indented row under an open prompt used to be read as the rest of the
+ * prompt. Send something while the agent is busy and its next tool result
+ * arrived in the thread as part of the message you had just sent.
+ */
+const TOOL = /^\s*⎿/u;
 
 /** The agent speaking. */
 const SPOKE = /^⏺\s+(.*)$/u;
@@ -297,7 +316,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
        * marker of its own is the rest of what was typed.
        */
       if (this.prompting) {
-        if (INDENTED.test(line) && !SPOKE.test(line) && !STATUS.test(line.trimStart()) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
+        if (INDENTED.test(line) && !SPOKE.test(line) && !TOOL.test(line) && !STATUS.test(line.trimStart()) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
           this.prompting.push(line.trim());
           continue;
         }

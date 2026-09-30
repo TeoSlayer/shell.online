@@ -313,6 +313,44 @@ describe("reading a real exchange", () => {
   });
 });
 
+/*
+ * Captured from Claude Code v2.1.285 through a pty: a prompt sent while the
+ * agent was already working, and the tool result that came back under it.
+ */
+describe("a prompt sent while the agent is busy", () => {
+  it("does not read the tool result under it as part of what was sent", () => {
+    const frame = [
+      "\u23FA say exactly: banana".replace("\u23FA", "\u23FA"),
+      "\u276F run the probe as well",
+      "  \u23BF  $ go run ./probe",
+      "  \u23BF  claude-code  3 events",
+      "\u23FA Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    const sent = shaped.filter((line) => line.startsWith("sent:"));
+    expect(sent).toEqual(["sent:run the probe as well"]);
+    expect(sent.join("")).not.toContain("go run ./probe");
+  });
+
+  /*
+   * The same row, as another terminal draws it. A marker is a glyph in a
+   * font; which glyph arrives is not ours to decide, and a session reported
+   * from a real machine showed this one.
+   */
+  it("reads the same prompt when the marker arrives as a greater-than", () => {
+    const frame = [
+      "\u23FA earlier answer",
+      "> run the probe as well",
+      "  \u23BF  $ go run ./probe",
+      "\u23FA Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    expect(shaped.filter((line) => line.startsWith("sent:"))).toEqual(["sent:run the probe as well"]);
+  });
+});
+
 describe("the interface's own indent and wrapping", () => {
   it("comes off the paragraph", () => {
     expect(dedent(["  one", "  two"])).toEqual(["one", "two"]);

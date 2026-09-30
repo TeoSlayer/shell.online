@@ -143,7 +143,36 @@ async function run() {
   await write('\x1b[?1049l');
   await tick();
 
-  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table';
+  /*
+   * Leaving the chat renderer and coming back.
+   *
+   * The pane tears the renderer down and builds a new one, and the relay
+   * replays the whole screen into it. Reported from a real session: after
+   * doing that the thinking wheel went out and nothing new ever arrived
+   * again, until a prompt was sent by hand.
+   */
+  terminal.dispose();
+  const again = new ChatTerminal({ cols: 80, rows: 24 });
+  again.open(host);
+  cleanup = () => again.dispose();
+  const write2 = (bytes: string) => new Promise<void>(resolve => again.write(bytes, resolve));
+  const settle = async (ms = 500) => { await tick(); await new Promise(r => setTimeout(r, ms)); await tick(); };
+  const screen = (...rows: string[]) => '\x1b[2J\x1b[H' + rows.join('\r\n');
+  /* The snapshot a fresh connection is given, the way the pane delivers it. */
+  again.reset();
+  await write2('\x1b]0;✳ Claude Code\x07\x1b[?1049h' + screen('❯ first question', '', '⏺ first answer', '', '────────────────────', '❯', '────────────────────'));
+  await settle(1600);
+  assert(host.querySelectorAll('.chat-received').length === 1, `Re-entry draws the replayed answer (got ${host.querySelectorAll('.chat-received').length})`);
+  /* And then the session carries on, exactly as it would have before. */
+  await write2(screen('❯ first question', '', '⏺ first answer', '', '⏺ second answer', '', '────────────────────', '❯', '────────────────────'));
+  await settle(1600);
+  const answers = [...host.querySelectorAll('.chat-received .chat-body')].map(node => node.textContent);
+  assert(answers.length === 2, `New output arrives after re-entry (got ${JSON.stringify(answers)})`);
+  assert(answers[1] === 'second answer', `The new answer is the new one (got ${JSON.stringify(answers)})`);
+  /* And the wheel stops, because the screen did. */
+  assert(host.querySelector<HTMLElement>('.chat-thinking')?.hidden !== false, 'A settled screen is not still thinking');
+
+  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry';
 }
 
 document.querySelector<HTMLButtonElement>('#run')!.onclick = () => {
