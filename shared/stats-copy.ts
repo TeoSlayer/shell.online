@@ -290,15 +290,15 @@ const ACCOUNT_GROUPS = [
   { key: "session", label: "Ran a session" },
   { key: "machine", label: "Linked a machine" },
   { key: "signed_up", label: "Signed up only" },
-  { key: "ours", label: "Our own" },
 ] as const;
 
 export type AccountGroupKey = (typeof ACCOUNT_GROUPS)[number]["key"];
 
 /**
  * The account list in groups, furthest along first, newest sign-up first
- * within each. Our own accounts are a group of their own at the end instead of
- * being mixed in with customers. Empty groups are left out.
+ * within each. Our own accounts are left out, as they are out of every other
+ * figure; the app no longer sends them, and an older one that does is ignored.
+ * Empty groups are left out.
  */
 export function groupAccounts(
   entries: StatsAccountListEntry[],
@@ -308,7 +308,7 @@ export function groupAccounts(
       key,
       label,
       accounts: entries
-        .filter((entry) => (entry.internal ? "ours" : accountStage(entry)) === key)
+        .filter((entry) => !entry.internal && accountStage(entry) === key)
         .sort((left, right) => right.joinedAt - left.joinedAt || left.email.localeCompare(right.email)),
     }))
     .filter((group) => group.accounts.length > 0);

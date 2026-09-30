@@ -222,7 +222,7 @@ describe("the account list", () => {
     expect(accountStage(entry({ sessions: 1 }))).toBe("session");
   });
 
-  it("groups furthest along first, newest first within a group, and ours last", () => {
+  it("groups furthest along first, newest first within a group, and leaves ours out", () => {
     const groups = groupAccounts([
       entry({ email: "old@x.io", joinedAt: 1 }),
       entry({ email: "new@x.io", joinedAt: 3 }),
@@ -234,7 +234,6 @@ describe("the account list", () => {
       ["Ran a session", ["runner@x.io"]],
       ["Linked a machine", ["linker@x.io"]],
       ["Signed up only", ["new@x.io", "old@x.io"]],
-      ["Our own", ["dev@ours.io"]],
     ]);
   });
 
