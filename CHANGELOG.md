@@ -4,6 +4,52 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Removed
+
+- The agent-record transcript added in 0.24.0 is withdrawn. It found a
+  record by the directory the session started in, and a launcher starts
+  every session in the same directory: six Claude transcripts on one machine
+  all stated `/`, so several sessions resolved to the same file and a chat
+  could have shown another session's conversation. The chat reads the screen,
+  which is what it was doing in practice — no host ever shipped a record that
+  a viewer drew. The opcode stays reserved and the relay accepts and drops it,
+  so hosts already released with the tap keep their connection.
+
+### Fixed
+
+- A message no longer arrives with a screenful of blank space in it. While a
+  command runs, the screen holds still except for a status line counting the
+  seconds, so every repaint handed over the empty gap above that line again:
+  four seconds of work arrived as eighty blank rows inside one message, and
+  reaching the end of the conversation meant scrolling past them.
+
+- New output arrives again after leaving the chat renderer and coming back.
+  The reader holds back the row an agent looks to be part-way through
+  writing, and only another frame could commit it — so a screen that had gone
+  quiet for good, which is exactly what a replayed snapshot is, never
+  committed its last message. The wheel kept turning and nothing new
+  appeared until a prompt was sent by hand, because a prompt is a frame. A
+  screen still for more than a second, with no spinner on it, now commits.
+
+- A conversation is no longer drawn twice when a device that remembers the
+  session reconnects. The replayed screen is a picture of the end of the
+  conversation and the end is what the device already had, so both were
+  shown: an answer appeared again underneath a later question.
+
+- A heading with a clock running on the end of it holds still. `Running the
+  canary` became `Running the canary · 3s` a second later, and the words had
+  not changed — but the reader compares rows, so a row that ticks is a row it
+  cannot match against the frame before, which is what hands content over
+  twice and leaves a stale clock frozen in the thread. The clock is taken off
+  before frames are compared, in both the shapes a captured session writes:
+  `· 3s`, and a bracket holding a middot and a duration. A bracket without a
+  middot is somebody's sentence and is left alone.
+
+- A tool's result is no longer read as part of the prompt above it. Sending
+  something while the agent was busy put its next tool result in the thread
+  as part of the message just sent. The prompt marker is also recognised as
+  `>`, which is what some terminals draw where a captured frame showed `❯`.
+
 ## [0.24.0] — 2026-09-30
 
 ### Added

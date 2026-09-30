@@ -27,7 +27,6 @@ import { ScreenReader, paletteFromTheme, type ReaderTerminal } from "./screen-re
 import { Transcript, type TranscriptLine } from "./transcript";
 import { adapterFor, type AgentAdapter } from "./agents";
 import { ChatHistory } from "./chat-history";
-import { messageFor as recordMessage, readBatch } from "./agent-record";
 
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -50,6 +49,27 @@ const PARSE_SCROLLBACK = 1000;
  * it has actually stopped.
  */
 const AGENT_QUIET_MS = 400;
+
+/**
+ * How long a screen has to hold still before its last row is committed.
+ *
+ * The reader holds back the row an agent looks to be part-way through
+ * writing, because in one frame that row and the row it finished on are the
+ * same thing; only another frame tells them apart. A preview at 400ms shows
+ * it without committing it, which is right while the agent is mid-token.
+ *
+ * But a preview is all it ever was. A screen that has gone quiet for good --
+ * an agent that has finished, or a replayed snapshot of one, which is what
+ * the pane hands a renderer that has just been reopened -- never sent the
+ * frame that would commit it, so the last thing said stayed uncommitted and
+ * the next thing said committed the one before it. From the outside the chat
+ * had stopped: the wheel kept turning, nothing new arrived, and sending a
+ * prompt by hand was what unstuck it, because a prompt is a frame.
+ *
+ * So once the screen has been still this long, and the agent is not drawing
+ * a spinner, the row is taken as finished and committed for real.
+ */
+const AGENT_SETTLED_MS = 1200;
 
 /**
  * How long after a line the Return that submits it is sent.
@@ -104,15 +124,8 @@ export class ChatTerminal {
   /** Whether this screen has already been reported as unreadable; see `painted`. */
   private unreadable = false;
 
-  /**
-   * Whether the agent's own record is speaking.
-   *
-   * Once it is, the screen is not read for the conversation any more. See
-   * `fromRecord`: a record is the conversation, a screen is a picture of part
-   * of one, and reading both draws every turn twice.
-   */
-  private recorded = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
+  private agentSettled: ReturnType<typeof setTimeout> | null = null;
   /** Lines and Returns waiting to go out as separate events; see `enter`. */
   private outbox: string[] = [];
   private sending: ReturnType<typeof setTimeout> | null = null;
@@ -182,7 +195,6 @@ export class ChatTerminal {
     this.view = new ChatView(element, {
       onSubmit: (text) => this.submit(text),
       onKeys: (bytes) => this.type(bytes),
-      onChoose: (index, label) => this.choose(index, label),
     });
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
@@ -217,34 +229,6 @@ export class ChatTerminal {
     });
   }
 
-  /**
-   * The conversation the agent itself recorded, from the host.
-   *
-   * Once one of these arrives the screen stops being read: a record is the
-   * conversation and a screen is a picture of part of one, and where both
-   * exist there is nothing to gain by drawing both. The terminal keeps
-   * running underneath -- this only changes what the chat is built from.
-   */
-  fromRecord(payload: Uint8Array): void {
-    if (this.disposed) return;
-    const batch = readBatch(payload);
-    if (!batch) return;
-    const changed = this.transcript.fromRecord(
-      batch.events.map((event) => ({ seq: event.seq, message: recordMessage(event) })),
-    );
-    if (!this.recorded) {
-      this.recorded = true;
-      /*
-       * Whatever was read off the screen before the record arrived is a worse
-       * account of the same conversation, and keeping both shows every turn
-       * twice.
-       */
-      this.agent?.reset();
-      this.agent = null;
-      this.view?.setThinking(false);
-    }
-    if (changed) this.schedule();
-  }
 
   write(data: string | Uint8Array, callback?: () => void): void {
     this.inner.write(data, () => {
@@ -269,6 +253,8 @@ export class ChatTerminal {
     this.quiet = null;
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
     this.agentQuiet = null;
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = null;
     this.agent?.reset();
     this.agent = null;
     this.unreadable = false;
@@ -314,6 +300,7 @@ export class ChatTerminal {
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.quiet) clearTimeout(this.quiet);
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    if (this.agentSettled) clearTimeout(this.agentSettled);
     if (this.sending) clearTimeout(this.sending);
     this.outbox = [];
     this.listeners.clear();
@@ -348,24 +335,6 @@ export class ChatTerminal {
    * echo back off the grid, which is guesswork the moment a program stops
    * echoing, as every password prompt does.
    */
-  /**
-   * Answers a question the agent is waiting on.
-   *
-   * A choice prompt is drawn as a numbered menu and a bare digit picks from
-   * it -- watched happening, not inferred. The digit is sent as a keystroke
-   * rather than as a line: the menu is not waiting for a Return, and sending
-   * one would answer the *next* question too.
-   *
-   * What was chosen is said out loud in the conversation, because a button
-   * that empties itself and leaves no trace is a session where nobody can
-   * tell what was answered.
-   */
-  private choose(index: number, label: string): void {
-    if (this.options.disableStdin || index < 0 || index > 8) return;
-    this.transcript.submitted(label, Date.now());
-    this.type(String.fromCharCode("1".charCodeAt(0) + index));
-    this.schedule();
-  }
 
   private submit(text: string): void {
     if (this.options.disableStdin) return;
@@ -527,8 +496,6 @@ export class ChatTerminal {
    * it, is more use than a picture of it nobody can read.
    */
   private painted(lines: TranscriptLine[], now: number): void {
-    /* The record is the conversation; the screen is a picture of part of one. */
-    if (this.recorded) return;
     if (!this.agent) {
       /*
        * Asked again on every frame until something answers, rather than once
@@ -574,6 +541,8 @@ export class ChatTerminal {
    */
   private armAgentQuiet(): void {
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = null;
     this.agentQuiet = setTimeout(() => {
       this.agentQuiet = null;
       if (!this.agent) return;
@@ -584,7 +553,28 @@ export class ChatTerminal {
         changed = true;
       }
       if (changed) this.schedule();
+      this.armAgentSettled();
     }, AGENT_QUIET_MS);
+  }
+
+  /** The screen has stopped for good; see AGENT_SETTLED_MS. */
+  private armAgentSettled(): void {
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = setTimeout(() => {
+      this.agentSettled = null;
+      /* A spinner means it is still working, whatever the screen is doing. */
+      if (!this.agent || this.agent.working) return;
+      const now = Date.now();
+      let changed = false;
+      for (const utterance of this.agent.flush()) {
+        this.transcript.fromAgent(utterance, now);
+        changed = true;
+      }
+      if (changed) {
+        this.view?.setThinking(false);
+        this.schedule();
+      }
+    }, AGENT_SETTLED_MS - AGENT_QUIET_MS);
   }
 
   /**
