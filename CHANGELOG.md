@@ -4,6 +4,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.24.1] — 2026-09-30
+
 ### Removed
 
 - The agent-record transcript added in 0.24.0 is withdrawn. It found a
