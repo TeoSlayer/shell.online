@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,10 @@ import (
 //   - Credentials point at a file that does not exist, so nothing reaches
 //     the linked account, and ensureDaemon finds no consent to start anything.
 //     Tests that need an account set their own with t.Setenv.
+//
+// Nothing else of shell.online's is inherited either. Run inside a shared
+// session, the suite otherwise read that session's name, command, origin and
+// password as its own, and failed only there.
 func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && (os.Args[1] == "daemon" || os.Args[1] == "agent" || os.Args[1] == "service") {
 		os.Exit(0)
@@ -27,6 +32,11 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "shell tests: %v\n", err)
 		os.Exit(1)
+	}
+	for _, entry := range os.Environ() {
+		if name, _, _ := strings.Cut(entry, "="); strings.HasPrefix(name, "SHELL_ONLINE") {
+			_ = os.Unsetenv(name)
+		}
 	}
 	_ = os.Setenv("SHELL_ONLINE_CONFIG", filepath.Join(directory, "no-credentials.json"))
 	code := m.Run()
