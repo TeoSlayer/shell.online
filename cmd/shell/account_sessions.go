@@ -191,8 +191,14 @@ func accountSessionStatus(session account.AccountSession, now time.Time) string 
 // accountSessionDuration is how long a session has run, or ran.
 func accountSessionDuration(session account.AccountSession, now time.Time) string {
 	end := now
-	if session.ClosedAt != nil {
+	switch {
+	case session.ClosedAt != nil:
 		end = time.UnixMilli(*session.ClosedAt)
+	case accountHostGone(session, now):
+		// Nobody reported an exit, so there is no ClosedAt. The last moment
+		// the relay held the host socket is the closest thing to one, as in
+		// the web app's sessionEndedAt; `now` made a finished run keep growing.
+		end = time.UnixMilli(*session.HostLastSeenAt)
 	}
 	return compactDuration(end.Sub(time.UnixMilli(session.StartedAt)))
 }

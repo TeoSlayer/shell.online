@@ -113,7 +113,11 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	if sessionName == "" {
 		sessionName = sanitizeSessionName(sessionNameFromEnvironment())
 	}
-	password := os.Getenv("SHELL_ONLINE_E2EE_PASSWORD")
+	password, err := suppliedPassword(os.Getenv, os.Stdin)
+	if err != nil {
+		fmt.Fprintf(stderr, "shell: %v\n", err)
+		return 2
+	}
 	encrypted := !*noE2EE
 	if !encrypted && password != "" {
 		fmt.Fprintln(stderr, "shell: SHELL_ONLINE_E2EE_PASSWORD cannot be used with --no-e2ee")
@@ -134,7 +138,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		}
 	}
 	if !*foreground && !isBackgroundChild() {
-		return launchBackgroundProcess(arguments, *jsonOutput, stdout, stderr)
+		return launchBackgroundProcess(arguments, password, *jsonOutput, stdout, stderr)
 	}
 
 	readyFile, err := openBackgroundReadyFile()

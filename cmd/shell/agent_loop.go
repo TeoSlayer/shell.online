@@ -247,7 +247,7 @@ func performAgentCommand(
 		// not silently weaken E2EE or widen file sharing on the wrapper itself.
 		arguments := append([]string{"--"}, browserCommandArguments(command.Command)...)
 		launch := exec.CommandContext(ctx, self, arguments...)
-		launch.Env = os.Environ()
+		launch.Env = passwordHandoffEnvironment(os.Environ(), "")
 		if command.Name != "" {
 			// The launched shell reads this when it publishes the session, so
 			// the name chosen in the browser survives to the session list.
@@ -260,7 +260,9 @@ func performAgentCommand(
 			if openErr != nil {
 				return fmt.Errorf("read the sealed password: %w", openErr)
 			}
-			launch.Env = append(launch.Env, "SHELL_ONLINE_E2EE_PASSWORD="+password)
+			// Over a pipe, never the environment: see passwordOnStdinEnvironment.
+			launch.Env = passwordHandoffEnvironment(launch.Env, password)
+			launch.Stdin = strings.NewReader(password)
 		}
 		launch.Env = append(launch.Env, sessionOriginEnvironment+"="+command.ID)
 		// What was asked for, so the session records that rather than the
