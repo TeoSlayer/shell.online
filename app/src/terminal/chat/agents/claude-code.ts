@@ -569,6 +569,32 @@ function furniture(line: string): boolean {
   return STATUS.test(line) || STATUS_TAIL.test(line) || SPINNER.test(line);
 }
 
+/**
+ * A counter ticking on the end of a line that is otherwise finished.
+ *
+ * `Running the chat renderer canary` becomes `Running the chat renderer
+ * canary · 3s` and then `· 4s`, and the words never changed. To the repaint
+ * reader that is a different row, so the row it had already given out is
+ * given out again -- the same heading twice in one message, once per second
+ * it ran for.
+ *
+ * Two shapes, both taken from a captured session, and both tight on purpose.
+ * A bare duration after a middot; and a trailing bracket that holds both a
+ * middot and a duration, which is how this program writes `(3s · ↓ 60
+ * tokens)` and `(running UserPromptSubmit hook · 0s)`. Requiring the middot
+ * inside the bracket is what keeps a sentence that happens to end in
+ * something like "(from 30s)" intact: that is somebody's words, not a clock.
+ */
+const TIMER_TAIL = /\s+·\s+\d+(?:\.\d+)?(?:ms|s|m|h)(?:\s+\d+(?:\.\d+)?s)?\s*$/u;
+const TIMER_BRACKET = /\s*\((?=[^()]*·)[^()]*\b\d+(?:\.\d+)?(?:ms|s|m|h)\b[^()]*\)\s*$/u;
+
+/** The same line with whatever clock was running on the end of it taken off. */
+function untimed(line: string): string {
+  let text = line.replace(TIMER_BRACKET, "");
+  text = text.replace(TIMER_TAIL, "");
+  return text === line ? line : text.trimEnd();
+}
+
 /** Ignore changing chrome before comparing frames, not after deduplication. */
 function normalize(frame: readonly string[]): string[] {
   let fence: string | null = null;
@@ -578,7 +604,9 @@ function normalize(frame: readonly string[]): string[] {
       return line;
     }
     fence = fenceAt(SPOKE.exec(line)?.[1] ?? line);
-    return !fence && furniture(line) ? "✻" : line;
+    if (fence) return line;
+    /* Inside a fence a clock is the program's output, not its chrome. */
+    return furniture(line) ? "✻" : untimed(line);
   });
 }
 

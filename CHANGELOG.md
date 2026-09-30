@@ -36,6 +36,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   conversation and the end is what the device already had, so both were
   shown: an answer appeared again underneath a later question.
 
+- A heading with a clock running on the end of it holds still. `Running the
+  canary` became `Running the canary · 3s` a second later, and the words had
+  not changed — but the reader compares rows, so a row that ticks is a row it
+  cannot match against the frame before, which is what hands content over
+  twice and leaves a stale clock frozen in the thread. The clock is taken off
+  before frames are compared, in both the shapes a captured session writes:
+  `· 3s`, and a bracket holding a middot and a duration. A bracket without a
+  middot is somebody's sentence and is left alone.
+
 - A tool's result is no longer read as part of the prompt above it. Sending
   something while the agent was busy put its next tool result in the thread
   as part of the message just sent. The prompt marker is also recognised as
