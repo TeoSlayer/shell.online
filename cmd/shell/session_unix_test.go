@@ -174,7 +174,8 @@ func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 		sessionNameEnvironment + "=Parent",
 		sessionOriginEnvironment + "=cmd_parent",
 		sessionCommandEnvironment + "=claude --dangerously-skip-permissions",
-		"SHELL_ONLINE_E2EE_PASSWORD=ParentPass",
+		passwordEnvironment + "=ParentPass",
+		passwordOnStdinEnvironment + "=1",
 	})
 
 	want := map[string]string{
@@ -204,7 +205,8 @@ func TestTerminalEnvironmentAdvertisesBrowserCapabilities(t *testing.T) {
 		sessionNameEnvironment,
 		sessionOriginEnvironment,
 		sessionCommandEnvironment,
-		"SHELL_ONLINE_E2EE_PASSWORD",
+		passwordEnvironment,
+		passwordOnStdinEnvironment,
 	} {
 		if value := environmentValue(environment, name); value != "" {
 			t.Errorf("terminalEnvironment() retained internal %s=%q", name, value)

@@ -41,7 +41,7 @@ func openBackgroundReadyFile() (backgroundReadyWriter, error) {
 	return file, nil
 }
 
-func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr io.Writer) int {
+func launchBackgroundProcess(arguments []string, password string, jsonOutput bool, stdout, stderr io.Writer) int {
 	_ = stdout
 	executable, err := os.Executable()
 	if err != nil {
@@ -64,7 +64,7 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	}
 
 	command := exec.Command(executable, arguments...)
-	command.Env = setEnvironmentValue(os.Environ(), backgroundChildEnvironment, "1")
+	command.Env = setEnvironmentValue(passwordHandoffEnvironment(os.Environ(), password), backgroundChildEnvironment, "1")
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyEnvironment, "3")
 	command.Env = setEnvironmentValue(command.Env, backgroundParentEnvironment, fmt.Sprint(os.Getpid()))
 	command.Env = withLaunchingTerminalGrid(command.Env)
@@ -73,7 +73,7 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	command.Stderr = null
 	command.ExtraFiles = []*os.File{readyWriter}
 	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := command.Start(); err != nil {
+	if err := startWithPassword(command, password); err != nil {
 		_ = readyWriter.Close()
 		_ = null.Close()
 		fmt.Fprintf(stderr, "shell: start in background: %v\n", err)

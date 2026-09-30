@@ -995,7 +995,9 @@ func terminalEnvironment(environment []string) []string {
 		sessionNameEnvironment,
 		sessionOriginEnvironment,
 		sessionCommandEnvironment,
-		"SHELL_ONLINE_E2EE_PASSWORD",
+		passwordEnvironment,
+		/* A nested shell would wait for a password on the terminal. */
+		passwordOnStdinEnvironment,
 	)
 	environment = setEnvironmentValue(environment, "TERM", "xterm-256color")
 	environment = setEnvironmentValue(environment, "COLORTERM", "truecolor")
