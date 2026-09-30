@@ -13,7 +13,7 @@ export function landingMarkup(): string {
   return `<div class="home">
     <header class="home-nav wrap">
       <a class="home-logo" href="/" aria-label="shell.online home">shell<span>.</span>online</a>
-      <nav aria-label="Main navigation"><a href="#how">How it works</a><a href="/docs/">Docs</a><a href="https://app.shell.online/" class="home-login">Log in</a><a class="button small" href="#start" data-cta="start_nav">Get started</a></nav>
+      <nav aria-label="Main navigation"><a href="#how">How it works</a><a href="/docs/">Docs</a><a href="https://app.shell.online/" class="home-login">Log in</a></nav>
     </header>
     <main>
       <section class="home-hero wrap" aria-labelledby="home-title">
