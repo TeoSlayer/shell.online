@@ -976,6 +976,19 @@ func terminalEnvironment(environment []string) []string {
 		backgroundReadyToken,
 		backgroundParentEnvironment,
 		terminalGridEnvironment,
+		/*
+		 * What a browser-started launch hands to this one wrapper. Left in
+		 * place, every `shell` run inside the shared program read them as
+		 * its own: a nested share published the parent's command, name and
+		 * origin, and quietly reused the parent's browser password, so
+		 * `shell password rotate` from inside rotated to the same one.
+		 */
+		sessionNameEnvironment,
+		sessionOriginEnvironment,
+		sessionCommandEnvironment,
+		passwordEnvironment,
+		/* A nested shell would wait for a password on the terminal. */
+		passwordOnStdinEnvironment,
 	)
 	environment = setEnvironmentValue(environment, "TERM", "xterm-256color")
 	environment = setEnvironmentValue(environment, "COLORTERM", "truecolor")

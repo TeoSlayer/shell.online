@@ -176,6 +176,31 @@ func TestAccountSessionStatusMatchesTheWebApp(t *testing.T) {
 	}
 }
 
+func TestAccountSessionDurationStopsWhenTheMachineWasLastSeen(t *testing.T) {
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	started := now.Add(-2 * time.Hour).UnixMilli()
+	lastSeen := now.Add(-2*time.Hour + 10*time.Second).UnixMilli()
+	justNow := now.Add(-30 * time.Second).UnixMilli()
+	closed := now.Add(-time.Hour).UnixMilli()
+	tests := []struct {
+		name    string
+		session account.AccountSession
+		want    string
+	}{
+		/* Gone for hours after running ten seconds: it ran ten seconds. */
+		{"machine gone", account.AccountSession{StartedAt: started, RelayStatus: "disconnected", HostLastSeenAt: &lastSeen}, compactDuration(10 * time.Second)},
+		{"closed", account.AccountSession{StartedAt: started, ClosedAt: &closed}, compactDuration(time.Hour)},
+		/* Still reconnecting, so still running. */
+		{"offline", account.AccountSession{StartedAt: started, RelayStatus: "disconnected", HostLastSeenAt: &justNow}, compactDuration(2 * time.Hour)},
+		{"online", account.AccountSession{StartedAt: started, RelayStatus: "connected"}, compactDuration(2 * time.Hour)},
+	}
+	for _, test := range tests {
+		if got := accountSessionDuration(test.session, now); got != test.want {
+			t.Errorf("%s: duration = %q, want %q", test.name, got, test.want)
+		}
+	}
+}
+
 func TestValidateSessionName(t *testing.T) {
 	if err := validateSessionName(""); err != nil {
 		t.Errorf("empty name: %v", err)

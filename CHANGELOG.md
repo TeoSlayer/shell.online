@@ -50,6 +50,27 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   as part of the message just sent. The prompt marker is also recognised as
   `>`, which is what some terminals draw where a captured frame showed `❯`.
 
+- `shell ls` no longer shows a session whose machine is gone as still
+  running. Its uptime kept growing; it now stops when the machine was last
+  seen, as in the web app.
+
+### Security
+
+- A session's browser password no longer sits in any process's environment.
+  The machine daemon handed a browser-started session its password in
+  `SHELL_ONLINE_E2EE_PASSWORD`, and every background session kept it there for
+  its whole life, where any program running as the same user could read it
+  (`ps -E`, `/proc/<pid>/environ`). It now travels between shell's own
+  processes over a pipe. Setting `SHELL_ONLINE_E2EE_PASSWORD` yourself still
+  works as before.
+- The program a session shares no longer inherits that session's password,
+  name, command or browser request. A `shell` run inside a browser-started
+  session silently reused the parent's browser password, published the
+  parent's command and name as its own, and carried the request id the
+  browser uses to recognise the session it asked for; `shell password rotate`
+  run from inside rotated to the same password. The accounts service now also
+  lets only one session claim a browser request.
+
 ## [0.24.0] — 2026-09-30
 
 ### Added
