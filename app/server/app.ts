@@ -2314,10 +2314,12 @@ export function createApp(options: AppOptions) {
         /*
          * The list names people, so it is its own route: the counts above stay
          * free of identifiers whatever is added here, and nothing that reads
-         * them is handed an address by accident.
+         * them is handed an address by accident. Our own accounts are left out
+         * of it as they are out of every count, so their addresses never leave.
          */
         if (route === "GET /api/stats/accounts/list") {
-          return send(response, 200, { accounts: await store.accountDirectory(isInternalAccount) });
+          const accounts = await store.accountDirectory(isInternalAccount);
+          return send(response, 200, { accounts: accounts.filter((account) => !account.internal) });
         }
         const requested = url.searchParams.get("range");
         const range = isStatsRange(requested) ? requested : "7d";

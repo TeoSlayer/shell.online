@@ -3946,7 +3946,7 @@ describe("account figures for the statistics dashboard", () => {
     expect(JSON.stringify(answer.body)).not.toContain("ana@example.com");
   });
 
-  it("lists the accounts by name only to the token, and keeps them out of the counts", async () => {
+  it("lists customers by name only to the token, and keeps them out of the counts", async () => {
     handle = createApp({
       store,
       verifyIdToken: verifyIdToken as never,
@@ -3965,9 +3965,10 @@ describe("account figures for the statistics dashboard", () => {
     const listed = await call("GET", "/api/stats/accounts/list", { auth: TOKEN });
     expect(listed.status).toBe(200);
     expect(listed.headers["Cache-Control"]).toBe("no-store");
-    /* Both signed up within the same moment, so the order between them is not the point here. */
-    expect(listed.body.accounts.map((account: { email: string; internal: boolean }) => [account.email, account.internal]).sort())
-      .toEqual([["ana@example.com", false], ["dev@ours.example", true]]);
+    /* Our own account is left out of the list as it is out of every count. */
+    expect(listed.body.accounts.map((account: { email: string; internal: boolean }) => [account.email, account.internal]))
+      .toEqual([["ana@example.com", false]]);
+    expect(JSON.stringify(listed.body)).not.toContain("ours.example");
 
     const counts = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
     expect(JSON.stringify(counts.body)).not.toContain("@");

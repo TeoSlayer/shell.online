@@ -1144,7 +1144,7 @@ function renderActivation(accounts: StatsAccountStats, period: string): string {
 
 /**
  * Every account by name, grouped by how far it got and newest first within
- * each group. Our own accounts are folded away at the end.
+ * each group. Our own accounts are not in it.
  */
 function renderAccountList(list: StatsAccountList, now: number): string {
   if (list === null) return "";
@@ -1178,9 +1178,8 @@ function renderAccountList(list: StatsAccountList, now: number): string {
         <div><h2>Accounts</h2></div>
         <strong>${integerFormatter.format(customers)}</strong>
       </header>
-      ${groups.length === 0 ? '<p class="cohort-empty">No account has signed up yet.</p>' : groups.map((group) => group.key === "ours"
-        ? `<details class="account-group"><summary>${escapeHtml(group.label)} <span>${integerFormatter.format(group.accounts.length)}</span></summary>${table(group.accounts)}</details>`
-        : `<section class="account-group"><h3>${escapeHtml(group.label)} <span>${integerFormatter.format(group.accounts.length)}</span></h3>${table(group.accounts)}</section>`,
+      ${groups.length === 0 ? '<p class="cohort-empty">No account has signed up yet.</p>' : groups.map((group) =>
+        `<section class="account-group"><h3>${escapeHtml(group.label)} <span>${integerFormatter.format(group.accounts.length)}</span></h3>${table(group.accounts)}</section>`,
       ).join("")}
     </article>
   `;

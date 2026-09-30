@@ -2144,20 +2144,14 @@ html.stats-document #app {
   gap: 18px;
 }
 
-.account-group > h3,
-.account-group > summary {
+.account-group > h3 {
   margin: 0 0 8px;
   color: var(--stats-ink);
   font-size: 12px;
   font-weight: 560;
 }
 
-.account-group > summary {
-  cursor: pointer;
-}
-
-.account-group > h3 span,
-.account-group > summary span {
+.account-group > h3 span {
   margin-left: 6px;
   color: var(--stats-muted);
   font-weight: 500;
