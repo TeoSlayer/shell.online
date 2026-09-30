@@ -1990,7 +1990,8 @@ html.stats-document #app {
 }
 
 .cohort-panel,
-.accounts-panel {
+.accounts-panel,
+.account-list-panel {
   padding: 20px 22px 18px;
 }
 
