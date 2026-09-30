@@ -282,6 +282,15 @@ try {
       labelWeight: px(label, 'fontWeight'),
       help: px(help, 'fontSize'),
       status: px(status, 'fontSize'),
+      /*
+       * The section sits in the 300px details column, where the longest
+       * switch label is wider than the text can be: it has to wrap inside
+       * the column rather than push the column, or the page, sideways.
+       */
+      overflow: Math.max(...[...document.querySelectorAll('.session-automation-switch')]
+        .map((row) => row.getBoundingClientRect().right))
+        - document.querySelector('.session-automation').getBoundingClientRect().right,
+      pageOverflow: document.documentElement.scrollWidth - innerWidth,
     };
   })()`);
   /*
@@ -297,6 +306,11 @@ try {
     assert.ok(typeScale.help <= typeScale.page, `permission help must not outsize the page at ${at}`);
     assert.ok(typeScale.status <= typeScale.page, `permission status must not outsize the page at ${at}`);
     assert.ok(typeScale.labelWeight <= 600, `permission label weight at ${at}`);
+    assert.ok(typeScale.overflow <= 1, `permission switches must wrap inside the column at ${at}`);
+    assert.ok(typeScale.pageOverflow <= 1, `permissions must not widen the page at ${at}`);
+    // The section is taller than the fold in the narrow column; a clip that
+    // runs past the viewport captures blank pixels, so bring it into view.
+    await evaluate(`(() => { document.querySelector('.session-automation').scrollIntoView({ block: 'center' }); return true; })()`);
     const clip = `(() => {
       const r = document.querySelector('.session-automation').getBoundingClientRect();
       return { x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16, scale: 1 };
@@ -306,6 +320,7 @@ try {
     console.log(`PASS ${browser}: permissions section matches the page type scale at ${at}`);
   }
   if (browser !== 'safari') await transport.setViewport({ width: 1280, height: 900, dpr: 2, mobile: false });
+  await evaluate(`(() => { window.scrollTo(0, 0); return true; })()`);
 
   // 5) The actual owner vault decrypts a synthetic, purpose-bound envelope.
   await waitFor(() => evaluate(`routeTest.vault?.status === 'setup'`), 'vault setup state');
