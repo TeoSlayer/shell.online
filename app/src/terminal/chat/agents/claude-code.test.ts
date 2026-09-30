@@ -378,11 +378,11 @@ describe("a line with a clock running on the end of it", () => {
 describe("a prompt sent while the agent is busy", () => {
   it("does not read the tool result under it as part of what was sent", () => {
     const frame = [
-      "\u23FA say exactly: banana".replace("\u23FA", "\u23FA"),
-      "\u276F run the probe as well",
-      "  \u23BF  $ go run ./probe",
-      "  \u23BF  claude-code  3 events",
-      "\u23FA Done.",
+      "⏺ say exactly: banana",
+      "❯ run the probe as well",
+      "  ⎿  $ go run ./probe",
+      "  ⎿  claude-code  3 events",
+      "⏺ Done.",
       "cursor",
     ];
     const shaped = shape(read(new ClaudeCodeAdapter(), frame));
@@ -398,10 +398,10 @@ describe("a prompt sent while the agent is busy", () => {
    */
   it("reads the same prompt when the marker arrives as a greater-than", () => {
     const frame = [
-      "\u23FA earlier answer",
+      "⏺ earlier answer",
       "> run the probe as well",
-      "  \u23BF  $ go run ./probe",
-      "\u23FA Done.",
+      "  ⎿  $ go run ./probe",
+      "⏺ Done.",
       "cursor",
     ];
     const shaped = shape(read(new ClaudeCodeAdapter(), frame));
