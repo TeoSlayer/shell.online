@@ -21,7 +21,7 @@ export function landingMarkup(): string {
           <p class="eyebrow">Your coding agent. On your phone.</p>
           <h1 id="home-title">Leave your desk.<br><span>Keep your agent moving.</span></h1>
           <p class="home-dek">Check progress. Reply to prompts.<br>Your agent stays on your computer. You don’t have to.</p>
-          <div class="home-actions"><a class="button" href="#start" data-cta="start_hero">Start your first session <span aria-hidden="true">↗</span></a><a class="quiet-link" href="#see-it" data-cta="demo">See a real session <span aria-hidden="true">↓</span></a></div>
+          <div class="home-actions"><a class="button" href="https://app.shell.online/" data-cta="start_hero">Get Started <span aria-hidden="true">↗</span></a><a class="quiet-link" href="#see-it" data-cta="demo">See a real session <span aria-hidden="true">↓</span></a></div>
           <p class="home-reassurance">Free and open source. No account needed to try it.</p>
           <div class="hero-agent-brands" aria-label="Bring your favorite agent">${AGENT_BRANDS.slice(
             0,
