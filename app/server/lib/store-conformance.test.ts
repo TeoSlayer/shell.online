@@ -2245,6 +2245,35 @@ for (const implementation of implementations) {
         expect(rows[1]).toMatchObject({ machineLinked: true, sessionStarted: true, teammateInvited: true });
       });
 
+      it("lists every account by name, newest first, with how far each got", async () => {
+        await store.putOrganization(organization());
+        await store.putOrganization(organization({ id: "org_2", name: "Ben's team", createdBy: "uid-2" }));
+        await store.putMembership(membership());
+        await store.putMembership(membership({ orgId: "org_1", uid: "uid-3", email: "cy@example.com", name: "Cy", role: "member", joinedAt: 1500 }));
+        await store.putMembership(membership({ orgId: "org_2", uid: "uid-2", email: "ben@ours.example", name: "Ben", joinedAt: 2000 }));
+        await store.putToken(token());
+        await store.putToken(token({ id: "dev_2", accessHash: "access-2", refreshHash: "refresh-2" }));
+        expect(await store.revokeDevice("uid-1", "dev_2")).toBe(true);
+        await store.upsertSession(session());
+        await store.putInvite(invite());
+        await store.touchMembership("uid-1", noon);
+        const listed = await store.accountDirectory((email) => email.endsWith("@ours.example"));
+        expect(listed).toEqual([
+          {
+            email: "ben@ours.example", name: "Ben", team: "Ben's team", teamSize: 1, joinedAt: 2000, lastSeenAt: null,
+            machines: 0, sessions: 0, activeDays: 0, invitesSent: 0, internal: true,
+          },
+          {
+            email: "cy@example.com", name: "Cy", team: "Vulture", teamSize: 2, joinedAt: 1500, lastSeenAt: null,
+            machines: 0, sessions: 0, activeDays: 0, invitesSent: 0, internal: false,
+          },
+          {
+            email: "ana@example.com", name: "Ana Ruiz", team: "Vulture", teamSize: 2, joinedAt: 1000, lastSeenAt: noon,
+            machines: 2, sessions: 1, activeDays: 1, invitesSent: 1, internal: false,
+          },
+        ]);
+      });
+
       it("keeps the days through a membership rewrite and drops them with the account", async () => {
         await store.putOrganization(organization());
         await store.putMembership(membership());

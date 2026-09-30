@@ -246,6 +246,27 @@ export interface AccountActivity {
 }
 
 /**
+ * One account as the statistics dashboard lists it: who, when, and how far
+ * they got. Unlike AccountActivity this names the person, so it is served
+ * only to the dashboard's token and never folded into the public counts.
+ */
+export interface AccountDirectoryEntry {
+  email: string;
+  name: string;
+  team: string;
+  teamSize: number;
+  joinedAt: number;
+  lastSeenAt: number | null;
+  /** Machines ever linked, unlinked ones included. */
+  machines: number;
+  /** Sessions still on record. */
+  sessions: number;
+  activeDays: number;
+  invitesSent: number;
+  internal: boolean;
+}
+
+/**
  * Things an account can do in the app that the statistics dashboard wants
  * counted, without ever saying which account: linked a machine, registered
  * a session, sent a command. Counted by day and by kind, nothing else.
