@@ -1,10 +1,10 @@
 // Local-only browser gate. No accounts, model calls or production analytics.
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { launchChromeTransport } from "./lib/browser-transport.mjs";
+import { launchChromeTransport, removeProfile } from "./lib/browser-transport.mjs";
 
 const origin = new URL(process.env.DOCS_TEST_URL ?? "http://127.0.0.1:5178/");
 assert(
@@ -231,5 +231,5 @@ try {
   );
 } finally {
   await browser?.close();
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

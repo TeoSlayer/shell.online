@@ -2,12 +2,12 @@
 // No live account, session, model, or analytics traffic. Screenshots stay outside source.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, writeFile, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
-import { launchChromeTransport, launchSafariTransport } from "./lib/browser-transport.mjs";
+import { launchChromeTransport, launchSafariTransport, removeProfile } from "./lib/browser-transport.mjs";
 import { auditTextLayout } from "./lib/text-layout-audit.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -441,5 +441,5 @@ try {
   await new Promise(r => server.close(r));
   // Linux Chrome helpers can finish profile writes just after the main process
   // exits. Retry only this fixture-owned tree; persistent cleanup failure fails.
-  await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  await removeProfile(temp);
 }

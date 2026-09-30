@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, extname, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { build } from 'esbuild';
-import { launchChromeTransport } from './lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from './lib/browser-transport.mjs';
 
 const live = process.env.POSTHOG_LIVE === '1';
 const base = resolve(import.meta.dirname, '..');
@@ -215,5 +215,5 @@ try{
   await browser?.close();
   // Chrome helpers can briefly finish profile writes after the parent exits.
   // Retry only this fixture-owned directory; persistent cleanup failure fails.
-  await rm(profile,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+  await removeProfile(profile);
 }

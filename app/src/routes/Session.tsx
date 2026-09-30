@@ -444,26 +444,6 @@ export function Session() {
 
           <SessionAudience session={session} members={members} you={you} />
 
-          <SessionAutomation key={session.id} session={session} you={you} onChange={async (changes) => {
-            automationSaving.current = true;
-            ++detailGeneration.current;
-            try {
-              const { session: updated } = await updateSessionAutomation(session.id, changes);
-              setDetail((current) => current?.session.id === updated.id ? {
-                ...current,
-                session: {
-                  ...current.session,
-                  mcpTeamAccess: updated.mcpTeamAccess,
-                  dailyBriefingEnabled: updated.dailyBriefingEnabled,
-                  dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess,
-                },
-              } : current);
-            } finally {
-              automationSaving.current = false;
-              ++detailGeneration.current;
-            }
-          }} />
-
           <h2 className="detail-heading">Comments</h2>
 
           {comments.length === 0 ? (
@@ -568,6 +548,26 @@ export function Session() {
               </dd>
             </div>
           </dl>
+
+          <SessionAutomation key={session.id} session={session} you={you} onChange={async (changes) => {
+            automationSaving.current = true;
+            ++detailGeneration.current;
+            try {
+              const { session: updated } = await updateSessionAutomation(session.id, changes);
+              setDetail((current) => current?.session.id === updated.id ? {
+                ...current,
+                session: {
+                  ...current.session,
+                  mcpTeamAccess: updated.mcpTeamAccess,
+                  dailyBriefingEnabled: updated.dailyBriefingEnabled,
+                  dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess,
+                },
+              } : current);
+            } finally {
+              automationSaving.current = false;
+              ++detailGeneration.current;
+            }
+          }} />
         </aside>
       </div>
     </AppShell>

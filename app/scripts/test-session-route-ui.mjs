@@ -15,13 +15,13 @@
 // Chrome by default; SHELL_BROWSER=safari runs the same fixture through
 // safaridriver. Synthetic data only; no login, relay or deploy.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport, launchSafariTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, launchSafariTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const browser = process.env.SHELL_BROWSER === 'safari' ? 'safari' : 'chrome';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -259,7 +259,70 @@ try {
   const merged = await evaluate(`(() => [...document.querySelectorAll('.session-automation-switch input')].map((i) => i.checked))()`);
   assert.deepEqual(merged, [true, true, false], `checkboxes after save: ${JSON.stringify(merged)}`);
 
-  // 4) The actual owner vault decrypts a synthetic, purpose-bound envelope.
+  /*
+   * 4) The permissions section is typed like the rest of the page.
+   *
+   * Nothing in this section set a size, so its label, help and status
+   * inherited the browser's 16px while every other line on the page is
+   * 13.5px, and <strong> came out at the browser's 700 next to a page whose
+   * emphasis is 560. It read as a different component pasted in. The numbers
+   * come from the page itself rather than being repeated here, so the gate
+   * keeps holding if the page's scale moves.
+   */
+  const measureTypeScale = () => evaluate(`(() => {
+    const px = (node, property) => parseFloat(getComputedStyle(node)[property]);
+    const reference = document.querySelector('.detail-summary');
+    const label = document.querySelector('.session-automation-switch strong');
+    const help = document.querySelector('.session-automation-help');
+    const status = document.querySelector('.session-automation-status');
+    if (!reference || !label || !help || !status) return null;
+    return {
+      page: px(reference, 'fontSize'),
+      label: px(label, 'fontSize'),
+      labelWeight: px(label, 'fontWeight'),
+      help: px(help, 'fontSize'),
+      status: px(status, 'fontSize'),
+      /*
+       * The section sits in the 300px details column, where the longest
+       * switch label is wider than the text can be: it has to wrap inside
+       * the column rather than push the column, or the page, sideways.
+       */
+      overflow: Math.max(...[...document.querySelectorAll('.session-automation-switch')]
+        .map((row) => row.getBoundingClientRect().right))
+        - document.querySelector('.session-automation').getBoundingClientRect().right,
+      pageOverflow: document.documentElement.scrollWidth - innerWidth,
+    };
+  })()`);
+  /*
+   * Both widths, because the phone is where a 16px line beside a 13.5px page
+   * shows most, and a future phone override would have to keep the scale.
+   */
+  for (const width of browser === 'safari' ? [null] : [1280, 390]) {
+    if (width) await transport.setViewport({ width, height: 900, dpr: 2, mobile: width < 700 });
+    const typeScale = await measureTypeScale();
+    const at = `${width ?? 'actual'}px ${JSON.stringify(typeScale)}`;
+    assert.ok(typeScale, `permissions section and its reference text must both render at ${at}`);
+    assert.equal(typeScale.label, typeScale.page, `permission label size at ${at}`);
+    assert.ok(typeScale.help <= typeScale.page, `permission help must not outsize the page at ${at}`);
+    assert.ok(typeScale.status <= typeScale.page, `permission status must not outsize the page at ${at}`);
+    assert.ok(typeScale.labelWeight <= 600, `permission label weight at ${at}`);
+    assert.ok(typeScale.overflow <= 1, `permission switches must wrap inside the column at ${at}`);
+    assert.ok(typeScale.pageOverflow <= 1, `permissions must not widen the page at ${at}`);
+    // The section is taller than the fold in the narrow column; a clip that
+    // runs past the viewport captures blank pixels, so bring it into view.
+    await evaluate(`(() => { document.querySelector('.session-automation').scrollIntoView({ block: 'center' }); return true; })()`);
+    const clip = `(() => {
+      const r = document.querySelector('.session-automation').getBoundingClientRect();
+      return { x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16, scale: 1 };
+    })()`;
+    const shot = await transport.screenshot(browser === 'chrome' ? clip : undefined);
+    await writeFile(join(shots, `session-permissions-${width ?? 'actual'}-${browser}.png`), Buffer.from(shot, 'base64'));
+    console.log(`PASS ${browser}: permissions section matches the page type scale at ${at}`);
+  }
+  if (browser !== 'safari') await transport.setViewport({ width: 1280, height: 900, dpr: 2, mobile: false });
+  await evaluate(`(() => { window.scrollTo(0, 0); return true; })()`);
+
+  // 5) The actual owner vault decrypts a synthetic, purpose-bound envelope.
   await waitFor(() => evaluate(`routeTest.vault?.status === 'setup'`), 'vault setup state');
   await evaluate(`routeTest.prepareContent()`);
   await waitFor(() => evaluate(`document.querySelector('.detail-name')?.textContent === 'Synthetic private suggestion'`), 'owner-encrypted title');
@@ -302,5 +365,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  if (profile) await rm(profile, { recursive: true, force: true });
+  if (profile) await removeProfile(profile);
 }

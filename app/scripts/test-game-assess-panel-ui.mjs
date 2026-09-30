@@ -8,13 +8,13 @@
 // written outside the repository; no login, provider, session content, key or
 // deploy is involved.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shots = await mkdtemp(join(tmpdir(), 'shell-assess-shots-'));
@@ -214,5 +214,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

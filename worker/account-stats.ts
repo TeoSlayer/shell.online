@@ -1,4 +1,12 @@
-import type { StatsAccountActivation, StatsAccountPeriod,StatsAccounts, StatsAccountStats, StatsRange } from "../shared/stats";
+import type {
+  StatsAccountActivation,
+  StatsAccountList,
+  StatsAccountListEntry,
+  StatsAccountPeriod,
+  StatsAccounts,
+  StatsAccountStats,
+  StatsRange,
+} from "../shared/stats";
 
 /*
  * The accounts app keeps the only exact count of people: accounts. It answers
@@ -35,6 +43,47 @@ export async function fetchAccountStats(
   } catch {
     return { error: "accounts app did not answer" };
   }
+}
+
+/*
+ * The accounts by name, for the dashboard's list. Asked for on its own route
+ * so the counts never carry an address. The same three answers as the counts:
+ * nothing when unlinked, an error when linked and silent, the list otherwise.
+ * An app too old to have the route answers 404, and the list is then left out
+ * rather than shown as broken.
+ */
+export async function fetchAccountList(
+  base: string | undefined,
+  token: string | undefined,
+  fetchImplementation: typeof fetch = fetch,
+): Promise<StatsAccountList> {
+  const origin = base?.trim();
+  const secret = token?.trim();
+  if (!origin || !secret) return null;
+  try {
+    const response = await fetchImplementation(`${origin.replace(/\/+$/, "")}/api/stats/accounts/list`, {
+      headers: { Authorization: `Bearer ${secret}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) return { error: `accounts app answered ${response.status}` };
+    const body = await response.json();
+    if (!isObject(body) || !Array.isArray(body.accounts)) {
+      return { error: "accounts app answered in an unexpected shape" };
+    }
+    return { accounts: body.accounts.filter(isAccountListEntry) };
+  } catch {
+    return { error: "accounts app did not answer" };
+  }
+}
+
+function isAccountListEntry(value: unknown): value is StatsAccountListEntry {
+  if (!isObject(value)) return false;
+  return ["email", "name", "team"].every((key) => typeof value[key] === "string") &&
+    ["teamSize", "joinedAt", "machines", "sessions", "activeDays", "invitesSent"]
+      .every((key) => typeof value[key] === "number") &&
+    (value.lastSeenAt === null || typeof value.lastSeenAt === "number") &&
+    typeof value.internal === "boolean";
 }
 
 /*

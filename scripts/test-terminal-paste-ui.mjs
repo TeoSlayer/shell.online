@@ -1,12 +1,12 @@
 // Actual xterm and Refstream paste paths, synthetic clipboard/permission state.
 // No relay, real clipboard, account, analytics collection or user terminal.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
-import { launchChromeTransport, launchSafariTransport } from './lib/browser-transport.mjs';
+import { launchChromeTransport, launchSafariTransport, removeProfile } from './lib/browser-transport.mjs';
 
 const profile = await mkdtemp(join(tmpdir(), 'shell-paste-test-'));
 const server = await createServer({ root: fileURLToPath(new URL('..', import.meta.url)),
@@ -119,5 +119,5 @@ try {
 } finally {
   await browser?.close();
   await server.close();
-  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  await removeProfile(profile);
 }

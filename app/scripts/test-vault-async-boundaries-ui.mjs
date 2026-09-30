@@ -13,13 +13,13 @@
 // real account, network, secrets, commits or deploys.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const APP = join(here, '..');
@@ -250,5 +250,5 @@ try {
 } finally {
   try { await transport?.close?.(); } catch { /* best effort */ }
   try { await server.close(); } catch { /* best effort */ }
-  try { await rm(profile, { recursive: true, force: true }); } catch { /* best effort */ }
+  try { await removeProfile(profile); } catch { /* best effort */ }
 }

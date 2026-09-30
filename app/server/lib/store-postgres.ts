@@ -42,6 +42,7 @@ import {
 } from "./store";
 import type {
   AccountActivity,
+  AccountDirectoryEntry,
   AppEvent,
   AppEventCount,
   AccountKey,
@@ -3042,6 +3043,32 @@ export class PostgresStore implements Store {
       machineLinked: row.machine_linked === true,
       sessionStarted: row.session_started === true,
       teammateInvited: row.teammate_invited === true,
+    }));
+  }
+
+  async accountDirectory(isInternal: (email: string) => boolean = () => false): Promise<AccountDirectoryEntry[]> {
+    const rows = await this.rows(
+      `SELECT m.email, m.name, o.name AS team, m.joined_at, m.last_seen_at,
+         (SELECT count(*) FROM memberships t WHERE t.org_id = m.org_id) AS team_size,
+         (SELECT count(*) FROM cli_tokens c WHERE c.uid = m.uid) AS machines,
+         (SELECT count(*) FROM sessions s WHERE s.uid = m.uid) AS sessions,
+         (SELECT count(*) FROM account_activity a WHERE a.uid = m.uid) AS active_days,
+         (SELECT count(*) FROM invites i WHERE i.created_by = m.uid) AS invites_sent
+       FROM memberships m JOIN organizations o ON o.id = m.org_id
+       ORDER BY m.joined_at DESC, m.email`,
+    );
+    return rows.map((row) => ({
+      email: row.email as string,
+      name: row.name as string,
+      team: row.team as string,
+      teamSize: Number(row.team_size),
+      joinedAt: Number(row.joined_at),
+      lastSeenAt: row.last_seen_at == null ? null : Number(row.last_seen_at),
+      machines: Number(row.machines),
+      sessions: Number(row.sessions),
+      activeDays: Number(row.active_days),
+      invitesSent: Number(row.invites_sent),
+      internal: isInternal((row.email as string | null) ?? ""),
     }));
   }
 
