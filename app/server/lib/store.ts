@@ -5,6 +5,7 @@ import type { AssessmentSnapshot, JevConsent } from "./jev/integration";
 import type { McpTeamGrantReport, McpTeamHostRequest, McpTeamRequest, McpTeamReportResult, McpTeamRequestResult } from "./mcp-team";
 import type {
   AccountActivity,
+  AccountDirectoryEntry,
   AppEvent,
   AppEventCount,
   AccountKey,
@@ -564,6 +565,12 @@ export interface Store {
    * figures without ever being handed an address to drop them by.
    */
   accountActivity(isInternal?: (email: string) => boolean): Promise<AccountActivity[]>;
+  /**
+   * Every account by name, newest first, with how far each got. For the
+   * statistics dashboard's account list, behind its token; `isInternal` marks
+   * our own accounts so the list can set them apart.
+   */
+  accountDirectory(isInternal?: (email: string) => boolean): Promise<AccountDirectoryEntry[]>;
 
   /* ---- App events ---- */
   /**

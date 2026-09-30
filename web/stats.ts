@@ -2,6 +2,7 @@ import {
   INSTALL_CONVERSION_DAYS,
   STATS_RANGES,
   type StatsAccounts,
+  type StatsAccountList,
   type StatsAccountStats,
   type StatsBreakdownItem,
   type StatsRange,
@@ -14,6 +15,8 @@ import { DAY_MS, peopleCountedSince } from "../shared/stats-snapshot";
 import {
   accountsInsight,
   activationRows,
+  formatAgo,
+  groupAccounts,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -416,7 +419,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
     ${people.configured ? "" : `
       <p class="stats-note">
         <span aria-hidden="true">●</span>
-        <span>People are not being counted yet. Set <code>STATS_VISITOR_SALT</code> (16 or more characters) on the Worker and every unique, new, returning and retention figure below fills in from that moment. Event counts are unaffected.</span>
+        <span>People aren't counted yet: set <code>STATS_VISITOR_SALT</code> on the Worker.</span>
       </p>
     `}
     <section class="stats-kpis" aria-label="Headline statistics">
@@ -443,7 +446,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       ${renderKpi(
         "Binary downloads",
         figures.installs,
-        `${integerFormatter.format(figures.installsReported)} installer success reports · not inferred from downloads`,
+        `${integerFormatter.format(figures.installsReported)} install reports`,
         snapshot.trend,
         "installs",
         "amber",
@@ -486,12 +489,14 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
 
     <article class="stats-panel funnel-panel">
       <header class="panel-heading">
-        <div><span class="panel-kicker">From a first look to a first keystroke</span><h2>Funnel</h2></div>
+        <div>${panelTitle(
+          "Funnel",
+          funnelInsight(snapshot),
+          peopleSince === null ? "" : `People have been counted since ${formatDay(peopleSince)}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.`,
+        )}</div>
         <span class="panel-range">${escapeHtml(rangeLabel)}</span>
       </header>
-      <p class="panel-insight">${escapeHtml(funnelInsight(snapshot))}</p>
       ${renderFunnel(snapshot)}
-      ${peopleSince === null ? "" : `<p class="cohort-empty">People have been counted since ${escapeHtml(formatDay(peopleSince))}; event counts run from the start of the range. Until the range begins after that day, a people figure covers fewer days than the count beside it.</p>`}
       ${renderInstallConversion(snapshot)}
       ${renderUniquesStrip(snapshot)}
     </article>
@@ -501,10 +506,9 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
     <section class="stats-wide-grid">
       <article class="stats-panel traffic-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">Who came</span><h2>Traffic</h2></div>
+          <div>${panelTitle("Traffic", trafficInsight(snapshot))}</div>
           <strong>${integerFormatter.format(totalViews)} <small>views</small></strong>
         </header>
-        <p class="panel-insight">${escapeHtml(trafficInsight(snapshot))}</p>
         ${renderTimeChart("traffic", trend, TRAFFIC_SERIES, snapshot.trendStepMs, true)}
         <div class="traffic-split is-wide">
           <span class="split-people"><i></i>People <b>${integerFormatter.format(audiences.views.browsers)}</b></span>
@@ -541,18 +545,17 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
     <section class="stats-wide-grid">
       <article class="stats-panel activity-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">Throughput</span><h2>Session activity</h2></div>
+          <div>${panelTitle("Session activity", sessionsInsight(snapshot))}</div>
           <div class="chart-legend">
             ${ACTIVITY_SERIES.map((series) => `<span><i style="--legend:${series.color}"></i>${series.label}</span>`).join("")}
           </div>
         </header>
-        <p class="panel-insight">${escapeHtml(sessionsInsight(snapshot))}</p>
         ${renderTimeChart("activity", trend, ACTIVITY_SERIES, snapshot.trendStepMs)}
       </article>
 
       <article class="stats-panel outcomes-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">Reliability</span><h2>Session outcomes</h2></div>
+          <div><h2>Session outcomes</h2></div>
           <strong>${integerFormatter.format(endedSessions)} <small>ended</small></strong>
         </header>
         ${renderDonut(outcomes)}
@@ -662,9 +665,7 @@ function renderSnapshot(container: HTMLElement, snapshot: StatsSnapshot): void {
       <span>Showing ${escapeHtml(rangeLabel)}${previous ? `, compared with ${escapeHtml(priorLabel)}` : ""}.</span>
       <span>${snapshot.collectingSince ? `Collecting exact dashboard metrics since ${formatDate(snapshot.collectingSince)}.` : "Waiting for the first event."}</span>
       ${people.configured && people.since !== null ? `<span>Counting people since ${escapeHtml(formatDay(people.since, "long"))}.</span>` : ""}
-      <span>Crawlers are requests whose user agent says so; they stay in the ledger and out of every figure about people.</span>
       ${accountsExcludedNote(snapshot.accounts)}
-      <span>People are keyed hashes of address and browser family, forgotten ${people.memoryDays} days after they were last seen; a person seen again after that counts as new.</span>
     </div>
   `;
 
@@ -805,7 +806,7 @@ function renderFunnel(snapshot: StatsSnapshot): string {
         const basisCount = step.basisCount ?? basis?.count ?? 0;
         const basisLabel = step.basisLabel ?? basis?.label.toLowerCase() ?? "";
         const share = basis === null
-          ? (index === 0 ? "the whole path starts here" : "its own population")
+          ? ""
           : basisCount === 0
             ? `no ${basisLabel} to compare with`
             : `${formatPercent(ratio(step.count, basisCount))} of ${basisLabel}`;
@@ -813,13 +814,12 @@ function renderFunnel(snapshot: StatsSnapshot): string {
           ? ""
           : `<em class="funnel-excluded">+ ${step.excluded.map((entry) => `${integerFormatter.format(entry.count)} ${escapeHtml(entry.label)}`).join(" · ")}</em>`;
         return `
-          <div class="funnel-step">
+          <div class="funnel-step" title="${escapeHtml(step.note)}">
             <span>${escapeHtml(step.label)}</span>
             <b>${integerFormatter.format(step.count)}${step.unique === null ? "" : `<small>${integerFormatter.format(step.unique)} ${step.unique === 1 ? "person" : "people"}${sinceFor(step.key)}</small>`}</b>
             <div><i style="width:${width}%;--funnel:${colors[index % colors.length]}"></i></div>
             <em>${escapeHtml(share)}</em>
             ${excluded}
-            <small>${escapeHtml(step.note)}</small>
           </div>
         `;
       }).join("")}
@@ -912,7 +912,7 @@ function renderCohorts(
   return `
     <article class="stats-panel cohort-panel">
       <header class="panel-heading">
-        <div><span class="panel-kicker">${escapeHtml(kicker)}</span><h2>${escapeHtml(title)}</h2></div>
+        <div>${panelTitle(title, `${kicker}.`)}</div>
         <span class="panel-range">${weeks} weeks</span>
       </header>
       ${!configured
@@ -951,11 +951,9 @@ function renderAccounts(snapshot: StatsSnapshot): string {
   const points = accountPoints(accounts);
   const signups = points.map((point) => point.values.signups);
   const active = points.map((point) => point.values.active);
-  const stale = accounts.total - accounts.activeInRange;
   return `
     <header class="stats-section-head">
       <div>
-        <span class="panel-kicker">The only exact count of people on this page</span>
         <h2>Accounts</h2>
       </div>
       <span class="panel-range">${escapeHtml(rangeLabel)}</span>
@@ -985,7 +983,7 @@ function renderAccounts(snapshot: StatsSnapshot): string {
         accounts.activeInRange,
         accounts.total === 0
           ? "no accounts yet"
-          : `${formatPercent(ratio(accounts.activeInRange, accounts.total))} of all accounts · ${integerFormatter.format(stale)} did not`,
+          : `${formatPercent(ratio(accounts.activeInRange, accounts.total))} of all accounts`,
         active,
         "violet",
         renderDelta(accounts.activeInRange, previous?.active ?? null, priorLabel),
@@ -994,10 +992,10 @@ function renderAccounts(snapshot: StatsSnapshot): string {
         "Came back",
         accounts.returningInRange,
         snapshot.range === "all"
-          ? "nothing comes before all time, so nothing here has come back to it"
+          ? "—"
           : accounts.activeInRange === 0
             ? "nobody used the app in this range"
-            : `${formatPercent(ratio(accounts.returningInRange, accounts.activeInRange))} of the accounts that used it had signed up earlier`,
+            : `${formatPercent(ratio(accounts.returningInRange, accounts.activeInRange))} of active`,
         active,
         "pink",
         renderDelta(accounts.returningInRange, previous?.returning ?? null, priorLabel),
@@ -1007,21 +1005,23 @@ function renderAccounts(snapshot: StatsSnapshot): string {
     <section class="stats-wide-grid">
       <article class="stats-panel accounts-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">Sign-ups, and the accounts that opened it</span><h2>Day by day</h2></div>
+          <div>${panelTitle(
+            "Day by day",
+            accountsInsight(accounts, rangeLabel),
+            `Every day since the first account, whatever range is chosen above. A day counts an account as active if it signed up or made a request that day.${accountsSinceNote(accounts)}`,
+          )}</div>
           <div class="chart-legend">
             ${ACCOUNT_SERIES.map((series) => `<span><i style="--legend:${series.color}"></i>${series.label}</span>`).join("")}
           </div>
         </header>
-        <p class="panel-insight">${escapeHtml(accountsInsight(accounts, rangeLabel))}</p>
         ${points.length === 0
           ? '<p class="cohort-empty">No account has signed up yet.</p>'
           : renderTimeChart("accounts", points, ACCOUNT_SERIES, DAY_MS)}
-        <p class="cohort-empty">Every day since the first account, whatever range is chosen above: accounts arrive a few a day, and a day is the smallest step that says anything. A day counts an account as active if it signed up or made a request that day.${accountsSinceNote(accounts)}</p>
       </article>
 
       <article class="stats-panel accounts-events-panel">
         <header class="panel-heading">
-          <div><span class="panel-kicker">What they did</span><h2>In the app</h2></div>
+          <div>${panelTitle("In the app", "Things done, not distinct accounts: one account linking three machines counts three times. What we did ourselves is counted apart and never shown here.")}</div>
           <span class="panel-range">${escapeHtml(rangeLabel)}</span>
         </header>
         ${renderAccountEvents(accounts.events)}
@@ -1040,6 +1040,8 @@ function renderAccounts(snapshot: StatsSnapshot): string {
         "No account has signed up in these weeks yet.",
       )}
     </section>
+
+    ${renderAccountList(snapshot.accountList ?? null, snapshot.generatedAt)}
   `;
 }
 
@@ -1092,7 +1094,7 @@ function renderEngagement(accounts: StatsAccountStats): string {
   return `
     <article class="stats-panel breakdown-panel kind-band">
       <header class="panel-heading">
-        <div><span class="panel-kicker">Accounts by the days they have been in the app</span><h2>How much they use it</h2></div>
+        <div>${panelTitle("How much they use it", "Accounts by the days they have been in the app, over the accounts that signed up since days started being recorded. An older account is missing the days before that and would read here as one that never came back, so it is left out.")}</div>
         <strong>${integerFormatter.format(accounts.engagementBase)}</strong>
       </header>
       <div class="breakdown-list">
@@ -1106,7 +1108,6 @@ function renderEngagement(accounts: StatsAccountStats): string {
             </div>
           `).join("")}
       </div>
-      <p class="cohort-empty">Over the accounts that signed up since days started being recorded. An older account is missing the days before that and would read here as one that never came back, so it is left out rather than counted against the product.</p>
     </article>
   `;
 }
@@ -1123,7 +1124,7 @@ function renderActivation(accounts: StatsAccountStats, period: string): string {
   return `
     <article class="stats-panel breakdown-panel kind-rate kind-band kind-activation">
       <header class="panel-heading">
-        <div><span class="panel-kicker">Of the accounts that signed up ${escapeHtml(period)}</span><h2>How far they got</h2></div>
+        <div>${panelTitle("How far they got", `Of the accounts that signed up ${period}. Each row is a share of these sign-ups. A machine counts even if it was unlinked later and an invite whether or not it was accepted, but a session only while it is still listed. Another day means active on two or more separate days, the sign-up day included.`)}</div>
         <strong>${integerFormatter.format(funnel.base)}</strong>
       </header>
       <div class="breakdown-list">
@@ -1137,9 +1138,63 @@ function renderActivation(accounts: StatsAccountStats, period: string): string {
             </div>
           `).join("")}
       </div>
-      <p class="cohort-empty">Each row is a share of these sign-ups, counted once however many times they did it. A machine counts even if it was unlinked later and an invite whether or not it was accepted, but a session only while it is still listed: an account that removed every session it ran is not counted as having run one. Another day means active on two or more separate days, the sign-up day included.</p>
     </article>
   `;
+}
+
+/**
+ * Every account by name, grouped by how far it got and newest first within
+ * each group. Our own accounts are folded away at the end.
+ */
+function renderAccountList(list: StatsAccountList, now: number): string {
+  if (list === null) return "";
+  if ("error" in list) {
+    return `<p class="stats-note"><span>Account list unavailable: ${escapeHtml(list.error)}.</span></p>`;
+  }
+  const groups = groupAccounts(list.accounts);
+  const rows = (accounts: typeof list.accounts) => accounts.map((account) => `
+    <tr>
+      <td><span class="account-email">${escapeHtml(account.email)}</span>${account.name ? `<small>${escapeHtml(account.name)}</small>` : ""}</td>
+      <td>${escapeHtml(formatDay(account.joinedAt))}</td>
+      <td>${escapeHtml(formatAgo(account.lastSeenAt, now))}</td>
+      <td class="num">${integerFormatter.format(account.machines)}</td>
+      <td class="num">${integerFormatter.format(account.sessions)}</td>
+      <td class="num">${integerFormatter.format(account.activeDays)}</td>
+      <td>${escapeHtml(account.team)}${account.teamSize > 1 ? ` <small>${integerFormatter.format(account.teamSize)}</small>` : ""}</td>
+    </tr>
+  `).join("");
+  const table = (accounts: typeof list.accounts) => `
+    <div class="account-table-wrap">
+      <table class="account-table">
+        <thead><tr><th>Account</th><th>Signed up</th><th>Last seen</th><th class="num">Machines</th><th class="num">Sessions</th><th class="num">Days</th><th>Team</th></tr></thead>
+        <tbody>${rows(accounts)}</tbody>
+      </table>
+    </div>
+  `;
+  const customers = list.accounts.filter((account) => !account.internal).length;
+  return `
+    <article class="stats-panel account-list-panel">
+      <header class="panel-heading">
+        <div><h2>Accounts</h2></div>
+        <strong>${integerFormatter.format(customers)}</strong>
+      </header>
+      ${groups.length === 0 ? '<p class="cohort-empty">No account has signed up yet.</p>' : groups.map((group) => group.key === "ours"
+        ? `<details class="account-group"><summary>${escapeHtml(group.label)} <span>${integerFormatter.format(group.accounts.length)}</span></summary>${table(group.accounts)}</details>`
+        : `<section class="account-group"><h3>${escapeHtml(group.label)} <span>${integerFormatter.format(group.accounts.length)}</span></h3>${table(group.accounts)}</section>`,
+      ).join("")}
+    </article>
+  `;
+}
+
+/**
+ * A panel title whose explanation is a tooltip rather than a paragraph under
+ * it: the page is read at a glance, and the caveats are there for whoever asks.
+ */
+function panelTitle(title: string, ...notes: string[]): string {
+  const note = notes.map((entry) => entry.trim()).filter(Boolean).join(" ");
+  return note === ""
+    ? `<h2>${escapeHtml(title)}</h2>`
+    : `<h2 class="has-note" tabindex="0" title="${escapeHtml(note)}">${escapeHtml(title)}</h2>`;
 }
 
 function renderAccountKpi(
@@ -1205,7 +1260,7 @@ function renderAccountEvents(events: Record<string, number>): string {
   const order = ["machine_linked", "session_registered", "command_sent", "vault_created", "invite_created", "invite_accepted", "feedback_sent"];
   const items = order.filter((key) => (events[key] ?? 0) > 0).map((key) => ({ label: key, value: events[key] }));
   if (items.length === 0) {
-    return '<p class="cohort-empty">Nothing done in the app in this range: no machine linked, session registered, command sent, vault created, invite, or feedback. What we did ourselves is counted apart and never shown here.</p>';
+    return '<p class="cohort-empty">Nothing done in the app in this range.</p>';
   }
   const maximum = Math.max(1, ...items.map((item) => item.value));
   return `
@@ -1218,7 +1273,6 @@ function renderAccountEvents(events: Record<string, number>): string {
         </div>
       `).join("")}
     </div>
-    <p class="cohort-empty">Things done, not distinct accounts: one account linking three machines counts three times. What we did ourselves is counted apart and never shown here.</p>
   `;
 }
 
@@ -1233,7 +1287,7 @@ function renderRates(
   return `
     <article class="stats-panel breakdown-panel kind-rate">
       <header class="panel-heading">
-        <div><span class="panel-kicker">${escapeHtml(description)}</span><h2>${escapeHtml(title)}</h2></div>
+        <div>${panelTitle(title, `${description}.`, footnote)}</div>
       </header>
       <div class="breakdown-list">
         ${shown.slice(0, 7).map((row) => `
@@ -1244,7 +1298,6 @@ function renderRates(
           </div>
         `).join("") || "<em>No opened sessions in this range yet.</em>"}
       </div>
-      ${footnote ? `<p class="cohort-empty">${escapeHtml(footnote)}</p>` : ""}
     </article>
   `;
 }
@@ -1260,7 +1313,7 @@ function renderBreakdown(
   return `
     <article class="stats-panel breakdown-panel kind-${kind}">
       <header class="panel-heading">
-        <div><span class="panel-kicker">${escapeHtml(description)}</span><h2>${escapeHtml(title)}</h2></div>
+        <div>${panelTitle(title, `${description}.`, footnote)}</div>
         <strong>${integerFormatter.format(items.reduce((sum, item) => sum + item.value, 0))}</strong>
       </header>
       <div class="breakdown-list">
@@ -1272,7 +1325,6 @@ function renderBreakdown(
           </div>
         `).join("") || "<em>No events in this range yet.</em>"}
       </div>
-      ${footnote ? `<p class="cohort-empty">${escapeHtml(footnote)}</p>` : ""}
     </article>
   `;
 }

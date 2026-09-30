@@ -2304,13 +2304,21 @@ export function createApp(options: AppOptions) {
 
       /* ---- Account figures for the statistics dashboard ---- */
 
-      if (route === "GET /api/stats/accounts") {
+      if (route === "GET /api/stats/accounts" || route === "GET /api/stats/accounts/list") {
         const expected = options.statsToken;
         if (!expected) return send(response, 404, { error: "not found" });
         const presented = bearer(request);
         const matches = presented.length === expected.length &&
           timingSafeEqual(Buffer.from(presented), Buffer.from(expected));
         if (!matches) return send(response, 401, { error: "sign in first" });
+        /*
+         * The list names people, so it is its own route: the counts above stay
+         * free of identifiers whatever is added here, and nothing that reads
+         * them is handed an address by accident.
+         */
+        if (route === "GET /api/stats/accounts/list") {
+          return send(response, 200, { accounts: await store.accountDirectory(isInternalAccount) });
+        }
         const requested = url.searchParams.get("range");
         const range = isStatsRange(requested) ? requested : "7d";
         const now = Date.now();

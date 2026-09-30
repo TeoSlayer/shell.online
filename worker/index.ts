@@ -38,7 +38,7 @@ import {
   type DeviceClass,
 } from "./analytics";
 import { isStatsRange, type StatsRange } from "../shared/stats";
-import { fetchAccountStats } from "./account-stats";
+import { fetchAccountList, fetchAccountStats } from "./account-stats";
 import { checkTeamAuthorization, type TeamAuthorizationResult } from "./team-authorization";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
@@ -679,13 +679,14 @@ async function handleStatsRequest(request: Request, env: Env, url: URL): Promise
     }
     const requestedRange = url.searchParams.get("range");
     const range: StatsRange = isStatsRange(requestedRange) ? requestedRange : "7d";
-    const [snapshotResponse, accounts] = await Promise.all([
+    const [snapshotResponse, accounts, accountList] = await Promise.all([
       fetchStatsSnapshot(env.STATS, range, hasVisitorSalt(env.STATS_VISITOR_SALT)),
       fetchAccountStats(env.APP_STATS_URL, env.APP_STATS_TOKEN, range),
+      fetchAccountList(env.APP_STATS_URL, env.APP_STATS_TOKEN),
     ]);
     if (!snapshotResponse.ok) return secureStatsResponse(snapshotResponse);
     const snapshot = await snapshotResponse.json<Record<string, unknown>>();
-    return secureStatsResponse(json({ ...snapshot, accounts }));
+    return secureStatsResponse(json({ ...snapshot, accounts, accountList }));
   }
 
   return secureStatsResponse(json({ error: "not found" }, 404));

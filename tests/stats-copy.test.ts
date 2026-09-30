@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildStatsSnapshot, DAY_MS, dayStart, type StatsSnapshotRows } from "../shared/stats-snapshot";
-import type { StatsAccountStats } from "../shared/stats";
+import type { StatsAccountListEntry, StatsAccountStats } from "../shared/stats";
 import {
   accountsInsight,
+  accountStage,
   activationRows,
+  formatAgo,
+  groupAccounts,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -202,5 +205,51 @@ describe("activationRows", () => {
   it("never draws a step past the whole bar", () => {
     const rows = activationRows({ base: 1, machineLinked: 2, sessionStarted: 1, teammateInvited: 0, cameBack: 0 });
     expect(rows[0].share).toBe(1);
+  });
+});
+
+describe("the account list", () => {
+  const entry = (overrides: Partial<StatsAccountListEntry>): StatsAccountListEntry => ({
+    email: "a@example.com", name: "A", team: "A's team", teamSize: 1, joinedAt: 0, lastSeenAt: null,
+    machines: 0, sessions: 0, activeDays: 0, invitesSent: 0, internal: false, ...overrides,
+  });
+
+  it("places an account at the furthest step it reached", () => {
+    expect(accountStage(entry({}))).toBe("signed_up");
+    expect(accountStage(entry({ machines: 2 }))).toBe("machine");
+    expect(accountStage(entry({ machines: 1, sessions: 3 }))).toBe("session");
+    /* A session run from a teammate's machine still counts as a session. */
+    expect(accountStage(entry({ sessions: 1 }))).toBe("session");
+  });
+
+  it("groups furthest along first, newest first within a group, and ours last", () => {
+    const groups = groupAccounts([
+      entry({ email: "old@x.io", joinedAt: 1 }),
+      entry({ email: "new@x.io", joinedAt: 3 }),
+      entry({ email: "runner@x.io", joinedAt: 2, sessions: 1 }),
+      entry({ email: "linker@x.io", joinedAt: 2, machines: 1 }),
+      entry({ email: "dev@ours.io", joinedAt: 4, sessions: 9, internal: true }),
+    ]);
+    expect(groups.map((group) => [group.label, group.accounts.map((account) => account.email)])).toEqual([
+      ["Ran a session", ["runner@x.io"]],
+      ["Linked a machine", ["linker@x.io"]],
+      ["Signed up only", ["new@x.io", "old@x.io"]],
+      ["Our own", ["dev@ours.io"]],
+    ]);
+  });
+
+  it("orders sign-ups in the same millisecond the same way every time, and leaves out empty groups", () => {
+    const groups = groupAccounts([entry({ email: "b@x.io" }), entry({ email: "a@x.io" })]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].accounts.map((account) => account.email)).toEqual(["a@x.io", "b@x.io"]);
+    expect(groupAccounts([])).toEqual([]);
+  });
+
+  it("says when an account was last in the app in UTC days", () => {
+    const noon = Date.UTC(2026, 8, 30, 12);
+    expect(formatAgo(null, noon)).toBe("never");
+    expect(formatAgo(Date.UTC(2026, 8, 30, 0, 1), noon)).toBe("today");
+    expect(formatAgo(Date.UTC(2026, 8, 29, 23, 59), noon)).toBe("yesterday");
+    expect(formatAgo(Date.UTC(2026, 8, 20, 12), noon)).toBe("10d ago");
   });
 });

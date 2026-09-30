@@ -265,6 +265,26 @@ export interface StatsAccountStats {
 
 export type StatsAccounts = StatsAccountStats | { error: string } | null;
 
+/**
+ * One account by name, for the dashboard's account list. Sent by the accounts
+ * app on its own route, behind the same token as the counts.
+ */
+export interface StatsAccountListEntry {
+  email: string;
+  name: string;
+  team: string;
+  teamSize: number;
+  joinedAt: number;
+  lastSeenAt: number | null;
+  machines: number;
+  sessions: number;
+  activeDays: number;
+  invitesSent: number;
+  internal: boolean;
+}
+
+export type StatsAccountList = { accounts: StatsAccountListEntry[] } | { error: string } | null;
+
 export interface StatsSnapshot {
   version: 2;
   generatedAt: number;
@@ -335,6 +355,8 @@ export interface StatsSnapshot {
   uniques: StatsUniques;
   retention: StatsRetention;
   accounts: StatsAccounts;
+  /** Absent from a snapshot built without the accounts app, and from an older Worker. */
+  accountList?: StatsAccountList;
   trend: StatsSeriesPoint[];
   breakdowns: {
     devices: StatsBreakdownItem[];

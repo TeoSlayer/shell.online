@@ -40,6 +40,7 @@ import {
 } from "./store";
 import type {
   AccountActivity,
+  AccountDirectoryEntry,
   AppEvent,
   AppEventCount,
   AccountKey,
@@ -1848,6 +1849,24 @@ export class MemoryStore implements Store {
       sessionStarted: this.data.sessions.some((session) => session.uid === membership.uid),
       teammateInvited: this.data.invites.some((invite) => invite.createdBy === membership.uid),
     }));
+  }
+
+  async accountDirectory(isInternal: (email: string) => boolean = () => false): Promise<AccountDirectoryEntry[]> {
+    return this.data.memberships
+      .map((membership) => ({
+        email: membership.email,
+        name: membership.name,
+        team: this.data.organizations.find((entry) => entry.id === membership.orgId)?.name ?? "",
+        teamSize: this.data.memberships.filter((entry) => entry.orgId === membership.orgId).length,
+        joinedAt: membership.joinedAt,
+        lastSeenAt: membership.lastSeenAt ?? null,
+        machines: this.data.tokens.filter((token) => token.uid === membership.uid).length,
+        sessions: this.data.sessions.filter((session) => session.uid === membership.uid).length,
+        activeDays: this.data.accountActivity.filter((entry) => entry.uid === membership.uid).length,
+        invitesSent: this.data.invites.filter((invite) => invite.createdBy === membership.uid).length,
+        internal: isInternal(membership.email),
+      }))
+      .sort((left, right) => right.joinedAt - left.joinedAt || left.email.localeCompare(right.email));
   }
 
   /* ---- App events ---- */
