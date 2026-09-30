@@ -14,7 +14,7 @@
 //   close()
 // The Safari transport only ever touches the session and driver it spawned.
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import net from 'node:net';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -387,4 +387,20 @@ export async function launchSafariTransport({ retries = 2 } = {}) {
     }
   }
   throw new Error(`Safari driver setup failed after ${retries} attempts: ${lastError?.message ?? lastError}`);
+}
+
+/*
+ * Removes a throwaway Chrome profile, and does not fail the canary over it.
+ *
+ * Chrome keeps writing into its user data directory for a moment after the
+ * connection closes, so a plain recursive remove races it and throws
+ * ENOTEMPTY on the profile's `Default` subdirectory -- which failed CI on
+ * main after every single gate in the password-requests canary had passed.
+ * `force` does not cover this: it suppresses a missing path, not a directory
+ * that grew a file between the readdir and the rmdir. Retries do, because the
+ * writer is finishing, not starting.
+ */
+export async function removeProfile(profile) {
+  if (!profile) return;
+  await rm(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }

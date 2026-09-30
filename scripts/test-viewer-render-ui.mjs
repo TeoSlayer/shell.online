@@ -6,13 +6,13 @@
 // SHELL_BROWSER=safari runs the same fixtures through a real safaridriver
 // session (no DPR/mobile emulation; the actual measured viewport is logged).
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport, launchSafariTransport, safariGreenPaintCheck } from './lib/browser-transport.mjs';
+import { launchChromeTransport, launchSafariTransport, safariGreenPaintCheck, removeProfile } from './lib/browser-transport.mjs';
 
 const browser = process.env.SHELL_BROWSER === 'safari' ? 'safari' : 'chrome';
 const profile = browser === 'chrome' ? await mkdtemp(join(tmpdir(), 'shell-viewer-render-')) : null;
@@ -288,5 +288,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  if (profile) await rm(profile, { recursive: true, force: true });
+  if (profile) await removeProfile(profile);
 }

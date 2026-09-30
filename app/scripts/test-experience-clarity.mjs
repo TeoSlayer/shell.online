@@ -1,12 +1,12 @@
 // Real UI/providers, synthetic account and relay only. No user sessions touched.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const profile = await mkdtemp(join(tmpdir(), 'shell-clarity-browser-'));
@@ -93,4 +93,4 @@ try {
     console.log(`PASS ${width}: setup, Windows copy, detail, vault guidance, unchanged permissions`);
   }
   console.log(`Preview screenshots: ${shots}`);
-} finally { await browser?.close(); await server.close(); await rm(profile, { recursive: true, force: true }); }
+} finally { await browser?.close(); await server.close(); await removeProfile(profile); }

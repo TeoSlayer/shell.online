@@ -41,13 +41,13 @@
 // No real account, no commits/deploys. Synthetic data only.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const APP = join(here, '..');
@@ -902,5 +902,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

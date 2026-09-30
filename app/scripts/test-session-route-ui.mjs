@@ -15,13 +15,13 @@
 // Chrome by default; SHELL_BROWSER=safari runs the same fixture through
 // safaridriver. Synthetic data only; no login, relay or deploy.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport, launchSafariTransport } from '../../scripts/lib/browser-transport.mjs';
+import { launchChromeTransport, launchSafariTransport, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const browser = process.env.SHELL_BROWSER === 'safari' ? 'safari' : 'chrome';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -302,5 +302,5 @@ try {
 } finally {
   await transport?.close();
   await server.close();
-  if (profile) await rm(profile, { recursive: true, force: true });
+  if (profile) await removeProfile(profile);
 }
