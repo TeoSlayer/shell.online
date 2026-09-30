@@ -42,6 +42,17 @@ const REMEMBERED = 400;
 
 export class RepaintReader {
   private given: string[] = [];
+  /*
+   * Whether the last row handed downstream was blank.
+   *
+   * The collapse below has to hold across calls, not only inside one. A
+   * screen that gains a blank row this frame and another the next hands one
+   * blank over each time, and neither call can see the other's -- which is
+   * how a message ends up holding the pairs of empty rows that a reader has
+   * to scroll past. Measured on a captured session: nine rows in a message,
+   * four of them empty.
+   */
+  private endedBlank = false;
   /** The last frame seen in full, including the row that was held back. */
   private pending: readonly string[] = [];
 
@@ -85,6 +96,7 @@ export class RepaintReader {
   reset(): void {
     this.given = [];
     this.pending = [];
+    this.endedBlank = false;
   }
 
   /** Uncommitted rows, for a reversible quiet-time preview. */
@@ -103,7 +115,9 @@ export class RepaintReader {
     this.given.push(...fresh);
     const remembered = Math.max(REMEMBERED, lines.length);
     if (this.given.length > remembered) this.given.splice(0, this.given.length - remembered);
-    return flatten(fresh);
+    const out = flatten(fresh, this.endedBlank);
+    if (out.length > 0) this.endedBlank = out[out.length - 1].trim() === "";
+    return out;
   }
 
   /**
@@ -210,10 +224,13 @@ function matches(given: readonly string[], from: number, frame: readonly string[
  * One is kept rather than none because downstream a blank line is what cuts a
  * paragraph. Twenty do nothing that one does not.
  */
-function flatten(lines: readonly string[]): string[] {
+function flatten(lines: readonly string[], afterBlank: boolean): string[] {
   const out: string[] = [];
+  let blank = afterBlank;
   for (const line of lines) {
-    if (line.trim() === "" && out.length > 0 && out[out.length - 1].trim() === "") continue;
+    const empty = line.trim() === "";
+    if (empty && blank) continue;
+    blank = empty;
     out.push(line);
   }
   return out;

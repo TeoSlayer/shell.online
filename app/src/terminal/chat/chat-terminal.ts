@@ -562,18 +562,25 @@ export class ChatTerminal {
     if (this.agentSettled) clearTimeout(this.agentSettled);
     this.agentSettled = setTimeout(() => {
       this.agentSettled = null;
-      /* A spinner means it is still working, whatever the screen is doing. */
-      if (!this.agent || this.agent.working) return;
+      if (!this.agent) return;
+      /*
+       * The spinner is not consulted here, and that is the point.
+       *
+       * `working` is only recomputed when a frame arrives, so the spinner on
+       * the last frame of a turn leaves it true for ever -- and a commit that
+       * waits for it to go false then waits for ever too. A spinner animates:
+       * a screen nobody has repainted for over a second is a screen whose
+       * spinner has stopped, whatever the last frame happened to catch. So
+       * stillness is taken as the answer, and the wheel is put out with it.
+       */
       const now = Date.now();
       let changed = false;
       for (const utterance of this.agent.flush()) {
         this.transcript.fromAgent(utterance, now);
         changed = true;
       }
-      if (changed) {
-        this.view?.setThinking(false);
-        this.schedule();
-      }
+      this.view?.setThinking(false);
+      if (changed) this.schedule();
     }, AGENT_SETTLED_MS - AGENT_QUIET_MS);
   }
 
