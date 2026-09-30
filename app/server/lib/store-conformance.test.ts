@@ -2222,6 +2222,29 @@ for (const implementation of implementations) {
         ]);
       });
 
+      it("still counts a machine that was unlinked, and stops counting a session once it is removed", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putToken(token());
+        await store.upsertSession(session());
+        expect(await store.revokeDevice("uid-1", "dev_1")).toBe(true);
+        expect(await store.deleteSession("org_1", "s1")).toBe(true);
+        const [row] = await store.accountActivity();
+        expect(row).toMatchObject({ machineLinked: true, sessionStarted: false });
+      });
+
+      it("does not credit an account with what a teammate did", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.putMembership(membership({ uid: "uid-2", email: "ben@example.com", joinedAt: 2000 }));
+        await store.putToken(token({ uid: "uid-2", email: "ben@example.com" }));
+        await store.upsertSession(session({ uid: "uid-2", ownerUid: "uid-2", assigneeUid: "uid-2" }));
+        await store.putInvite(invite({ createdBy: "uid-2" }));
+        const rows = (await store.accountActivity()).sort((left, right) => left.joinedAt - right.joinedAt);
+        expect(rows[0]).toMatchObject({ machineLinked: false, sessionStarted: false, teammateInvited: false });
+        expect(rows[1]).toMatchObject({ machineLinked: true, sessionStarted: true, teammateInvited: true });
+      });
+
       it("keeps the days through a membership rewrite and drops them with the account", async () => {
         await store.putOrganization(organization());
         await store.putMembership(membership());

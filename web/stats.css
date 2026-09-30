@@ -2126,4 +2126,13 @@ html.stats-document #app {
   border-top: 0;
 }
 
+/* A share and its count side by side, which the default 30px column wraps. */
+.kind-activation .breakdown-list > div {
+  grid-template-columns: minmax(76px, 0.7fr) minmax(80px, 1fr) 58px;
+}
+
+.kind-activation .breakdown-list > div > strong {
+  white-space: nowrap;
+}
+
 .kind-band .breakdown-list > div > i b { background: linear-gradient(90deg, #4a6a86, #8ec2dc); }

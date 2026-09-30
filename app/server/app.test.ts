@@ -3946,6 +3946,24 @@ describe("account figures for the statistics dashboard", () => {
     expect(JSON.stringify(answer.body)).not.toContain("ana@example.com");
   });
 
+  it("says how far the range's sign-ups got, as counts", async () => {
+    handle = createApp({ store, verifyIdToken: verifyIdToken as never, allowedOrigins: [ORIGIN], statsToken: TOKEN });
+    expect((await call("GET", "/api/org", { auth: await idToken() })).status).toBe(200);
+    expect((await call("GET", "/api/org", {
+      auth: await idToken({ sub: "uid-2", email: "bo@example.com", name: "Bo" }),
+    })).status).toBe(200);
+    const before = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
+    expect(before.body.activation).toEqual({ base: 2, machineLinked: 0, sessionStarted: 0, teammateInvited: 0, cameBack: 0 });
+
+    await store.putToken({
+      id: "dev_1", accessHash: "access", refreshHash: "refresh", uid: "uid-1", email: "ana@example.com",
+      name: "Ana", label: "laptop", accessExpiresAt: Date.now() + 60_000, createdAt: Date.now(), lastSeenAt: Date.now(),
+    });
+    const after = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
+    expect(after.body.activation).toEqual({ base: 2, machineLinked: 1, sessionStarted: 0, teammateInvited: 0, cameBack: 0 });
+    expect(JSON.stringify(after.body.activation)).not.toMatch(/uid|@/);
+  });
+
   /*
    * Our own accounts are the most active there are and were always going to
    * use the product. Left in, a quiet week reads as a good one, so they are
@@ -3967,6 +3985,7 @@ describe("account figures for the statistics dashboard", () => {
     const answer = await call("GET", "/api/stats/accounts?range=7d", { auth: TOKEN });
     expect(answer.status).toBe(200);
     expect(answer.body).toMatchObject({ total: 1, newInRange: 1, activeInRange: 1, excluded: 1 });
+    expect(answer.body.activation.base).toBe(1);
     expect(answer.body.cohorts[0].size).toBe(1);
     expect(JSON.stringify(answer.body)).not.toContain("ours.example");
   });

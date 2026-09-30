@@ -1,4 +1,4 @@
-import type { StatsAccountStats, StatsSnapshot } from "./stats";
+import type { StatsAccountActivation, StatsAccountStats, StatsSnapshot } from "./stats";
 import { DAY_MS } from "./stats-snapshot";
 
 /*
@@ -259,6 +259,21 @@ export function accountsInsight(accounts: StatsAccountStats, rangeLabel: string)
     parts.push(`The period before brought ${integerFormatter.format(previous.newAccounts)}; this one brought none.`);
   }
   return `${parts.join(" ")}${ours}`;
+}
+
+/**
+ * The activation panel's rows, in the order a new account usually goes, each
+ * a share of the same sign-ups. A range with no sign-ups gives no rows: every
+ * share would be 0 of 0, which says nothing.
+ */
+export function activationRows(funnel: StatsAccountActivation): { label: string; value: number; share: number }[] {
+  if (funnel.base === 0) return [];
+  return [
+    { label: "Linked a machine", value: funnel.machineLinked },
+    { label: "Ran a session", value: funnel.sessionStarted },
+    { label: "Invited a teammate", value: funnel.teammateInvited },
+    { label: "Came back another day", value: funnel.cameBack },
+  ].map((row) => ({ ...row, share: ratio(row.value, funnel.base) }));
 }
 
 export interface DeltaChip {

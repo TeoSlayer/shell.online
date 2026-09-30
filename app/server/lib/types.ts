@@ -236,7 +236,10 @@ export interface AccountActivity {
    */
   /** Ran `shell login` on at least one machine, whether or not it is still linked. */
   machineLinked: boolean;
-  /** Registered at least one session. */
+  /**
+   * Has at least one session on record. Removing a session deletes its row,
+   * so an account that removed every session it ran reads as never having run one.
+   */
   sessionStarted: boolean;
   /** Created at least one invite, accepted or not. */
   teammateInvited: boolean;

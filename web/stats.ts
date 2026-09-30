@@ -13,6 +13,7 @@ import {
 import { DAY_MS, peopleCountedSince } from "../shared/stats-snapshot";
 import {
   accountsInsight,
+  activationRows,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -1118,30 +1119,25 @@ function renderEngagement(accounts: StatsAccountStats): string {
 function renderActivation(accounts: StatsAccountStats, period: string): string {
   const funnel = accounts.activation;
   if (funnel === null) return "";
-  const rows = [
-    { label: "Linked a machine", value: funnel.machineLinked },
-    { label: "Ran a session", value: funnel.sessionStarted },
-    { label: "Invited a teammate", value: funnel.teammateInvited },
-    { label: "Came back another day", value: funnel.cameBack },
-  ];
+  const rows = activationRows(funnel);
   return `
-    <article class="stats-panel breakdown-panel kind-rate kind-band">
+    <article class="stats-panel breakdown-panel kind-rate kind-band kind-activation">
       <header class="panel-heading">
         <div><span class="panel-kicker">Of the accounts that signed up ${escapeHtml(period)}</span><h2>How far they got</h2></div>
         <strong>${integerFormatter.format(funnel.base)}</strong>
       </header>
       <div class="breakdown-list">
-        ${funnel.base === 0
+        ${rows.length === 0
           ? `<em>No account signed up ${escapeHtml(period)}.</em>`
           : rows.map((row) => `
             <div>
               <span>${escapeHtml(row.label)}</span>
-              <i><b style="width:${Math.max(2, ratio(row.value, funnel.base) * 100)}%"></b></i>
-              <strong>${formatPercent(ratio(row.value, funnel.base))} <small>${integerFormatter.format(row.value)}</small></strong>
+              <i><b style="width:${Math.max(2, row.share * 100)}%"></b></i>
+              <strong>${formatPercent(row.share)} <small>${integerFormatter.format(row.value)}</small></strong>
             </div>
           `).join("")}
       </div>
-      <p class="cohort-empty">Each row is a share of these sign-ups, counted once however many times they did it. A machine counts even if it was unlinked later, and an invite counts whether or not it was accepted. Another day means active on two or more separate days, the sign-up day included.</p>
+      <p class="cohort-empty">Each row is a share of these sign-ups, counted once however many times they did it. A machine counts even if it was unlinked later and an invite whether or not it was accepted, but a session only while it is still listed: an account that removed every session it ran is not counted as having run one. Another day means active on two or more separate days, the sign-up day included.</p>
     </article>
   `;
 }

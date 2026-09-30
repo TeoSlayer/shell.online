@@ -159,6 +159,20 @@ describe("accountStats activation", () => {
     });
   });
 
+  it("counts a sign-up at the very start of the range in it, and one a moment before out of it", () => {
+    const start = now - 7 * DAY_MS;
+    const edge = [
+      customer({ joinedAt: start, days: [], machineLinked: true }),
+      customer({ joinedAt: start - 1, days: [], machineLinked: true }),
+    ];
+    expect(accountStats(edge, "7d", now).activation).toMatchObject({ base: 1, machineLinked: 1 });
+  });
+
+  it("says nothing about which accounts they were", () => {
+    expect(Object.keys(accountStats(accounts, "7d", now).activation).sort())
+      .toEqual(["base", "cameBack", "machineLinked", "sessionStarted", "teammateInvited"]);
+  });
+
   it("is all zeros for an empty range rather than missing", () => {
     expect(accountStats([], "24h", now).activation).toEqual({
       base: 0, machineLinked: 0, sessionStarted: 0, teammateInvited: 0, cameBack: 0,

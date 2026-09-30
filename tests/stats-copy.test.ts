@@ -3,6 +3,7 @@ import { buildStatsSnapshot, DAY_MS, dayStart, type StatsSnapshotRows } from "..
 import type { StatsAccountStats } from "../shared/stats";
 import {
   accountsInsight,
+  activationRows,
   deltaChip,
   formatDuration,
   formatPercent,
@@ -181,5 +182,25 @@ describe("accountsInsight", () => {
   it("does not say new or returning over all time, where every account is both or neither", () => {
     const all = accounts({ total: 20, newInRange: 20, activeInRange: 12, returningInRange: 0, previous: null });
     expect(accountsInsight(all, "all time")).toBe("20 accounts in all. 12 used the app (60% of all of them).");
+  });
+});
+
+describe("activationRows", () => {
+  it("lists the steps in the order a new account goes, each a share of the same sign-ups", () => {
+    expect(activationRows({ base: 4, machineLinked: 3, sessionStarted: 2, teammateInvited: 0, cameBack: 1 })).toEqual([
+      { label: "Linked a machine", value: 3, share: 0.75 },
+      { label: "Ran a session", value: 2, share: 0.5 },
+      { label: "Invited a teammate", value: 0, share: 0 },
+      { label: "Came back another day", value: 1, share: 0.25 },
+    ]);
+  });
+
+  it("has no rows for a range nobody signed up in, rather than a column of 0 of 0", () => {
+    expect(activationRows({ base: 0, machineLinked: 0, sessionStarted: 0, teammateInvited: 0, cameBack: 0 })).toEqual([]);
+  });
+
+  it("never draws a step past the whole bar", () => {
+    const rows = activationRows({ base: 1, machineLinked: 2, sessionStarted: 1, teammateInvited: 0, cameBack: 0 });
+    expect(rows[0].share).toBe(1);
   });
 });
