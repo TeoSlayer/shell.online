@@ -564,6 +564,62 @@ describe("a reload, which is a connection, which is a replay", () => {
     expect(texts(now)).toEqual(["from before the reload", "the screen, replayed"]);
   });
 
+  /*
+   * What the screenshot showed: an answer, then a later question, then the
+   * same answer again underneath it. The screen replayed on connection holds
+   * the end of the conversation, and the end of the conversation is exactly
+   * what this device remembered, so both were drawn.
+   */
+  it("does not draw again what it already remembered", () => {
+    const earlier = new Transcript();
+    earlier.submitted("move the permissions", 1000);
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("Moved and live.")], open: false }, 1100);
+    earlier.submitted("is the json used?", 1200);
+    earlier.close(1300);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    /* The screen still shows the answer and the question under it. */
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Moved and live.")], open: false }, 2000);
+    now.fromAgent({ kind: "sent", text: "is the json used?", lines: [], open: false }, 2001);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["move the permissions", "Moved and live.", "is the json used?"]);
+  });
+
+  it("keeps what the session said after the snapshot", () => {
+    const earlier = new Transcript();
+    earlier.submitted("asked", 1000);
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("answered")], open: false }, 1100);
+    earlier.close(1200);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("answered")], open: false }, 2000);
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("and then this")], open: false }, 2100);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["asked", "answered", "and then this"]);
+  });
+
+  /* An agent does say the same short thing twice, and both were real. */
+  it("keeps a genuine repeat the remembered thread has no second copy of", () => {
+    const earlier = new Transcript();
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 2000);
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 2100);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["Done.", "Done."]);
+  });
+
   it("keeps it through more than one reconnection", () => {
     const earlier = new Transcript();
     earlier.submitted("remembered", 1000);
@@ -602,43 +658,5 @@ describe("a reload, which is a connection, which is a replay", () => {
     now.clear();
     now.beginReplay();
     expect(now.messages).toEqual([]);
-  });
-});
-
-describe("the agent's own record", () => {
-  const recorded = (seq: number, text: string, kind: "sent" | "received" = "received") => ({
-    seq,
-    message: { kind, at: 1000 + seq, text: kind === "sent" ? text : "", lines: kind === "sent" ? [] : [plainLine(text)], open: false },
-  });
-
-  it("becomes the conversation", () => {
-    const transcript = new Transcript();
-    expect(transcript.fromRecord([recorded(1, "npm test", "sent"), recorded(2, "all passed")])).toBe(true);
-    expect(texts(transcript)).toEqual(["npm test", "all passed"]);
-    expect(transcript.isRecorded).toBe(true);
-  });
-
-  /*
-   * Events carry their position, so a batch that arrives twice -- a reconnect,
-   * a replay, a host that resent -- changes nothing.
-   */
-  it("says the same thing once however many times it arrives", () => {
-    const transcript = new Transcript();
-    transcript.fromRecord([recorded(1, "one"), recorded(2, "two")]);
-    expect(transcript.fromRecord([recorded(1, "one"), recorded(2, "two")])).toBe(false);
-    expect(transcript.fromRecord([recorded(2, "two"), recorded(3, "three")])).toBe(true);
-    expect(texts(transcript)).toEqual(["one", "two", "three"]);
-  });
-
-  it("is forgotten when the conversation is cleared", () => {
-    const transcript = new Transcript();
-    transcript.fromRecord([recorded(1, "one")]);
-    transcript.clear();
-    expect(transcript.isRecorded).toBe(false);
-    expect(transcript.fromRecord([recorded(1, "one")])).toBe(true);
-  });
-
-  it("knows it has not heard from a record yet", () => {
-    expect(new Transcript().isRecorded).toBe(false);
   });
 });

@@ -313,6 +313,102 @@ describe("reading a real exchange", () => {
   });
 });
 
+/*
+ * Captured from Claude Code v2.1.285 through a pty: a prompt sent while the
+ * agent was already working, and the tool result that came back under it.
+ */
+/*
+ * A heading that counts up while its work runs. The words never change; the
+ * clock on the end of them does, and the reader compares rows.
+ */
+/*
+ * A heading that counts up while its work runs: `Running the canary` becomes
+ * `Running the canary · 3s`, and the words never changed. The reader compares
+ * rows, so a row that ticks is a row it cannot match -- which is the thing
+ * this module's own notes say breaks the join between one frame and the next
+ * and hands content over twice. Taking the clock off makes the row hold still.
+ */
+describe("a line with a clock running on the end of it", () => {
+  /* The text of the message the frames below leave open. */
+  const body = (rows: string[][]) => {
+    const adapter = new ClaudeCodeAdapter();
+    let last = "";
+    for (const rowSet of rows) {
+      for (const utterance of read(adapter, rowSet)) last = utterance.lines.map((l) => l.text).join("\n");
+    }
+    return last;
+  };
+
+  it("holds the heading still while the clock runs", () => {
+    const said = body([
+      ["⏺ answer one", "", "⏺ Running the canary", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 1s", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 2s", "next row", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 12s", "next row", "tail", "cursor"],
+    ]);
+    expect(said).toContain("Running the canary");
+    expect((said.match(/Running the canary/g) ?? []).length).toBe(1);
+    /* Not `Running the canary · 2s`: a clock stopped at a moment that has
+     * passed is worse than no clock, and it is what made the row change. */
+    expect(said).not.toMatch(/·\s*\d+s/u);
+  });
+
+  /* The other shape a captured session writes: `(… · 0s)`, `(4s · ↓ 60 tokens)`. */
+  it("holds it still for a bracketed counter too", () => {
+    const said = body([
+      ["⏺ answer one", "", "⏺ Bash(npm test) (running hook · 0s)", "cursor"],
+      ["⏺ answer one", "", "⏺ Bash(npm test) (running hook · 3s)", "next row", "cursor"],
+      ["⏺ answer one", "", "⏺ Bash(npm test) (4s · ↓ 60 tokens)", "next row", "tail", "cursor"],
+    ]);
+    expect((said.match(/Bash\(npm test\)/g) ?? []).length).toBe(1);
+    expect(said).not.toContain("tokens");
+    expect(said).not.toContain("running hook");
+  });
+
+  /*
+   * A bracket with no middot in it is somebody's sentence, and the words
+   * inside it are theirs. Only a clock is taken off.
+   */
+  it("leaves a sentence that merely ends in a number alone", () => {
+    expect(body([["⏺ We cut the build (from 30s)", "", "cursor"]]))
+      .toContain("We cut the build (from 30s)");
+  });
+});
+
+describe("a prompt sent while the agent is busy", () => {
+  it("does not read the tool result under it as part of what was sent", () => {
+    const frame = [
+      "⏺ say exactly: banana",
+      "❯ run the probe as well",
+      "  ⎿  $ go run ./probe",
+      "  ⎿  claude-code  3 events",
+      "⏺ Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    const sent = shaped.filter((line) => line.startsWith("sent:"));
+    expect(sent).toEqual(["sent:run the probe as well"]);
+    expect(sent.join("")).not.toContain("go run ./probe");
+  });
+
+  /*
+   * The same row, as another terminal draws it. A marker is a glyph in a
+   * font; which glyph arrives is not ours to decide, and a session reported
+   * from a real machine showed this one.
+   */
+  it("reads the same prompt when the marker arrives as a greater-than", () => {
+    const frame = [
+      "⏺ earlier answer",
+      "> run the probe as well",
+      "  ⎿  $ go run ./probe",
+      "⏺ Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    expect(shaped.filter((line) => line.startsWith("sent:"))).toEqual(["sent:run the probe as well"]);
+  });
+});
+
 describe("the interface's own indent and wrapping", () => {
   it("comes off the paragraph", () => {
     expect(dedent(["  one", "  two"])).toEqual(["one", "two"]);

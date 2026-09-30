@@ -95,10 +95,15 @@ export class RepaintReader {
   private give(lines: readonly string[], end = lines.length): string[] {
     const fresh = lines.slice(this.overlap(lines), end);
     if (fresh.length === 0) return [];
+    /*
+     * What is given out is remembered exactly as the frame had it, because
+     * that is what the next frame will be compared against. What is handed
+     * downstream has its blank runs collapsed; see `flatten`.
+     */
     this.given.push(...fresh);
     const remembered = Math.max(REMEMBERED, lines.length);
     if (this.given.length > remembered) this.given.splice(0, this.given.length - remembered);
-    return fresh;
+    return flatten(fresh);
   }
 
   /**
@@ -190,6 +195,28 @@ function matches(given: readonly string[], from: number, frame: readonly string[
     if (given[from + index] !== frame[index]) return false;
   }
   return true;
+}
+
+/**
+ * One blank line where a frame had many.
+ *
+ * The empty middle of a screen is not content. A screen with a status line
+ * under a tall empty gap -- a command running, counting the seconds -- hands
+ * that gap over on every repaint, because the line above it changed and the
+ * rows below it are therefore new. Four seconds of `go run` arrived as eighty
+ * blank rows inside one message, and a reader had to scroll a blank screen to
+ * reach the end of the conversation.
+ *
+ * One is kept rather than none because downstream a blank line is what cuts a
+ * paragraph. Twenty do nothing that one does not.
+ */
+function flatten(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.trim() === "" && out.length > 0 && out[out.length - 1].trim() === "") continue;
+    out.push(line);
+  }
+  return out;
 }
 
 function trimTrailingBlanks(lines: readonly string[]): readonly string[] {
