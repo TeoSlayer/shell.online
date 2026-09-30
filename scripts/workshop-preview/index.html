@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Team Workshop · Local activity preview</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">▦</span><div><h1>Team Workshop</h1><p>A little forest. A growing team.</p></div></div>
+    <div class="preview-notice"><strong>LOCAL WORKSHOP PREVIEW</strong><span>Simulated identities · no real sessions or models</span></div>
+    <div class="team-control"><span>Teammates</span><div role="group" aria-label="Number of simulated team members"><button data-team="1" aria-label="Show 1 team member">1</button><button data-team="3" aria-label="Show 3 team members" aria-pressed="true">3</button><button data-team="8" aria-label="Show 8 team members">8</button><button data-team="24" aria-label="Show 24 team members">24</button></div><span id="team-count">3 people · 9 drones</span></div>
+    <label class="density-control" for="agents-per-owner">Drones / teammate<select id="agents-per-owner"><option>3</option><option>6</option><option>12</option><option>24</option></select></label>
+  </header>
+  <main class="map-stage" id="map-stage">
+    <canvas id="world" tabindex="0" aria-label="Local drone workshop preview map. Identities are simulated. Drag to pan. Use plus and minus to zoom, or use the camera controls below."></canvas>
+    <div class="map-caption"><span class="live-dot"></span>Woodland grid <span id="grid-size">· 1 owner area</span></div>
+    <details class="owner-legend" id="owner-legend"><summary id="owner-legend-summary">Owners · 3</summary><div id="owner-legend-list"></div></details>
+    <div class="map-help" id="map-help">Drag to explore · scroll to zoom · select a drone</div>
+    <div id="selection-note" class="selection-note" aria-live="polite"></div>
+    <section id="today-strip" class="today-strip" aria-label="Today's local demo output"><strong id="today-total" role="status">Today · 0 completed · 0 delivered · team level 0</strong><span id="today-detail">Local demo · resets on reload · Europe/Bucharest</span></section>
+    <button class="overview" id="overview" aria-label="Map overview: click to move the camera"><canvas id="minimap" width="210" height="130"></canvas><span>MAP OVERVIEW</span></button>
+    <div class="loading" id="loading">Preparing your woodland…</div>
+  </main>
+  <aside class="dock" aria-label="Preview controls">
+    <section class="control-group camera-group"><h2>Explore</h2>
+      <div class="button-row"><button id="fit-team">Fit team</button><button id="focus-mine">My area</button><button id="reset-view" class="quiet">Reset</button></div>
+      <div class="button-row"><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value" aria-label="Current zoom">100%</output><button id="zoom-in" aria-label="Zoom in">+</button><button id="toggle-map" aria-pressed="true" class="quiet">Minimap</button><label class="motion-label"><input id="reduced-motion" type="checkbox">Less motion</label></div>
+    </section>
+    <section class="control-group drone-group"><h2>Evidence-driven activity <span class="sim-label" id="activity-origin">real local process · no model</span></h2>
+      <label class="select-label" for="selected-drone">Inspect<select id="selected-drone"></select></label>
+      <label class="select-label mode-label" for="activity-mode">Evidence<select id="activity-mode"><option value="local-sandbox">Local sandbox job · no model</option><option value="simulated">Simulated events</option></select></label>
+      <div class="state-buttons hidden" id="simulated-controls" role="group" aria-label="Emit a simulated activity event"><button data-event="started">Work started</button><button data-event="output">Output</button><button data-event="completed">Completed</button><button data-event="attention">Needs input</button><button data-event="idle">Idle</button><button data-event="offline">Offline</button></div>
+      <div class="sandbox-controls" id="sandbox-controls"><label for="job-kind">Task<select id="job-kind"><option value="fixture-check">Check local fixture · about 5 seconds</option></select></label><button id="start-job" class="primary">Run local task</button><button id="cancel-job" disabled>Cancel task</button></div>
+      <p id="drone-state" class="detail" role="status"></p>
+      <p id="evidence-detail" class="detail evidence-detail"></p>
+    </section>
+    <section class="control-group parcel-group"><h2>A message, made visible <span class="sim-label">simulated origins & delivery</span></h2>
+      <div class="parcel-inputs"><label for="parcel-source">From<select id="parcel-source"></select></label><label for="parcel-target">To<select id="parcel-target"></select></label><button id="send-parcel" class="primary">Send parcel</button><button id="parcel-next" disabled>Simulate delivery</button></div>
+      <div class="parcel-ledger" aria-label="Simulated request lifecycle"><span data-phase="submitted">1 · Submitted</span><span data-phase="delivered">2 · Host delivered</span><span data-phase="response">3 · Correlated response</span></div>
+      <p id="parcel-status" class="detail" role="status">Send from an owner, another drone, or the MCP gateway. Delivery is not task completion.</p>
+    </section>
+  </aside>
+  <script type="module" src="/demo.js"></script>
+</body>
+</html>
