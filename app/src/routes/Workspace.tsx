@@ -1043,6 +1043,7 @@ export function Workspace() {
                 liveWrite={liveWrite}
                 liveRead={liveRead}
                 finished={finished}
+                summaries={sessionSummaries}
                 now={now}
                 members={members}
                 you={you}
@@ -1223,8 +1224,10 @@ function SessionGroup({
              */
             const title = sessionTitle(session);
             return (
+              <SessionSummaryHover key={session.id} session={session} summary={summaries[session.id]} now={now}>
+              {(hover) => (
               <tr
-                key={session.id}
+                {...hover}
                 data-live={online}
                 className="table-row-linked"
                 onClick={(event) => {
@@ -1232,7 +1235,6 @@ function SessionGroup({
                 }}
               >
                 <td>
-                  <SessionSummaryHover session={session} summary={summaries[session.id]} now={now}>
                   <Link className="table-subject" to={`/sessions/${session.id}`}>
                     {/* The kind of thing running, in colour while it runs. */}
                     <img
@@ -1247,7 +1249,6 @@ function SessionGroup({
                     </span>
                     <SessionLock session={session} />
                   </Link>
-                  </SessionSummaryHover>
                   {/*
                     * A genuine two-line summary when the record carries one,
                     * and the truthful empty state when it does not. The command
@@ -1348,6 +1349,8 @@ function SessionGroup({
                   </div>
                 </td>
               </tr>
+              )}
+              </SessionSummaryHover>
             );
           })}
         </tbody>

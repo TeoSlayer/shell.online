@@ -11,7 +11,7 @@ import { SessionBoard } from "./SessionBoard";
  * never calls it.
  */
 vi.mock("../vault/VaultProvider", () => ({
-  useVault: () => ({ openShare: async () => null }),
+  useVault: () => ({ uid: "owner", status: "locked", openShare: async () => null }),
 }));
 
 const owner = { uid: "owner", role: "owner" } as Member;
@@ -36,6 +36,7 @@ const render = (overrides: Partial<SessionRecord> = {}) =>
     liveWrite: [session(overrides)],
     liveRead: [],
     finished: [],
+    summaries: {},
     now: 2000,
     members: [owner],
     you: owner,
@@ -92,6 +93,7 @@ describe("the finished column", () => {
       liveWrite: [],
       liveRead: [],
       finished: [session({ closedAt: 1500 })],
+      summaries: {},
       now: 2000,
       members: [owner],
       you: owner,
@@ -104,5 +106,18 @@ describe("the finished column", () => {
     })));
     expect(html).toContain("Process has exited");
     expect(html).not.toContain("stopped answering");
+  });
+});
+
+describe("board card summary hover", () => {
+  it("makes the whole card the target for a session with summaries, with no info button", () => {
+    const html = render({ summariesEnabled: true });
+    expect(html).toMatch(/<li[^>]*data-summary-hover=""[^>]*class="board-card"|<li[^>]*class="board-card"[^>]*data-summary-hover=""/);
+    expect(html).not.toContain("Show summary");
+    expect(html).not.toContain("summary-hover-toggle");
+  });
+
+  it("leaves cards without summaries untouched", () => {
+    expect(render()).not.toContain("data-summary-hover");
   });
 });
