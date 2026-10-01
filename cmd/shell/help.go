@@ -400,6 +400,7 @@ Per-session switches live on the session itself; see shell help permissions.
   shell permissions <session-id> --mcp-team-access=true|false
                                  [--daily-briefing=true|false]
                                  [--briefing-team-access=true|false]
+                                 [--summaries=true|false]
 
 Reads a session's automation permissions, or updates the ones you name. A
 switch you do not name is left exactly as it is.
@@ -407,12 +408,22 @@ switch you do not name is left exactly as it is.
   --mcp-team-access        Let a teammate's agent reach this session over MCP.
   --daily-briefing         Generate a daily briefing for this session.
   --briefing-team-access   Let teammates read this session's briefing.
+  --summaries              Publish short summaries that only you can open.
 
-The three switches are independent: agreeing to one is not agreeing to the
-others. These are the same server-owned switches the web app writes, so a
-change made here is what the browser sees on its next read, and a change made
-in the browser is what this reads. Only the session's owner can change them;
-they are consent, and this build does not act on them yet.
+The switches are independent: agreeing to one is not agreeing to the others.
+These are the same server-owned switches the web app writes, so a change made
+here is what the browser sees on its next read, and a change made in the
+browser is what this reads. Only the session's owner can change them. They are
+consent; apart from summaries, this build does not act on them yet.
+
+Summaries: a session is summarised once each time it goes idle (about 20
+seconds without new output, or a Claude Code turn ending), and again only
+after new output. A Claude Code session is summarised on this machine from its
+own transcript. Any other process sends the redacted tail of its recent output,
+encrypted, to the shell.online summarizer, which runs in an attested
+Confidential Space enclave; this host checks the enclave's attestation before
+sending anything. Either way the summary is encrypted to your account vault
+and the service stores only ciphertext. Requires an updated running host.
 `)
 	case "kill", "stop":
 		fmt.Fprint(stdout, `Stop sessions
@@ -524,6 +535,7 @@ SYNOPSIS
   shell briefings off [--all]
   shell permissions <session-id> [--mcp-team-access=true|false]
                        [--daily-briefing=true|false] [--briefing-team-access=true|false]
+                       [--summaries=true|false]
   shell attach <session-id-or-prefix>
   shell kill <session-id-or-prefix>
   shell kill --all
@@ -610,13 +622,15 @@ SESSION COMMANDS
       a briefing yet, and the command says so.
   shell permissions <session-id>
       Read a session's automation switches: MCP team access, daily briefing,
-      and briefing team access.
+      briefing team access and summaries.
   shell permissions <session-id> --mcp-team-access=true|false
                                  [--daily-briefing=true|false]
                                  [--briefing-team-access=true|false]
+                                 [--summaries=true|false]
       Update the switches you name; a switch you do not name is left as it is.
       Only the session's owner can change them. They are the same server-owned
-      switches the web app writes, and this build does not act on them yet.
+      switches the web app writes. This build acts on --summaries (see
+      shell help permissions); the others are recorded consent only.
   shell agent
       Watch for browser-started sessions in this terminal.
   shell daemon status|start|stop

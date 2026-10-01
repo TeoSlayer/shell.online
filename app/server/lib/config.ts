@@ -75,6 +75,11 @@ export interface Config {
    */
   mcpTeamCheckToken?: string;
   /**
+   * The b64u 32-byte Ed25519 seed that signs summary tickets for the attested
+   * summarizer. Absent or malformed makes the ticket route answer 503.
+   */
+  summaryTicketKey?: string;
+  /**
    * Accounts the statistics dashboard leaves out of every figure: ours, not
    * customers'. Addresses and domains, read from STATS_EXCLUDE; see
    * internal-accounts.ts for why it is configuration rather than source.
@@ -284,6 +289,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     statsToken,
     jevApiKey,
     mcpTeamCheckToken,
+    summaryTicketKey: env.SUMMARY_TICKET_KEY?.trim() || undefined,
     excludedAccounts: parseExcludedAccounts(env.STATS_EXCLUDE),
   };
 }

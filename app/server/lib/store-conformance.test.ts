@@ -249,6 +249,93 @@ for (const implementation of implementations) {
       await implementation.reset(store);
     });
 
+    describe("owner-only sealed session summaries", () => {
+      const origin = 'shell-online-source:{"version":1,"deviceId":"dev_1"}';
+      async function setup() {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.upsertSession(session({ origin }));
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { summariesEnabled: true });
+        const policy = await store.sessionSummaryPolicy("org_1", "s1", "uid-1", "dev_1");
+        return { generation: policy!.generation, observedAt: 1, senderPublicKey: "opaque-key", sealed: "ss1.opaque" };
+      }
+
+      it("is off by default and independent of daily-briefing consent", async () => {
+        await store.putOrganization(organization());
+        await store.putMembership(membership());
+        await store.upsertSession(session({ origin }));
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: true });
+        const policy = (await store.sessionSummaryPolicy("org_1", "s1", "uid-1", "dev_1"))!;
+        expect(policy.enabled).toBe(false);
+        const summary = { generation: policy.generation, observedAt: 1, senderPublicKey: "k", sealed: "ss1.x" };
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 100)).toBe("disabled");
+        expect(await store.claimSummaryTicket("org_1", "s1", "uid-1", "dev_1", 100)).toEqual({ result: "disabled" });
+      });
+
+      it("enforces provenance, owner, generation and the two-minute interval with exact retries", async () => {
+        const summary = await setup();
+        expect(await store.sessionSummaryPolicy("org_1", "s1", "uid-1", "other")).toBeNull();
+        expect(await store.putSessionSummary("org_1", "s1", "uid-2", "dev_1", summary, 100)).toBe("missing");
+        expect(await store.putSessionSummary("org_2", "s1", "uid-1", "dev_1", summary, 100)).toBe("missing");
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "other", summary, 100)).toBe("missing");
+        const writes = await Promise.all([
+          store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 100),
+          store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", { ...summary, sealed: "ss1.other" }, 100),
+        ]);
+        expect(writes.sort()).toEqual(["limited", "stored"]);
+        const stored = (await store.getSessionSummary("org_1", "s1", "uid-1"))!;
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", stored, 101)).toBe("stored");
+        expect(await store.getSessionSummary("org_1", "s1", "uid-2")).toBeNull();
+        expect(await store.sessionSummaryPolicy("org_1", "s1", "uid-1", "dev_1")).toMatchObject({ enabled: true, nextPublishAt: 120_100 });
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", { ...stored, observedAt: 2 }, 120_099)).toBe("limited");
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", { ...stored, observedAt: 2 }, 120_100)).toBe("stored");
+        expect(JSON.stringify(await store.listOrgSessions("org_1"))).not.toContain("ss1.");
+        // Summaries and content never share a slot.
+        expect(await store.getSessionContent("org_1", "s1", "uid-1")).toBeNull();
+      });
+
+      it("purges on consent off, rotates the generation and rejects the old one", async () => {
+        const summary = await setup();
+        await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 100);
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { summariesEnabled: false });
+        expect(await store.getSessionSummary("org_1", "s1", "uid-1")).toBeNull();
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 101)).toBe("disabled");
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { summariesEnabled: true });
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 102)).toBe("stale");
+        const next = (await store.sessionSummaryPolicy("org_1", "s1", "uid-1", "dev_1"))!;
+        expect(next.generation).not.toBe(summary.generation);
+        expect(next.nextPublishAt).toBe(0);
+        expect(await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", { ...summary, generation: next.generation }, 103)).toBe("stored");
+        // Turning daily briefings on or off leaves the summary alone.
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: true });
+        await store.setSessionAutomationConsent("org_1", "s1", "uid-1", { dailyBriefingEnabled: false });
+        expect(await store.getSessionSummary("org_1", "s1", "uid-1")).not.toBeNull();
+      });
+
+      it("keeps a re-registration but invalidates a share rotation", async () => {
+        const summary = await setup();
+        await store.putSessionSummary("org_1", "s1", "uid-1", "dev_1", summary, 100);
+        await store.upsertSession(session({ origin }));
+        expect(await store.getSessionSummary("org_1", "s1", "uid-1")).toEqual(summary);
+        await store.upsertSession(session({ origin, shareUrl: "https://shell.online/s/rotated" }));
+        expect(await store.getSessionSummary("org_1", "s1", "uid-1")).toBeNull();
+      });
+
+      it("issues at most one ticket a minute per session, bound to the current generation", async () => {
+        const summary = await setup();
+        expect(await store.claimSummaryTicket("org_1", "s1", "uid-1", "other", 1_000)).toEqual({ result: "missing" });
+        expect(await store.claimSummaryTicket("org_1", "s1", "uid-2", "dev_1", 1_000)).toEqual({ result: "missing" });
+        const claims = await Promise.all([
+          store.claimSummaryTicket("org_1", "s1", "uid-1", "dev_1", 1_000),
+          store.claimSummaryTicket("org_1", "s1", "uid-1", "dev_1", 1_000),
+        ]);
+        expect(claims.map((claim) => claim.result).sort()).toEqual(["issued", "limited"]);
+        expect(claims.find((claim) => claim.result === "issued")).toEqual({ result: "issued", generation: summary.generation, ownerUid: "uid-1" });
+        expect(await store.claimSummaryTicket("org_1", "s1", "uid-1", "dev_1", 60_999)).toEqual({ result: "limited" });
+        expect((await store.claimSummaryTicket("org_1", "s1", "uid-1", "dev_1", 61_000)).result).toBe("issued");
+      });
+    });
+
     describe("owner-only sealed session content", () => {
       const origin = 'shell-online-source:{"version":1,"deviceId":"dev_1"}';
       async function setup() {
