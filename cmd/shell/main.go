@@ -306,6 +306,29 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	// fatal: sharing a terminal must not depend on the accounts service.
 	link := openSessionLink(signalContext, stderr)
 	/*
+	 * Session summaries are opt-in per session and read their consent later.
+	 * A linked machine binds a fresh Claude Code launch to a known
+	 * conversation id now, so a summary can only ever describe the
+	 * conversation this session runs; other processes get a bounded output
+	 * copy that stays empty until summaries are switched on.
+	 */
+	var summaryTap *summaryOutput
+	var claudeConversation claudeBinding
+	if link != nil {
+		hookFile := ""
+		if len(command) > 0 && isClaudeBinary(command[0]) {
+			hookFile = newClaudeHookFile()
+		}
+		command, claudeConversation = bindClaudeSession(command, hookFile)
+		if hookFile != "" && claudeConversation.HookFile == "" {
+			_ = os.Remove(hookFile)
+		}
+		if claudeConversation.HookFile != "" {
+			defer os.Remove(claudeConversation.HookFile)
+		}
+		summaryTap = newSummaryOutput()
+	}
+	/*
 	 * Observations of MCP tool calls reach the linked account through this
 	 * reporter. It is optional in both directions: no linked account or no
 	 * live session means nothing is reported, never a blocked launch.
@@ -397,6 +420,11 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	contentContext, cancelContent := context.WithCancel(processContext)
 	defer cancelContent()
 	link.StartContent(contentContext, command)
+	link.StartSummaries(contentContext, displayCommand(launch.DisplayArguments), claudeConversation, summaryTap)
+	var outputTap func([]byte)
+	if summaryTap != nil {
+		outputTap = summaryTap.Write
+	}
 	if isBackgroundChild() {
 		onStarted = announceSession
 	} else {
@@ -425,6 +453,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		},
 		fileService,
 		flowReporter.enqueue,
+		outputTap,
 	)
 	// The share is over once the process is; mark it closed in the account.
 	cancelContent()
