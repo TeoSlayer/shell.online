@@ -82,8 +82,12 @@ const server = createServer((req, res) => {
 });
 
 let browser;
-const centre = async (selector, dx = 0.5, dy = 0.5) => browser.evaluate(
-  `(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.left+r.width*${dx},y:r.top+r.height*${dy}}})()`);
+// Values go through CDP's argument channel, never into JavaScript source.
+function pointIn(selector, dx, dy) {
+  const r = document.querySelector(selector).getBoundingClientRect();
+  return { x: r.left + r.width * dx, y: r.top + r.height * dy };
+}
+const centre = (selector, dx = 0.5, dy = 0.5) => browser.call(pointIn, selector, dx, dy);
 const cardOpen = () => browser.evaluate("!!document.querySelector('.summary-card')");
 const until = async (expression, label) => {
   for (let i = 0; i < 60; i++) { if (await browser.evaluate(expression)) return; await delay(50); }
@@ -153,7 +157,9 @@ try {
   await browser.touch("touchStart", [tap]);
   await delay(60);
   await browser.touch("touchEnd", []);
-  await until(`window.opens===${opensBefore + 1}`, "a quick tap still opens the session");
+  let opens = opensBefore;
+  for (let i = 0; i < 60 && opens === opensBefore; i++) { await delay(50); opens = await browser.evaluate("window.opens"); }
+  assert.equal(opens, opensBefore + 1, "A quick tap still opens the session");
   assert(!(await cardOpen()), "A quick tap does not show the summary");
 
   console.log("summary hover browser gate: passed");
