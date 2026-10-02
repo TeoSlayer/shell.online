@@ -418,7 +418,8 @@ consent; apart from summaries, this build does not act on them yet.
 
 Summaries: a session is summarised once each time it goes idle (about 20
 seconds without new output, or a Claude Code turn ending), and again only
-after new output. A Claude Code session is summarised on this machine from its
+after new output (a session that is already idle when you turn this on waits
+for new output). A Claude Code session is summarised on this machine from its
 own transcript. Any other process sends the redacted tail of its recent output,
 encrypted, to the shell.online summarizer, which runs in an attested
 Confidential Space enclave; this host checks the enclave's attestation before

@@ -174,7 +174,8 @@ func (verifier *Verifier) Verify(ctx context.Context, identity Identity) (*Verif
 		return nil, errors.New("attestation: token issued in the future")
 	case claims.Swname != "CONFIDENTIAL_SPACE":
 		return nil, errors.New("attestation: not a Confidential Space workload")
-	case claims.Hwmodel != "INTEL_TDX":
+	// Google's value for Intel TDX, as seen in production tokens.
+	case claims.Hwmodel != "GCP_INTEL_TDX":
 		return nil, errors.New("attestation: not Intel TDX hardware")
 	case claims.Dbgstat != "disabled-since-boot":
 		return nil, errors.New("attestation: debugging is not disabled")

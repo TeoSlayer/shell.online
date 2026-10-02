@@ -20,7 +20,7 @@ var (
 	urlPattern = regexp.MustCompile(`(?i)(?:\b[a-z][a-z0-9+.-]{1,31}://|\bwww\.)[^\s<>"']*`)
 	// Bare domains on TLDs that are common in links but rare as file
 	// extensions (so main.go, deploy.sh and parser.cc survive).
-	domainPattern = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud|club|us|zip|mov)\b(?:[/:?#][^\s<>"']*)?`)
+	domainPattern = regexp.MustCompile(`(?i)\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud|club|us|to|gd|ms|lol|icu|vip|work|tech|su|ga|cf|ml|gq|pw|fun|space|website|news|one|cyou|buzz|rest|bar|xin|cam|bond|sbs|life|world|today|pro)\b(?:[/:?#][^\s<>"']*)?`)
 	// The last label must be alphabetic, so package specifiers such as
 	// vite@6.0.0 are not mistaken for addresses.
 	emailPattern = regexp.MustCompile(`(?i)[^\s@]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b`)
@@ -35,9 +35,66 @@ var (
 	refPattern     = regexp.MustCompile(`(?m)^\s*\[[^\]\n]{1,100}\]:\s*\S+.*$`)
 	tagPattern     = regexp.MustCompile(`</?[A-Za-z!][^>\n]{0,500}>`)
 	fencePattern   = regexp.MustCompile("`{3,}[^\\n]*")
-	spacePattern   = regexp.MustCompile(`[ \t]+`)
-	blankPattern   = regexp.MustCompile(`\n{3,}`)
+	// Links disguised so a person can still type them: evil[.]com, hxxps://,
+	// "evil dot com" and punycode.
+	defangedPattern = regexp.MustCompile(`(?i)\[\s*\.\s*\]|\(\s*\.\s*\)|\{\s*\.\s*\}|\[\s*dot\s*\]|\(\s*dot\s*\)|\bhxxps?\b|\[:\]//|\b[a-z0-9-]+\s+dot\s+[a-z]{2,}\b|\bxn--[a-z0-9-]*`)
+	tokenPattern    = regexp.MustCompile(`[\p{L}\p{N}.-]+`)
+	spacePattern    = regexp.MustCompile(`[ \t]+`)
+	blankPattern    = regexp.MustCompile(`\n{3,}`)
 )
+
+// fold maps the characters people use to disguise links onto ASCII before
+// matching: full-width forms (U+FF01–U+FF5E) and dot, colon, slash and at
+// look-alikes. Kept identical to the enclave guard and the browser opener.
+func fold(text string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 0xFF01 && r <= 0xFF5E:
+			return r - 0xFEE0
+		case r == 0x3002 || r == 0xFF61 || r == 0xFE52 || r == 0x2024 || r == 0x2E33 || r == 0x00B7 || r == 0x0701 || r == 0x0702:
+			return '.'
+		case r == 0xA789 || r == 0x2236 || r == 0xFE55:
+			return ':'
+		case r == 0x2215 || r == 0x2044 || r == 0x29F8:
+			return '/'
+		case r == 0xFE6B:
+			return '@'
+		}
+		return r
+	}, text)
+}
+
+// lookalikeToken reports a dotted token (label.label) containing a non-ASCII
+// letter, such as "shell-online.cоm" with a Cyrillic "о".
+func lookalikeToken(token string) bool {
+	nonASCII := false
+	for _, r := range token {
+		if r > unicode.MaxASCII && unicode.IsLetter(r) {
+			nonASCII = true
+			break
+		}
+	}
+	if !nonASCII {
+		return false
+	}
+	parts := strings.Split(strings.Trim(token, ".-"), ".")
+	letters := 0
+	for _, part := range parts {
+		if strings.IndexFunc(part, unicode.IsLetter) >= 0 {
+			letters++
+		}
+	}
+	return len(parts) >= 2 && letters >= 2
+}
+
+func hasLookalikeDomain(text string) bool {
+	for _, token := range tokenPattern.FindAllString(text, -1) {
+		if lookalikeToken(token) {
+			return true
+		}
+	}
+	return false
+}
 
 // ErrUnsafeText is returned by CheckText; the message says which rule failed
 // without echoing the text.
@@ -65,6 +122,7 @@ func hasUnsafeRune(value string, multiline bool) bool {
 
 // CheckText is the strict gate. It never rewrites: text that fails is refused.
 func CheckText(value string, maxRunes int, multiline bool) error {
+	folded := fold(value)
 	switch {
 	case value == "" || strings.TrimSpace(value) == "":
 		return errors.New("empty")
@@ -76,23 +134,23 @@ func CheckText(value string, maxRunes int, multiline bool) error {
 		return errors.New("tab")
 	case hasUnsafeRune(value, multiline):
 		return errors.New("control or format character")
-	case urlPattern.MatchString(value) || domainPattern.MatchString(value):
+	case urlPattern.MatchString(folded) || domainPattern.MatchString(folded) || defangedPattern.MatchString(folded) || hasLookalikeDomain(folded):
 		return errors.New("link")
-	case schemePattern.MatchString(value):
+	case schemePattern.MatchString(folded):
 		return errors.New("link")
-	case emailPattern.MatchString(value):
+	case emailPattern.MatchString(folded):
 		return errors.New("e-mail address")
-	case ipPattern.MatchString(value):
+	case ipPattern.MatchString(folded):
 		return errors.New("IP address")
-	case entityPattern.MatchString(value):
+	case entityPattern.MatchString(folded):
 		return errors.New("HTML entity")
-	case refLinkPattern.MatchString(value):
+	case refLinkPattern.MatchString(folded):
 		return errors.New("markdown reference link")
-	case strings.Contains(value, "](") || strings.Contains(value, "!["):
+	case strings.Contains(folded, "](") || strings.Contains(folded, "!["):
 		return errors.New("markdown link")
-	case strings.ContainsRune(value, '`'):
+	case strings.ContainsRune(folded, '`'):
 		return errors.New("code markup")
-	case tagPattern.MatchString(value):
+	case tagPattern.MatchString(folded):
 		return errors.New("markup tag")
 	}
 	return nil
@@ -119,12 +177,20 @@ func CleanText(value string, maxRunes int, multiline bool) string {
 		}
 		return r
 	}, value)
+	value = fold(value)
 	value = fencePattern.ReplaceAllString(value, "")
 	value = imagePattern.ReplaceAllString(value, "$1")
 	value = linkPattern.ReplaceAllString(value, "$1")
 	value = refPattern.ReplaceAllString(value, "")
 	value = tagPattern.ReplaceAllString(value, "")
+	value = defangedPattern.ReplaceAllString(value, "(link removed)")
 	value = urlPattern.ReplaceAllString(value, "(link removed)")
+	value = tokenPattern.ReplaceAllStringFunc(value, func(token string) string {
+		if lookalikeToken(token) {
+			return "(link removed)"
+		}
+		return token
+	})
 	value = schemePattern.ReplaceAllString(value, "(link removed)")
 	value = emailPattern.ReplaceAllString(value, "(address removed)")
 	value = ipPattern.ReplaceAllString(value, "(address removed)")

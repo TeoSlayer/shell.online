@@ -89,8 +89,11 @@ func TestAllowlist(t *testing.T) {
 	if _, err := empty.Verify(signer.sign(allowlistPayloadFor(1))); !errors.Is(err, ErrNoReleaseKey) {
 		t.Errorf("no release key must fail closed, got %v", err)
 	}
-	if len(ReleaseAllowlistKeys) != 0 {
-		t.Log("release allowlist keys are configured in this build")
+	if len(ReleaseAllowlistKeys) != 1 || len(ReleaseAllowlistKeys[0]) != ed25519.PublicKeySize || !EnclaveConfigured() {
+		t.Fatal("the production release key must be embedded")
+	}
+	if got := base64.RawURLEncoding.EncodeToString(ReleaseAllowlistKeys[0]); got != "8tXN968-bAZbZODaHwzK-Oz5kPr209Hc-RfTATTnckg" {
+		t.Fatalf("embedded release key changed: %s", got)
 	}
 }
 
@@ -141,8 +144,12 @@ func (fake *issuer) claims(enclaveKey string) map[string]any {
 	return map[string]any{
 		"iss": GoogleIssuer, "aud": DefaultAudience,
 		"iat": testNow.Add(-time.Minute).Unix(), "nbf": testNow.Add(-time.Minute).Unix(), "exp": testNow.Add(time.Hour).Unix(),
-		"swname": "CONFIDENTIAL_SPACE", "hwmodel": "INTEL_TDX", "dbgstat": "disabled-since-boot",
-		"eat_nonce": []string{KeyNonce(enclaveKey)},
+		// The claim set mirrors a production Confidential Space token
+		// (2026-10-02), including fields the verifier does not use.
+		"swname": "CONFIDENTIAL_SPACE", "hwmodel": "GCP_INTEL_TDX", "dbgstat": "disabled-since-boot",
+		"attester_tcb": []string{"INTEL"}, "oemid": 11129, "secboot": true, "swversion": []string{"260800"},
+		"eat_profile": "https://cloud.google.com/confidential-computing/confidential-space/docs/reference/token-claims",
+		"eat_nonce":   []string{KeyNonce(enclaveKey)},
 		"submods": map[string]any{
 			"container":          map[string]any{"image_digest": testDigest},
 			"confidential_space": map[string]any{"support_attributes": []string{"LATEST", "STABLE", "USABLE"}},
@@ -206,8 +213,9 @@ func TestVerifierRejections(t *testing.T) {
 		"not stable": func(_, c map[string]any) {
 			c["submods"].(map[string]any)["confidential_space"] = map[string]any{"support_attributes": []string{"LATEST"}}
 		},
-		"sev hardware": func(_, c map[string]any) { c["hwmodel"] = "GCP_AMD_SEV" },
-		"not cs":       func(_, c map[string]any) { c["swname"] = "GCE" },
+		"sev hardware":  func(_, c map[string]any) { c["hwmodel"] = "GCP_AMD_SEV" },
+		"old tdx value": func(_, c map[string]any) { c["hwmodel"] = "INTEL_TDX" },
+		"not cs":        func(_, c map[string]any) { c["swname"] = "GCE" },
 		"digest": func(_, c map[string]any) {
 			c["submods"].(map[string]any)["container"] = map[string]any{"image_digest": "sha256:" + strings.Repeat("0", 64)}
 		},

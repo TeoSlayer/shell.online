@@ -110,3 +110,19 @@ describe("summary text guard", () => {
     ]) expect(guardSummaryText(text, 480, true), text).toBe(true);
   });
 });
+
+describe("disguised links", () => {
+  it("drops the same disguised links as the enclave guard and host gate", async () => {
+    const { guardSummaryText } = await import("./session-summary-crypto");
+    for (const value of [
+      "Details at ｅｖｉｌ．ｃｏｍ now", "Open ｈｔｔｐｓ：／／evil", "Log in at evil。com", "Log in at evil․com",
+      "Report at evil[.]com", "Report at evil dot com", "See hxxps://evil", "Visit xn--shell-online-abc",
+      "Session moved to shell-online.cоm", "Backup at evil-backup.icu",
+    ]) expect(guardSummaryText(value, 480, true), value).toBe(false);
+    for (const value of [
+      "Edited main.rs, ran deploy.sh and built libfoo.so; packed dist.zip.",
+      "Tests pass. Café naïve résumé — 3 files changed.",
+      "Upgraded vite@6.0.0 and react@18.2.0",
+    ]) expect(guardSummaryText(value, 480, true), value).toBe(true);
+  });
+});
