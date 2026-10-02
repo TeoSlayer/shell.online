@@ -560,6 +560,7 @@ export function Session() {
                   ...current.session,
                   mcpTeamAccess: updated.mcpTeamAccess,
                   dailyBriefingEnabled: updated.dailyBriefingEnabled,
+                  summariesEnabled: updated.summariesEnabled,
                   dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess,
                 },
               } : current);
