@@ -66,8 +66,9 @@ const AGENT_QUIET_MS = 400;
  * had stopped: the wheel kept turning, nothing new arrived, and sending a
  * prompt by hand was what unstuck it, because a prompt is a frame.
  *
- * Once the screen has been still this long the row is committed, including
- * when the last captured frame still contained a spinner.
+ * Once the screen has been still this long the preview closes for display
+ * and caching, including when the last frame held a spinner. The parser's
+ * tail stays reversible in case output resumes after the pause.
  */
 const AGENT_SETTLED_MS = 1200;
 
@@ -241,7 +242,7 @@ export class ChatTerminal {
       this.drain();
       if (this.replaying) {
         // Alternate-screen parsing normally waits for animationFrame. A replay
-        // must parse and commit its snapshot before comparing it with history.
+        // must parse its snapshot before comparing it with history.
         if (this.onScreen) {
           this.screenDirty = false;
           const now = Date.now();

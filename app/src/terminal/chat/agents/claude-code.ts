@@ -274,7 +274,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   settle(): AgentUtterance[] {
     this.previewing = true;
-    // A 400ms pause can occur mid-token. Preview it, but leave both the reader
+    // An idle pause can occur mid-token. Preview it, but leave both the reader
     // and classifier at their committed boundary so a later repaint replaces
     // the preview rather than appending a second copy. Prompts and tools are
     // not published until their boundary arrives.
