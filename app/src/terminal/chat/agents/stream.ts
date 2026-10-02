@@ -199,10 +199,10 @@ function distinct(line: string): boolean {
   return text !== "" && text !== "\u273B";
 }
 
-/** Whether a run of given-out lines holds anything but blank rows. */
+/** A status placeholder, like a blank row, cannot anchor a conversation. */
 function said(given: readonly string[], from: number, length: number): boolean {
   for (let index = 0; index < length; index += 1) {
-    if (given[from + index].trim() !== "") return true;
+    if (distinct(given[from + index])) return true;
   }
   return false;
 }

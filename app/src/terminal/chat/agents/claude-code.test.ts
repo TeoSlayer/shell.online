@@ -493,6 +493,16 @@ describe('streaming parser boundaries', () => {
 });
 
 describe('quiet-time previews through the transcript', () => {
+  it('previews an answer paused on the cursor row without committing its partial text', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    for (const answer of ['Partial', 'Partial answer completed']) {
+      const frame = ['❯ ask', '', `⏺ ${answer}`, '✳ Working…', '────────────────────', '❯', '────────────────────'];
+      for (const utterance of [...adapter.read(frame.map(plainLine), 2), ...adapter.settle()]) transcript.fromAgent(utterance, 1);
+      expect(transcript.messages.filter(m => m.kind === 'received').map(m => m.lines.map(l => l.text).join('\n'))).toEqual([answer]);
+    }
+  });
+
   it('keeps one growing message through repeated idle pauses and repaints', () => {
     const adapter = new ClaudeCodeAdapter();
     const transcript = new Transcript();

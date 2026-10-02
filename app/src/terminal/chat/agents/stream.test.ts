@@ -156,6 +156,12 @@ describe("the line a program finished on", () => {
 });
 
 describe('repaint boundaries', () => {
+  it('does not match a vanished footer spinner against a header status placeholder', () => {
+    const reader = new RepaintReader();
+    reader.read(['✻', 'heading', 'tool result', '✻', 'cursor']);
+    expect(reader.read(['✻', 'heading', 'tool result'])).toEqual([]);
+  });
+
   it('does not replay a flushed frame when painting resumes', () => {
     const reader = new RepaintReader();
     reader.read(['one', 'two', 'three']);
