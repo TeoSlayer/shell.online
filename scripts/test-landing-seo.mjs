@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 const repositoryRoot = new URL("../", import.meta.url);
 const readSource = (path) => readFile(new URL(path, repositoryRoot), "utf8");
-const [indexHtml, documentationHtml, landingSource, landingStyles, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource] = await Promise.all([
+const [indexHtml, documentationHtml, landingSource, landingStyles, documentationRenderer, documentationRoutes, viteSource, sitemap, robots, manifestSource, readme, workerSource, docsSource, packageSource, blogHtml, blogRegistrySource, exampleConfig] = await Promise.all([
   readSource("index.html"),
   readSource("web/documentation.html"),
   readSource("web/landing-markup.ts"),
@@ -17,6 +17,9 @@ const [indexHtml, documentationHtml, landingSource, landingStyles, documentation
   readSource("worker/index.ts"),
   readSource("docs/content.json"),
   readSource("package.json"),
+  readSource("web/blog.html"),
+  readSource("blog/posts.json"),
+  readSource("wrangler.example.jsonc"),
 ]);
 
 const check = (condition, message) => {
@@ -168,6 +171,20 @@ check(
 check(workerSource.includes("raw.githubusercontent.com/TeoSlayer/shell.online/v${version}/docs/content.json"), "Tagged documentation source endpoint is missing");
 check(workerSource.includes("isVersionedDocumentationPath(url.pathname)"), "Versioned routes must load the documentation shell");
 check(workerSource.includes('documentationAssetPath(url.pathname, RELEASE_VERSION)'), "Archives must use the version-aware asset route");
+check(blogHtml.includes("<!--BLOG_BODY-->") && blogHtml.includes("<!--BLOG_HEAD-->") && viteSource.includes("renderBlogSite(template, blogPosts, bodies)"), "Blog posts must render readable HTML at build time");
+check(blogHtml.includes("__BLOG_TITLE__") && blogHtml.includes("__BLOG_DESCRIPTION__"), "Blog metadata build tokens are missing");
+check(blogHtml.includes('<meta name="robots" content="index, follow'), "Blog robots directive is invalid");
+check(blogHtml.includes("/web/blog-entry.ts") && !blogHtml.includes("/web/main.ts"), "The blog must not load the terminal runtime");
+check(!blogHtml.includes("user-scalable=no") && !blogHtml.includes("maximum-scale=1"), "The blog must allow browser zoom");
+check(viteSource.includes('blog: resolve(import.meta.dirname, "web/blog.html")'), "Vite must use one blog entry point");
+for (const post of JSON.parse(blogRegistrySource)) {
+  check(post.description.length >= 70 && post.description.length <= 170, `${post.slug} needs a specific, concise description`);
+  await readSource(`blog/posts/${post.slug}.html`);
+}
+check(landingSource.includes('<a href="/blog/">Blog</a>'), "The landing page must link to the blog");
+check(exampleConfig.includes('"/blog",') && exampleConfig.includes('"/blog/*",'), "Blog routes must run through the Worker to be counted and to 404 properly");
+check(workerSource.includes("blogAssetIsSpaFallback(url.pathname"), "A missing blog post must not answer with the landing page");
+check(robots.includes("Sitemap: https://shell.online/blog/sitemap.xml"), "robots.txt does not advertise the blog sitemap");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
 check(robots.includes("Sitemap: https://shell.online/sitemap.xml"), "robots.txt does not advertise the sitemap");
 check(

@@ -42,6 +42,7 @@ import { fetchAccountList, fetchAccountStats } from "./account-stats";
 import { checkTeamAuthorization, type TeamAuthorizationResult } from "./team-authorization";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
+import { blogAssetIsSpaFallback, resolveBlogRoute } from "../shared/blog";
 import { viewerFrameAction } from "../shared/session-access";
 import {
   MAX_SESSION_VIEWERS,
@@ -465,6 +466,15 @@ const relayHandler = {
         headers: {
           "Cache-Control": "no-store",
           "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
+    if (blogAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {
+      assetResponse = new Response(BLOG_NOT_FOUND_PAGE, {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store",
+          "Content-Type": "text/html; charset=utf-8",
         },
       });
     }
@@ -4210,6 +4220,8 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
     (connectingIp === "127.0.0.1" || connectingIp === "::1");
 }
 
+const BLOG_NOT_FOUND_PAGE = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Post not found | shell.online</title><body style="max-width:560px;margin:15vh auto;padding:0 24px;font:16px/1.6 system-ui,sans-serif;color:#1c251f;background:#f7f8f2"><h1>That post isn’t here.</h1><p><a href="/blog/">Browse the blog</a> or go back to <a href="/">shell.online</a>.</p>`;
+
 function isPublicAnalyticsPath(pathname: string): boolean {
   if (pathname === "/" || pathname === "") return true;
   return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
@@ -4266,6 +4278,7 @@ export function secureAssetResponse(response: Response, pathname: string, hostna
 
 function isPublicDocumentPath(pathname: string): boolean {
   if (pathname === "/") return true;
+  if (resolveBlogRoute(pathname)) return true;
   return !isVersionedDocumentationPath(pathname) && resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
 }
 
