@@ -49,6 +49,17 @@ export function resolveBlogRoute(
     : null;
 }
 
+/**
+ * Where a request under /blogs belongs: the same path under /blog/. People
+ * type the plural; it should land on the index or the post, not a 404.
+ */
+export function blogAliasRedirect(pathname: string): string | null {
+  if (pathname === "/blogs" || pathname === "/blogs/") return "/blog/";
+  if (!pathname.startsWith("/blogs/")) return null;
+  const rest = pathname.slice("/blogs/".length);
+  return `/blog/${rest}`;
+}
+
 // The assets binding answers an unknown path with the landing page. Under
 // /blog/ that would make every mistyped post URL a 200 copy of the homepage.
 export function blogAssetIsSpaFallback(

@@ -1,1 +1,391 @@
-[]
+[
+  {
+    "slug": "end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli",
+    "title": "End-to-End Encrypted Terminal Sharing Has a Second Secret on the Host: shell.online v0.24.1 Takes the Session Password Out of Process Environments",
+    "description": "What end-to-end encrypted terminal sharing hides from the relay, and why shell.online v0.24.1 moved the session password out of process environments.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "security",
+      "end-to-end-encryption",
+      "coding-agents",
+      "secrets"
+    ],
+    "iso_date": "2026-09-30",
+    "author": "Artemii Amelin",
+    "banner": "banners/end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli.svg",
+    "canonical": "https://pilotprotocol.network/blog/end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli"
+  },
+  {
+    "slug": "let-a-coding-agent-share-its-own-terminal-session-in-the-browser-the-shell-onlin",
+    "title": "Let a Coding Agent Share Its Own Terminal Session in the Browser: the shell.online Skill and shell --json",
+    "description": "How the shell.online agent skill tells Claude Code or Codex to share a terminal session in the browser and hand you the link, read-only when it should be.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "agent-skills",
+      "coding-agents",
+      "terminal-sharing",
+      "claude-code"
+    ],
+    "iso_date": "2026-09-29",
+    "author": "Artemii Amelin",
+    "banner": "banners/let-a-coding-agent-share-its-own-terminal-session-in-the-browser-the-shell-onlin.svg",
+    "canonical": "https://pilotprotocol.network/blog/let-a-coding-agent-share-its-own-terminal-session-in-the-browser-the-shell-onlin"
+  },
+  {
+    "slug": "watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23",
+    "title": "Watch a Coding Agent Remotely Without Shrinking Its Terminal: shell.online v0.23.2 Gives the Host Its Grid and Each Viewer Its Own Layout",
+    "description": "How to watch a coding agent remotely from a phone now that shell.online v0.23.2 lets the host own its terminal grid and each browser viewer reflow its own view.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "claude-code",
+      "coding-agents",
+      "mobile"
+    ],
+    "iso_date": "2026-09-27",
+    "author": "Artemii Amelin",
+    "banner": "banners/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23.svg",
+    "canonical": "https://pilotprotocol.network/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23"
+  },
+  {
+    "slug": "self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste",
+    "title": "Self-Hosted Terminal Sharing: Run the shell.online Relay on One Docker Host Instead of Cloudflare",
+    "description": "Cloudflare had a Durable Objects incident on 25 September. Here is self-hosted terminal sharing with the standalone shell.online relay, step by step.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "self-hosting",
+      "docker",
+      "cloudflare",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-09-26",
+    "author": "Artemii Amelin",
+    "banner": "banners/self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste.svg",
+    "canonical": "https://pilotprotocol.network/blog/self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste"
+  },
+  {
+    "slug": "start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la",
+    "title": "Start a Terminal Session From the Browser on a Mac That Sat Idle for Days: the launchd Priority Fix in shell.online v0.23.3",
+    "description": "Why browser-started sessions on an idle Mac lagged for seconds, and what v0.23.3 changes when you start a terminal session from the browser.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "macos",
+      "launchd",
+      "remote-start",
+      "coding-agents"
+    ],
+    "iso_date": "2026-09-25",
+    "author": "Artemii Amelin",
+    "banner": "banners/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la.svg",
+    "canonical": "https://pilotprotocol.network/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la"
+  },
+  {
+    "slug": "watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid",
+    "title": "Watch Claude Code From Your Phone as a Conversation, Not an 80-Column Grid",
+    "description": "How to watch Claude Code from your phone with the shell.online chat renderer, what it reads from the screen, and where the transcript is kept.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "coding-agents",
+      "mobile",
+      "end-to-end-encryption"
+    ],
+    "iso_date": "2026-09-24",
+    "author": "Artemii Amelin",
+    "banner": "banners/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid.svg",
+    "canonical": "https://pilotprotocol.network/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid"
+  },
+  {
+    "slug": "share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it",
+    "title": "Share a Terminal Session Password With a Teammate Without the Service Seeing It: shell.online v0.23.1 Password Requests",
+    "description": "shell.online v0.23.1 lets a teammate ask a session owner for its password; the copy is sealed in the owner's browser and the service never holds it.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "end-to-end-encryption",
+      "coding-agents",
+      "team-collaboration"
+    ],
+    "iso_date": "2026-09-23",
+    "author": "Artemii Amelin",
+    "banner": "banners/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it.svg",
+    "canonical": "https://pilotprotocol.network/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it"
+  },
+  {
+    "slug": "which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor",
+    "title": "Which Agent Session Needs You? shell.online v0.22 Adds a Passive Pulse to Monitor a Coding Agent in the Browser",
+    "description": "shell.online v0.22.0 adds a passive session pulse to monitor a coding agent in the browser across tabs, with no model calls, prompts, or extra connections.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "terminal-sharing",
+      "observability",
+      "claude-code"
+    ],
+    "iso_date": "2026-09-22",
+    "author": "Artemii Amelin",
+    "banner": "banners/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor.svg",
+    "canonical": "https://pilotprotocol.network/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor"
+  },
+  {
+    "slug": "mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke",
+    "title": "MCP Terminal Access for an AI Agent: Scoped Grants That Expire and Revoke",
+    "description": "How shell.online v0.21 gives an AI agent MCP terminal access through scoped, expiring, revocable grants, and what that costs you in end-to-end encryption.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "mcp",
+      "ai-agents",
+      "terminal-sharing",
+      "security"
+    ],
+    "iso_date": "2026-09-21",
+    "author": "Artemii Amelin",
+    "banner": "banners/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke.svg",
+    "canonical": "https://pilotprotocol.network/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke"
+  },
+  {
+    "slug": "a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell",
+    "title": "A Read-Only Terminal Link for Your Coding Agent, After Plugin4Shell",
+    "description": "Plugin4Shell showed how much a coding agent can reach. A read-only terminal link lets a reviewer watch that agent without holding a credential that types.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "read-only-terminal",
+      "coding-agents",
+      "plugin4shell",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-09-20",
+    "author": "Artemii Amelin",
+    "banner": "banners/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell.svg",
+    "canonical": "https://pilotprotocol.network/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell"
+  },
+  {
+    "slug": "how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it",
+    "title": "How to Revoke a Shared Terminal Link Without Killing the Process Behind It",
+    "description": "Revoke a shared terminal link with one command: shell password rotate swaps the key, drops viewers, and leaves the process running.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "credential-rotation",
+      "security",
+      "developer-tools"
+    ],
+    "iso_date": "2026-09-19",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it.svg",
+    "canonical": "https://pilotprotocol.network/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it"
+  },
+  {
+    "slug": "end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon",
+    "title": "End-to-End Encrypted Terminal Sharing: What the Relay Sees, and What It Can No Longer Replay",
+    "description": "What end-to-end encrypted terminal sharing in shell.online hides from the relay, what it leaks, and how envelope v2 stops replayed keystrokes.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "end-to-end-encryption",
+      "terminal-sharing",
+      "security",
+      "coding-agents"
+    ],
+    "iso_date": "2026-09-18",
+    "author": "Artemii Amelin",
+    "banner": "banners/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon.svg",
+    "canonical": "https://pilotprotocol.network/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon"
+  },
+  {
+    "slug": "end-to-end-encrypted-terminal-sharing-what-the-relay-can-still-do-after-shell-on",
+    "title": "End-to-End Encrypted Terminal Sharing: What the Relay Can Still Do After shell.online v0.16.1",
+    "description": "What end-to-end encrypted terminal sharing hides from a relay, what it never hid, and how shell.online v0.16.1 stops replayed keystrokes.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "end-to-end-encryption",
+      "terminal-sharing",
+      "aes-gcm",
+      "replay-protection"
+    ],
+    "iso_date": "2026-09-17",
+    "author": "Artemii Amelin",
+    "banner": "banners/end-to-end-encrypted-terminal-sharing-what-the-relay-can-still-do-after-shell-on.svg",
+    "canonical": "https://pilotprotocol.network/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-can-still-do-after-shell-on"
+  },
+  {
+    "slug": "track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and",
+    "title": "Track Terminal Sessions Across Machines by Name: shell.online v0.16 Adds --name and shell ls",
+    "description": "shell.online v0.16.0 lets you name a session at start and list terminal sessions across machines with shell ls, as agents move into remote sandboxes.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "coding-agents",
+      "cli",
+      "remote-development"
+    ],
+    "iso_date": "2026-09-16",
+    "author": "Artemii Amelin",
+    "banner": "banners/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and.svg",
+    "canonical": "https://pilotprotocol.network/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and"
+  },
+  {
+    "slug": "a-browser-terminal-on-a-ros-2-robot-without-a-vpn-and-why-it-should-be-read-only",
+    "title": "A Browser Terminal on a ROS 2 Robot Without a VPN, and Why It Should Be Read-Only by Default",
+    "description": "How to get a browser terminal on a ROS 2 robot with shell.online: one command, no VPN, read-only links, reconnects, and persistent URLs across reboots.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "ros2",
+      "robotics",
+      "remote-access",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-09-15",
+    "author": "Artemii Amelin",
+    "banner": "banners/a-browser-terminal-on-a-ros-2-robot-without-a-vpn-and-why-it-should-be-read-only.svg",
+    "canonical": "https://pilotprotocol.network/blog/a-browser-terminal-on-a-ros-2-robot-without-a-vpn-and-why-it-should-be-read-only"
+  },
+  {
+    "slug": "connect-an-ai-agent-to-a-live-terminal-without-giving-it-the-machine-shell-onlin",
+    "title": "Connect an AI Agent to a Live Terminal Without Giving It the Machine: shell.online v0.15 Agent Handoffs",
+    "description": "How to connect an AI agent to a live terminal with shell.online v0.15: a revocable invitation, explicit completion evidence, and a process that stays yours.",
+    "category": "Engineering",
+    "tags": [
+      "shell-online",
+      "ai-agents",
+      "terminal",
+      "refstream",
+      "openai"
+    ],
+    "iso_date": "2026-09-14",
+    "author": "Artemii Amelin",
+    "banner": "banners/connect-an-ai-agent-to-a-live-terminal-without-giving-it-the-machine-shell-onlin.svg",
+    "canonical": "https://pilotprotocol.network/blog/connect-an-ai-agent-to-a-live-terminal-without-giving-it-the-machine-shell-onlin"
+  },
+  {
+    "slug": "share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel",
+    "title": "Share a Terminal Session in the Browser Without Handing Over the Filesystem: shell.online v0.14 File Access",
+    "description": "shell.online v0.14 adds opt-in, rooted file access, so you can share a terminal session in the browser and open only the files you chose.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "coding-agents",
+      "sandbox",
+      "end-to-end-encryption"
+    ],
+    "iso_date": "2026-09-13",
+    "author": "Artemii Amelin",
+    "banner": "banners/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel.svg",
+    "canonical": "https://pilotprotocol.network/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel"
+  },
+  {
+    "slug": "self-hosted-terminal-sharing-on-one-docker-box-the-shell-online-relay-without-a",
+    "title": "Self-Hosted Terminal Sharing on One Docker Box: the shell.online Relay Without a Cloudflare Account",
+    "description": "shell.online v0.12.2 adds self-hosted terminal sharing: a standalone relay on any Docker host, Caddy TLS, no Cloudflare account, same E2EE.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "self-hosting",
+      "docker",
+      "terminal-sharing",
+      "end-to-end-encryption"
+    ],
+    "iso_date": "2026-09-12",
+    "author": "Artemii Amelin",
+    "banner": "banners/self-hosted-terminal-sharing-on-one-docker-box-the-shell-online-relay-without-a.svg",
+    "canonical": "https://pilotprotocol.network/blog/self-hosted-terminal-sharing-on-one-docker-box-the-shell-online-relay-without-a"
+  },
+  {
+    "slug": "a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone",
+    "title": "A Read-Only Terminal Link for a Training Run You Check From Your Phone",
+    "description": "Share a training run with a read-only terminal link: one command, a phone-sized grid, relay-enforced no-input, E2EE, and what happens when the network drops.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "read-only-terminal",
+      "training-runs",
+      "remote-monitoring",
+      "mobile-terminal"
+    ],
+    "iso_date": "2026-09-11",
+    "author": "Artemii Amelin",
+    "banner": "banners/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone.svg",
+    "canonical": "https://pilotprotocol.network/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone"
+  },
+  {
+    "slug": "vs-code-1-137-runs-agent-sessions-in-their-own-process-terminal-sharing-without",
+    "title": "VS Code 1.137 Runs Agent Sessions in Their Own Process. Terminal Sharing Without SSH or VPN Does That for a Failing Build",
+    "description": "How to pair-debug a failing build with terminal sharing without SSH or VPN, and how that compares to the Agent Host in VS Code 1.137.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "vscode",
+      "pair-debugging",
+      "ci"
+    ],
+    "iso_date": "2026-09-10",
+    "author": "Artemii Amelin",
+    "banner": "banners/vs-code-1-137-runs-agent-sessions-in-their-own-process-terminal-sharing-without.svg",
+    "canonical": "https://pilotprotocol.network/blog/vs-code-1-137-runs-agent-sessions-in-their-own-process-terminal-sharing-without"
+  },
+  {
+    "slug": "team-terminal-sharing-sealed-so-the-service-cant-open-it",
+    "title": "Team Terminal Sharing, Sealed So the Service Can't Open It",
+    "description": "Share terminal sessions with your team on shell.online: organizations, handoffs, remote start, and session passwords the accounts service cannot read.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "terminal-sharing",
+      "end-to-end-encryption",
+      "oauth",
+      "team-collaboration"
+    ],
+    "iso_date": "2026-09-09",
+    "author": "Artemii Amelin",
+    "banner": "banners/team-terminal-sharing-sealed-so-the-service-cant-open-it.svg",
+    "canonical": "https://pilotprotocol.network/blog/team-terminal-sharing-sealed-so-the-service-cant-open-it"
+  },
+  {
+    "slug": "how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts",
+    "title": "How to Watch a Coding Agent Remotely After You Turn Off Its Permission Prompts",
+    "description": "Claude Code 2.1.259 runs headless with no prompts. Here is how to watch a coding agent remotely from a phone with a read-only, end-to-end encrypted link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "coding-agents",
+      "read-only-terminal",
+      "remote-monitoring"
+    ],
+    "iso_date": "2026-09-08",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts.svg",
+    "canonical": "https://pilotprotocol.network/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts"
+  },
+  {
+    "slug": "shell-online-live-terminal-browser-link",
+    "title": "shell.online: A Live Browser Link for Any Terminal",
+    "description": "shell.online turns a running terminal command into a browser link you can watch or type into from any device. Open source, built by Pilot Protocol.",
+    "category": "Blog",
+    "tags": [
+      "shell-online",
+      "terminals",
+      "agents",
+      "open-source"
+    ],
+    "iso_date": "2026-09-02",
+    "banner": "banners/shell-online-live-terminal-browser-link.svg",
+    "canonical": "https://pilotprotocol.network/blog/shell-online-live-terminal-browser-link"
+  }
+]

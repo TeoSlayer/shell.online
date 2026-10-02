@@ -183,6 +183,7 @@ for (const post of JSON.parse(blogRegistrySource)) {
 }
 check(landingSource.includes('<a href="/blog/">Blog</a>'), "The landing page must link to the blog");
 check(exampleConfig.includes('"/blog",') && exampleConfig.includes('"/blog/*",'), "Blog routes must run through the Worker to be counted and to 404 properly");
+check(exampleConfig.includes('"/blogs",') && exampleConfig.includes('"/blogs/*",') && workerSource.includes("blogAliasRedirect(url.pathname)"), "/blogs must run through the Worker and redirect to /blog/");
 check(workerSource.includes("blogAssetIsSpaFallback(url.pathname"), "A missing blog post must not answer with the landing page");
 check(robots.includes("Sitemap: https://shell.online/blog/sitemap.xml"), "robots.txt does not advertise the blog sitemap");
 check(robots.includes("User-agent: *\nAllow: /"), "robots.txt does not allow the canonical landing page");
