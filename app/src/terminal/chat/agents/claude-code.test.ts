@@ -478,6 +478,16 @@ describe("a prompt the terminal had to wrap", () => {
 });
 
 describe('streaming parser boundaries', () => {
+  it('preserves indented check results while removing the right-aligned effort control', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const messages = settled(adapter, ['❯ checks', '', '⏺ Results:', '  ✓ unit tests passed', '  ✗ integration check failed',
+      '                          ◐ medium · /effort', '────────────────────', '❯', '────────────────────']);
+    const text = messages.flatMap(message => message.lines.map(line => line.text)).join('\n');
+    expect(text).toContain('✓ unit tests passed');
+    expect(text).toContain('✗ integration check failed');
+    expect(text).not.toContain('/effort');
+  });
+
   it('does not consume an answer marker as part of an adjacent prompt', () => {
     const adapter = new ClaudeCodeAdapter();
     const said = [...read(adapter, ['❯ hello', '⏺ answer', '  more', '✻ Done']), ...adapter.flush()];

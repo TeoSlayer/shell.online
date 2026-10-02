@@ -40,13 +40,21 @@ by the implementing agent, supplemented by CodeQL and regression tests.
    filter for the desired dimensions, so accepting the invalid size still fails.
    No standalone-relay production code changes.
 
+5. **High: broad status normalization hid indented check results.**
+   A regression test reproduced `✓ unit tests passed` and `✗ integration check
+   failed` disappearing from an assistant answer. The broader trim-based status
+   filter was introduced in this PR while handling the captured effort footer.
+   It now recognizes that specific right-aligned `/effort` control and preserves
+   indented answer text. This is a pre-merge regression caught during review,
+   not an additional claim about the original production symptoms.
+
 The first finding was reproduced before changing production code. The third was
 caught in the draft review fix before pushing it; it is not counted as another
 production failure in the original before/after report.
 
 ## Evidence and remaining limits
 
-- Chat tests: 205 pass. The real-browser canary passes at 1280px and 390px with
+- Chat tests: 206 pass. The real-browser canary passes at 1280px and 390px with
   pauses extending beyond both idle timers, followed by cache/reconnect/refresh.
 - Synthetic [desktop](chat-renderer-screenshots/review_preview-1280.png) and
   [mobile-width](chat-renderer-screenshots/review_preview-390.png) screenshots

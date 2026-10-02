@@ -125,6 +125,8 @@ const SPINNER = /^\s*[^\p{L}\p{N}\s]\s+\p{L}[\p{L}\u2019']*…/u;
  * row that starts with something else and ends in an update is still status.
  */
 const STATUS_TAIL = /(?:✓|✔)\s*Update installed|Restart to update/u;
+/** The captured right-aligned control above the composer, not answer text. */
+const EFFORT = /^\s+[◐◑◒◓]\s+\S+\s+·\s+\/effort\s*$/u;
 
 /** Anything indented under the marker above it. */
 const INDENTED = /^\s+\S/u;
@@ -581,7 +583,7 @@ function composerAt(frame: readonly string[]): number {
 
 /** Anything the program says about itself rather than about the work. */
 function furniture(line: string): boolean {
-  return STATUS.test(line.trimStart()) || STATUS_TAIL.test(line) || SPINNER.test(line);
+  return STATUS.test(line) || EFFORT.test(line) || STATUS_TAIL.test(line) || SPINNER.test(line);
 }
 
 /**
