@@ -31,6 +31,13 @@ by the implementing agent, supplemented by CodeQL and regression tests.
    closed state and live identity; changed output can reopen them. The unit and
    encrypted browser lifecycle tests pass.
 
+4. **CI timing gap: a standalone-relay test checked before resize delivery.**
+   CI on `59fd114` saw the old 173×51 grid where 90×30 was expected after a
+   fixed 40ms sleep. The test now awaits the next actual `terminal_size` message
+   and asserts its exact value and the unchanged message count. It does not
+   filter for the desired dimensions, so accepting the invalid size still fails.
+   No standalone-relay production code changes.
+
 The first finding was reproduced before changing production code. The third was
 caught in the draft review fix before pushing it; it is not counted as another
 production failure in the original before/after report.
