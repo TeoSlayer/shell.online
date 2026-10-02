@@ -35,6 +35,8 @@
       "/self-hosting/*",
       "/blog",
       "/blog/*",
+      "/blogs",
+      "/blogs/*",
       "/"
     ]
   },

@@ -1,0 +1,57 @@
+<p>On September 1, the security startup Strix published <a href="https://www.strix.ai/blog/baseten-harbor-github-pat-takeover">a write-up of what its pentest agent found while evaluating Baseten as an inference vendor</a>. Pointed at the company's public hosts, the agent took about 25 minutes to pull a GitHub personal access token out of a public project on a Harbor container registry. The token was not in a filesystem layer. It sat in the image's <code>history[].created_by</code> field, where Docker had recorded a RUN step with GITHUB_TOKEN expanded into it, from a build dated March 3, 2023. According to Strix it still carried admin and push rights on Baseten's main product repo, the GitOps repo that drives their clusters, and their Homebrew tap. <a href="https://www.techzine.eu/news/security/144330/major-flaw-in-ai-neoclouds-security-found-by-prospective-customer/">Techzine's coverage on September 16</a> gives the same timeline: reported late on July 13, token rotated the next afternoon, everything flagged resolved by July 17.</p>
+
+<p>Two numbers in that story matter more than the 25 minutes. The credential stayed valid for more than three years because nobody knew it had escaped, and it was dead within a day once somebody did. Revocation was the cheap part. The same logic applies to a smaller credential that developers hand around every day, and this post is about how to revoke a shared terminal link on <a href="https://shell.online/"><span class="brand-shell">shell.online</span></a>, our browser link to any terminal process, without stopping whatever is running behind it.</p>
+
+<section>
+<h2>A terminal link is a bearer credential, and it travels through chat</h2>
+<p>Running <code>shell claude</code> or <code>shell npm run dev</code> prints a URL and a randomly generated ten-character password. <a href="https://shell.online/security/">The security model page</a> is blunt about what that pair is: a bearer capability. Anyone holding both values for an interactive share can view and type with the operating-system permissions of the wrapped process. The term means the same thing it means in <a href="https://www.rfc-editor.org/rfc/rfc6750#section-1.2">RFC 6750</a>, where a bearer token is one that any party in possession of it can use, with no further proof of identity. A terminal link is not an OAuth token, but the property is identical. Possession is the whole check.</p>
+<p>That would be fine if the pair only ever went to the intended person. In practice it goes into a Slack thread, a ticket, a meeting chat, a screenshot. <a href="https://www.gitguardian.com/state-of-secrets-sprawl-report-2026">GitGuardian's State of Secrets Sprawl 2026 report</a> counted 28.65 million new hardcoded secrets in public GitHub commits during 2025, and says roughly 28% of secrets sprawl happens exclusively outside code repositories, in collaboration and productivity tools. Those are the places a terminal link gets pasted while two people debug something in a hurry.</p>
+<p>So assume a link to a long-running process eventually ends up somewhere it should not be. If that process is a training job on hour thirty, killing it to close the link is an expensive way to fix a sharing mistake.</p>
+</section>
+
+<section>
+<h2>Revoke a shared terminal link with one command</h2>
+<p>Since v0.12.2 (September 12) the CLI has had a way to change a live session's credentials in place. Find the session, then rotate it:</p>
+<pre><code>shell list
+shell password rotate &lt;id&gt;</code></pre>
+<p>The ID can be the full session ID or an unambiguous prefix of at least six characters. The command has to run on the machine that owns the session, because it talks to the local process holding the PTY. On success it prints a new link and a new password, followed by one line: "Existing viewers were disconnected. Share the new link and password." The wrapped process is not restarted, and nothing about it changes except who can reach it.</p>
+<p>If the replacement needs to be something you choose, for example a longer passphrase for a session that will live for weeks, set it in the environment for that one command:</p>
+<pre><code>SHELL_ONLINE_E2EE_PASSWORD='a much longer passphrase' shell password rotate &lt;id&gt;</code></pre>
+<p>Without the variable, the CLI generates ten random base64url characters, the same as at session start. The full grammar is in <a href="https://shell.online/cli/">the CLI reference under "Manage passwords"</a>.</p>
+</section>
+
+<section>
+<h2>What the rotation does, in order</h2>
+<p>The ordering is the part worth reading closely, because a revocation with a gap in it is not a revocation. The sequence below comes from the CLI help text and <a href="https://github.com/TeoSlayer/shell.online/blob/main/.github/SECURITY.md">the security policy in the repository</a>.</p>
+<ol>
+<li>The CLI generates a fresh password and a fresh URL salt. The browser and the CLI each derive the session's AES-256-GCM key locally from the password and the salt using PBKDF2-HMAC-SHA256 with 600,000 iterations, the figure <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP's password storage guidance</a> recommends for that construction. New password plus new salt means a new key.</li>
+<li>For a session started with <code>--persistent</code>, the owner-only state file is updated with the new salt, password, and key before the host changes ciphers. Restarts keep the new credentials, and the stable session path stays the same.</li>
+<li>The host activates the new cipher. From this point, input encrypted under the old key is rejected by the CLI itself.</li>
+<li>Only then does the relay disconnect the existing browser viewers. The relay receives neither the old credential nor the new one.</li>
+<li>If the machine is linked to an account, the account's copy of the URL and the owner's sealed vault copy are replaced atomically (the vault is optional, so only if the account has one), and copies that had been sealed to teammates are removed until the new password is shared with them again.</li>
+</ol>
+<p>Step 3 comes before step 4 on purpose. The help text gives the reason: because the host switches ciphers first, old-key input is rejected immediately, while its holder is still connected. The disconnect that follows is cleanup.</p>
+<p>The implementation is short enough to read. The command entry point is <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/sessions.go">runSessionPassword in cmd/shell/sessions.go</a>, which validates or generates the replacement and hands it to the running session over its local control channel.</p>
+</section>
+
+<section>
+<h2>What rotating a password cannot do</h2>
+<div class="callout"><p>Rotation changes future access only. It cannot erase terminal output that somebody already received, and it does nothing about secrets that were printed into that output.</p></div>
+<p>This is the Baseten lesson again from the other side. Rotating the GitHub token closed the door, but it could not tell anyone who had walked through it during the previous three years. If a link leaked while the terminal was showing an API key, a database URL, or an agent's environment dump, rotate the link and then rotate those too.</p>
+<p>The security policy is also specific about a subtler point: an old URL and password pair may still open an anonymous socket to the relay, but it cannot authenticate any encrypted frame sent after the swap. Old credentials cannot decrypt later frames, and the host accepts no input under the old key.</p>
+<p>Rotation applies to end-to-end encrypted sessions. For one started with <code>--no-e2ee</code>, the command refuses with "this session has no browser password". For that case, and for any case where the process itself should not keep running, the right tool is <code>shell kill &lt;id&gt;</code>, which stops the process and closes its link.</p>
+</section>
+
+<section>
+<h2>Teams: offboarding is a rotation event, handoff is not</h2>
+<p>With accounts and organizations, a session password can be sealed to individual members, so colleagues can open the session without the service being able to read it. Removing a member deletes every copy sealed to that account. It cannot make the person forget a password they already opened, so the documented rule is to rotate each active session that person could reach when immediate revocation matters. Rotation also removes the stale teammate copies, so the new password has to be shared with the remaining team again.</p>
+<p>Ordinary handoffs do not need any of this. Assigning a session to someone else, or transferring ownership, updates in place without a reconnect and without a window in which the former writer can still send input. The public link does not change.</p>
+</section>
+
+<section>
+<h2>Rotation is the backstop. Pick a narrower link first.</h2>
+<p>Most leaked-link scenarios are less serious if the link was narrow to begin with. A monitoring link for a build or a training run should be started with <code>shell --read-only</code>, which the relay and the CLI each enforce independently, so a modified browser cannot turn it interactive. A link meant for a twenty-minute pairing session should carry <code>shell --auto-close 30m</code> so it expires whether or not anyone remembers it. Every ordinary share closes when its process exits anyway. Rotation is for what is left over: the long-lived interactive session that has to keep running and whose credentials have gone further than intended.</p>
+<p>The same applies when an agent is the one creating shares. The <a href="https://shell.online/skill">installable agent skill</a> tells an agent asked to revoke access without stopping the task to use the rotate command, send only the new pair, and say plainly that the previous credentials no longer decrypt later frames. If you are new to the tool itself, <a href="/blog/shell-online-live-terminal-browser-link/">our introduction to live terminal links</a> covers the basics, and the CLI is MIT licensed with <a href="https://github.com/TeoSlayer/shell.online">the full source on GitHub</a>.</p>
+</section>
+
+<div class="cta"><h3>Share a terminal you can take back</h3><p>One command prints a link and a password for any process. If the pair travels too far, rotate it and keep the process running.</p><a href="https://shell.online/">Try shell.online</a></div>

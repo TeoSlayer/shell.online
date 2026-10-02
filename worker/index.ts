@@ -42,7 +42,7 @@ import { fetchAccountList, fetchAccountStats } from "./account-stats";
 import { checkTeamAuthorization, type TeamAuthorizationResult } from "./team-authorization";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
-import { blogAssetIsSpaFallback, resolveBlogRoute } from "../shared/blog";
+import { blogAliasRedirect, blogAssetIsSpaFallback, resolveBlogRoute } from "../shared/blog";
 import { viewerFrameAction } from "../shared/session-access";
 import {
   MAX_SESSION_VIEWERS,
@@ -453,6 +453,14 @@ const relayHandler = {
 
     if (url.pathname.startsWith("/api/")) {
       return json({ error: "not found" }, 404);
+    }
+
+    const blogAlias = blogAliasRedirect(url.pathname);
+    if (blogAlias !== null && (request.method === "GET" || request.method === "HEAD")) {
+      return new Response(null, {
+        status: 301,
+        headers: { Location: `${blogAlias}${url.search}`, "Cache-Control": "public, max-age=3600" },
+      });
     }
 
     const assetRequest = (request.method === "GET" || request.method === "HEAD") &&

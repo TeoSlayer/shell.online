@@ -1,0 +1,50 @@
+<p>On September 17 the Anthropic Institute published its <a href="https://www.anthropic.com/institute/measuring-pace-of-ai-development">R&amp;D Automation Index</a>, which says Claude now leads 26% of Anthropic's own model R&amp;D work, up from under 1% in February, with roughly 30,000 agents doing research and engineering work at any one time in August. The word doing the work in that sentence is "leads". The index defines its AL4 level as "AI leads: it can complete most of the task end-to-end from a high-level prompt", and a human still owns the result. Someone has to know which of those sessions needs a person right now. That is the problem the passive session pulse in <span class="brand-shell">shell.online</span> <a href="https://github.com/TeoSlayer/shell.online/releases/tag/v0.22.0">v0.22.0</a>, released yesterday, is aimed at: a way to monitor a coding agent in the browser across several open sessions without spending a model call or a keystroke to find out whether one of them has gone quiet.</p>
+
+<section>
+<h2>What the pulse actually shows</h2>
+<p>The pulse lives in the <a href="https://shell.online">shell.online</a> web app. Every open terminal pane gets a small badge, and background tabs get a compact version of the same badge on the tab strip, so you can have five agent sessions open and scan the tabs instead of clicking through each one. The badge is built from three things, all computed in the browser from output the pane is already receiving.</p>
+<ul>
+<li><strong>Activity state.</strong> Not observed, Output active, or Quiet. A pane flips to Quiet after 15 seconds without output. The badge refreshes once per second, not once per output frame, and the state is only ever "this browser has or has not seen bytes recently".</li>
+<li><strong>New output.</strong> If bytes arrive while the tab is hidden or another pane is active, the badge shows New output. Looking at the pane resets the counter. The count is capped at one megabyte so a chatty process cannot grow it forever.</li>
+<li><strong>Fixed hints.</strong> Three labels, and only three: Context limit reported, Input may be needed, and Test result reported. Each hint expires after two minutes. The label is a fixed string chosen by the app; text from the terminal is never copied into the badge.</li>
+</ul>
+<p>The hint patterns are narrow on purpose. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/src/terminal/session-pulse.ts">tracker in the repo</a> matches lines like "Error: context window exceeded", "Compaction failed: context too long", "Approval required", "Allow this command? [y/n]", and the summary lines that vitest, jest, pytest and cargo print at the end of a run, such as "Tests: 2 failed, 3 passed, 5 total" or "test result: ok. 4 passed; 0 failed; 0 ignored". A line has to match from its start, and a line over 1,024 characters is discarded rather than scanned. The test file beside it lists the exact strings expected to match.</p>
+</section>
+
+<section>
+<h2>Why it says "observation", not "idle"</h2>
+<p>The README is blunt about what this is: "These are observations, not proof that a process is idle, finished, or successful." The badge's own tooltip repeats it: output timing does not establish whether an agent is idle or finished, and a pattern match does not confirm agent state.</p>
+<p>That restraint is deliberate, and the agent tooling itself shows why. The <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">Claude Code changelog</a> for 2.1.269 records a fix for remote and headless sessions "reporting 'waiting for your input' while background agents were still running", with an environment variable to restore the old behaviour. Five versions later, 2.1.274 fixed background agent notifications "claiming the agent had no live background work when it was still waiting on its own background task and would resume". If the harness running the agent can misreport whether it is waiting, a byte-level observer outside the process has no business claiming to know better. So the pulse does not try. It reports when bytes last arrived, whether you have seen them, and whether a recognisable line went past. You decide what that means.</p>
+<p>One related detail: replayed snapshots do not count as new activity. When a viewer reconnects, the host sends a screen snapshot so the terminal repaints correctly. That snapshot can replace a stale hint, but it does not set Output active or bump the New output counter, because nothing new happened on the machine. The changelog entries for v0.21.2 through v0.22.0 cover the snapshot ordering work that makes this distinction reliable.</p>
+</section>
+
+<section>
+<h2>What it costs, and what it can see</h2>
+<p>The pulse makes no model calls, sends no prompts, opens no additional terminal connections, and creates no subscriptions for sessions you have not opened. It runs on the bytes an authorised viewer already decrypts. That last point is a consequence of the architecture rather than a policy choice: terminal traffic is <a href="https://shell.online/e2ee/">end-to-end encrypted by default</a>, the CLI encrypts frames before they reach the relay, and the browser decrypts them. The relay cannot compute a pulse because it never sees plaintext. The only place this signal can exist is inside the pane that holds the key.</p>
+<p>Its state lives in browser memory and is cleared on disconnect, on loss of access, and when the pane closes. Nothing is persisted, nothing is uploaded, and the pulse does not appear in the account service's session list. The parser is bounded in the way you would want for something that reads untrusted output: it decodes in four-kilobyte pieces including split UTF-8 code points, discards escape sequences and control strings as a stream even if an attacker never terminates one, and stops scanning any line that exceeds the length cap. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/session-content.md">session content and pulse doc</a> in the repo is the short reference for these limits.</p>
+<div class="callout"><p>The pulse is not a daily briefing and not a summary. v0.22.0 also ships owner-encrypted titles and response excerpts for explicitly resumed OpenCode sessions, but that is a separate, opt-in feature gated on daily-briefing consent, and it makes no model calls either. Enabling it does not change what the pulse does.</p></div>
+</section>
+
+<section>
+<h2>The workflow, end to end</h2>
+<p>Start the agent the way you already would, wrapped in <span class="brand-shell">shell.online</span>. If the person watching should never be able to type, make the link read-only from the start:</p>
+<pre><code>shell claude
+shell --read-only codex
+shell --name "migration branch" claude</code></pre>
+<p>Each command prints a browser link, an eight-character password and a QR code. The URL and password together are a bearer credential: anyone holding both can view the session and, unless it is read-only, type into it with the permissions of the wrapped process. Read-only is enforced by the CLI rather than hidden in the viewer, so a monitoring link cannot be promoted to a control link from the browser side.</p>
+<p>To get the pulse across several sessions at once, link the machine with shell auth, which is optional and uses OAuth 2.0 with PKCE and a loopback redirect. Linking publishes only the share URL, command name, host name and timing, never terminal contents and never the password. Then open the sessions as tabs in the web app. The compact badge on each tab is the whole point: three agents running, one tab says Quiet with Input may be needed, and that is the one you open. On a phone the same tabs work, and the recent mobile layout fixes in the repo's unreleased changelog are aimed at exactly that screen.</p>
+<p>Edge cases worth knowing:</p>
+<ul>
+<li><strong>Network loss.</strong> The observer clears itself when the connection drops, so the badge returns to Not observed on reconnect until live output resumes. It will not carry a stale Output active across a gap.</li>
+<li><strong>The agent finishes.</strong> Sessions close when the wrapped process exits, and shell --auto-close 5m sets an earlier deadline. A closed session has no pulse, which is the correct answer.</li>
+<li><strong>Upgrading.</strong> The pulse is browser-only, so it applies after refreshing the web app with v0.22.0 or later. Host-side features in the same release need a newly started host; installing the CLI never restarts a running session.</li>
+<li><strong>Revoking access.</strong> Rotating the password with shell password rotate revokes every existing viewer, and the pulse in their pane clears with the access. How that works without killing the process is covered in <a href="/blog/shell-online-live-terminal-browser-link/">the original shell.online write-up</a>.</li>
+</ul>
+</section>
+
+<section>
+<h2>The supervision problem is an attention problem</h2>
+<p>The Automation Index also reports that over a billion decisions from Anthropic's research and engineering agents in August, about one in 47,000 were blocked by automated checks. That is a very large number of decisions and a very small number of interventions, and it describes the shape of supervising agents at scale: nearly everything runs, and the human's job is to notice the few moments that need them. A passive signal that says "this one has been quiet for a while and printed something that looks like a question" is cheap, honest about its limits, and computed where the data already is.</p>
+</section>
+
+<div class="cta"><h3>Watch every agent from one set of tabs</h3><p>Wrap the agent in one command, open the sessions in the web app, and let the pulse tell you which tab to look at. Encrypted end to end, with no model calls and nothing stored.</p><a href="https://shell.online/">Try shell.online</a></div>

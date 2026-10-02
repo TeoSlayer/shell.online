@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import registry from "../blog/posts.json";
 import {
+  blogAliasRedirect,
   blogAssetIsSpaFallback,
   blogCategories,
   blogPosts,
@@ -106,6 +107,16 @@ describe("blog routing", () => {
     expect(resolveBlogRoute("/blogs/", posts)).toBeNull();
     for (const { slug } of blogPosts)
       expect(resolveBlogRoute(`/blog/${slug}/`)).toEqual({ kind: "post", slug });
+  });
+
+  it("sends /blogs to the same place under /blog/", () => {
+    expect(blogAliasRedirect("/blogs")).toBe("/blog/");
+    expect(blogAliasRedirect("/blogs/")).toBe("/blog/");
+    expect(blogAliasRedirect("/blogs/a-post/")).toBe("/blog/a-post/");
+    expect(blogAliasRedirect("/blogs/feed.xml")).toBe("/blog/feed.xml");
+    expect(blogAliasRedirect("/blog/")).toBeNull();
+    expect(blogAliasRedirect("/blogsx")).toBeNull();
+    expect(blogAliasRedirect("/")).toBeNull();
   });
 
   it("detects the landing page returned for a missing post", () => {

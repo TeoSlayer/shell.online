@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="How to Revoke a Shared Terminal Link Without Killing the Process Behind It">
+  <rect width="1200" height="630" fill="#0b0b0a"/>
+  <g stroke="#1d1d1b" stroke-width="1"><line x1="0" y1="158" x2="1200" y2="158"/><line x1="0" y1="472" x2="1200" y2="472"/></g>
+  <text x="80" y="120" font-family="ui-monospace,Menlo,monospace" font-size="26" letter-spacing="6" fill="#aaff00">SECURITY / SEP 19 2026</text>
+  <text x="80" y="265" font-family="Inter,Segoe UI,sans-serif" font-size="56" font-weight="700" fill="#eceae3">How to Revoke a Shared Terminal</text><text x="80" y="333" font-family="Inter,Segoe UI,sans-serif" font-size="56" font-weight="700" fill="#eceae3">Link Without Killing the Process</text><text x="80" y="401" font-family="Inter,Segoe UI,sans-serif" font-size="56" font-weight="700" fill="#eceae3">Behind It</text>
+  <text x="80" y="535" font-family="ui-monospace,Menlo,monospace" font-size="26" fill="#b9b6ad">Revoke a shared terminal link with one command...</text>
+  <text x="1120" y="590" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="24" letter-spacing="3" fill="#aaff00">pilotprotocol.network</text>
+</svg>

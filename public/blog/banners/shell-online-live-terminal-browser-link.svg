@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="shell.online: a live browser link for any terminal">
+  <rect width="1200" height="630" fill="#0b0b0a"/>
+  <g stroke="#1d1d1b" stroke-width="1">
+    <line x1="0" y1="158" x2="1200" y2="158"/>
+    <line x1="0" y1="472" x2="1200" y2="472"/>
+  </g>
+  <text x="80" y="112" font-family="'JetBrains Mono', monospace" font-size="22" letter-spacing="6" fill="#8a8a83">PILOT / PROTOCOL</text>
+  <g font-family="'Inter Tight', Helvetica, Arial, sans-serif" font-weight="500" fill="#f4f4f0">
+    <text x="80" y="270" font-size="66" letter-spacing="-2"><tspan fill="#c8ff00">shell.online</tspan></text>
+    <text x="80" y="348" font-size="66" letter-spacing="-2">A live browser link</text>
+    <text x="80" y="426" font-size="66" letter-spacing="-2">for any terminal.</text>
+  </g>
+  <text x="80" y="540" font-family="'JetBrains Mono', monospace" font-size="22" letter-spacing="2" fill="#8a8a83">shell.online</text>
+  <g font-family="'JetBrains Mono', monospace" font-size="18" letter-spacing="2" fill="#8a8a83">
+    <text x="1120" y="540" text-anchor="end">terminals · agents · open-source</text>
+  </g>
+</svg>
