@@ -426,12 +426,27 @@ export class Transcript {
     const replayed = this.items.slice(base);
     const kept: Message[] = [];
     let claimed = 0;
+    let first = true;
+    let reachedNewOutput = false;
     for (const message of replayed) {
+      if (reachedNewOutput) { kept.push(message); continue; }
       const signature = signatureOf(message);
       let found = -1;
+      let clipped = 0;
       for (let at = claimed; at < remembered.length; at += 1) {
         if (signatureOf(remembered[at]) === signature) { found = at; break; }
       }
+      // Only the first output can have been clipped by the top of the screen.
+      // Require multiple complete rows, not a coincidental short last line.
+      // Agent previews replace their whole paragraph on the next frame, so
+      // only append-based terminal output can reopen a clipped answer.
+      if (found < 0 && first && (!message.open || !this.agentOwned)) {
+        for (let at = claimed; at < remembered.length; at += 1) {
+          clipped = clippedPrefixLength(remembered[at], message);
+          if (clipped > 0) { found = at; break; }
+        }
+      }
+      if (message.kind !== "notice") first = false;
       if (found >= 0) {
         claimed = found + 1;
         if (message.open) {
@@ -439,6 +454,10 @@ export class Transcript {
           // live object attached to the remembered identity so its next frame
           // grows in place instead of creating a second answer.
           const previous = remembered[found];
+          if (clipped > 0) {
+            message.lines = [...previous.lines.slice(0, clipped), ...message.lines];
+            message.preformatted = previous.preformatted;
+          }
           message.id = previous.id;
           message.at = previous.at;
           message.revision = Math.max(message.revision, previous.revision + 1);
@@ -447,6 +466,9 @@ export class Transcript {
         continue;
       }
       kept.push(message);
+      // A new prompt or answer ends the overlap. Later identical words are
+      // a genuine repeat, not another part of the cached snapshot.
+      if (message.kind !== "notice") reachedNewOutput = true;
     }
     if (kept.length === replayed.length) return;
     this.items = [...remembered, ...kept];
@@ -705,7 +727,9 @@ export class Transcript {
      * holding a hundred thousand DOM nodes it will never show again.
      */
     if (this.items.length > MAX_MESSAGES) {
-      this.items.splice(0, this.items.length - MAX_MESSAGES);
+      const dropped = this.items.length - MAX_MESSAGES;
+      this.items.splice(0, dropped);
+      if (this.replaying) this.replayBase = Math.max(0, this.replayBase - dropped);
     }
     this.rev += 1;
     return full;
@@ -741,6 +765,13 @@ export class Transcript {
 function signatureOf(message: Message): string {
   const body = message.text || message.lines.map((line) => line.text).join("\n");
   return `${message.kind}\u0000${body.trim()}`;
+}
+
+function clippedPrefixLength(previous: Message, replayed: Message): number {
+  if (previous.kind !== "received" || replayed.kind !== "received" || replayed.lines.length < 2) return 0;
+  const offset = previous.lines.length - replayed.lines.length;
+  if (offset <= 0) return 0;
+  return replayed.lines.every((line, index) => line.text === previous.lines[offset + index].text) ? offset : 0;
 }
 
 function echoMatches(line: string, command: string): boolean {

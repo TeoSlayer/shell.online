@@ -14,7 +14,7 @@
  */
 
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
-import { hasCodeFence, looksMarkdown, renderMarkdown } from "./markdown";
+import { hasCodeFence, hasMarkdownTable, looksMarkdown, renderMarkdown } from "./markdown";
 import { boxTableAt, buildBoxTable, hasBoxTable } from "./boxed";
 
 export interface ChatViewOptions {
@@ -680,7 +680,7 @@ export class ChatView {
      * flickering, and a message that is still being written is not finished
      * enough to re-read as blocks anyway.
      */
-    if (!message.open && (!message.preformatted || hasCodeFence(source)) && looksMarkdown(source)) {
+    if (!message.open && (!message.preformatted || hasCodeFence(source) || hasMarkdownTable(source)) && looksMarkdown(source)) {
       body.dataset.shape = "rich";
       node.el.dataset.shape = "rich";
       const signature = `${Boolean(message.preformatted)}\0${source}`;

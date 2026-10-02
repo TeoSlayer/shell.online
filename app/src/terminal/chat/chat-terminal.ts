@@ -156,6 +156,8 @@ export class ChatTerminal {
       scrollback: PARSE_SCROLLBACK,
       allowProposedApi: true,
     });
+    window.addEventListener("pagehide", this.persist);
+    document.addEventListener("visibilitychange", this.onVisibility);
     this.reader = new ScreenReader(paletteFromTheme(options.theme as Record<string, string> | undefined));
     this.options = new ChatOptions(this);
 
@@ -309,7 +311,11 @@ export class ChatTerminal {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.persist();
     this.disposed = true;
+    window.removeEventListener("pagehide", this.persist);
+    document.removeEventListener("visibilitychange", this.onVisibility);
     /*
      * The last thing said is written before the tab goes. Everything else is
      * written on a timer, and a tab closing is exactly the moment that timer
@@ -654,6 +660,21 @@ export class ChatTerminal {
     }, Math.max(0, deadline - Date.now()));
   }
 
+  private readonly onVisibility = (): void => {
+    if (document.visibilityState === "hidden") this.persist();
+  };
+
+  private saveHistory(): void {
+    if (this.historyLoading || this.transcript.isReplaying) return;
+    this.history?.save(this.transcript.messages.filter(message => !this.unkept.has(message.id)));
+  }
+
+  private readonly persist = (): void => {
+    // Do not depend on a pending animation frame: those stop in hidden tabs.
+    this.saveHistory();
+    void this.history?.flush();
+  };
+
   /** One redraw per frame, however many chunks landed in it. */
   private schedule(): void {
     if (this.disposed || this.frame || this.transcript.isReplaying) return;
@@ -667,11 +688,7 @@ export class ChatTerminal {
       }
       this.view?.render(this.transcript.messages, this.transcript.revision);
       /* Kept once the burst it belongs to is over; see chat-history.ts. */
-      if (!this.historyLoading) this.history?.save(
-        this.unkept.size === 0
-          ? this.transcript.messages
-          : this.transcript.messages.filter((message) => !this.unkept.has(message.id)),
-      );
+      this.saveHistory();
     });
   }
 }

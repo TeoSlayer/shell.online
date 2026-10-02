@@ -145,3 +145,9 @@ it("keeps a fenced code block together across blank lines and indentation change
   expect(paragraphs.map(p => p.lines.map(l => l.text))).toEqual([['Before'], code, ['After']]);
   expect(paragraphs[1].preformatted).toBe(true);
 });
+
+
+it("keeps a Markdown table together when body columns use different padding", () => {
+  const table = ['Name | Count', '--- | ---:', 'first    |   1', 'second   |   2'];
+  expect(intoParagraphs(lines(...table)).map(p => p.lines.map(l => l.text))).toEqual([table]);
+});

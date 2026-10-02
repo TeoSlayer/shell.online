@@ -188,3 +188,25 @@ it("remembers at least one full frame when the terminal is taller than the histo
   expect(reader.flush()).toEqual(["row 449"]);
   expect(reader.read(frame)).toEqual([]);
 });
+
+it("keeps consecutive blank code rows across frames, but collapses prose gaps", () => {
+  const reader = new RepaintReader();
+  const code = ['⏺ ```python', '  first = 1', '', '', '  second = 2', '  ```', '', '', '⏺ next'];
+  const out: string[] = [];
+  for (let length = 1; length <= code.length; length++) out.push(...reader.read(code.slice(0, length)));
+  out.push(...reader.flush());
+  expect(out).toEqual(['⏺ ```python', '  first = 1', '', '', '  second = 2', '  ```', '', '⏺ next']);
+});
+
+it("previews collapsed gaps without consuming them or changing fence state", () => {
+  const reader = new RepaintReader();
+  reader.read(['⏺ first', '', '', '⏺ second']);
+  expect(reader.preview()).toEqual(['⏺ second']);
+  expect(reader.preview()).toEqual(reader.flush());
+  reader.reset();
+  reader.read(['~~~python', '', '', 'print(1)']);
+  expect(reader.preview()).toEqual(['print(1)']);
+  expect(reader.flush()).toEqual(['print(1)']);
+  reader.reset();
+  expect([...reader.read(['first', '', '', 'second']), ...reader.flush()]).toEqual(['first', '', 'second']);
+});

@@ -28,6 +28,7 @@
  * written. A paragraph that is sentences is allowed to wrap.
  */
 
+import { hasMarkdownTable, isMarkdownTableRow } from "./markdown";
 import type { TranscriptLine } from "./transcript";
 
 const CODE_FENCE = /^\s*(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/u;
@@ -114,6 +115,9 @@ export function startsNewParagraph(open: readonly TranscriptLine[], next: Transc
   if (open.length === 0) return false;
   if (insideCodeFence(open)) return false;
   const previous = open[open.length - 1];
+  // Table padding is alignment, not a boundary between messages.
+  if (isMarkdownTableRow(next.text) && (hasMarkdownTable(`${previous.text}\n${next.text}`)
+      || hasMarkdownTable(open.map(line => line.text).join("\n")))) return false;
   // Keep each complete fence together, separate from prose on either side.
   if (CODE_FENCE.test(next.text) || CODE_FENCE.test(previous.text)) return true;
 

@@ -705,3 +705,36 @@ it("does not cut a fenced block in half when output pauses", () => {
   expect(transcript.settle(20_000)).toBe(true);
   expect(texts(transcript)).toEqual(['```python\nprint(1)\n\nprint(2)\n```']);
 });
+
+describe("snapshots clipped by the terminal viewport", () => {
+  it("keeps the complete cached answer when replay starts at its last rows", () => {
+    const transcript = new Transcript();
+    transcript.output(["first row", "second row", "third row", ""].map(plainLine), 1);
+    const id = transcript.messages[0].id;
+    transcript.beginReplay();
+    transcript.output(["second row", "third row"].map(plainLine), 2);
+    transcript.endReplay();
+    transcript.output([plainLine("fourth row")], 3);
+    expect(texts(transcript)).toEqual(["first row\nsecond row\nthird row\nfourth row"]);
+    expect(transcript.messages[0].id).toBe(id);
+  });
+
+  it("does not erase a repeated answer after a new prompt in the snapshot", () => {
+    const transcript = new Transcript();
+    transcript.output(["first row", "second row", ""].map(plainLine), 1);
+    transcript.beginReplay();
+    transcript.submitted("run it again", 2);
+    transcript.output(["first row", "second row", ""].map(plainLine), 3);
+    transcript.endReplay();
+    expect(texts(transcript)).toEqual(["first row\nsecond row", "run it again", "first row\nsecond row"]);
+  });
+
+  it("deduplicates replay when history is already at its message limit", () => {
+    const transcript = new Transcript();
+    for (let n = 0; n < MAX_MESSAGES; n++) transcript.output([plainLine(`answer ${n}`), plainLine("")], n);
+    transcript.beginReplay();
+    transcript.output([plainLine(`answer ${MAX_MESSAGES - 1}`), plainLine("")], 1000);
+    transcript.endReplay();
+    expect(texts(transcript).filter(text => text === `answer ${MAX_MESSAGES - 1}`)).toHaveLength(1);
+  });
+});

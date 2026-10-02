@@ -53,6 +53,7 @@ export class RepaintReader {
    * four of them empty.
    */
   private endedBlank = false;
+  private fence: string | null = null;
   /** The last frame seen in full, including the row that was held back. */
   private pending: readonly string[] = [];
 
@@ -97,11 +98,12 @@ export class RepaintReader {
     this.given = [];
     this.pending = [];
     this.endedBlank = false;
+    this.fence = null;
   }
 
   /** Uncommitted rows, for a reversible quiet-time preview. */
   preview(): string[] {
-    return this.pending.slice(this.overlap(this.pending));
+    return flatten(this.pending.slice(this.overlap(this.pending)), this.endedBlank, this.fence).lines;
   }
 
   private give(lines: readonly string[], end = lines.length): string[] {
@@ -115,9 +117,10 @@ export class RepaintReader {
     this.given.push(...fresh);
     const remembered = Math.max(REMEMBERED, lines.length);
     if (this.given.length > remembered) this.given.splice(0, this.given.length - remembered);
-    const out = flatten(fresh, this.endedBlank);
-    if (out.length > 0) this.endedBlank = out[out.length - 1].trim() === "";
-    return out;
+    const out = flatten(fresh, this.endedBlank, this.fence);
+    this.endedBlank = out.blank;
+    this.fence = out.fence;
+    return out.lines;
   }
 
   /**
@@ -224,16 +227,21 @@ function matches(given: readonly string[], from: number, frame: readonly string[
  * One is kept rather than none because downstream a blank line is what cuts a
  * paragraph. Twenty do nothing that one does not.
  */
-function flatten(lines: readonly string[], afterBlank: boolean): string[] {
+function flatten(lines: readonly string[], blank: boolean, fence: string | null): { lines: string[]; blank: boolean; fence: string | null } {
   const out: string[] = [];
-  let blank = afterBlank;
   for (const line of lines) {
     const empty = line.trim() === "";
-    if (empty && blank) continue;
+    // Blank rows inside code are content, including consecutive blank rows.
+    if (empty && blank && !fence) continue;
+    const marker = /^\s*(?:⏺\s+)?(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/u.exec(line);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (!marker[2] && marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+    }
     blank = empty;
     out.push(line);
   }
-  return out;
+  return { lines: out, blank, fence };
 }
 
 function trimTrailingBlanks(lines: readonly string[]): readonly string[] {

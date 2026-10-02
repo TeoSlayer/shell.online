@@ -218,7 +218,7 @@ async function run() {
   formatView.render(formatted.messages, formatted.revision);
   assert([...host.querySelectorAll('.chat-line')].map(n => n.textContent).join('\n') === raw.join('\n'), 'Raw code retains exact rows and identifiers');
   assert(!host.querySelector('.md-strong'), 'Raw code is never parsed as emphasis');
-  const fenced = ['```python', ...raw, '', '    print(42)', '```'];
+  const fenced = ['```python', ...raw, '', '', '    print(42)', '```'];
   formatted.fromAgent({ kind: 'received', text: '', lines: fenced.map(plainLine), preformatted: true, open: false }, 2);
   formatView.render(formatted.messages, formatted.revision);
   assert(host.querySelector('.md-pre code')?.textContent === fenced.slice(1, -1).join('\n'), 'Fenced code retains all whitespace and identifiers');
@@ -244,7 +244,26 @@ async function run() {
   renderMarkdown(markdownHost, '~~~python\n__name__ = 1\n~~~');
   assert(markdownHost.querySelector('.md-pre code')?.textContent === '__name__ = 1', 'Tilde fences retain identifiers');
   assert(looksMarkdown('~~~python\n__name__ = 1\n~~~'), 'Tilde fences are detected');
+  const paddedTable = ['Name | Value', '--- | ---:', '`left|right`    |   2', 'escaped \\| pipe | 3'];
+  formatted.fromAgent({kind: 'received', text: '', lines: paddedTable.map(plainLine), preformatted: true, open: false}, 4);
+  formatView.render(formatted.messages, formatted.revision);
+  const aligned = [...host.querySelectorAll('table.md-table')].at(-1)!;
+  assert(aligned?.querySelectorAll('th').length === 2 && aligned.querySelectorAll('td').length === 4, 'Padded and borderless Markdown tables retain their columns');
+  assert(aligned.querySelector('td')?.textContent === 'left|right', 'Pipes inside inline code stay in one table cell');
+  assert((aligned.querySelectorAll('td')[1] as HTMLElement).style.textAlign === 'right', 'Table alignment is retained');
   formatView.dispose();
+
+  const normal = new ChatTerminal({cols: 100, rows: 30});
+  normal.open(host);
+  cleanup = () => normal.dispose();
+  const normalWrite = (data: string) => new Promise<void>(resolve => normal.write(data, resolve));
+  for (const line of fenced) await normalWrite(line + '\r\n');
+  await settle(1000);
+  assert(host.querySelector('.md-pre code')?.textContent === fenced.slice(1, -1).join('\n'), 'Normal terminal output keeps fenced code across separate transport chunks');
+  await normalWrite('\r\n' + paddedTable.join('\r\n') + '\r\n');
+  await settle(1000);
+  assert(host.querySelectorAll('table.md-table td').length === 4, 'Normal terminal table rows remain one table');
+  normal.dispose();
 
   const growing = new ChatTerminal({cols: 80, rows: 24});
   growing.open(host);
@@ -311,7 +330,6 @@ async function run() {
   // A fresh renderer is the refresh/re-entry lifecycle used by the session pane.
   const refreshed = new ChatTerminal({cols: 80, rows: 24});
   cleanup = () => { refreshed.dispose(); cache.dispose(); };
-  await new Promise(resolve => setTimeout(resolve, 100));
   refreshed.rememberAs(session, 'fixture-secret');
   refreshed.open(host);
   refreshed.reset();
