@@ -598,16 +598,23 @@ function untimed(line: string): string {
 /** Ignore changing chrome before comparing frames, not after deduplication. */
 function normalize(frame: readonly string[]): string[] {
   let fence: string | null = null;
-  return frame.map(line => {
+  let end = 0;
+  const normalized = frame.map((line, index) => {
     if (fence) {
       if (closesFence(line, fence)) fence = null;
+      end = index + 1;
       return line;
     }
     fence = fenceAt(SPOKE.exec(line)?.[1] ?? line);
-    if (fence) return line;
+    if (fence) { end = index + 1; return line; }
     /* Inside a fence a clock is the program's output, not its chrome. */
-    return furniture(line) ? "✻" : untimed(line);
+    if (furniture(line)) return "✻";
+    if (line.trim()) end = index + 1;
+    return untimed(line);
   });
+  // A spinner below an answer does not make the answer's last row complete.
+  // Leave that row pending so another frame can replace a partial token.
+  return normalized.slice(0, end);
 }
 
 function fenceAt(line: string): string | null {

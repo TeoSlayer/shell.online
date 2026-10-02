@@ -18,7 +18,13 @@ import { Transcript, plainLine } from "../transcript";
 const read = (adapter: ClaudeCodeAdapter, frame: readonly string[]) =>
   adapter.read(frame.map(plainLine));
 
-const shape = (utterances: ReturnType<ClaudeCodeAdapter["read"]>) =>
+const settled = (adapter: ClaudeCodeAdapter, frame: readonly string[]) => {
+  const transcript = new Transcript();
+  for (const utterance of [...read(adapter, frame), ...adapter.flush()]) transcript.fromAgent(utterance, 1);
+  return [...transcript.messages];
+};
+
+const shape = (utterances: readonly { kind: string; open?: boolean; text: string; lines: readonly { text: string }[] }[]) =>
   utterances.map((u) => `${u.kind}${u.open ? "(open)" : ""}:${u.text || u.lines.map((l) => l.text).join(" / ")}`);
 
 describe("recognising the program", () => {
@@ -147,7 +153,7 @@ describe("reading a real exchange", () => {
    * pipes, the sockets. It is one thing the agent said and it arrives as one.
    */
   it("gives the prompt and the whole of what the agent said, as one message", () => {
-    const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE));
+    const shaped = shape(settled(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE));
     expect(shaped[0]).toBe("sent:list the files in this directory, then say done");
     expect(shaped[1]).toContain("received");
     expect(shaped[1]).toContain("Here's what's in /private/tmp:");
@@ -197,7 +203,7 @@ describe("reading a real exchange", () => {
       "❯",
       "────────────────────────────────────────",
     ];
-    const said = shape(read(adapter, frame)).join("\n");
+    const said = shape(settled(adapter, frame)).join("\n");
     expect(said).toContain("Working on it.");
     for (const noise of ["Flowing", "Cooked for", "medium", "Tip:", "Update installed", "auto mode on"]) {
       expect(said).not.toContain(noise);
@@ -221,14 +227,14 @@ describe("reading a real exchange", () => {
       "❯",
       "────────────────────────────────────────",
     ];
-    const said = shape(read(adapter, frame)).join("\n");
+    const said = shape(settled(adapter, frame)).join("\n");
     expect(said).toContain("answered");
     expect(said).not.toContain("Update installed");
     expect(said).not.toContain("Tip:");
   });
 
   it("says nothing for a status line", () => {
-    const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
+    const shaped = shape(settled(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
     expect(shaped).not.toContain("Cooked for");
   });
 
@@ -561,4 +567,16 @@ describe("fragmented repaint", () => {
       expect(JSON.stringify(transcript.messages)).toBe(before);
     }
   });
+});
+
+
+it("does not commit a partial answer just because a spinner is drawn below it", () => {
+  const adapter = new ClaudeCodeAdapter();
+  const transcript = new Transcript();
+  const frame = (answer: string) => ['❯ ask', '', `⏺ ${answer}`, '✳ Working…', 'Tip: use /help', '────────────────────', '❯', '────────────────────'];
+  for (const answer of ['Partial', 'Partial answer', 'Partial answer completed']) {
+    for (const utterance of [...read(adapter, frame(answer)), ...adapter.settle()]) transcript.fromAgent(utterance, 1);
+  }
+  for (const utterance of adapter.flush()) transcript.fromAgent(utterance, 2);
+  expect(transcript.messages.filter(m => m.kind === "received").map(m => m.lines.map(l => l.text).join("\n"))).toEqual(['Partial answer completed']);
 });

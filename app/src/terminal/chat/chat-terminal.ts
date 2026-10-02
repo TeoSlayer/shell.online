@@ -66,8 +66,8 @@ const AGENT_QUIET_MS = 400;
  * had stopped: the wheel kept turning, nothing new arrived, and sending a
  * prompt by hand was what unstuck it, because a prompt is a frame.
  *
- * So once the screen has been still this long, and the agent is not drawing
- * a spinner, the row is taken as finished and committed for real.
+ * Once the screen has been still this long the row is committed, including
+ * when the last captured frame still contained a spinner.
  */
 const AGENT_SETTLED_MS = 1200;
 
@@ -139,6 +139,7 @@ export class ChatTerminal {
    * xterm's options and a session's identity is not one of them.
    */
   private history: ChatHistory | null = null;
+  private historyLoading: Promise<void> | null = null;
 
   /**
    * Messages about this viewing rather than about the session.
@@ -204,16 +205,13 @@ export class ChatTerminal {
    * Keeps this session's conversation on this device, and puts back what is
    * already there.
    *
-   * Called once, by whoever knows which session this is. The load races the
-   * first bytes off the socket and is allowed to: `restore` refuses a
-   * transcript that already has something in it, so a session that starts
-   * talking before the cache comes back keeps what it is saying and drops
-   * what it remembered, which is the right way round.
+   * Incoming snapshots wait for this read. Otherwise a fast connection can
+   * populate the transcript first, making restore discard the device history.
    */
   rememberAs(sessionId: string, secret: string | null): void {
     if (this.history || !ChatHistory.available()) return;
     this.history = new ChatHistory(sessionId, secret);
-    void this.history.load().then((messages) => {
+    this.historyLoading = this.history.load().then((messages) => {
       if (this.disposed) return;
       if (messages && messages.length > 0) {
         this.transcript.restore(messages);
@@ -226,14 +224,29 @@ export class ChatTerminal {
         this.unkept.add(said.id);
       }
       this.schedule();
-    });
+    }).finally(() => { this.historyLoading = null; });
   }
 
 
   write(data: string | Uint8Array, callback?: () => void): void {
+    if (this.disposed) return;
+    if (this.historyLoading) {
+      const held = typeof data === "string" ? data : data.slice();
+      void this.historyLoading.then(() => this.write(held, callback));
+      return;
+    }
     this.inner.write(data, () => {
       this.drain();
       if (this.replaying) {
+        // Alternate-screen parsing normally waits for animationFrame. A replay
+        // must parse and commit its snapshot before comparing it with history.
+        if (this.onScreen) {
+          this.screenDirty = false;
+          const now = Date.now();
+          this.painted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), now);
+          const tail = this.agent?.working ? this.agent.settle() : this.agent?.flush();
+          for (const utterance of tail ?? []) this.transcript.fromAgent(utterance, now);
+        }
         this.replaying = false;
         this.transcript.endReplay();
         this.schedule();
@@ -244,6 +257,11 @@ export class ChatTerminal {
 
   /** The relay is about to replay the session from the top. */
   reset(): void {
+    if (this.disposed) return;
+    if (this.historyLoading) {
+      void this.historyLoading.then(() => this.reset());
+      return;
+    }
     /*
      * Every timer as well as every buffer. A quiet timer armed before a
      * replay fires afterwards and closes whatever is open by then, which
@@ -274,6 +292,7 @@ export class ChatTerminal {
     this.lastCommand = "";
     this.inner.reset();
     this.view?.setDirect(false);
+    this.view?.setThinking(false);
   }
 
   resize(cols: number, rows: number): void {
@@ -337,7 +356,11 @@ export class ChatTerminal {
    */
 
   private submit(text: string): void {
-    if (this.options.disableStdin) return;
+    if (this.disposed || this.options.disableStdin) return;
+    if (this.historyLoading) {
+      void this.historyLoading.then(() => this.submit(text));
+      return;
+    }
     /*
      * A bare Return is a real thing to send -- it is how a prompt waiting on
      * one is answered -- but it is not an utterance, so it goes over the wire
@@ -644,7 +667,7 @@ export class ChatTerminal {
       }
       this.view?.render(this.transcript.messages, this.transcript.revision);
       /* Kept once the burst it belongs to is over; see chat-history.ts. */
-      this.history?.save(
+      if (!this.historyLoading) this.history?.save(
         this.unkept.size === 0
           ? this.transcript.messages
           : this.transcript.messages.filter((message) => !this.unkept.has(message.id)),

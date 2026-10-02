@@ -14,7 +14,7 @@
  */
 
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
-import { looksMarkdown, renderMarkdown } from "./markdown";
+import { hasCodeFence, looksMarkdown, renderMarkdown } from "./markdown";
 import { boxTableAt, buildBoxTable, hasBoxTable } from "./boxed";
 
 export interface ChatViewOptions {
@@ -70,7 +70,7 @@ interface Rendered {
   revision: number;
   lines: number;
   /** Whether this has been re-read as Markdown, which happens once. */
-  rich?: boolean;
+  rich?: string;
   /** The drawing this was last built from, so an unchanged one is not rebuilt. */
   boxed?: string;
   /** Whether this message's options have been drawn; they are drawn once. */
@@ -617,6 +617,7 @@ export class ChatView {
      * and showing all of it preformatted is what made a long sentence run off
      * the side of a phone while a table had nothing to align against.
      */
+    const source = text(message);
     body.dataset.shape = message.preformatted ? "pre" : "prose";
     node.el.dataset.shape = body.dataset.shape;
     /*
@@ -646,7 +647,8 @@ export class ChatView {
        * only honest unit -- there are no stable rows in a table that gained a
        * column.
        */
-      if (hasBoxTable(message.lines)) {
+      if (!hasCodeFence(source) && hasBoxTable(message.lines)) {
+        node.rich = undefined;
         const signature = message.lines.map((line) => line.text).join("\n");
         if (node.boxed !== signature) {
           node.boxed = signature;
@@ -657,7 +659,6 @@ export class ChatView {
         this.stamp(node, message);
         return;
       }
-      node.boxed = undefined;
     }
     /*
      * Copy belongs on the things worth copying. Now that an answer arrives as
@@ -679,11 +680,15 @@ export class ChatView {
      * flickering, and a message that is still being written is not finished
      * enough to re-read as blocks anyway.
      */
-    if (!message.open && !node.rich && looksMarkdown(text(message))) {
-      node.rich = true;
+    if (!message.open && (!message.preformatted || hasCodeFence(source)) && looksMarkdown(source)) {
       body.dataset.shape = "rich";
       node.el.dataset.shape = "rich";
-      renderMarkdown(body, text(message));
+      const signature = `${Boolean(message.preformatted)}\0${source}`;
+      if (node.rich !== signature) {
+        renderMarkdown(body, source, message.preformatted);
+        node.rich = signature;
+        node.boxed = undefined;
+      }
       this.fold(node, message);
       this.stamp(node, message);
       return;
@@ -701,6 +706,11 @@ export class ChatView {
      * page and put back. Rows that kept their content now keep their nodes,
      * so the only thing that moves is the row that changed.
      */
+    if (node.rich !== undefined || node.boxed !== undefined) {
+      body.replaceChildren();
+      node.rich = undefined;
+      node.boxed = undefined;
+    }
     const rows = body.childNodes;
     for (let index = 0; index < message.lines.length; index += 1) {
       const line = message.lines[index];

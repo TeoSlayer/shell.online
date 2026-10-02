@@ -30,6 +30,19 @@
 
 import type { TranscriptLine } from "./transcript";
 
+const CODE_FENCE = /^\s*(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/u;
+
+export function insideCodeFence(lines: readonly TranscriptLine[]): boolean {
+  let fence: string | null = null;
+  for (const line of lines) {
+    const match = CODE_FENCE.exec(line.text);
+    if (!match) continue;
+    if (!fence) fence = match[1];
+    else if (!match[2] && match[1][0] === fence[0] && match[1].length >= fence.length) fence = null;
+  }
+  return fence !== null;
+}
+
 export interface Paragraph {
   lines: TranscriptLine[];
   /**
@@ -99,7 +112,10 @@ function structural(line: TranscriptLine): boolean {
  */
 export function startsNewParagraph(open: readonly TranscriptLine[], next: TranscriptLine): boolean {
   if (open.length === 0) return false;
+  if (insideCodeFence(open)) return false;
   const previous = open[open.length - 1];
+  // Keep each complete fence together, separate from prose on either side.
+  if (CODE_FENCE.test(next.text) || CODE_FENCE.test(previous.text)) return true;
 
   /* Back to the margin, after something that was hanging off it. */
   if (INDENTED.test(previous.text) && !INDENTED.test(next.text) && next.text.trim() !== "") return true;
@@ -129,7 +145,7 @@ export function intoParagraphs(lines: readonly TranscriptLine[]): Paragraph[] {
   };
 
   for (const line of lines) {
-    if (line.text.trim() === "") {
+    if (line.text.trim() === "" && !insideCodeFence(current)) {
       flush();
       continue;
     }
@@ -149,6 +165,7 @@ export function intoParagraphs(lines: readonly TranscriptLine[]): Paragraph[] {
  */
 export function looksPreformatted(lines: readonly TranscriptLine[]): boolean {
   if (lines.length === 0) return false;
+  if (lines.some(line => CODE_FENCE.test(line.text))) return true;
 
   for (const line of lines) {
     /* Anything drawn rather than written is a picture, however short. */

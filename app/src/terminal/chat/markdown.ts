@@ -13,7 +13,7 @@
  * the language -- headings, emphasis, code, lists, quotes, links -- which is
  * far less than a parser costs to carry.
  *
- * What is deliberately absent: raw HTML, images, reference links, tables.
+ * What is deliberately absent: raw HTML, images and reference links.
  * Anything unrecognised stays exactly as it was typed, which is the right
  * answer for a renderer reading somebody else's output: show it, do not eat
  * it.
@@ -45,7 +45,12 @@ const PIPE_ROW = /^\s*\|.*\|\s*$/u;
 const PIPE_RULE = /^\s*\|[\s:|-]+\|\s*$/u;
 
 /** Whether this text has anything in it worth rendering as Markdown. */
+export function hasCodeFence(text: string): boolean {
+  return text.split("\n").some(line => FENCE.test(line));
+}
+
 export function looksMarkdown(text: string): boolean {
+  if (hasCodeFence(text) || /^\s*\|.*\|\s*\n\s*\|[\s:|-]+\|/mu.test(text)) return true;
   return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|`{3,})|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:/u.test(text);
 }
 
@@ -54,11 +59,11 @@ export function looksMarkdown(text: string): boolean {
  *
  * The host is emptied with `replaceChildren`, never with `innerHTML`.
  */
-export function renderMarkdown(host: HTMLElement, text: string): void {
-  host.replaceChildren(...blocks(text.split("\n")));
+export function renderMarkdown(host: HTMLElement, text: string, preformatted = false): void {
+  host.replaceChildren(...blocks(text.split("\n"), preformatted));
 }
 
-function blocks(lines: readonly string[]): Node[] {
+function blocks(lines: readonly string[], preformatted: boolean): Node[] {
   const out: Node[] = [];
   let at = 0;
   while (at < lines.length) {
@@ -71,7 +76,7 @@ function blocks(lines: readonly string[]): Node[] {
       at += 1;
       while (at < lines.length) {
         const close = FENCE.exec(lines[at]);
-        if (close && close[1][0] === ticks[0] && close[1].length >= ticks.length) {
+        if (close && close[1][0] === ticks[0] && close[1].length >= ticks.length && !close[2]) {
           at += 1;
           break;
         }
@@ -79,6 +84,15 @@ function blocks(lines: readonly string[]): Node[] {
         at += 1;
       }
       out.push(codeBlock(body.join("\n"), language));
+      continue;
+    }
+
+    // Outside explicit fences, a preformatted message is still terminal text.
+    // Its indentation and identifiers must never be reinterpreted as prose.
+    if (preformatted) {
+      const rows: string[] = [];
+      while (at < lines.length && !FENCE.test(lines[at])) rows.push(lines[at++]);
+      out.push(drawnBlock(rows.join("\n")));
       continue;
     }
 
@@ -160,6 +174,14 @@ function blocks(lines: readonly string[]): Node[] {
         at += 1;
       }
       out.push(pipeTable(rows));
+      continue;
+    }
+
+    // A pipe row without a header rule is text. Consume it here so the
+    // paragraph boundary below cannot leave the parser stuck on the same row.
+    if (PIPE_ROW.test(line)) {
+      out.push(drawnBlock(line));
+      at += 1;
       continue;
     }
 

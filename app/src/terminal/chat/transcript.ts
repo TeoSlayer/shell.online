@@ -25,7 +25,7 @@
  * that the command exited, or the process simply going quiet.
  */
 
-import { looksPreformatted, startsNewParagraph } from "./paragraphs";
+import { insideCodeFence, looksPreformatted, startsNewParagraph } from "./paragraphs";
 import type { AgentUtterance } from "./agents/types";
 
 /**
@@ -221,7 +221,7 @@ export class Transcript {
    * nothing is open. The caller owns the timer; this module owns the rule.
    */
   get quietDeadline(): number | null {
-    if (this.agentOwned) return null;
+    if (this.agentOwned || insideCodeFence(this.open?.lines ?? [])) return null;
     return this.open && this.open.kind === "received" ? this.lastGrewAt + IDLE_CLOSE_MS : null;
   }
 
@@ -370,7 +370,9 @@ export class Transcript {
    * them. So the transcript is rebuilt in full and the view is told once.
    */
   beginReplay(): void {
-    const remembered = this.remembered;
+    // Reconnecting must retain output received during this visit as well.
+    this.close(this.lastGrewAt);
+    const remembered = this.items.slice();
     this.replaying = true;
     this.clear();
     /* Where the remembered conversation ends and the replayed screen begins. */
@@ -430,7 +432,20 @@ export class Transcript {
       for (let at = claimed; at < remembered.length; at += 1) {
         if (signatureOf(remembered[at]) === signature) { found = at; break; }
       }
-      if (found >= 0) { claimed = found + 1; continue; }
+      if (found >= 0) {
+        claimed = found + 1;
+        if (message.open) {
+          // A replay taken mid-turn may continue this exact message. Keep the
+          // live object attached to the remembered identity so its next frame
+          // grows in place instead of creating a second answer.
+          const previous = remembered[found];
+          message.id = previous.id;
+          message.at = previous.at;
+          message.revision = Math.max(message.revision, previous.revision + 1);
+          remembered[found] = message;
+        }
+        continue;
+      }
       kept.push(message);
     }
     if (kept.length === replayed.length) return;
@@ -513,7 +528,7 @@ export class Transcript {
        * the end of a thought, so it is where one bubble stops and the next
        * begins; see paragraphs.ts.
        */
-      if (stripped.text.trim() === "") {
+      if (stripped.text.trim() === "" && !insideCodeFence(this.open?.lines ?? [])) {
         this.close(at);
         continue;
       }

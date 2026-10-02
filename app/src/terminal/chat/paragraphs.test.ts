@@ -137,3 +137,11 @@ describe("output with no blank line in it", () => {
     ).toEqual(["prose:2", "prose:1", "prose:1"]);
   });
 });
+
+
+it("keeps a fenced code block together across blank lines and indentation changes", () => {
+  const code = ['~~~python', 'if __name__ == "__main__":', '    print("hello")', '', 'print("done")', '~~~'];
+  const paragraphs = intoParagraphs(lines('Before', ...code, 'After'));
+  expect(paragraphs.map(p => p.lines.map(l => l.text))).toEqual([['Before'], code, ['After']]);
+  expect(paragraphs[1].preformatted).toBe(true);
+});

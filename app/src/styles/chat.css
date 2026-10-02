@@ -460,6 +460,12 @@
   overflow-wrap: anywhere;
 }
 
+.chat-msg[data-tone="info"] .chat-chip {
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+  background: var(--blue-wash);
+  color: var(--blue-deep);
+}
+
 .chat-msg[data-tone="interrupt"] .chat-chip {
   border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
   background: var(--danger-wash);
