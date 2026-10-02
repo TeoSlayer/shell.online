@@ -1,5 +1,9 @@
 # Chat renderer: reproduction evidence
 
+The subsequent PR review found and fixed an additional long-idle timing gap; see
+[the review findings and screenshots](chat-renderer-review.md). Counts below record
+the initial before/after audit, before that added regression test.
+
 Tested 2026-10-02 on macOS with local Chrome. `main`, `origin/main` and a fresh
 GitHub `ls-remote` agree on `436ee639a3ad888e86b3b7050632e2546d610fd5`.
 The baseline is a separate detached worktree. Only regression test files were

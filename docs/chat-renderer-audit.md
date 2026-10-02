@@ -1,5 +1,9 @@
 # Chat renderer audit — 2026-10-02
 
+The subsequent PR review found and fixed an additional long-idle timing gap; see
+[the review findings and screenshots](chat-renderer-review.md). Counts below record
+the initial before/after audit, before that added regression test.
+
 Work is isolated on `fix/chat-renderer-all-sessions` in
 `/Users/alexgodo/agent-work/shell-chat-renderer-fresh-20261002`. The user freshly
 cloned GitHub after this environment's network restriction blocked cloning.

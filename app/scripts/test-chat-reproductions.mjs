@@ -1,6 +1,6 @@
 // One unchanged fixture against either checkout. Every case gets a new browser
 // so main's parser hang cannot prevent subsequent cases from being measured.
-import { readFile, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,8 @@ import { launchChromeTransport } from '../../scripts/lib/browser-transport.mjs';
 const ownRoot = fileURLToPath(new URL('../..', import.meta.url));
 const root = resolve(process.argv[2] || ownRoot);
 const reportPath = process.argv[3] || join(tmpdir(), 'chat-reproductions.json');
+const screenshots = process.env.CHAT_REPRO_SCREENSHOTS;
+if (screenshots) await mkdir(screenshots, {recursive: true});
 const source = await readFile(new URL('./fixtures/chat-reproductions.ts', import.meta.url), 'utf8');
 const bundle = await build({
   stdin: {contents: source, loader: 'ts', resolveDir: join(root, 'app/scripts/fixtures'), sourcefile: 'chat-reproductions.ts'},
@@ -49,6 +51,9 @@ try {
         await delay(50);
       }
       if (!result || result.status === 'running') result = {name, status: 'timeout'};
+      if (screenshots && result.status === 'pass' && /^[a-z_]+$/.test(name)) {
+        await writeFile(join(screenshots, `${name}-${width}.png`), Buffer.from(await browser.screenshot(), 'base64'));
+      }
     } catch (error) { result = {name, status: 'error', error: error.message}; }
     finally {
       await browser?.close();

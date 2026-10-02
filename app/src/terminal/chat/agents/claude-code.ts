@@ -278,12 +278,17 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     // and classifier at their committed boundary so a later repaint replaces
     // the preview rather than appending a second copy. Prompts and tools are
     // not published until their boundary arrives.
+    const pending = this.reader.preview();
+    const closed: AgentUtterance[] = [];
+    // A new marker completes the preceding paragraph even if its own text
+    // is still arriving. Commit that boundary, but keep the new row reversible.
+    if (!this.fence && pending[0] && (SPOKE.test(pending[0]) || PROMPT.test(pending[0]))) this.close(closed);
     const state = { open: [...this.open], prompting: this.prompting && [...this.prompting],
-      started: this.started, spoken: this.spoken, fence: this.fence };
-    const preview = this.classify(this.reader.preview());
+      started: this.started, spoken: this.spoken, fence: this.fence, lastSent: this.lastSent };
+    const preview = this.classify(pending);
     Object.assign(this, state);
     return preview.length === 1 && preview[0].kind === "received"
-      ? [{ ...preview[0], open: true }] : [];
+      ? [...closed, { ...preview[0], open: true }] : closed;
   }
 
   flush(): AgentUtterance[] {

@@ -26,6 +26,22 @@ const write = (terminal: ChatTerminal, bytes: string | Uint8Array) => new Promis
 const screen = (rows: readonly string[]) => '\x1b[2J\x1b[H' + rows.join('\r\n');
 
 const cases: Record<string, () => Promise<unknown>> = {
+  async review_preview() {
+    const transcript = new Transcript(), view = makeView();
+    const at = new Date('2026-10-02T12:00:00Z').getTime();
+    transcript.noticed('Reading Claude Code as messages.', at);
+    transcript.submitted('Show a Python example and the renderer checks.', at);
+    for (const source of [
+      '## Renderer checks\nCode and tables retain their formatting.',
+      '```python\nif __name__ == "__main__":\n    print("**literal**")\n\n    print("ready")\n```',
+      '| Check | Result |\n| --- | --- |\n| History and replay | Passed |\n| Desktop and mobile layout | Passed |',
+    ]) transcript.fromAgent({kind: 'received', text: '', lines: source.split('\n').map(plainLine), open: false, preformatted: source.startsWith('```')}, at);
+    view.setThinking(false);
+    view.render(transcript.messages, transcript.revision);
+    await tick();
+    assert(host.querySelector('.md-heading') && host.querySelector('table') && host.querySelector('.md-pre code'), 'Review preview is missing rendered content');
+    assert(document.documentElement.scrollWidth <= innerWidth, 'Review preview overflows the viewport');
+  },
   async raw_code() {
     const source = '# Python source\nif __name__ == "__main__":\n    print("**literal**")';
     const transcript = output(source, true), view = makeView();
@@ -142,8 +158,12 @@ const cases: Record<string, () => Promise<unknown>> = {
 };
 
 const name = new URLSearchParams(location.search).get('case')!;
+const run = new Map(Object.entries(cases)).get(name);
 Object.assign(window, {reproduction: {status: 'running', name}});
-Promise.resolve().then(() => cases[name]()).then(
+Promise.resolve().then(() => {
+  if (!run) throw new Error('Unknown reproduction case');
+  return run();
+}).then(
   details => Object.assign(window, {reproduction: {status: 'pass', name, details}}),
   error => Object.assign(window, {reproduction: {status: 'fail', name, error: String(error.message)}}),
 );

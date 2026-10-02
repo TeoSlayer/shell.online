@@ -87,12 +87,12 @@ async function run() {
   const frame = (answer: string) => '\x1b[2J\x1b[H' + ['❯ question', '', `⏺ ${answer}`, '', '────────────────────', '❯', '────────────────────'].join('\r\n');
   await write('\x1b]0;Claude Code\x07\x1b[?1049h' + frame('Partial'));
   await tick();
-  await new Promise(resolve => setTimeout(resolve, 450));
+  await new Promise(resolve => setTimeout(resolve, 1600));
   await tick();
   for (const answer of ['Partial', 'Partial answer', 'Partial answer complete']) {
     await write(frame(answer));
     await tick();
-    await new Promise(resolve => setTimeout(resolve, 450));
+    await new Promise(resolve => setTimeout(resolve, 1600));
     await tick();
     assert(host.querySelectorAll('.chat-received').length === 1, 'Alternate repaint preserves one answer');
     assert(host.querySelector('.chat-received .chat-body')?.textContent === answer, 'Alternate answer grows without stale text');

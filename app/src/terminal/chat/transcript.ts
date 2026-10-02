@@ -318,6 +318,7 @@ export class Transcript {
      * was growing shook rather than grew.
      */
     if (differs(target.lines, utterance.lines) || target.preformatted !== utterance.preformatted) {
+      if (utterance.open) target.open = true;
       target.lines = utterance.lines.slice();
       target.preformatted = utterance.preformatted;
       this.touch(target);
@@ -468,6 +469,10 @@ export class Transcript {
           message.id = previous.id;
           message.at = previous.at;
           message.revision = Math.max(message.revision, previous.revision + 1);
+          // Replaying identical text must not make a saved answer ineligible
+          // for caching during an immediate renderer switch. Its next changed
+          // agent frame can reopen it through the retained live object.
+          if (this.agentOwned) message.open = previous.open;
           remembered[found] = message;
         }
         continue;
@@ -616,6 +621,17 @@ export class Transcript {
     const deadline = this.quietDeadline;
     if (deadline === null || at < deadline) return false;
     this.close(at);
+    return true;
+  }
+
+  /** Finish drawing/saving an idle preview without losing its live identity. */
+  closeAgentPreview(at: number): boolean {
+    if (!this.agentOwned || !this.open?.open) return false;
+    this.open.open = false;
+    this.touch(this.open);
+    this.lastGrewAt = at;
+    // The parser still owns this paragraph. A later frame can reopen it;
+    // a real prompt/paragraph boundary goes through close() and detaches it.
     return true;
   }
 

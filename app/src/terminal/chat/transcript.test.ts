@@ -692,6 +692,7 @@ it("reopens the remembered message when a replayed answer is still growing", () 
   transcript.beginReplay();
   transcript.fromAgent({kind: "received", text: "", lines: [plainLine("Partial")], open: true}, 2);
   transcript.endReplay();
+  expect(transcript.messages[0].open).toBe(false);
   transcript.fromAgent({kind: "received", text: "", lines: [plainLine("Partial answer")], open: false}, 3);
   expect(texts(transcript)).toEqual(["Partial answer"]);
   expect(transcript.messages[0].id).toBe(first.id);

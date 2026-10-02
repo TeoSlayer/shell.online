@@ -246,7 +246,7 @@ export class ChatTerminal {
           this.screenDirty = false;
           const now = Date.now();
           this.painted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), now);
-          const tail = this.agent?.working ? this.agent.settle() : this.agent?.flush();
+          const tail = this.agent?.settle();
           for (const utterance of tail ?? []) this.transcript.fromAgent(utterance, now);
         }
         this.replaying = false;
@@ -604,10 +604,13 @@ export class ChatTerminal {
        */
       const now = Date.now();
       let changed = false;
-      for (const utterance of this.agent.flush()) {
+      // An idle screen can resume after a network/model pause. Finish the
+      // displayed preview, but only commit parser rows on a real boundary.
+      for (const utterance of this.agent.settle()) {
         this.transcript.fromAgent(utterance, now);
         changed = true;
       }
+      changed = this.transcript.closeAgentPreview(now) || changed;
       this.view?.setThinking(false);
       if (changed) this.schedule();
     }, AGENT_SETTLED_MS - AGENT_QUIET_MS);
