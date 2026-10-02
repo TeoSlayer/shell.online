@@ -335,7 +335,7 @@ async function run() {
   refreshed.reset();
   await new Promise<void>(resolve => refreshed.write(snapshot, resolve));
   await tick();
-  assert(bodies().length === 3, 'Refresh restores all closed history without duplicating the snapshot');
+  assert(bodies().length === 3, `Refresh restores all closed history without duplicating the snapshot: ${JSON.stringify(bodies())}`);
   assert(!host.textContent?.includes('Nothing from this session'), 'A populated cache has no empty-cache notice');
 
   result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry, spinner at rest, code fidelity, Markdown, cache race, refresh, replay';

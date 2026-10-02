@@ -707,6 +707,21 @@ it("does not cut a fenced block in half when output pauses", () => {
 });
 
 describe("snapshots clipped by the terminal viewport", () => {
+  it("does not use a renderer notice as the chronological anchor of a snapshot", () => {
+    const transcript = new Transcript();
+    transcript.submitted("cached question", 1);
+    transcript.output(["cached answer", ""].map(plainLine), 2);
+    // The notice is added when chat first reads an already cached screen.
+    transcript.noticed("Reading Claude Code as messages.", 3);
+    transcript.output(["new live answer", ""].map(plainLine), 4);
+    transcript.beginReplay();
+    transcript.noticed("Reading Claude Code as messages.", 5);
+    transcript.fromAgent({kind: "sent", text: "cached question", lines: [], open: false}, 6);
+    transcript.fromAgent({kind: "received", text: "", lines: [plainLine("cached answer")], open: false}, 7);
+    transcript.endReplay();
+    expect(texts(transcript)).toEqual(["cached question", "cached answer", "Reading Claude Code as messages.", "new live answer"]);
+  });
+
   it("keeps the complete cached answer when replay starts at its last rows", () => {
     const transcript = new Transcript();
     transcript.output(["first row", "second row", "third row", ""].map(plainLine), 1);

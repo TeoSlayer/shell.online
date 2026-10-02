@@ -429,8 +429,15 @@ export class Transcript {
     let first = true;
     let reachedNewOutput = false;
     for (const message of replayed) {
-      if (reachedNewOutput) { kept.push(message); continue; }
       const signature = signatureOf(message);
+      // Renderer notices describe how this visit reads the screen. They can
+      // follow cached answers in history but precede them in the snapshot,
+      // so they must not advance the conversation's chronological anchor.
+      if (message.kind === "notice" && message.tone === "info") {
+        if (!remembered.some(previous => signatureOf(previous) === signature)) kept.push(message);
+        continue;
+      }
+      if (reachedNewOutput) { kept.push(message); continue; }
       let found = -1;
       let clipped = 0;
       for (let at = claimed; at < remembered.length; at += 1) {
