@@ -143,6 +143,15 @@ describe("blog pages", () => {
     expect(prepared.minutes).toBe(3);
   });
 
+  it("never lets a heading smuggle an element into the table of contents", () => {
+    const { headings } = prepareBlogBody(
+      "<h2><scr<b>ipt>alert(1)</scr</b>ipt> a < b</h2>",
+    );
+    expect(headings[0].label).not.toMatch(/[<>]/);
+    expect(headings[0].label).toContain("alert(1)");
+    expect(headings[0].id).not.toMatch(/[<>]/);
+  });
+
   it("rejects body markup the page or its security policy cannot carry", () => {
     expect(blogBodyProblems("<p>Fine.</p><img src=\"/blog/a.png\" alt=\"A\">")).toEqual([]);
     expect(blogBodyProblems(" ")).toContain("body is empty");

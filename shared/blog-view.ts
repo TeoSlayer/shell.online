@@ -73,6 +73,19 @@ export function blogBodyProblems(body: string): string[] {
   return problems;
 }
 
+// The text of a piece of markup, entities left as written. One pass can leave
+// a tag behind ("<scr<b>ipt>"), so it strips until nothing changes and then
+// escapes any bracket still standing: the result can never open an element.
+function plainText(markup: string, gap = ""): string {
+  let text = markup;
+  let before: string;
+  do {
+    before = text;
+    text = text.replace(/<[^>]*>/g, gap);
+  } while (text !== before);
+  return text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** Gives every <h2> an anchor, and measures the post. */
 export function prepareBlogBody(body: string): PreparedBlogBody {
   const headings: BlogHeading[] = [];
@@ -80,7 +93,7 @@ export function prepareBlogBody(body: string): PreparedBlogBody {
   const html = body.replace(
     /<h2\b([^>]*)>([\s\S]*?)<\/h2>/gi,
     (_, attributes: string, inner: string) => {
-      const label = inner.replace(/<[^>]+>/g, "").trim();
+      const label = plainText(inner).trim();
       const given = attributes.match(/\sid\s*=\s*["']([^"']+)["']/i)?.[1];
       const base =
         given ??
@@ -98,8 +111,7 @@ export function prepareBlogBody(body: string): PreparedBlogBody {
       return `<h2${rest} id="${esc(id)}">${inner}</h2>`;
     },
   );
-  const words = body
-    .replace(/<[^>]+>/g, " ")
+  const words = plainText(body, " ")
     .split(/\s+/)
     .filter(Boolean).length;
   return { html, headings, minutes: Math.max(1, Math.ceil(words / 200)) };
