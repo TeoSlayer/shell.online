@@ -15,11 +15,20 @@ import (
 
 // ReleaseAllowlistKeys are the Ed25519 public keys that may sign the enclave
 // image allowlist (PROTOCOL.md §2). The private half is held offline by the
-// release process, never by a deployed service.
-//
-// Empty until the release key ceremony: with no key, VerifyAllowlist fails
-// closed and no terminal text is ever sent to a summarizer.
-var ReleaseAllowlistKeys = []ed25519.PublicKey{}
+// release process, never by a deployed service. With no key, VerifyAllowlist
+// fails closed and no terminal text is ever sent to a summarizer.
+var ReleaseAllowlistKeys = []ed25519.PublicKey{
+	// Production release key, created 2026-10-02.
+	mustReleaseKey("8tXN968-bAZbZODaHwzK-Oz5kPr209Hc-RfTATTnckg"),
+}
+
+func mustReleaseKey(encoded string) ed25519.PublicKey {
+	raw, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
+	if err != nil || len(raw) != ed25519.PublicKeySize {
+		panic("summaries: invalid embedded release key")
+	}
+	return ed25519.PublicKey(raw)
+}
 
 // ErrNoReleaseKey means this build cannot verify any allowlist.
 var ErrNoReleaseKey = errors.New("summaries: this build has no enclave allowlist release key; enclave summaries are disabled")

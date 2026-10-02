@@ -89,8 +89,11 @@ func TestAllowlist(t *testing.T) {
 	if _, err := empty.Verify(signer.sign(allowlistPayloadFor(1))); !errors.Is(err, ErrNoReleaseKey) {
 		t.Errorf("no release key must fail closed, got %v", err)
 	}
-	if len(ReleaseAllowlistKeys) != 0 {
-		t.Log("release allowlist keys are configured in this build")
+	if len(ReleaseAllowlistKeys) != 1 || len(ReleaseAllowlistKeys[0]) != ed25519.PublicKeySize || !EnclaveConfigured() {
+		t.Fatal("the production release key must be embedded")
+	}
+	if got := base64.RawURLEncoding.EncodeToString(ReleaseAllowlistKeys[0]); got != "8tXN968-bAZbZODaHwzK-Oz5kPr209Hc-RfTATTnckg" {
+		t.Fatalf("embedded release key changed: %s", got)
 	}
 }
 
