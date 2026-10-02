@@ -4,6 +4,23 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+## [0.25.0] — 2026-10-02
+
+### Added
+
+- Session summaries. Hover a session in app.shell.online (List or Board view;
+  long-press on touch) to see what it is doing. Off by default, owner-only and
+  opt-in per session with `shell permissions <id> --summaries=true` or the
+  Summaries switch. A session is summarised once each time it goes idle, and
+  again only after new output.
+- Claude Code sessions are summarised on your machine from their own
+  transcript and encrypted to your vault key; the binding follows `/clear`,
+  `/resume` and handoff forks through a SessionStart hook.
+- Other terminal sessions send redacted output, encrypted, to the attested
+  shell.online summarizer (Intel TDX Confidential Space) only after this
+  host verifies its attestation and signed image allowlist; the summary is
+  encrypted to your vault key inside the enclave. See docs/summaries.md.
+
 ## [0.24.1] — 2026-09-30
 
 ### Removed
