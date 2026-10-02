@@ -1,0 +1,420 @@
+{
+  "date": "2026-10-02",
+  "baseline": "436ee639a3ad888e86b3b7050632e2546d610fd5",
+  "browser": {
+    "main": [
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "raw_code",
+        "error": "Source changed: Waiting for the session02:00 AMPython sourceif name == \"main\": print(\"literal\")CopyThinkingJump to latest",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "rich_metadata",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "rich_revision",
+        "error": "Revised content is stale or raw",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "standalone_table",
+        "error": "Standalone table was printed as raw rows",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "padded_table",
+        "error": "Padded table lost its columns",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "fenced_stream",
+        "error": "Stream changed code: [\"pythonif __name__ == \\\"__main__\\\":\",\"print(\\\"literal\\\")\",\"    print(42)\",\"\"]",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "blue_notice",
+        "error": "Notice colours: rgb(156, 161, 148), rgb(22, 25, 20)",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "cache_arrival",
+        "error": "Fast output / slow history: [\"new live answer\"]",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "recorded_frames",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "fail",
+        "name": "recorded_bytes",
+        "error": "claude: no output from actual recording",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "name": "orphan_pipe",
+        "status": "error",
+        "error": "CDP timeout: Runtime.evaluate"
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "raw_code",
+        "error": "Source changed: Waiting for the session02:00 AMPython sourceif name == \"main\": print(\"literal\")CopyThinkingJump to latest",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "rich_metadata",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "rich_revision",
+        "error": "Revised content is stale or raw",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "standalone_table",
+        "error": "Standalone table was printed as raw rows",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "padded_table",
+        "error": "Padded table lost its columns",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "fenced_stream",
+        "error": "Stream changed code: [\"pythonif __name__ == \\\"__main__\\\":\",\"print(\\\"literal\\\")\",\"    print(42)\",\"\"]",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "blue_notice",
+        "error": "Notice colours: rgb(156, 161, 148), rgb(22, 25, 20)",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "cache_arrival",
+        "error": "Fast output / slow history: [\"new live answer\"]",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "recorded_frames",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "fail",
+        "name": "recorded_bytes",
+        "error": "claude: no output from actual recording",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "name": "orphan_pipe",
+        "status": "error",
+        "error": "CDP timeout: Runtime.evaluate"
+      }
+    ],
+    "fixed": [
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "raw_code",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "rich_metadata",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "rich_revision",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "standalone_table",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "padded_table",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "fenced_stream",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "blue_notice",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "cache_arrival",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "recorded_frames",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "recorded_bytes",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 1280,
+        "status": "pass",
+        "name": "orphan_pipe",
+        "warnings": []
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "raw_code",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "rich_metadata",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "rich_revision",
+        "warnings": []
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "standalone_table",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "padded_table",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "fenced_stream",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "blue_notice",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "cache_arrival",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "recorded_frames",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "recorded_bytes",
+        "warnings": [
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications.",
+          "ResizeObserver loop completed with undelivered notifications."
+        ]
+      },
+      {
+        "width": 390,
+        "status": "pass",
+        "name": "orphan_pipe",
+        "warnings": []
+      }
+    ]
+  },
+  "unit": {
+    "main": {
+      "total": 167,
+      "passed": 136,
+      "failed": 31,
+      "failedCases": [
+        "device history across renderer replacement waits for an outgoing renderer's transaction to commit before loading",
+        "device history across renderer replacement serializes overlapping writes and captures each snapshot before waiting",
+        "device history across renderer replacement treats malformed cache data as absent so live output can start",
+        "keeps a fenced code block together across blank lines and indentation changes",
+        "keeps a Markdown table together when body columns use different padding",
+        "a reconnect keeps this visit's conversation while a reconnect fills in the screen",
+        "fenced output from normal terminal sessions keeps indentation, blank rows and fence-like content across chunks",
+        "fenced output from normal terminal sessions retains output from this visit across successive reconnects",
+        "reopens the remembered message when a replayed answer is still growing",
+        "does not cut a fenced block in half when output pauses",
+        "snapshots clipped by the terminal viewport does not use a renderer notice as the chronological anchor of a snapshot",
+        "snapshots clipped by the terminal viewport keeps the complete cached answer when replay starts at its last rows",
+        "snapshots clipped by the terminal viewport does not erase a repeated answer after a new prompt in the snapshot",
+        "quiet-time previews through the transcript previews an answer paused on the cursor row without committing its partial text",
+        "does not commit a partial answer just because a spinner is drawn below it",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 31 byte chunks, painting every 1 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 31 byte chunks, painting every 2 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 31 byte chunks, painting every 3 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 31 byte chunks, painting every 5 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 31 byte chunks, painting every 8 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 137 byte chunks, painting every 1 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 137 byte chunks, painting every 2 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 137 byte chunks, painting every 3 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 137 byte chunks, painting every 5 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 137 byte chunks, painting every 8 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 509 byte chunks, painting every 1 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 509 byte chunks, painting every 2 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 509 byte chunks, painting every 3 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 509 byte chunks, painting every 5 chunks",
+        "actual PTY bytes split across transport chunks keeps the prompt and answer with 509 byte chunks, painting every 8 chunks",
+        "keeps consecutive blank code rows across frames, but collapses prose gaps"
+      ]
+    },
+    "fixed": {
+      "total": 167,
+      "passed": 167,
+      "failed": 0,
+      "failedCases": []
+    }
+  }
+}

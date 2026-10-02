@@ -60,7 +60,9 @@ describe("device history across renderer replacement", () => {
     const saved = before.flush();
     await vi.waitFor(() => expect(commits).toHaveLength(1));
     const loaded = cache("replace").load();
-    await Promise.resolve();
+    // Let all queued request microtasks finish. One Promise.resolve() only
+    // reached database-open and could let the old implementation pass by luck.
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(reads).toBe(0);
     commits.shift()!();
     await saved;
