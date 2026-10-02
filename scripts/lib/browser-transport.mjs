@@ -223,6 +223,11 @@ export async function launchChromeTransport({ profile }) {
       await request('Emulation.setTouchEmulationEnabled', { enabled: Boolean(mobile) });
       return { width, height, dpr };
     },
+    // Trusted mouse input: real pointerenter/leave and hover, which scripted
+    // events cannot produce. type is mouseMoved, mousePressed or mouseReleased.
+    mouse: (type, { x, y }) => request('Input.dispatchMouseEvent', {
+      type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1, pointerType: 'mouse',
+    }),
     // Trusted touch input, as a phone's finger produces it. type is
     // touchStart, touchMove, touchEnd or touchCancel; points are CSS pixels.
     enableTouch: () => request('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 }),

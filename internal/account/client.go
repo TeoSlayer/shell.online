@@ -314,6 +314,7 @@ const (
 	AutomationMcpTeamAccess      = "mcpTeamAccess"
 	AutomationDailyBriefing      = "dailyBriefingEnabled"
 	AutomationBriefingTeamAccess = "dailyBriefingTeamAccess"
+	AutomationSummaries          = "summariesEnabled"
 )
 
 // SessionAutomation is a session's automation consent as the account service
@@ -324,6 +325,8 @@ type SessionAutomation struct {
 	McpTeamAccess      bool `json:"mcpTeamAccess"`
 	DailyBriefing      bool `json:"dailyBriefingEnabled"`
 	BriefingTeamAccess bool `json:"dailyBriefingTeamAccess"`
+	// Summaries lets this session's host publish owner-encrypted summaries.
+	Summaries bool `json:"summariesEnabled"`
 }
 
 // SwitchValue reads one of the three switches by its service name, so a list
@@ -336,6 +339,8 @@ func (automation SessionAutomation) SwitchValue(key string) bool {
 		return automation.DailyBriefing
 	case AutomationBriefingTeamAccess:
 		return automation.BriefingTeamAccess
+	case AutomationSummaries:
+		return automation.Summaries
 	default:
 		return false
 	}

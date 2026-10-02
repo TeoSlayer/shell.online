@@ -59,6 +59,7 @@ import { timingSafeEqual } from "node:crypto";
 import { callerAddress, rateLimiter } from "./lib/rate-limit";
 import { logMailer, type Mailer } from "./lib/mail";
 import { readSessionContent } from "./lib/session-content";
+import { issueSummaryTicket, readSessionSummary, summaryTicketSigner } from "./lib/session-summary";
 import { readMcpFlows } from "./lib/mcp-flows";
 import { createJevIntegration } from "./lib/jev/integration";
 import { readJevAssessRequest } from "./lib/jev/request";
@@ -111,6 +112,11 @@ export interface AppOptions {
    * DO fails team grants closed. At least 32 characters; see readConfig.
    */
   mcpTeamCheckToken?: string;
+  /**
+   * Signs summary tickets (b64u Ed25519 seed). Server-only; absent or
+   * malformed makes the ticket route fail closed with 503.
+   */
+  summaryTicketKey?: string | null;
   /**
    * Accounts the statistics dashboard leaves out of every figure: ours, not
    * customers'. Addresses and domains; see internal-accounts.ts.
@@ -297,7 +303,7 @@ function readTeamShares(value: unknown): { uid: string; sealed: string }[] | nul
  * refuses the whole update. Consent is a yes or a no, and a "maybe" stored as
  * a truthy string would be read as a yes by whoever checks it next.
  */
-const AUTOMATION_CONSENT_FIELDS = ["mcpTeamAccess", "dailyBriefingEnabled", "dailyBriefingTeamAccess"] as const;
+const AUTOMATION_CONSENT_FIELDS = ["mcpTeamAccess", "dailyBriefingEnabled", "dailyBriefingTeamAccess", "summariesEnabled"] as const;
 
 function readAutomationConsent(
   body: unknown,
@@ -452,6 +458,8 @@ export function createApp(options: AppOptions) {
    * owner's separate consent. The stores own every predicate; this object
    * only sequences them.
    */
+  /* Built once; a bad key stays null and every ticket request is refused. */
+  const summarySigner = summaryTicketSigner(options.summaryTicketKey);
   const jev = createJevIntegration({
     env: { JEV_API_KEY: options.jevApiKey ?? null },
     store: jevStoreHooks(store),
@@ -987,6 +995,54 @@ export function createApp(options: AppOptions) {
         return content ? send(response, 200, content) : send(response, 404, { error: "no session content" });
       }
 
+      /*
+       * Session summaries (summary protocol v1). The publisher is the
+       * session's own linked machine for its owner, exactly as for content;
+       * the service stores an `ss1.` envelope it cannot open. The ticket is
+       * how the offline, attested summarizer learns that this owner consented
+       * and has quota: it is signed here and checked inside the enclave.
+       */
+      const cliSummaryRoute = url.pathname.match(/^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/(summary-policy|summary|summary-ticket)$/);
+      if (cliSummaryRoute && ((request.method === "GET" && cliSummaryRoute[2] === "summary-policy")
+        || (request.method === "PUT" && cliSummaryRoute[2] === "summary")
+        || (request.method === "POST" && cliSummaryRoute[2] === "summary-ticket"))) {
+        const token = await requireCli(request);
+        if (!token) return send(response, 401, { error: "not signed in" });
+        const membership = await store.membershipOf(token.uid);
+        if (!membership) return send(response, 404, { error: "no such session" });
+        const sessionId = cliSummaryRoute[1];
+        if (cliSummaryRoute[2] === "summary-policy") {
+          const policy = await store.sessionSummaryPolicy(membership.orgId, sessionId, token.uid, token.id);
+          return policy ? send(response, 200, policy) : send(response, 404, { error: "no such session" });
+        }
+        if (cliSummaryRoute[2] === "summary-ticket") {
+          // Check the key before claiming, so a misconfiguration does not spend the slot.
+          const signer = await summarySigner;
+          if (!signer) return send(response, 503, { error: "summaries are not configured" });
+          const claim = await store.claimSummaryTicket(membership.orgId, sessionId, token.uid, token.id);
+          if (claim.result !== "issued") {
+            const status = { missing: 404, disabled: 403, limited: 429 }[claim.result];
+            return send(response, status, { error: claim.result === "limited" ? "one summary ticket per minute" : `summary ${claim.result}` });
+          }
+          const ticket = await issueSummaryTicket(signer, { uid: claim.ownerUid, sessionId, generation: claim.generation });
+          return send(response, 200, { ticket, generation: claim.generation, ownerUid: claim.ownerUid });
+        }
+        const summary = await readSessionSummary(await readBody(request));
+        if (!summary) return send(response, 400, { error: "invalid sealed session summary" });
+        const result = await store.putSessionSummary(membership.orgId, sessionId, token.uid, token.id, summary);
+        if (result === "stored") return send(response, 200, { stored: true });
+        const status = { missing: 404, disabled: 403, stale: 409, limited: 429 }[result];
+        return send(response, status, { error: result === "limited" ? "a summary may be published every two minutes" : `session summary ${result}` });
+      }
+
+      const browserSummaryRoute = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{6,64})\/summary$/);
+      if (request.method === "GET" && browserSummaryRoute) {
+        const membership = await requireMember(request);
+        if (!membership) return send(response, 401, { error: "sign in first" });
+        const summary = await store.getSessionSummary(membership.orgId, browserSummaryRoute[1], membership.uid);
+        return summary ? send(response, 200, summary) : send(response, 404, { error: "no session summary" });
+      }
+
       const cliAutomationRoute = url.pathname.match(
         /^\/api\/cli\/sessions\/([A-Za-z0-9_-]{6,64})\/automation$/,
       );
@@ -1010,6 +1066,7 @@ export function createApp(options: AppOptions) {
             mcpTeamAccess: session.mcpTeamAccess ?? false,
             dailyBriefingEnabled: session.dailyBriefingEnabled ?? false,
             dailyBriefingTeamAccess: session.dailyBriefingTeamAccess ?? false,
+            summariesEnabled: session.summariesEnabled ?? false,
           });
         }
         const body = (await readBody(request)) as Record<string, unknown>;
@@ -1026,6 +1083,7 @@ export function createApp(options: AppOptions) {
           mcpTeamAccess: updated.mcpTeamAccess ?? false,
           dailyBriefingEnabled: updated.dailyBriefingEnabled ?? false,
           dailyBriefingTeamAccess: updated.dailyBriefingTeamAccess ?? false,
+          summariesEnabled: updated.summariesEnabled ?? false,
         });
       }
 
