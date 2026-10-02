@@ -19,9 +19,11 @@ by the implementing agent, supplemented by CodeQL and regression tests.
 
 2. **Medium: unvalidated method dispatch in the reproduction fixture.**
    CodeQL alert 45 identified `cases[name]()` where `name` came from the URL.
-   The fixture now looks up only its declared cases in a `Map` and rejects
-   unknown names. This is test infrastructure; no production endpoint was
-   introduced. The CodeQL rerun must confirm the alert is cleared.
+   A `Map` lookup cleared that alert but CodeQL raised alert 46 on the indirect
+   call to its returned function. The fixture now dispatches through an explicit
+   switch with statically named methods and rejects unknown names. This is test
+   infrastructure; no production endpoint was introduced. The final CodeQL
+   report must confirm both alerts are cleared.
 
 3. **Regression prevented while fixing finding 1: reconnect followed immediately
    by renderer disposal could omit a saved answer.**

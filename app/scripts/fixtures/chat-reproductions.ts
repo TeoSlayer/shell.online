@@ -158,11 +158,24 @@ const cases: Record<string, () => Promise<unknown>> = {
 };
 
 const name = new URLSearchParams(location.search).get('case')!;
-const run = new Map(Object.entries(cases)).get(name);
 Object.assign(window, {reproduction: {status: 'running', name}});
 Promise.resolve().then(() => {
-  if (!run) throw new Error('Unknown reproduction case');
-  return run();
+  // Keep URL input out of method dispatch, including inherited property names.
+  switch (name) {
+    case 'review_preview': return cases.review_preview();
+    case 'raw_code': return cases.raw_code();
+    case 'rich_metadata': return cases.rich_metadata();
+    case 'rich_revision': return cases.rich_revision();
+    case 'orphan_pipe': return cases.orphan_pipe();
+    case 'standalone_table': return cases.standalone_table();
+    case 'padded_table': return cases.padded_table();
+    case 'fenced_stream': return cases.fenced_stream();
+    case 'blue_notice': return cases.blue_notice();
+    case 'cache_arrival': return cases.cache_arrival();
+    case 'recorded_frames': return cases.recorded_frames();
+    case 'recorded_bytes': return cases.recorded_bytes();
+    default: throw new Error('Unknown reproduction case');
+  }
 }).then(
   details => Object.assign(window, {reproduction: {status: 'pass', name, details}}),
   error => Object.assign(window, {reproduction: {status: 'fail', name, error: String(error.message)}}),
