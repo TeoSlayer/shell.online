@@ -34,8 +34,10 @@ const (
 	// idle. A session is summarised once per idle period, and only again after
 	// new output followed by another idle period.
 	summaryQuiet = 20 * time.Second
-	// summaryRequestTimeout bounds one enclave round trip (a CPU model).
-	summaryRequestTimeout = 60 * time.Second
+	// summaryRequestTimeout bounds one enclave round trip. It exceeds the
+	// enclave's own limits (15 s queue wait + 90 s model deadline), so the
+	// host never gives up on a request the enclave is still answering.
+	summaryRequestTimeout = 120 * time.Second
 	// summaryBackoffMin and summaryBackoffMax space out retries after the
 	// enclave fails, so an outage costs neither tickets nor requests per tick.
 	summaryBackoffMin = 2 * time.Minute
@@ -156,6 +158,11 @@ func (runner *summaryRunner) tick(ctx context.Context) {
 	// actually verify an enclave; otherwise nothing is captured or sent.
 	generic := !claude && runner.enclaveReady != nil && runner.enclaveReady()
 	runner.output.setEnabled(enabled && generic)
+	if !(enabled && generic) {
+		// Capture restarts from zero when it is next enabled, so the count of
+		// already-summarised output must restart too.
+		runner.lastTotal = 0
+	}
 	if !enabled || (!claude && !generic) {
 		return
 	}

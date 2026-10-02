@@ -98,3 +98,29 @@ func TestCheckTextMatchesBrowserRules(t *testing.T) {
 		}
 	}
 }
+
+// Disguised links: the host gate must reject what the enclave guard and the
+// browser reject, and CleanText must turn agent text into something that passes.
+func TestCheckTextCatchesDisguisedLinks(t *testing.T) {
+	for _, value := range []string{
+		"Details at ｅｖｉｌ．ｃｏｍ now", "Open ｈｔｔｐｓ：／／evil", "Log in at evil。com", "Log in at evil․com",
+		"Report at evil[.]com", "Report at evil dot com", "See hxxps://evil", "Visit xn--shell-online-abc",
+		"Session moved to shell-online.cоm", "Backup at evil-backup.icu",
+	} {
+		if CheckText(value, 480, true) == nil {
+			t.Errorf("accepted %q", value)
+		}
+		if cleaned := CleanText(value, 480, true); cleaned != "" && CheckText(cleaned, 480, true) != nil {
+			t.Errorf("CleanText(%q) = %q still fails the gate", value, cleaned)
+		}
+	}
+	for _, value := range []string{
+		"Edited main.rs, ran deploy.sh and built libfoo.so; packed dist.zip.",
+		"Tests pass. Café naïve résumé — 3 files changed.",
+		"Upgraded vite@6.0.0 and react@18.2.0",
+	} {
+		if err := CheckText(value, 480, true); err != nil {
+			t.Errorf("rejected %q: %v", value, err)
+		}
+	}
+}

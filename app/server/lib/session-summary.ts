@@ -40,7 +40,7 @@ export async function readSessionSummary(value: unknown, now = Date.now()): Prom
   const body = value as Record<string, unknown>;
   if (Object.keys(body).some((key) => !FIELDS.includes(key))) return null;
   if (typeof body.generation !== "string" || !/^[a-f0-9]{32}$/.test(body.generation)) return null;
-  if (typeof body.observedAt !== "number" || !Number.isSafeInteger(body.observedAt) || body.observedAt <= 0 || body.observedAt > now + 60_000) return null;
+  if (typeof body.observedAt !== "number" || !Number.isSafeInteger(body.observedAt) || body.observedAt <= 0 || body.observedAt > now + 10 * 60_000) return null;
   if (typeof body.sealed !== "string" || body.sealed.length > SUMMARY_SEALED_MAX || !/^ss1\.[A-Za-z0-9_-]+$/.test(body.sealed)) return null;
   const encoded = body.sealed.slice(4);
   const bytes = Buffer.from(encoded, "base64url");
@@ -77,9 +77,12 @@ export async function summaryTicketSigner(seed: string | undefined | null): Prom
   pkcs8.set(PKCS8_ED25519_PREFIX);
   pkcs8.set(raw, PKCS8_ED25519_PREFIX.length);
   try {
-    const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, true, ["sign"]);
-    const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+    // An extractable copy exists only long enough to read the public half; the
+    // key kept for signing cannot be exported.
+    const exportable = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, true, ["sign"]);
+    const jwk = await crypto.subtle.exportKey("jwk", exportable);
     if (typeof jwk.x !== "string") return null;
+    const privateKey = await crypto.subtle.importKey("pkcs8", pkcs8, { name: "Ed25519" }, false, ["sign"]);
     return {
       publicKey: jwk.x,
       async sign(message) {

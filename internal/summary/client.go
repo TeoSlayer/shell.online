@@ -90,7 +90,8 @@ func NewClient(endpoint string, verifier *Verifier, httpClient *http.Client) (*C
 // Summarize seals request to a freshly verified enclave key and returns the
 // enclave's sealed summary. request.Tail must already be PrepareTail output.
 func (client *Client) Summarize(ctx context.Context, request Request) (Result, error) {
-	for attempt := 0; attempt < 2; attempt++ {
+	// A restarted enclave has a new key; re-verify a few times before giving up.
+	for attempt := 0; attempt < 3; attempt++ {
 		enclave, err := client.enclave(ctx)
 		if err != nil {
 			return Result{}, err

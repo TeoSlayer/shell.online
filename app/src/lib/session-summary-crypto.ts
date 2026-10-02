@@ -39,18 +39,53 @@ const SURROGATE = /[\ud800-\udfff]/u;
  */
 const LINK_OR_MARKUP = [
   /\b[a-z][a-z0-9+.-]{1,20}:\/\/|\bwww\.|\b(?:data|javascript|vbscript|file|mailto|tel|sms):\S/i,
-  /\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud)\b/i,
+  /\b[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.(?:com|net|org|io|co|ai|app|dev|xyz|me|info|biz|ru|cn|tk|top|online|site|link|click|ly|gl|gg|uk|de|fr|ws|page|live|shop|store|support|help|login|cloud|to|gd|ms|lol|icu|vip|work|tech|su|ga|cf|ml|gq|pw|fun|space|website|news|one|cyou|buzz|rest|bar|xin|cam|bond|sbs|life|world|today|pro)\b/i,
   /[^\s@]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b/i,
   /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/,
-  /<[a-z/!?][^>]*>|\]\(|!\[|```|\[[^\]]*\]\s*\[|&[a-z]+;|&#/i,
+  /<[a-z/!?][^>]*>|\]\(|!\[|```|\[[^\]]*\]\s*\[|&[a-z]+;|&#/i,  // Disguised links: evil[.]com, hxxps://, "evil dot com", punycode.
+  /\[\s*\.\s*\]|\(\s*\.\s*\)|\{\s*\.\s*\}|\[\s*dot\s*\]|\(\s*dot\s*\)|\bhxxps?\b|\[:\]\/\/|\b[a-z0-9-]+\s+dot\s+[a-z]{2,}\b|\bxn--/i,
 ];
+
+/*
+ * Fold the characters people use to disguise links onto ASCII before
+ * matching: full-width forms (U+FF01–U+FF5E) and dot, colon, slash and at
+ * look-alikes. Identical to fold() in the enclave guard and the host gate.
+ */
+const DOTS = new Set([0x3002, 0xff61, 0xfe52, 0x2024, 0x2e33, 0x00b7, 0x0701, 0x0702]);
+const COLONS = new Set([0xa789, 0x2236, 0xfe55]);
+const SLASHES = new Set([0x2215, 0x2044, 0x29f8]);
+export function foldLookalikes(value: string): string {
+  let out = "";
+  for (const char of value) {
+    const code = char.codePointAt(0)!;
+    if (code >= 0xff01 && code <= 0xff5e) out += String.fromCodePoint(code - 0xfee0);
+    else if (DOTS.has(code)) out += ".";
+    else if (COLONS.has(code)) out += ":";
+    else if (SLASHES.has(code)) out += "/";
+    else if (code === 0xfe6b) out += "@";
+    else out += char;
+  }
+  return out;
+}
+
+/* A dotted token (label.label) containing a non-ASCII letter: a look-alike domain. */
+function hasLookalikeDomain(value: string): boolean {
+  for (const token of value.match(/[\p{L}\p{N}.-]+/gu) ?? []) {
+    if (!/[^\x00-\x7F]/u.test(token) || !/\p{L}/u.test(token.replace(/[\x00-\x7F]/g, ""))) continue;
+    const parts = token.replace(/^[.-]+|[.-]+$/g, "").split(".");
+    if (parts.length >= 2 && parts.filter((part) => /\p{L}/u.test(part)).length >= 2) return true;
+  }
+  return false;
+}
 
 export function guardSummaryText(value: unknown, max: number, multiline: boolean): value is string {
   if (typeof value !== "string" || value.length === 0 || value.length > max * 2) return false;
   if ([...value].length > max || value.trim().length === 0) return false;
   if (SURROGATE.test(value)) return false;
   if (FORBIDDEN_CHARS.test(multiline ? value.replace(/\n/g, "") : value)) return false;
-  return !LINK_OR_MARKUP.some((pattern) => pattern.test(value));
+  const folded = foldLookalikes(value);
+  if (hasLookalikeDomain(folded)) return false;
+  return !LINK_OR_MARKUP.some((pattern) => pattern.test(folded));
 }
 
 function validBinding(value: unknown): value is string {
