@@ -1,0 +1,65 @@
+<p>Agility Robotics unveiled Digit 5 today, and the part of the announcement that matters to anyone who runs robots for a living is not the 50 lb payload. It is the <a href="https://www.agilityrobotics.com/content/agility-unveils-digit-5-humanoid-robot-built-for-cooperatively-safe-work-at-scale">independent safety controller</a> that "oversees Digit's response to the detection of people within an unsafe distance," and the Agility Arc fleet platform that shows operators uptime, throughput, and mean time between incidents. Fleet-scale humanoids get fleet-scale tooling. The ROS 2 robot on your bench gets whatever you can reach it with. This post is about getting a browser terminal on a ROS 2 robot with <span class="brand-shell">shell.online</span>: one command on the robot, one link on your phone, no VPN, and a clear account of what that link does and does not expose.</p>
+
+<p>The timing is not only about Digit. The ROS 2 release team shipped <a href="https://github.com/ros2/ros2/releases/tag/release-humble-20260914">Humble Hawksbill Patch Release 15</a> yesterday, and the current LTS, <a href="https://discourse.openrobotics.org/t/ros-2-lyrical-luth-released/55021">Lyrical Luth</a>, has been out since May with Ubuntu 26.04 as its Tier 1 platform. Plenty of fleets are mid-migration between the two, and somebody has to look at the actual terminal on the actual robot when a launch file behaves differently than it did in the sim.</p>
+
+<section>
+<h2>Why ROS needs no adapter</h2>
+<p><span class="brand-shell">shell.online</span> transports terminal bytes. It does not know what ROS is, and it does not need to. The <a href="https://shell.online/platforms/">platforms page</a> says it directly: source the ROS environment first, then wrap roscore, roslaunch, ros2 run, ros2 launch, colcon build, or a node with the normal shell command. No bridge node, no DDS discovery across a NAT. The PTY runs on the robot, and the browser sees what a person at the robot's console would see.</p>
+
+<p>The one caveat, also from that page: ROS itself supports fewer OS and architecture pairs than the CLI does. Sharing a terminal does not make an unsupported ROS combination work.</p>
+</section>
+
+<section>
+<h2>Putting a browser terminal on a ROS 2 robot</h2>
+<p>Install the CLI on the robot's compute. On Linux, including ARM64 boards, the installer is one line and verifies the SHA-256 checksum of the binary it downloads:</p>
+<pre><code>curl -fsSL https://shell.online/install | sh</code></pre>
+<p>Then source your workspace and wrap the launch exactly as you would run it locally:</p>
+<pre><code>source /opt/ros/lyrical/setup.bash
+source ~/ros2_ws/install/setup.bash
+shell ros2 launch my_robot_bringup bringup.launch.py</code></pre>
+<p>The CLI prints a URL, a generated password, and a QR code. Scan the QR with a phone and the same terminal opens in the browser with the launch output streaming. The <a href="https://shell.online/e2ee/">encryption page</a> explains what the QR carries: the printed URL holds a random salt fragment, the QR adds the password to that fragment, and URL fragments never reach the relay. The CLI and the browser derive the same AES-256-GCM key locally with PBKDF2-HMAC-SHA256 at 600,000 iterations. Frames are encrypted on the robot before they go anywhere.</p>
+
+<p>The launch runs in the background on the robot. If a colleague is standing next to it with a keyboard, they can take over locally without disconnecting the browser viewers:</p>
+<pre><code>shell list
+shell attach &lt;session-id&gt;</code></pre>
+<p>Ctrl-X then D detaches and leaves the process running. Local input and the resulting output stay visible to everyone in a browser, so nobody is typing into a terminal the other person cannot see.</p>
+</section>
+
+<section>
+<h2>What a phone can and cannot do to a robot</h2>
+<p>This is the part to read before you paste the link into a group chat. The URL and password together are a bearer credential. The <a href="https://shell.online/security/">security model</a> calls it a bearer capability: anyone holding both can open the share, and on an interactive share they can type with the permissions of the wrapped process. On a robot, the wrapped process is usually running as a user that can publish to cmd_vel, restart nodes, or call an e-stop service. A terminal on a robot is a control surface, and the link is the key to it.</p>
+
+<p>Digit 5 solves the physical version of this with hardware: an independent safety controller that acts regardless of what the main software is doing. The equivalent on the terminal side is deciding, before you share, whether anyone on the far end should be able to type at all. For a robot that a support engineer only needs to observe, share the launch read-only:</p>
+<pre><code>shell --read-only ros2 launch my_robot_bringup bringup.launch.py</code></pre>
+<p>Read-only is enforced at the relay, not in the browser. Per the security page, ordinary browser input and confirmed EOF are rejected by the Worker, and DevTools or handcrafted WebSocket frames cannot turn the link into an interactive session. That matters when the process is a launch file holding a motor controller.</p>
+
+<div class="callout"><p>An interactive <span class="brand-shell">shell.online</span> link on a robot lets anyone who holds the URL and password send keystrokes with the permissions of the process you wrapped. If the goal is to let someone watch a bringup, a colcon build, or a bag replay, share it read-only. Rotate the password with shell password rotate if a link went further than intended; rotation disconnects current viewers without restarting the process.</p></div>
+
+<p>One more behavior worth knowing: phone viewers change the terminal grid. The <a href="https://shell.online/mobile/">mobile page</a> documents it. A desktop-only session uses a 120 by 36 grid, and the moment a phone connects, everyone switches to an 80 by 24 compatibility grid. Read-only phones count too. Wide output or a TUI will reflow when someone opens the link from a phone.</p>
+</section>
+
+<section>
+<h2>Network loss, restarts, and links that survive them</h2>
+<p>Robots lose Wi-Fi. They roam between access points, drive into the metal corner of a warehouse, or reboot when a battery swap goes badly. The <a href="https://shell.online/reliability/">reliability page</a> is specific about what happens: the CLI and browser reconnect with bounded backoff, a temporary network failure does not stop the process, and the same share link remains recoverable for 12 hours after its host disconnects. A browser tab left open on your desk reconnects when the robot's compute comes back into range.</p>
+
+<p>A reboot is different, because the process itself is gone. An ordinary share closes when its task exits, and rerunning the launch gives you a new URL and password. For a robot that you want reachable at one stable address across restarts, the CLI has a persistent mode:</p>
+<pre><code>shell --persistent /var/lib/robot/shell-state -- ros2 launch my_robot_bringup bringup.launch.py</code></pre>
+<p>The state file stores an owner-only host identity, the password, and the encryption material. Rerunning with that same file restores the same URL and password. Put that command in the robot's startup script and the link you saved last week still works after a power cycle. The <a href="https://github.com/TeoSlayer/shell.online">shell.online source</a> ships the same mechanism in its published Docker image, where a named volume plus restart: unless-stopped keeps one encrypted link across container restarts. Two edges: the persistent flag cannot be combined with the no-e2ee flag, and shell kill stops the process without deleting the identity file, so the next run reuses it.</p>
+
+<p>For a session that should not live all afternoon, such as a bag replay for a bug report, add an earlier deadline:</p>
+<pre><code>shell --read-only --auto-close 30m ros2 bag play /data/incident_0915</code></pre>
+<p>The auto-close value can only bring the deadline forward. The share still closes the moment the wrapped process exits, whichever comes first.</p>
+</section>
+
+<section>
+<h2>Letting an agent on the robot hand you the link</h2>
+<p>If a coding agent runs on the robot's compute, bisecting a launch-file regression after a Humble patch or babysitting a colcon build, it can start the share itself and hand the operator the link without interactive setup, using the JSON mode in the <a href="https://shell.online/cli/">CLI reference</a>:</p>
+<pre><code>shell --read-only --json -- colcon build --symlink-install</code></pre>
+<p>The first JSON event carries the share URL, the password, the session ID, and flags for read-only and encrypted. The <a href="https://shell.online/skill">installable agent skill</a> spells out the rules: preserve the full URL including its salt fragment, treat URL and password as a bearer secret, prefer read-only when the operator only needs to monitor, and never create a new session just to refresh a link. On a robot, where a stray keystroke has physical consequences, read-only by default is the right instinct for an agent.</p>
+
+<p>None of this changes where the process runs. The launch, the build, the bag replay all stay on the robot's compute with its own environment sourced. The relay sees connection metadata, encrypted frame sizes, timing, labels, and lifecycle events, and nothing of the terminal content. That is the split we described when we first wrote up <a href="/blog/shell-online-live-terminal-browser-link/">a live browser link for any terminal</a>, and a robot is where it earns its keep.</p>
+
+<p>Digit 5 is expected to reach early access in the first half of 2027. Most ROS robots today are not humanoids with a fleet dashboard. They are a compute box, a launch file, and a person who needs to see what it printed, from wherever they are, without a VPN and without handing a control surface to everyone who has the link.</p>
+</section>
+
+<div class="cta"><h3>Put a browser link on your robot's terminal</h3><p>Source your ROS environment, wrap the launch with one command, and open the same terminal from a phone. End-to-end encrypted by default, read-only when you say so, and the process never leaves the robot.</p><a href="https://shell.online/">Try shell.online</a></div>

@@ -1,3 +1,4 @@
+import { resolveBlogRoute } from "../shared/blog";
 import { resolveDocumentationRoute } from "../shared/documentation";
 import type { UniqueSurface } from "../shared/stats";
 import { campaignSource, classifyReferrer, PUBLIC_CTA_TARGETS } from "../shared/public-attribution";
@@ -256,17 +257,20 @@ export function uniqueSurface(event: AnalyticsEvent, target: string): UniqueSurf
  *
  * Every documentation route, current or versioned, has its own target, so a
  * page added to the docs is counted the day it ships rather than falling
- * through. A 404 is "not_found". Anything else the site answered without
- * knowing the path is "unknown_path": the assets binding serves the landing
- * page for those, so they are not lost visitors but they are not the landing
- * page either, and the count says how often a link points somewhere the site
- * should answer properly.
+ * through. The blog is two targets, its index and any one post, so the list
+ * of pages does not grow with every article. A 404 is "not_found". Anything
+ * else the site answered without knowing the path is "unknown_path": the
+ * assets binding serves the landing page for those, so they are not lost
+ * visitors but they are not the landing page either, and the count says how
+ * often a link points somewhere the site should answer properly.
  */
 export function documentTarget(pathname: string, status: number, currentVersion: string): string {
   if (status === 404) return "not_found";
   if (pathname === "/") return "landing";
   const route = resolveDocumentationRoute(pathname, currentVersion);
   if (route) return route.kind === "docs" ? "docs" : `docs_${route.kind.replace(/-/g, "_")}`;
+  const post = resolveBlogRoute(pathname);
+  if (post) return post.kind === "index" ? "blog" : "blog_post";
   if (SESSION_PATH.test(pathname)) return "session";
   return "unknown_path";
 }

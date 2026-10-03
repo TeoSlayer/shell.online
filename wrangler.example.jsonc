@@ -33,6 +33,10 @@
       "/e2ee/*",
       "/docker/*",
       "/self-hosting/*",
+      "/blog",
+      "/blog/*",
+      "/blogs",
+      "/blogs/*",
       "/"
     ]
   },

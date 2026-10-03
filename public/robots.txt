@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://shell.online/sitemap.xml
+Sitemap: https://shell.online/blog/sitemap.xml

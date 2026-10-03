@@ -67,6 +67,14 @@ describe("secureAssetResponse CSP Google Analytics endpoints", () => {
     expect(policy).toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
   });
 
+  it("lets search engines index the blog, without analytics scripts", () => {
+    const res = secureAssetResponse(htmlResponse(), "/blog/", "shell.online");
+    expect(res.headers.get("X-Robots-Tag")).toBeNull();
+    expect(csp(res)).toContain("script-src 'self';");
+    expect(secureAssetResponse(htmlResponse(), "/blog/not-a-post/", "shell.online").headers.get("X-Robots-Tag")).toContain("noindex");
+    expect(secureAssetResponse(htmlResponse(), "/blog/", "app.shell.online").headers.get("X-Robots-Tag")).toContain("noindex");
+  });
+
   it("does NOT allow GA on private session paths", () => {
     const res = secureAssetResponse(htmlResponse(), "/s/abcdefghijklmnopqrstuvwxyz012345/", "shell.online");
     const policy = csp(res);

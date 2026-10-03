@@ -95,6 +95,8 @@ export function humanize(value: string): string {
     docs_e2ee: "Docs · E2EE",
     docs_docker: "Docs · Docker",
     docs_self_hosting: "Docs · Self-hosting",
+    blog: "Blog",
+    blog_post: "Blog · Post",
     session: "Shared terminal",
     installer_download: "Installer fetched",
     binary_download: "Binary downloaded",

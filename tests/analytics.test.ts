@@ -18,6 +18,11 @@ import {
   writeAnalytics,
 } from "../worker/analytics";
 
+// The published registry may be empty; routing a post needs one to exist.
+vi.mock("../blog/posts.json", () => ({
+  default: [{ slug: "a-post", title: "A post", description: "About a post.", category: "Guide", tags: [], iso_date: "2026-09-01" }],
+}));
+
 describe("analytics", () => {
   it("writes a stable, privacy-limited Analytics Engine schema", () => {
     const writeDataPoint = vi.fn();
@@ -160,6 +165,9 @@ describe("analytics", () => {
     expect(documentTarget("/docs/v0.15.1/app/", 200, "0.15.1")).toBe("docs_app");
     expect(documentTarget("/docs/v0.15.1/", 200, "0.15.1")).toBe("docs");
     expect(documentTarget("/s/abcdefghijklmnopqrstuvwxyz012345", 200, "0.15.1")).toBe("session");
+    expect(documentTarget("/blog/", 200, "0.15.1")).toBe("blog");
+    expect(documentTarget("/blog/a-post/", 200, "0.15.1")).toBe("blog_post");
+    expect(documentTarget("/blog/not-a-post/", 200, "0.15.1")).toBe("unknown_path");
     expect(documentTarget("/docs/contributing/", 200, "0.15.1")).toBe("unknown_path");
     expect(documentTarget("/docs/contributing/", 404, "0.15.1")).toBe("not_found");
   });

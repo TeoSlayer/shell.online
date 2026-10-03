@@ -1,0 +1,55 @@
+<p>Cloudflare's status page opened an incident titled "Issues with Durable Objects" at 00:03 UTC on 25 September 2026 and resolved it at 14:49 UTC the same day. The hosted <span class="brand-shell">shell.online</span> relay is a Cloudflare Worker, and its live sessions are Durable Objects. That is a dependency you can read in the source, and since v0.12.2 it is also one you can remove: the repo ships a standalone relay for self-hosted terminal sharing on a single Docker host, with no Cloudflare account involved.</p>
+
+<section>
+<h2>What the hosted relay is built on</h2>
+<p>Cloudflare describes a Durable Object as "a special kind of Cloudflare Worker which uniquely combines compute with storage", with a globally unique name that lets it coordinate multiple clients (<a href="https://developers.cloudflare.com/durable-objects/">Durable Objects documentation</a>).</p>
+<p>In the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>, wrangler.example.jsonc binds a SESSIONS namespace to a class named TerminalSession, and worker/index.ts exports TerminalSession as a subclass of DurableObject. A comment beside the screen-snapshot code shows one consequence: Durable Object values stop at 128 KiB, so the last screen a host sent is stored in 64 KiB chunks and deleted with the rest of the session when it expires. The self-hosting guide lists the platform requirements for that path: Durable Objects, Rate Limiting, Analytics Engine, and static assets.</p>
+<p>On the incident, the first update on the <a href="https://www.cloudflarestatus.com/incidents/gv29fd076q2t">Cloudflare status entry</a> described new Workflows instances stuck in a Queued state; the 02:32 UTC update said Cloudflare was "investigating issues causing an increase of errors for Durable Objects". Cloudflare rated the impact minor. We are not claiming the hosted relay failed during that window; we did not measure it for this post and will not guess. The point is narrower. If your sessions run through a relay whose session state lives in someone else's Durable Objects, their incident page is on your dependency list.</p>
+</section>
+
+<section>
+<h2>Self-hosted terminal sharing on one Docker host</h2>
+<p>The standalone relay arrived in v0.12.2 on 12 September 2026. The changelog describes it as a single-node relay for ordinary Docker hosts using Node.js, WebSockets, local metadata state and Caddy-managed TLS, requiring no Cloudflare account or credentials. It lives under standalone/ in the repo: server.ts, a Dockerfile, compose.yaml and a four-line Caddyfile. A published image, ghcr.io/teoslayer/shell.online-relay, is built for amd64 and arm64.</p>
+<p>Requirements, per the <a href="https://shell.online/self-hosting/">self-hosting guide</a>: Docker Engine with Compose, a public domain, and ports 80 and 443. Point the domain's A and AAAA records at the host first, then:</p>
+<pre><code>git clone https://github.com/TeoSlayer/shell.online.git
+cd shell.online/standalone
+
+SHELL_ONLINE_PUBLIC_URL=https://relay.example.com \\
+SHELL_ONLINE_SITE=relay.example.com \\
+docker compose up -d --build</code></pre>
+<p>Caddy obtains the certificate on its own. Its documentation gives the conditions: the A/AAAA records point at your server, ports 80 and 443 are open externally, and the data directory is writable and persistent, after which "sites will be served over HTTPS automatically" and Caddy keeps the certificates renewed (<a href="https://caddyserver.com/docs/automatic-https">Caddy automatic HTTPS</a>). The Caddyfile in the repo only enables compression and reverse-proxies to the relay container on port 8080. For a local test with no domain, the defaults work at http://localhost:</p>
+<pre><code>docker compose up -d --build
+curl http://localhost/api/health</code></pre>
+<p>The relay container in compose.yaml runs with a read-only root filesystem, drops all capabilities, sets no-new-privileges, runs as an unprivileged user created in the Dockerfile, and has a health check that fetches /api/health every 30 seconds. Caddy starts only once that check passes. State goes to a named volume, relay-state, mounted at /var/lib/shell-online.</p>
+</section>
+
+<section>
+<h2>Pointing the CLI at your relay</h2>
+<p>Nothing about the installed CLI changes. The built-in reference documents --server as "Override the relay URL. Defaults to $SHELL_ONLINE_SERVER, then https://shell.online." Either of these starts Claude Code through your own relay:</p>
+<pre><code>SHELL_ONLINE_SERVER=https://relay.example.com shell claude
+shell --server https://relay.example.com claude</code></pre>
+<p>The CLI prints a link on your domain, a random ten-character password and a QR code, as it does against <a href="https://shell.online">shell.online</a>. The session commands are unchanged: shell --read-only for a view-only link, shell --auto-close 5m for a hard deadline, shell --persistent with a state file for a link that survives a host restart, shell list and shell attach on the host. The relay you run enforces the same protocol rules as the hosted one. The guide lists them: authentication, same-origin browser policy, read-only mode, the input lease, viewer, frame and traffic limits, slow-client protection, a stable terminal grid, and task-bound expiry. The numbers are in standalone/server.ts, for example a 64 KiB cap on a live frame and a 1.8 second typing lease that keeps two viewers from interleaving input.</p>
+<p>The credential model is unchanged too, and moving the relay in-house does not soften it. The URL and the password together are a bearer credential. Anyone holding both can view the session and, unless it was started read-only, type with the permissions of the wrapped process. Your relay adds no login in front of that; if you want one, put it in front of Caddy yourself.</p>
+</section>
+
+<section>
+<h2>What your relay stores, and what it still cannot read</h2>
+<p>End-to-end encryption does not depend on who runs the relay. The host and browser derive an AES-256-GCM frame key locally using PBKDF2-HMAC-SHA256 with 600,000 iterations, from the password and the random salt in the link's #salt= fragment (<a href="https://shell.online/e2ee/">encryption details</a>). Terminal input, output, snapshots and latency probes reach the relay as authenticated ciphertext. The self-hosting guide repeats this for the standalone build: terminal frames remain opaque to the relay when the CLI's default E2EE is used.</p>
+<p>What the relay does see is timing, addresses, encrypted sizes, labels and lifecycle metadata, and it can delay or drop traffic. That holds for a relay on your hardware, with one practical difference: the operator who sees that metadata is now you. The relay-state volume holds session metadata and host-token hashes so a persistent client can recover its identity after a relay restart. It does not hold terminal contents, encryption keys, or browser passwords. Back it up and run one replica per volume.</p>
+<div class="callout"><p>Passing --no-e2ee lets the relay read terminal contents. On a relay you control that is a smaller exposure than on a shared one, but it is still an exposure, and the docs call it a compatibility and debugging choice rather than a mode. The <a href="https://shell.online/security/">security model page</a> covers what the flag gives up.</p></div>
+</section>
+
+<section>
+<h2>Restarts, dropped networks, and expiry on your own relay</h2>
+<p>The lifetime rules are shared code, not a hosted-only policy. shared/session-lifetime.ts sets a 12 hour TTL for an ordinary session and 30 days for a persistent one, and both relays import the same disconnectedSessionExpiry function. The <a href="https://shell.online/reliability/">reliability page</a> states the user-facing version: an ordinary disconnected share can recover its link for 12 hours, and a temporary browser or network failure does not intentionally stop the session, because the process runs on the host machine, not on the relay.</p>
+<p>Relay restarts matter most when you own the box. The guide says live sockets reconnect after a restart, and the resume endpoint in standalone/server.ts rejects a resumed session with a 403 unless the host-token hash matches and the persistent, read-only and encrypted flags are identical to what was recorded. That check is what stops a restarted host from quietly turning a read-only link into an interactive one. With the <a href="https://shell.online/docker/">persistent Docker client</a> against your relay, the same URL and password come back after both sides restart: the client keeps its identity in its state file, and the relay keeps the matching metadata in relay-state.</p>
+<p>When the wrapped process exits, the session closes on its own, and auto-close deadlines apply as usual. If your relay is down, viewers see a disconnected session but nothing happens to the process; check the host first, and use shell attach on the machine to confirm the process is alive without going through the browser at all.</p>
+</section>
+
+<section>
+<h2>What you give up, and the middle option</h2>
+<p>The standalone relay does not include the optional accounts app or the hosted analytics dashboard, and standalone/server.ts has no MCP routes, so scoped MCP grants stay a Worker feature. That means no organization session list, no sealed password handoff between teammates, and no starting sessions from the web app. Those features are described in the <a href="/blog/shell-online-live-terminal-browser-link/">overview of how a browser link to a terminal works</a>; the accounts app can be self-hosted separately from app/ with PostgreSQL, but that is a second deployment, not part of the relay.</p>
+<p>If you want your own relay on Cloudflare rather than off it, copy wrangler.example.jsonc to wrangler.local.jsonc, run npm ci and npm run build, and deploy with wrangler. That changes who pays and who holds the data, not which platform incidents you are exposed to. The Docker path is the one that removes the dependency. We built <span class="brand-shell">shell.online</span> at <a href="https://pilotprotocol.network">Pilot Protocol</a> with the hosted relay as the default because most people just want the link, but the standalone server speaks the same protocol with a smaller trust surface, and after a day like 25 September it is worth knowing it is there.</p>
+</section>
+
+<div class="cta"><h3>Run the relay where your sessions already are</h3><p>One compose file, one domain, and the same CLI. Terminal contents stay encrypted end to end whichever relay carries them.</p><a href="https://shell.online/">Try shell.online</a></div>

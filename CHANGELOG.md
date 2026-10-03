@@ -4,6 +4,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A blog at shell.online/blog/, listing every shell.online post published so
+  far (23 posts, first published on pilotprotocol.network, which stays their
+  canonical home). Posts are listed in `blog/posts.json` with their bodies in
+  `blog/posts/`, and the build renders the index, each post, an RSS feed and a
+  sitemap as static pages. See blog/README.md.
+- `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
+
 ### Fixed
 
 - Chat preserves code indentation, literal identifiers and fenced blank lines,

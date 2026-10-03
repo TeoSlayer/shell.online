@@ -13,7 +13,7 @@ export function landingMarkup(): string {
   return `<div class="home">
     <header class="home-nav wrap">
       <a class="home-logo" href="/" aria-label="shell.online home">shell<span>.</span>online</a>
-      <nav aria-label="Main navigation"><a href="#how">How it works</a><a href="/docs/">Docs</a><a href="https://app.shell.online/" class="home-login">Log in</a><a class="button small" href="#start" data-cta="start_nav">Get started</a></nav>
+      <nav aria-label="Main navigation"><a href="#how">How it works</a><a href="/docs/">Docs</a><a href="/blog/">Blog</a><a href="https://app.shell.online/" class="home-login">Log in</a><a class="button small" href="#start" data-cta="start_nav">Get started</a></nav>
     </header>
     <main>
       <section class="home-hero wrap" aria-labelledby="home-title">
@@ -88,6 +88,6 @@ export function landingMarkup(): string {
       </section>
       <section class="home-final wrap"><p class="eyebrow">Next time your agent is busy</p><h2>You don’t have to stay at your desk.</h2><a class="button" href="#start" data-cta="start_footer">Start your first session <span aria-hidden="true">↗</span></a><p>Free. No account needed to try it.</p></section>
     </main>
-    <footer class="home-footer wrap"><a class="home-logo" href="/">shell<span>.</span>online</a><p>Developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>.</p><nav aria-label="Footer navigation"><a href="/docs/">Docs</a><a href="/security/">Security</a><a href="https://github.com/TeoSlayer/shell.online">GitHub</a><a href="https://app.shell.online/privacy">Privacy</a><a href="https://app.shell.online/terms">Terms</a><a href="/downloads/SHA256SUMS">v${RELEASE_VERSION} · SHA-256</a></nav></footer>
+    <footer class="home-footer wrap"><a class="home-logo" href="/">shell<span>.</span>online</a><p>Developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>.</p><nav aria-label="Footer navigation"><a href="/docs/">Docs</a><a href="/blog/">Blog</a><a href="/security/">Security</a><a href="https://github.com/TeoSlayer/shell.online">GitHub</a><a href="https://app.shell.online/privacy">Privacy</a><a href="https://app.shell.online/terms">Terms</a><a href="/downloads/SHA256SUMS">v${RELEASE_VERSION} · SHA-256</a></nav></footer>
   </div>`;
 }
