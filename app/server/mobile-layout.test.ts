@@ -219,22 +219,9 @@ describe("the canvas", () => {
   });
 });
 
-describe("a keyboard that moves the window rather than the page", () => {
-  /*
-   * iOS scrolls the *visual* viewport to lift a focused field above the
-   * keyboard. The page does not move, so a shell anchored at the top of the
-   * document hangs off the top of the screen by exactly that much, with a
-   * strip of bare page under its bottom edge. It is intermittent because
-   * whether the browser needs to scroll depends on where the caret is.
-   */
-  it("sits where the window is, not where the document starts", () => {
-    expect(css).toMatch(/\.shell\s*\{[^}]*top:\s*var\(--viewport-top, 0px\)/);
-    const hook = readFileSync(new URL("../src/lib/app-height.ts", import.meta.url), "utf8");
-    expect(hook).toContain('const TOP = "--viewport-top"');
-    /* What the document has scrolled is already had for free. */
-    expect(hook).toMatch(/viewport\.offsetTop - window\.scrollY/);
-  });
-});
+// Viewport anchoring is exercised with real document scroll and viewport
+// panning in scripts/test-app-layout-browser.mjs. The former source-text check
+// required the incorrect scroll subtraction that raised the bottom navigation.
 
 describe("the conversation as it is being written", () => {
   /*

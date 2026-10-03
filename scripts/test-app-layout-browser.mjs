@@ -129,6 +129,48 @@ try {
   assert((await browser.call(auditTextLayout,{selectors:['.text-audit-label'],complete:['.text-audit-label']})).includes('.text-audit-label: required badge text clipped'),'Required badge cannot hide behind ellipsis');
   await browser.evaluate(`document.getElementById('text-audit-fixture').remove()`);
   await until("!!document.querySelector('.xterm-screen') && document.fonts.status==='loaded'", "real terminal mounted");
+  if (browser.name === 'chrome') {
+    await browser.setViewport({ width: 390, height: 844, dpr: 1, mobile: true });
+    await delay(150);
+    // A mobile browser can scroll the layout viewport to reveal a focused
+    // field even while the app owns scrolling. Give this fixture scroll room
+    // so the native document scroll and viewport coordinates can diverge.
+    await browser.call(() => {
+      document.documentElement.style.minHeight = '1100px';
+      window.scrollTo(0, 80);
+    });
+    await delay(150);
+    const position = await browser.call(() => ({
+      scroll: scrollY, offset: visualViewport.offsetTop,
+      visible: visualViewport.height,
+      railBottom: document.querySelector('.rail').getBoundingClientRect().bottom,
+      shellTop: document.querySelector('.shell').getBoundingClientRect().top,
+    }));
+    console.log('MOBILE DOCUMENT SCROLL', JSON.stringify(position));
+    assert(position.scroll >= 79, 'The fixture really scrolled the document');
+    assert(Math.abs(position.railBottom - position.offset - position.visible) <= 2,
+      'Navigation stays on the visible bottom after document scroll: ' + JSON.stringify(position));
+    await browser.call(() => {
+      Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 30 });
+      Object.defineProperty(visualViewport, 'height', { configurable: true, value: 814 });
+      visualViewport.dispatchEvent(new Event('scroll'));
+    });
+    await delay(100);
+    const panned = await browser.call(() => ({
+      top: document.querySelector('.shell').getBoundingClientRect().top,
+      bottom: document.querySelector('.rail').getBoundingClientRect().bottom,
+    }));
+    assert(Math.abs(panned.top - 30) <= 2 && Math.abs(panned.bottom - 844) <= 2,
+      'Visual viewport panning is independent of document scroll: ' + JSON.stringify(panned));
+    await browser.call(() => {
+      delete visualViewport.offsetTop;
+      delete visualViewport.height;
+      document.documentElement.style.removeProperty('min-height');
+      window.scrollTo(0, 0);
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await delay(100);
+  }
   // Resize one mounted app across both sides of each breakpoint, including returning.
   for (const theme of process.env.APP_LAYOUT_GATE_ONLY ? [] : ['light','dark']) {
   await browser.evaluate(`window.layoutTheme('${theme}')`);
