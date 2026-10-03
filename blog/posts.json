@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-watch-a-long-codex-run-from-your-phone-and-share-it-with-a-teammate",
+    "title": "How to Watch a Long Codex Run From Your Phone and Share It With a Teammate",
+    "description": "GPT-6.1 Sol made long Codex runs cheap. A step-by-step guide to starting one with shell.online, checking it from your phone and giving a teammate a read-only link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "terminal-sharing",
+      "coding-agents",
+      "read-only-terminal"
+    ],
+    "iso_date": "2026-10-03",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-a-long-codex-run-from-your-phone-and-share-it-with-a-teammate.webp"
+  },
+  {
     "slug": "end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli",
     "title": "End-to-End Encrypted Terminal Sharing Has a Second Secret on the Host: shell.online v0.24.1 Takes the Session Password Out of Process Environments",
     "description": "What end-to-end encrypted terminal sharing hides from the relay, and why shell.online v0.24.1 moved the session password out of process environments.",

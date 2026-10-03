@@ -1,0 +1,95 @@
+<p>On September 29, at DevDay, OpenAI shipped <a href="https://openai.com/index/introducing-gpt-6-1-sol/">GPT-6.1 Sol</a>. The number everyone repeated was the price: $2 per million input tokens and $10 per million output tokens on the <a href="https://developers.openai.com/api/docs/pricing">API pricing page</a>, which <a href="https://thenextweb.com/news/openai-gpt-6-1-sol-price-astra-devday">The Next Web</a> worked out to a fifth of what GPT-6 Astra costs. It is in Codex already, and OpenAI's own <a href="https://learn.chatgpt.com/docs/models">model guide</a> now points people at Sol for long, repeated work.</p>
+
+<p>A price cut like that changes habits faster than any benchmark does. The refactor you used to babysit, because every wrong turn cost real money, becomes something you start and walk away from. And that is where it gets awkward. A two hour run is only useful if you can leave the desk without losing track of it, and if the teammate who reviews the result can see what happened without you pasting screenshots into chat.</p>
+
+<p>This guide is the setup for exactly that, start to finish, using <a href="https://shell.online/">shell.online</a>. It takes about five minutes and you do not need an account.</p>
+
+<section>
+<h2>What you need</h2>
+<ul>
+<li>A computer with the <a href="https://github.com/openai/codex">Codex CLI</a> installed and signed in. macOS, Linux and Windows all work, and the <a href="/platforms/">platform list</a> goes a good deal further than that.</li>
+<li>A phone with a browser. There is nothing to install on it.</li>
+<li>The <code>shell</code> command line tool. It is <a href="https://github.com/TeoSlayer/shell.online">open source on GitHub</a> under the <a href="https://github.com/TeoSlayer/shell.online/blob/main/LICENSE">MIT license</a>, so you can read what it does before you run it.</li>
+</ul>
+</section>
+
+<section>
+<h2>Step 1: Install shell on the machine doing the work</h2>
+<p>On macOS, Linux or BSD:</p>
+<pre><code>curl -fsSL https://shell.online/install | sh</code></pre>
+<p>On Windows, in PowerShell:</p>
+<pre><code>irm https://shell.online/install.ps1 | iex</code></pre>
+<p>The installer verifies the release checksums. If piping a script into a shell is not something you do, the platform page has Homebrew and build from source instructions. Either way, confirm what you got:</p>
+<pre><code>shell --version</code></pre>
+<p>As of this post that prints 0.25.0, the <a href="https://github.com/TeoSlayer/shell.online/releases/latest">current release</a>.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Codex through shell</h2>
+<pre><code>shell --name "billing-refactor" -- codex --model gpt-6.1-sol</code></pre>
+<p>Three things in that line are worth a second look.</p>
+<ul>
+<li>The bare <code>--</code> separates shell's options from Codex's. Everything after it, including <code>--model</code>, goes to Codex untouched.</li>
+<li><code>--name</code> is for you in an hour, when there are four sessions open and you need to tell them apart.</li>
+<li><code>gpt-6.1-sol</code> is the model id from OpenAI's guide. If you forget the flag, <code>/model</code> inside Codex gets you to the same place.</li>
+</ul>
+<p>shell starts Codex as a new process in the background and prints three things: a link, a password and a QR code. It does not attach to a Codex that is already running, so start the run this way from the beginning. The <a href="https://learn.chatgpt.com/docs/codex/cli">Codex CLI docs</a> cover the flags on the right side of the <code>--</code>, and the <a href="/cli/">shell command reference</a> covers the left.</p>
+<p>Want to keep typing in the terminal you launched from? Add <code>--foreground</code>, or run <code>shell attach &lt;ID&gt;</code> whenever you like. Press Ctrl-X and then D to detach again. Codex keeps going either way.</p>
+</section>
+
+<section>
+<h2>Step 3: Open it on your phone</h2>
+<p>Scan the QR code. That is the whole step. The page that opens is the same terminal, live. It is not a second copy of the agent. When Codex stops to ask whether it may run a migration, you can answer from the bus, and the <a href="/mobile/">mobile guide</a> explains paste and the on-screen keys.</p>
+<p>Two things trip people up here.</p>
+<p>First, the QR code contains the password. That is what makes it a single scan, and it is also why it should never end up in a screenshot. This is not a theoretical worry. Glow Labs recently <a href="https://www.glow.io/blogs/how-ai-agents-exposed-developer-screenshots-from-leading-tech-companies">found more than 13,000 internal screenshots from over 300 organizations</a> sitting in public GitHub repositories, pushed there by coding agents that had no better way to attach an image to a pull request. A picture of your terminal with a QR code in the corner is a picture of your credentials.</p>
+<p>Second, the process lives on your computer, so the computer has to stay awake and online. Closing the browser tab does nothing to Codex. Letting the laptop sleep stops everything. On a Mac, running <code>caffeinate -i</code> in a spare tab or changing the <a href="https://support.apple.com/guide/mac-help/set-sleep-and-wake-settings-mchle41a6ccd/mac">sleep settings</a> keeps it up. On Linux, <a href="https://man7.org/linux/man-pages/man1/systemd-inhibit.1.html">systemd-inhibit</a> does the job, and on Windows it is <a href="https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/powercfg-command-line-options">powercfg</a>.</p>
+<p>If you would rather the run survive a closed laptop entirely, that is what <a href="https://learn.chatgpt.com/docs/cloud">Codex Cloud</a> is for. The trade is that your code then runs on OpenAI's machines and not on yours. For a repository with production credentials in its environment, I would keep the run local and keep the lid open.</p>
+</section>
+
+<section>
+<h2>Step 4: Give a teammate a link that cannot type</h2>
+<p>The link you just scanned is interactive. Anyone holding it and the password can type into Codex with the same operating system permissions Codex has. That is right for you and wrong for almost everybody else. A reviewer needs to watch. So does the manager who asked how it is going, and so does the channel where you want to show the thing off.</p>
+<p>For them, start the session read-only:</p>
+<pre><code>shell --read-only --name "billing-refactor" -- codex --model gpt-6.1-sol</code></pre>
+<p>Read-only is enforced by the server, which rejects input coming from a browser. It is decided when the session starts and it cannot be upgraded afterwards, so nobody talks their way into typing. You still drive Codex from the host with <code>shell attach</code>. Security people call this the <a href="https://csrc.nist.gov/glossary/term/least_privilege">principle of least privilege</a>: each person gets the access their job needs and nothing above it. The <a href="/security/">security page</a> spells out what each kind of link allows.</p>
+<p>Send the link and the password through different channels. Put the link in the team chat and the password in a direct message, or use your password manager's sharing feature. Chat logs get searched, exported and forwarded, and a link on its own opens nothing.</p>
+<p>If you are wondering what the relay in the middle can read, the short answer is ciphertext. The part of the link after the <code>#</code> is a random salt, and <a href="https://www.rfc-editor.org/rfc/rfc3986.html#section-3.5">a URL fragment is never sent in a request</a>. Your browser combines that salt with the password using <a href="https://www.rfc-editor.org/rfc/rfc8018.html">PBKDF2</a> at 600,000 iterations, the figure the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP password storage cheat sheet</a> recommends for PBKDF2 with SHA-256. Out comes an <a href="https://csrc.nist.gov/pubs/sp/800/38/d/final">AES-256-GCM</a> key, derived through the browser's built in <a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey">Web Crypto API</a>. The <a href="/e2ee/">encryption page</a> has the full description, and there is a separate post on <a href="/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon/">what the relay sees and what it cannot replay</a>.</p>
+<div class="callout"><p><strong>Read-only does not cover files.</strong> File access is off by default. If you start a session with <code>--files</code>, a read-only viewer can still fetch files under that directory. Leave the flag off when the audience only needs to watch.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Keep track when one run turns into four</h2>
+<p>Cheap tokens rarely buy one long run. They buy several at once. OpenAI plainly expects this, because the refreshed Codex CLI has an <code>/agents</code> view for handing out tasks and following them, and Claude Code has its own <a href="https://code.claude.com/docs/en/sub-agents">subagents</a>. Those views live inside one tool. shell's list works across all of them, because it tracks terminals and does not care what is running in each.</p>
+<pre><code>shell list</code></pre>
+<p>That prints every share on this machine with its name and uptime. To see the same thing across a laptop, a build box and the Mac mini in the closet, link each of them once with <code>shell auth</code>. After that <code>shell ls</code> shows every open session in your account, and <a href="https://app.shell.online/">app.shell.online</a> shows it on your phone. The account is optional, and seeing a session in the list does not reveal what is in it. You still need the password, or your own vault, to decrypt anything. The <a href="/app/">app guide</a> covers inviting a teammate into an organization.</p>
+<p>Version 0.25.0, released on October 2, adds something that helps here: session summaries. Hover over a session in the app, or long-press it on a phone, and you get a sentence about what that run is doing. It is off by default and you opt in per session:</p>
+<pre><code>shell permissions &lt;ID&gt; --summaries=true</code></pre>
+<p>Read <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/summaries.md">how summaries are produced</a> before you turn this on for a Codex session. Claude Code sessions are summarised on your own machine. Other programs, Codex included, send redacted output, encrypted, to a summarizer running inside an attested <a href="https://confidentialcomputing.io/">confidential computing</a> enclave, and only after your host has verified that attestation. It is a careful design, and you should still know which of the two paths your session takes. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/CHANGELOG.md">changelog</a> lists the rest of the release.</p>
+</section>
+
+<section>
+<h2>Step 6: Take the access back</h2>
+<p>When the review is over, do not leave a working link lying in a chat log.</p>
+<pre><code>shell password rotate &lt;ID&gt;</code></pre>
+<p>Rotation disconnects everyone who is watching, changes the password and the salt, and revokes any <a href="https://modelcontextprotocol.io/">MCP</a> grants on the session. Codex keeps running through all of it. Removing a person from your organization does not do the same job, because it cannot erase a password they already know. There is a longer post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> if you want the exact order of events.</p>
+<p>And when the run itself is finished:</p>
+<pre><code>shell kill -- &lt;ID&gt;</code></pre>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>A few limits, stated plainly, because they decide whether this fits your case.</p>
+<ul>
+<li>It is terminal sharing. It is not a cloud machine and it is not remote desktop. If the host is asleep or offline, nobody is controlling anything.</li>
+<li>It does not make an unsafe run safe. A link shows you what Codex is doing, but it does not sandbox it. Adversa's <a href="https://adversa.ai/blog/top-ai-coding-agent-security-resources-october-2026/">October roundup of coding agent vulnerabilities</a> is a useful reminder to keep the agent's own permissions tight.</li>
+<li>The link and password together are a credential. Treat them the way you treat an SSH key, with the difference that this one can be revoked in a single command.</li>
+</ul>
+</section>
+
+<section>
+<h2>Why a networking company built a terminal tool</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, and the family resemblance is deliberate. Pilot is a networking stack for autonomous agents. Each agent gets an address, discovers its peers and talks to them over encrypted tunnels, and nobody has to open a port. Anyone who has tried to <a href="https://pilotprotocol.network/blog/connect-ai-agents-behind-nat-without-vpn">reach an agent behind NAT without a VPN</a> knows the problem well.</p>
+<p>shell solves the human half of it. Your laptop dials out, the relay passes ciphertext along, and you reach the terminal from a phone on hotel wifi. The encryption choices rhyme too. Pilot's write-up of <a href="https://pilotprotocol.network/blog/zero-dependency-encryption-x25519-aes-gcm">X25519 and AES-256-GCM in pure Go</a> is a good next read if step 4 made you curious, and the <a href="https://pilotprotocol.network/docs/">Pilot docs</a> show the agent side of the same idea.</p>
+</section>
+
+<div class="cta"><h3>Start your next long run with one extra word</h3><p>Put <code>shell</code> in front of the command you already use. You get a link for your phone and a read-only link for your team, and the process never leaves your machine.</p><a href="https://shell.online/docs/">Get started with shell.online</a></div>
