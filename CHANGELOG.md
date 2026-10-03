@@ -15,6 +15,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Mobile bottom navigation stays at the visible bottom after the browser scrolls
+  the document to a focused field, instead of leaving an empty strip below it.
 - Chat preserves code indentation, literal identifiers and fenced blank lines,
   renders Markdown tables, and continues past isolated pipe rows.
 - Device chat history survives refresh, reconnect and renderer changes without
