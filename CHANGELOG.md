@@ -13,6 +13,18 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   sitemap as static pages. See blog/README.md.
 - `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
 
+### Fixed
+
+- Chat preserves code indentation, literal identifiers and fenced blank lines,
+  renders Markdown tables, and continues past isolated pipe rows.
+- Device chat history survives refresh, reconnect and renderer changes without
+  replaying cached messages twice or overwriting history with early live output.
+- Claude Code chat no longer publishes incomplete prompts or repeats tool
+  headings when their markers blink or elapsed-time counters change.
+- Answers that resume after an idle pause continue in the same chat message.
+- Blue “Reading … as messages” notices are restored. Summary permission switches
+  reflect a successful save immediately instead of waiting for the next poll.
+
 ## [0.25.0] — 2026-10-02
 
 ### Added

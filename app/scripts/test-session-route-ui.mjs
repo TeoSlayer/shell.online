@@ -110,7 +110,7 @@ const SETUP = `
     await import('/@id/__x00__${TEST_ENTRY_ID}.js');
   const you = { uid: 'qa-owner', email: 'owner@test', name: 'Owner', role: 'owner' };
   globalThis.routeTest = {
-    consent: { mcpTeamAccess: false, dailyBriefingEnabled: false, dailyBriefingTeamAccess: false },
+    consent: { mcpTeamAccess: false, dailyBriefingEnabled: false, summariesEnabled: false, dailyBriefingTeamAccess: false },
     puts: [],
     contentGets: 0,
     vaultRecord: null,
@@ -222,7 +222,7 @@ try {
   await waitFor(() => evaluate(`location.origin === 'http://127.0.0.1:${port}' && document.readyState === 'complete'`), 'page load');
   await evaluate(`(async () => { ${SETUP} })()`);
   await waitFor(() => evaluate(`!!document.querySelector('.detail-name')`), 'session detail rendered');
-  await waitFor(() => evaluate(`document.querySelectorAll('.session-automation-switch input').length === 3`), 'three consent checkboxes');
+  await waitFor(() => evaluate(`document.querySelectorAll('.session-automation-switch input').length === 4`), 'four consent checkboxes');
 
   // 1) Short title in the heading and the tab title; command behind a closed disclosure.
   const heading = await evaluate(`document.querySelector('.detail-name').textContent`);
@@ -243,11 +243,11 @@ try {
 
   // 2) A change made elsewhere (the CLI's route) arrives through the poll.
   const before = await evaluate(`(() => [...document.querySelectorAll('.session-automation-switch input')].map((i) => i.checked))()`);
-  assert.deepEqual(before, [false, false, false], `initial checkboxes: ${JSON.stringify(before)}`);
+  assert.deepEqual(before, [false, false, false, false], `initial checkboxes: ${JSON.stringify(before)}`);
   await evaluate(`(() => { routeTest.consent.dailyBriefingEnabled = true; return true; })()`);
-  await waitFor(() => evaluate(`(() => { const i = document.querySelectorAll('.session-automation-switch input'); return i.length === 3 && i[1].checked === true; })()`), 'CLI-side change reflected by the poll', 12000);
+  await waitFor(() => evaluate(`(() => { const i = document.querySelectorAll('.session-automation-switch input'); return i.length === 4 && i[1].checked === true; })()`), 'CLI-side change reflected by the poll', 12000);
   const after = await evaluate(`(() => [...document.querySelectorAll('.session-automation-switch input')].map((i) => i.checked))()`);
-  assert.deepEqual(after, [false, true, false], `checkboxes after poll: ${JSON.stringify(after)}`);
+  assert.deepEqual(after, [false, true, false, false], `checkboxes after poll: ${JSON.stringify(after)}`);
   console.log(`PASS ${browser}: CLI-to-web poll transition`);
 
   // 3) A checkbox change is one partial PUT, reflected from the response.
@@ -257,7 +257,16 @@ try {
   assert.deepEqual(puts, [{ mcpTeamAccess: true }], `PUT bodies: ${JSON.stringify(puts)}`);
   await waitFor(() => evaluate(`document.querySelectorAll('.session-automation-switch input')[0].checked === true`), 'checkbox reflects the save');
   const merged = await evaluate(`(() => [...document.querySelectorAll('.session-automation-switch input')].map((i) => i.checked))()`);
-  assert.deepEqual(merged, [true, true, false], `checkboxes after save: ${JSON.stringify(merged)}`);
+  assert.deepEqual(merged, [true, true, false, false], `checkboxes after save: ${JSON.stringify(merged)}`);
+  // The newly added fourth consent field must also merge immediately from
+  // the save response; waiting for the route's six-second poll hid omissions.
+  await evaluate(`document.querySelectorAll('.session-automation-switch input')[2].click()`);
+  await waitFor(() => evaluate(`routeTest.puts.length === 2 && !document.querySelectorAll('.session-automation-switch input')[2].matches(':disabled')`), 'summary save completed');
+  assert.deepEqual(await evaluate('routeTest.puts[1]'), {summariesEnabled: true});
+  assert.equal(await evaluate(`document.querySelectorAll('.session-automation-switch input')[2].checked`), true, 'Summary consent reflects its save before the next poll');
+  await evaluate(`document.querySelectorAll('.session-automation-switch input')[2].click()`);
+  await waitFor(() => evaluate(`routeTest.puts.length === 3 && !document.querySelectorAll('.session-automation-switch input')[2].matches(':disabled')`), 'summary disable completed');
+  assert.equal(await evaluate(`document.querySelectorAll('.session-automation-switch input')[2].checked`), false);
 
   /*
    * 4) The permissions section is typed like the rest of the page.
@@ -291,6 +300,8 @@ try {
         .map((row) => row.getBoundingClientRect().right))
         - document.querySelector('.session-automation').getBoundingClientRect().right,
       pageOverflow: document.documentElement.scrollWidth - innerWidth,
+      underDetails: !!label.closest('.detail-side') && document.querySelector('.session-automation').getBoundingClientRect().top
+        >= document.querySelector('.detail-side .detail-rows').getBoundingClientRect().bottom,
     };
   })()`);
   /*
@@ -308,6 +319,7 @@ try {
     assert.ok(typeScale.labelWeight <= 600, `permission label weight at ${at}`);
     assert.ok(typeScale.overflow <= 1, `permission switches must wrap inside the column at ${at}`);
     assert.ok(typeScale.pageOverflow <= 1, `permissions must not widen the page at ${at}`);
+    assert.ok(typeScale.underDetails, `permissions must remain under Details at ${at}`);
     // The section is taller than the fold in the narrow column; a clip that
     // runs past the viewport captures blank pixels, so bring it into view.
     await evaluate(`(() => { document.querySelector('.session-automation').scrollIntoView({ block: 'center' }); return true; })()`);

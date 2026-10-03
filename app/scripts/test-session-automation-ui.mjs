@@ -102,15 +102,15 @@ try {
     test.render('owner');
   })()`);
   const boxes = `document.querySelectorAll('#automation-test input[type="checkbox"]')`;
-  await waitFor(() => evaluate(`${boxes}.length === 3`), 'owner controls');
-  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [false, false, false]);
+  await waitFor(() => evaluate(`${boxes}.length === 4`), 'owner controls');
+  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [false, false, false, false]);
   await evaluate(`automationTest.hold = true; ${boxes}[0].click()`);
   await waitFor(() => evaluate('automationTest.calls.length === 1'), 'save started');
   assert.equal(await evaluate(`${boxes}[1].matches(':disabled')`), true);
   await evaluate('automationTest.hold = false; automationTest.release()');
   await waitFor(() => evaluate(`${boxes}[0].checked && !${boxes}[0].matches(':disabled')`), 'save finished');
   assert.deepEqual(await evaluate('automationTest.calls[0]'), { mcpTeamAccess: true });
-  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [true, false, false]);
+  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [true, false, false, false]);
   await evaluate(`automationTest.fail = true; ${boxes}[0].click()`);
   await waitFor(() => evaluate(`!!document.querySelector('#automation-test [role="alert"]')`), 'safe failure state');
   assert.equal(await evaluate(`${boxes}[0].checked`), true);

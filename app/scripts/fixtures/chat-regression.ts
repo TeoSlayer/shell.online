@@ -4,6 +4,8 @@ import '../../src/styles/shell.css';
 import '../../src/styles/chat.css';
 import { ChatView } from '../../src/terminal/chat/chat-view';
 import { ChatTerminal } from '../../src/terminal/chat/chat-terminal';
+import { ChatHistory } from '../../src/terminal/chat/chat-history';
+import { renderMarkdown, looksMarkdown } from '../../src/terminal/chat/markdown';
 import { Transcript, plainLine } from '../../src/terminal/chat/transcript';
 
 const host = document.querySelector<HTMLElement>('#fixture')!;
@@ -69,7 +71,7 @@ async function run() {
   streamingView.render(streaming.messages, streaming.revision);
   assert(row === host.querySelector('.chat-line') && textNode === row.firstChild, 'Streaming preserves row and text node');
   streamingView.dispose();
-  const terminal = new ChatTerminal({cols: 80, rows: 24});
+  let terminal = new ChatTerminal({cols: 80, rows: 24});
   terminal.open(host);
   cleanup = () => terminal.dispose();
   const write = (bytes: string) => new Promise<void>(resolve => terminal.write(bytes, resolve));
@@ -79,16 +81,18 @@ async function run() {
   await write('\x1b[4;7H');
   await tick();
   assert(host.querySelectorAll('.chat-line').length === 3, 'Cursor repaint does not duplicate normal output');
-  terminal.reset();
+  terminal.dispose();
+  terminal = new ChatTerminal({cols: 80, rows: 24});
+  terminal.open(host);
   const frame = (answer: string) => '\x1b[2J\x1b[H' + ['❯ question', '', `⏺ ${answer}`, '', '────────────────────', '❯', '────────────────────'].join('\r\n');
   await write('\x1b]0;Claude Code\x07\x1b[?1049h' + frame('Partial'));
   await tick();
-  await new Promise(resolve => setTimeout(resolve, 450));
+  await new Promise(resolve => setTimeout(resolve, 1600));
   await tick();
   for (const answer of ['Partial', 'Partial answer', 'Partial answer complete']) {
     await write(frame(answer));
     await tick();
-    await new Promise(resolve => setTimeout(resolve, 450));
+    await new Promise(resolve => setTimeout(resolve, 1600));
     await tick();
     assert(host.querySelectorAll('.chat-received').length === 1, 'Alternate repaint preserves one answer');
     assert(host.querySelector('.chat-received .chat-body')?.textContent === answer, 'Alternate answer grows without stale text');
@@ -108,7 +112,9 @@ async function run() {
    * `┌───┬───┐ │ │ │ ├───┼───┤` on a single line. Rows that are drawn are
    * never joined to anything.
    */
-  terminal.reset();
+  terminal.dispose();
+  terminal = new ChatTerminal({cols: 80, rows: 24});
+  terminal.open(host);
   const table = [
     '⏺ The three PRs from your last message:',
     '  ┌──────────┬───────────────┐',
@@ -202,7 +208,137 @@ async function run() {
   assert(host.querySelector<HTMLElement>('.chat-thinking')?.hidden !== false,
     'A screen at rest stops thinking even if its last frame held a spinner');
 
-  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry, spinner at rest';
+
+  again.dispose();
+  const formatView = new ChatView(host, { onSubmit() {}, onKeys() {} });
+  cleanup = () => formatView.dispose();
+  const formatted = new Transcript();
+  const raw = ['# Python source', 'if __name__ == "__main__":', '    print("**literal**")'];
+  formatted.fromAgent({ kind: 'received', text: '', lines: raw.map(plainLine), preformatted: true, open: false }, 1);
+  formatView.render(formatted.messages, formatted.revision);
+  assert([...host.querySelectorAll('.chat-line')].map(n => n.textContent).join('\n') === raw.join('\n'), 'Raw code retains exact rows and identifiers');
+  assert(!host.querySelector('.md-strong'), 'Raw code is never parsed as emphasis');
+  const fenced = ['```python', ...raw, '', '', '    print(42)', '```'];
+  formatted.fromAgent({ kind: 'received', text: '', lines: fenced.map(plainLine), preformatted: true, open: false }, 2);
+  formatView.render(formatted.messages, formatted.revision);
+  assert(host.querySelector('.md-pre code')?.textContent === fenced.slice(1, -1).join('\n'), 'Fenced code retains all whitespace and identifiers');
+  assert(!!host.querySelector('.md-number'), 'Fenced code receives syntax colour');
+  const rich = formatted.fromAgent({ kind: 'received', text: '', lines: [plainLine('## Heading'), plainLine('**Strong** and `code`')], open: false }, 3)!;
+  formatView.render(formatted.messages, formatted.revision);
+  const headingNode = host.querySelector('.md-heading');
+  assert(headingNode?.textContent === 'Heading', 'Markdown heading is rendered');
+  rich.revision++;
+  formatView.render(formatted.messages, formatted.revision + 1);
+  assert(host.querySelector('.md-heading') === headingNode, 'A metadata revision preserves rich content and its nodes');
+  rich.lines = [plainLine('## Changed heading')];
+  rich.revision++;
+  formatView.render(formatted.messages, formatted.revision + 2);
+  assert(host.querySelector('.md-heading')?.textContent === 'Changed heading', 'Changed rich text is updated');
+  const markdownHost = document.createElement('div');
+  renderMarkdown(markdownHost, '## Pipe output\n| not a table |\nfollowing text');
+  assert(markdownHost.textContent?.includes('following text'), 'A non-table pipe row cannot wedge the renderer');
+  const pipeTable = '| Name | Value |\n| --- | --- |\n| a | 1 |';
+  assert(looksMarkdown(pipeTable), 'A standalone Markdown table is detected');
+  renderMarkdown(markdownHost, pipeTable);
+  assert(markdownHost.querySelectorAll('th').length === 2 && markdownHost.querySelectorAll('td').length === 2, 'A standalone pipe table renders');
+  renderMarkdown(markdownHost, '~~~python\n__name__ = 1\n~~~');
+  assert(markdownHost.querySelector('.md-pre code')?.textContent === '__name__ = 1', 'Tilde fences retain identifiers');
+  assert(looksMarkdown('~~~python\n__name__ = 1\n~~~'), 'Tilde fences are detected');
+  const paddedTable = ['Name | Value', '--- | ---:', '`left|right`    |   2', 'escaped \\| pipe | 3'];
+  formatted.fromAgent({kind: 'received', text: '', lines: paddedTable.map(plainLine), preformatted: true, open: false}, 4);
+  formatView.render(formatted.messages, formatted.revision);
+  const aligned = [...host.querySelectorAll('table.md-table')].at(-1)!;
+  assert(aligned?.querySelectorAll('th').length === 2 && aligned.querySelectorAll('td').length === 4, 'Padded and borderless Markdown tables retain their columns');
+  assert(aligned.querySelector('td')?.textContent === 'left|right', 'Pipes inside inline code stay in one table cell');
+  assert((aligned.querySelectorAll('td')[1] as HTMLElement).style.textAlign === 'right', 'Table alignment is retained');
+  formatView.dispose();
+
+  const normal = new ChatTerminal({cols: 100, rows: 30});
+  normal.open(host);
+  cleanup = () => normal.dispose();
+  const normalWrite = (data: string) => new Promise<void>(resolve => normal.write(data, resolve));
+  for (const line of fenced) await normalWrite(line + '\r\n');
+  await settle(1000);
+  assert(host.querySelector('.md-pre code')?.textContent === fenced.slice(1, -1).join('\n'), 'Normal terminal output keeps fenced code across separate transport chunks');
+  await normalWrite('\r\n' + paddedTable.join('\r\n') + '\r\n');
+  await settle(1000);
+  assert(host.querySelectorAll('table.md-table td').length === 4, 'Normal terminal table rows remain one table');
+  normal.dispose();
+
+  const growing = new ChatTerminal({cols: 80, rows: 24});
+  growing.open(host);
+  cleanup = () => growing.dispose();
+  growing.reset();
+  const growWrite = (data: string) => new Promise<void>(resolve => growing.write(data, resolve));
+  await growWrite('\x1b]0;Claude Code\x07\x1b[?1049h' + screen('❯ question', '', '⏺ Partial', '✳ Working…', '────────────────────', '❯', '────────────────────'));
+  await tick();
+  await growWrite(screen('❯ question', '', '⏺ Partial answer completed', '', '────────────────────', '❯', '────────────────────'));
+  await settle(1600);
+  assert(host.querySelectorAll('.chat-received').length === 1 && host.querySelector('.chat-received .chat-body')?.textContent === 'Partial answer completed', 'A snapshot taken mid-answer continues in place');
+  growing.dispose();
+
+  // Exercise actual IndexedDB, encryption, cache-load races, and screen replay.
+  const session = `chat-regression-${crypto.randomUUID()}`;
+  const cache = new ChatHistory(session, 'fixture-secret');
+  const remembered = new Transcript();
+  remembered.output([plainLine('older output outside the screen'), plainLine('')], 10);
+  remembered.submitted('cached question', 20);
+  remembered.fromAgent({kind: 'received', text: '', lines: [plainLine('cached answer')], open: false}, 30);
+  cache.save(remembered.messages);
+  await cache.flush();
+  assert((await cache.load())?.length === 3, 'Encrypted history is written and read');
+  const other = new ChatHistory(session + '-other', 'fixture-secret');
+  assert(await other.load() === null, 'Sessions cannot read each other’s history');
+  other.dispose();
+  const wrongKey = new ChatHistory(session, 'different-secret');
+  assert(await wrongKey.load() === null, 'A different key cannot read cached messages');
+  wrongKey.dispose();
+  const originalLoad = ChatHistory.prototype.load;
+  ChatHistory.prototype.load = async function () {
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return originalLoad.call(this);
+  };
+  const cached = new ChatTerminal({cols: 80, rows: 24});
+  cleanup = () => { ChatHistory.prototype.load = originalLoad; cached.dispose(); cache.dispose(); };
+  cached.rememberAs(session, 'fixture-secret');
+  cached.open(host);
+  cached.reset();
+  const snapshot = '\x1b]0;Claude Code\x07\x1b[?1049h' + screen('❯ cached question', '', '⏺ cached answer', '', '────────────────────', '❯', '────────────────────');
+  const cachedWrite = (data: string) => new Promise<void>(resolve => cached.write(data, resolve));
+  await cachedWrite(snapshot);
+  ChatHistory.prototype.load = originalLoad;
+  await tick();
+  const bodies = () => [...host.querySelectorAll('.chat-received .chat-body')].map(n => n.textContent);
+  assert(JSON.stringify(bodies()) === JSON.stringify(['older output outside the screen', 'cached answer']), `First render retains history with no replay duplicate: ${JSON.stringify(bodies())}`);
+  await settle(1600);
+  assert(bodies().length === 2, 'Settling cannot reintroduce a replay duplicate');
+  const info = host.querySelector<HTMLElement>('[data-tone="info"] .chat-chip');
+  const blue = document.createElement('span');
+  blue.style.color = 'var(--blue-deep)';
+  blue.style.backgroundColor = 'var(--blue-wash)';
+  host.append(blue);
+  assert(!!info && getComputedStyle(info).color === getComputedStyle(blue).color && getComputedStyle(info).backgroundColor === getComputedStyle(blue).backgroundColor, 'The Reading notice uses the blue information colours');
+  blue.remove();
+  await cachedWrite(screen('❯ cached question', '', '⏺ cached answer', '', '⏺ new live answer', '', '────────────────────', '❯', '────────────────────'));
+  await settle(1600);
+  assert(bodies().filter(t => t === 'new live answer').length === 1, 'Live output arrives once after cache restore');
+  cached.reset();
+  await cachedWrite('\x1b]0;Claude Code\x07\x1b[?1049h' + screen('⏺ new live answer', '', '────────────────────', '❯', '────────────────────'));
+  await tick();
+  assert(JSON.stringify(bodies()) === JSON.stringify(['older output outside the screen', 'cached answer', 'new live answer']), 'Reconnect keeps both cached and newly received history');
+  cached.dispose();
+  // A fresh renderer is the refresh/re-entry lifecycle used by the session pane.
+  const refreshed = new ChatTerminal({cols: 80, rows: 24});
+  cleanup = () => { refreshed.dispose(); cache.dispose(); };
+  refreshed.rememberAs(session, 'fixture-secret');
+  refreshed.open(host);
+  refreshed.reset();
+  await new Promise<void>(resolve => refreshed.write(snapshot, resolve));
+  await tick();
+  assert(bodies().length === 3, `Refresh restores all closed history without duplicating the snapshot: ${JSON.stringify(bodies())}`);
+  assert(!host.textContent?.includes('Nothing from this session'), 'A populated cache has no empty-cache notice');
+
+  result.textContent = 'PASS: identity, streaming, wheel, touch, resize, zoom anchor, cursor repaint, idle repaint, alternate exit, drawn table, re-entry, spinner at rest, code fidelity, Markdown, cache race, refresh, replay';
 }
 
 document.querySelector<HTMLButtonElement>('#run')!.onclick = () => {
