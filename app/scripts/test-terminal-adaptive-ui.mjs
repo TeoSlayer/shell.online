@@ -95,19 +95,37 @@ const SETUP = `
   container.id = 'adaptive-test';
   container.style.cssText = 'position: fixed; top: 0; left: 0; z-index: 2147483647; width: ' + innerWidth + 'px; height: ' + (innerHeight - 40) + 'px;';
   document.body.append(container);
-  const shareUrl = location.origin + '/s/' + 'a'.repeat(32);
-  const tree = React.createElement(AuthContext.Provider, { value: auth },
+  let shareUrl = location.origin + '/s/' + 'a'.repeat(32);
+  if (globalThis.holdPassword) {
+    const { BrowserFrameCipher } = await import('/src/terminal/e2ee.ts');
+    const salt = new Uint8Array(16).fill(7);
+    shareUrl += '#salt=' + btoa(String.fromCharCode(...salt)).replace(/=+$/u, '') + '&password=fixture-password';
+    const derive = BrowserFrameCipher.fromPassword.bind(BrowserFrameCipher);
+    const hostCipher = await derive('fixture-password', salt);
+    adaptiveTest.encryptedSnapshot = async () => {
+      const text = new TextEncoder().encode('Ready at the fitted size');
+      const frame = new Uint8Array(text.length + 1); frame[0] = 3; frame.set(text, 1);
+      adaptiveTest.sockets[0].emitBinary((await hostCipher.seal(frame)).buffer);
+    };
+    BrowserFrameCipher.fromPassword = (...args) => new Promise(resolve => {
+      adaptiveTest.releasePassword = async () => { resolve(await derive(...args)); };
+    });
+  }
+  let options = { active: true, canResize: true, renderer: 'adaptive', ...globalThis.fixtureOptions };
+  const tree = () => React.createElement(AuthContext.Provider, { value: auth },
     React.createElement(BrowserRouter, null,
       React.createElement(VaultProvider, null,
         React.createElement(TeamKeyProvider, null,
           React.createElement(FeedbackProvider, null,
-            React.createElement(TerminalPane, { shareUrl, active: true, canResize: true, renderer: 'adaptive' })
+            React.createElement(TerminalPane, { shareUrl, ...options })
           )
         )
       )
     )
   );
-  createRoot(container).render(tree);
+  const root = createRoot(container);
+  root.render(tree());
+  globalThis.adaptiveTest.render = (next) => { options = { ...options, ...next }; root.render(tree()); };
   const { capture: captured } = await import('/src/terminal/adaptive/fixtures/captures.ts');
   const capture = captured('claude');
   globalThis.adaptiveTest.snapshot = () => {
@@ -138,8 +156,10 @@ const STATE = `(() => {
 })()`;
 
 const VIEWS = [
-  { name: 'phone', width: 390, height: 844, mobile: true },
   { name: 'desktop', width: 1440, height: 900, mobile: false },
+  { name: 'laptop', width: 1280, height: 800, mobile: false },
+  { name: 'large-desktop', width: 1920, height: 1080, mobile: false },
+  { name: 'phone', width: 390, height: 844, mobile: true },
 ];
 
 try {
@@ -160,6 +180,9 @@ try {
 
     const state = await evaluate(STATE);
     const rows = await evaluate('adaptiveTest.rows()');
+    console.log('initial geometry', label, state);
+    const initialRequests = await evaluate(`adaptiveTest.sockets[0].sent.filter((m) => typeof m === 'string').map((m) => JSON.parse(m)).filter((m) => m.type === 'grid_request')`);
+    assert.equal(initialRequests.length, 1, `${label}: automatically fit once on opening an existing session`);
     assert.equal(await evaluate(FITS), true, `${label}: the canvas is inside the pane`);
     for (const row of rows) assert.ok(row.length <= state.cols, `${label}: no row is wider than the canvas`);
     if (view.name === 'phone') {
@@ -194,8 +217,9 @@ try {
     if (state.fit) {
       await evaluate(`document.querySelector('#adaptive-test .pane-fit').click(), true`);
       const requests = await evaluate(`adaptiveTest.sockets[0].sent.filter((m) => typeof m === 'string').map((m) => JSON.parse(m)).filter((m) => m.type === 'grid_request')`);
-      assert.equal(requests.length, 1, `${label}: one click, one request`);
-      const [request] = requests;
+      assert.equal(requests.length, 2, `${label}: automatic fit plus one manual click`);
+      const [automatic, request] = requests;
+      assert.deepEqual(automatic, request, `${label}: automatic and manual fitting use exactly the same grid`);
       /* Laid out, the pane's grid is what it is drawing; drawn whole, it is what the pane would lay out. */
       if (view.name === 'phone') assert.deepEqual(request, { type: 'grid_request', cols: state.cols, rows: state.rows }, `${label}: fit asks for this pane's grid`);
       else assert.ok(request.cols > 120 && request.rows > 36, `${label}: a wide pane asks for more than the session has (${request.cols}x${request.rows})`);
@@ -204,9 +228,107 @@ try {
       await waitFor(() => evaluate(`!document.querySelector('#adaptive-test .pane-fit')`), 'fit offer withdrawn');
       const after = await evaluate(STATE);
       assert.deepEqual([after.cols, after.rows], [request.cols, request.rows], `${label}: the fitted grid is drawn whole`);
+      assert.ok(after.fontSize >= 11 && after.fontSize <= 14, `${label}: normal text after fitting (${after.fontSize}px)`);
+      console.log('fitted geometry', label, after);
+      await writeFile(join(shots, `${label}-fitted.png`), Buffer.from(await transport.screenshot(), 'base64'));
+      // Reconnecting and changing renderers must not automatically resize twice.
+      await evaluate(`adaptiveTest.sockets[0].close(1006), true`);
+      await waitFor(() => evaluate('adaptiveTest.sockets.length === 2 && adaptiveTest.sockets[1].readyState === 1'), 'reconnect');
+      await evaluate(`adaptiveTest.sockets[1].emitText(JSON.stringify({ type: 'terminal_size', cols: 80, rows: 24, dynamic: true })), true`);
+      await delay(150);
+      assert.equal(await evaluate(`adaptiveTest.sockets[1].sent.some(m => typeof m === 'string' && JSON.parse(m).type === 'grid_request')`), false, `${label}: reconnect does not fight a later host resize`);
+      await evaluate(`adaptiveTest.render({renderer:'xterm'}), true`);
+      await waitFor(() => evaluate('adaptiveTest.sockets.length === 3'), 'renderer changed');
+      await evaluate(`adaptiveTest.render({renderer:'adaptive'}), true`);
+      await waitFor(() => evaluate('adaptiveTest.sockets.length === 4'), 'adaptive restored');
+      await evaluate(`adaptiveTest.sockets[3].emitText(JSON.stringify({ type: 'terminal_size', cols: 80, rows: 24, dynamic: true })), true`);
+      await delay(150);
+      assert.equal(await evaluate(`adaptiveTest.sockets[3].sent.some(m => typeof m === 'string' && JSON.parse(m).type === 'grid_request')`), false, `${label}: renderer changes preserve the automatic-fit guard`);
     }
     console.log(`PASS ${label}: ${state.cols}x${state.rows} at ${state.fontSize}px for a 120x36 session${state.fit ? ', fit offered and applied' : ''}`);
   }
+  // All these cases start with a real pane and an undersized session. Conditions
+  // that arrive later must keep the automatic request pending, not lose it.
+  const guards = [
+    { name: 'not-owner', options: { canResize: false }, resume: { canResize: true } },
+    { name: 'cannot-type', options: { canType: false }, resume: { canType: true } },
+    { name: 'hidden', options: { active: false }, resume: { active: true } },
+    { name: 'explicit-opt-out', options: { fitOnOpen: false } },
+    { name: 'page-opt-out', search: '?terminalAutoFit=0' },
+    { name: 'read-only', readOnly: true },
+    { name: 'legacy-host', dynamic: false },
+    { name: 'keyboard', keyboard: true },
+    { name: 'no-layout', noLayout: true },
+    { name: 'chat-first', options: { renderer: 'chat' }, resume: { renderer: 'adaptive' } },
+  ];
+  for (const guard of guards) {
+    await transport.setViewport({ width: 1440, height: 900, dpr: 1, mobile: false });
+    await transport.navigate(`http://127.0.0.1:${port}/qa.html?run=${run += 1}`);
+    await waitFor(() => evaluate(`document.readyState === 'complete' && performance.getEntriesByType('navigation')[0]?.name.endsWith('/qa.html?run=${run}')`), 'guard page');
+    // The signed-in QA app redirects through /login to /sessions. Wait for
+    // it before setting a page flag, otherwise that redirect can erase it.
+    await waitFor(() => evaluate(`location.pathname === '/sessions'`), 'QA redirect settled');
+    await evaluate(`(() => {
+      globalThis.fixtureOptions = ${JSON.stringify(guard.options ?? {})};
+      history.replaceState(null, '', location.pathname + ${JSON.stringify(guard.search ?? '')});
+      if (${!!guard.keyboard}) document.documentElement.dataset.keyboard = 'open';
+      return true;
+    })()`);
+    await evaluate(`(async () => { ${SETUP} })()`);
+    await waitFor(() => evaluate('adaptiveTest.sockets.length === 1 && adaptiveTest.sockets[0].readyState === 1'), 'guard socket');
+    await evaluate(`(() => {
+      if (${!!guard.noLayout}) document.getElementById('adaptive-test').style.display = 'none';
+      adaptiveTest.sockets[0].emitText(JSON.stringify({ type: 'presence', readOnly: ${!!guard.readOnly} }));
+      adaptiveTest.sockets[0].emitText(JSON.stringify({ type: 'terminal_size', cols: 80, rows: 24, dynamic: ${guard.dynamic !== false} }));
+      return true;
+    })()`);
+    await delay(200);
+    const countRequests = () => evaluate(`adaptiveTest.sockets.flatMap(s => s.sent).filter(m => typeof m === 'string' && JSON.parse(m).type === 'grid_request').length`);
+    assert.equal(await countRequests(), 0, `${guard.name}: no automatic resize`);
+    if (guard.resume || guard.keyboard || guard.noLayout) {
+      await evaluate(`(() => {
+        adaptiveTest.render(${JSON.stringify(guard.resume ?? {})});
+        if (${!!guard.keyboard}) { delete document.documentElement.dataset.keyboard; adaptiveTest.size(1439); }
+        if (${!!guard.noLayout}) document.getElementById('adaptive-test').style.display = '';
+        return true;
+      })()`);
+      if (guard.name === 'chat-first') {
+        await waitFor(() => evaluate('adaptiveTest.sockets.length === 2'), 'terminal after chat');
+        await evaluate(`adaptiveTest.sockets[1].emitText(JSON.stringify({ type: 'terminal_size', cols: 80, rows: 24, dynamic: true })), true`);
+      }
+      await waitFor(async () => (await countRequests()) === 1, `${guard.name}: deferred fit`);
+      await delay(150);
+      assert.equal(await countRequests(), 1, `${guard.name}: exactly one deferred fit`);
+    }
+    if (guard.name.endsWith('opt-out')) {
+      await waitFor(() => evaluate(`!!document.querySelector('#adaptive-test .pane-fit')`), 'manual fit with auto-fit disabled');
+      await evaluate(`document.querySelector('#adaptive-test .pane-fit').click(), true`);
+      assert.equal(await countRequests(), 1, `${guard.name}: manual fit remains available`);
+    }
+    console.log(`PASS auto-fit guard: ${guard.name}`);
+  }
+  // Hold key derivation open: fitting must complete while the password is
+  // still being populated, and the first readable screen must use that grid.
+  await transport.setViewport({width: 1440, height: 900, dpr: 1, mobile: false});
+  await transport.navigate(`http://127.0.0.1:${port}/qa.html?run=${run += 1}`);
+  await waitFor(() => evaluate(`document.readyState === 'complete' && location.pathname === '/sessions'`), 'preparation page');
+  await evaluate('globalThis.holdPassword = true');
+  await evaluate(`(async () => { ${SETUP} })()`);
+  await waitFor(() => evaluate('adaptiveTest.sockets.length === 1 && adaptiveTest.sockets[0].readyState === 1'), 'socket while password pending');
+  await evaluate(`adaptiveTest.sockets[0].emitText(JSON.stringify({type:'terminal_size', cols:120, rows:36, dynamic:true})), true`);
+  const prepared = await evaluate(`adaptiveTest.sockets[0].sent.filter(m => typeof m === 'string').map(m => JSON.parse(m)).find(m => m.type === 'grid_request')`);
+  assert.ok(prepared?.cols > 120 && prepared?.rows > 36, 'grid requested before password derivation completed');
+  await evaluate(`adaptiveTest.sockets[0].emitText(JSON.stringify({type:'terminal_size', cols:${prepared.cols}, rows:${prepared.rows}, dynamic:true})), true`);
+  assert.equal((await evaluate(STATE)).fontSize, 13, 'normal font ready before unlocking');
+  assert.equal(await evaluate(`!!document.querySelector('#adaptive-test .pane-gate')`), false, 'a known password does not flash the manual password form');
+  await evaluate('adaptiveTest.releasePassword()');
+  await waitFor(() => evaluate(`adaptiveTest.sockets[0].sent.some(m => typeof m === 'string' && JSON.parse(m).type === 'snapshot_request')`), 'fresh snapshot after unlock');
+  await evaluate('adaptiveTest.encryptedSnapshot()');
+  await waitFor(() => evaluate(`adaptiveTest.rows().some(row => row.includes('Ready at the fitted size'))`), 'first readable screen');
+  const preparedState = await evaluate(STATE);
+  assert.equal(preparedState.fontSize, 13, 'first decrypted screen uses normal font');
+  assert.equal(await evaluate('adaptiveTest.sockets.length'), 1, 'preparation and unlock reuse one socket');
+  console.log('PASS automatic fit completes while password derivation is pending; first output is already fitted');
   console.log(`screenshots in ${shots}`);
 } finally {
   await transport?.close();

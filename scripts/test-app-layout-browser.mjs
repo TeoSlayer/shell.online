@@ -120,6 +120,8 @@ try {
     : await launchChromeTransport({ profile: join(temp, "profile") });
   const origin = `http://127.0.0.1:${server.address().port}/sessions`;
   await browser.navigate(origin);
+  // CDP navigation returns before the new document has necessarily been parsed.
+  await until(`location.href === ${JSON.stringify(origin)} && document.readyState !== 'loading' && !!document.body`, "fixture document ready");
   // Prove the geometry oracle rejects overflow, accepts intentional name
   // ellipsis, and still rejects clipping a required status/permission badge.
   await browser.evaluate(`(()=>{const p=document.createElement('div');p.id='text-audit-fixture';p.style.cssText='position:fixed;top:0;left:0;width:20px';const e=document.createElement('span');e.className='text-audit-label';e.style.cssText='display:block;width:20px;white-space:nowrap';e.textContent='W'.repeat(64);p.append(e);document.body.append(p);})()`);
