@@ -237,12 +237,6 @@ export function Workspace() {
   const pasteActions = useRef(new Map<string, () => void>());
   /* Requests whose session should be offered as soon as it exists: origin -> name. */
   const awaitingOpen = useRef(new Map<string, string>());
-  /*
-   * Sessions this browser started, not yet opened here. A session started from
-   * the browser has no terminal of its own to take a size from, so the pane
-   * that first opens it asks for its own, once.
-   */
-  const fitOnFirstOpen = useRef(new Set<string>());
   /* Passwords waiting for their session to appear so they can be shared. */
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
@@ -283,7 +277,6 @@ export function Workspace() {
       );
       if (arrived?.origin) {
         awaitingOpen.current.delete(arrived.origin);
-        fitOnFirstOpen.current.add(arrived.id);
         setLaunching("");
         setNotice("");
         dispatch({
@@ -882,8 +875,6 @@ export function Workspace() {
                 host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
                 canResize={!!current && !!you && current.ownerUid === you.uid}
-                fitOnOpen={fitOnFirstOpen.current.has(tab.id)}
-                onFitted={() => fitOnFirstOpen.current.delete(tab.id)}
                 renderer={terminalRenderer}
                 onPasteReady={(open) => { if (open) pasteActions.current.set(tab.id, open); else pasteActions.current.delete(tab.id); }}
                 pulseAllowed={!!current}
