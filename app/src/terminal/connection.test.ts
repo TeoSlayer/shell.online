@@ -405,6 +405,75 @@ describe("session lifecycle", () => {
 });
 
 describe("encrypted session", () => {
+  it("prepares the grid while password derivation is pending without sending plaintext", async () => {
+    const host = await BrowserFrameCipher.fromPassword("hunter2", new Uint8Array(16).fill(7));
+    let finish!: (cipher: BrowserFrameCipher) => void;
+    vi.spyOn(BrowserFrameCipher, "fromPassword").mockImplementationOnce(
+      () => new Promise(resolve => { finish = resolve; }),
+    );
+    const { connection, recorded } = connect(`${SALT}&password=hunter2`);
+    const unlocking = connection.start();
+    connection.prepare();
+    connection.prepare();
+    const socket = FakeSocket.last!;
+    socket.opened();
+    socket.control({ type: "terminal_size", cols: 80, rows: 24, dynamic: true });
+    connection.requestGrid({ cols: 180, rows: 45 });
+    expect(socket.sentControls("grid_request")).toEqual([{ type: "grid_request", cols: 180, rows: 45 }]);
+    expect(recorded.statuses.at(-1)?.status).toBe("connecting");
+    connection.send("never plaintext");
+    connection.sendBinary("never plaintext");
+    connection.sendFrame(encodeFrame(Opcode.Input, new TextEncoder().encode("never plaintext")));
+    socket.binary(await host.seal(encodeFrame(Opcode.Snapshot, new TextEncoder().encode("old grid"))));
+    await Promise.resolve();
+    expect(recorded.writes).toEqual([]);
+    expect(socket.sent.every(message => typeof message === "string")).toBe(true);
+
+    finish(host);
+    await unlocking;
+    expect(FakeSocket.created).toBe(1);
+    expect(socket.sentControls("snapshot_request")).toHaveLength(1);
+    socket.binary(await host.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("orphan delta"))));
+    socket.binary(await host.seal(encodeFrame(Opcode.Snapshot, new TextEncoder().encode("fitted screen"))));
+    socket.binary(await host.seal(encodeFrame(Opcode.Output, new TextEncoder().encode("live"))));
+    await waitFor(() => recorded.writes.length === 2, "fresh screen and live output");
+    expect(recorded.writes).toEqual([{ text: "fitted screen", reset: true }, { text: "live", reset: false }]);
+  });
+
+  it("reuses the prepared socket when a saved password arrives later", async () => {
+    const { connection, recorded } = connect(SALT);
+    await connection.start();
+    connection.prepare();
+    FakeSocket.last!.opened();
+    await connection.submitPassword("hunter2");
+    expect(FakeSocket.created).toBe(1);
+    expect(FakeSocket.last!.sentControls("snapshot_request")).toHaveLength(1);
+    expect(recorded.statuses.at(-1)?.status).toBe("connected");
+  });
+
+  it("does not reopen a prepared socket after unmount or a session ending during unlock", async () => {
+    const cipher = await BrowserFrameCipher.fromPassword("hunter2", new Uint8Array(16).fill(7));
+    for (const closeCode of [null, 4000, 4004]) {
+      let finish!: (cipher: BrowserFrameCipher) => void;
+      vi.spyOn(BrowserFrameCipher, "fromPassword").mockImplementationOnce(
+        () => new Promise(resolve => { finish = resolve; }),
+      );
+      const { connection, recorded } = connect(SALT);
+      await connection.start();
+      connection.prepare();
+      FakeSocket.last!.opened();
+      const unlocking = connection.submitPassword("hunter2");
+      if (closeCode === null) connection.close();
+      else FakeSocket.last!.closedWith(closeCode);
+      const created = FakeSocket.created;
+      const statuses = [...recorded.statuses];
+      finish(cipher);
+      await unlocking;
+      expect(FakeSocket.created).toBe(created);
+      expect(recorded.statuses).toEqual(statuses);
+    }
+  });
+
   it("uses a password embedded in the fragment without prompting", async () => {
     const { connection, recorded } = connect(`${SALT}&password=hunter2`);
     await connection.start();

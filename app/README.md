@@ -138,6 +138,10 @@ opens an existing or newly created session. It waits for an active, measurable
 pane, write permission, and a host that accepts grid requests. This changes the
 shared PTY grid exactly as the manual button does; the host's local terminal
 limit still applies. Reconnects and renderer changes do not repeat the request.
+Sizing runs in parallel with saved-password lookup and key derivation. The
+owner's pane prepares a control connection while locked, then reuses it and
+requests a fresh encrypted snapshot after the key is ready. No terminal input
+is sent before a key exists, and partial output is held until that snapshot.
 Manual fitting remains available after resizing the window or changing screens.
 Chat, Fixed grid, and Refstream retain their existing sizing behavior.
 

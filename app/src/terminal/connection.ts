@@ -94,6 +94,10 @@ export class TerminalConnection {
   private stopped = false;
   private readOnly = false;
   private awaitingPassword = false;
+  private prepared = false;
+  private unlockGeneration = 0;
+  private derivingKey = false;
+  private awaitingSnapshot = false;
   /* Whether the current key has opened a frame yet. */
   private proven = false;
   private waitingForCapacity = false;
@@ -144,14 +148,33 @@ export class TerminalConnection {
     return this.descriptor !== null;
   }
 
+  /**
+   * Overlap the owner's initial fit with password lookup/derivation. Only
+   * control messages are useful until the key exists; encrypted output is
+   * discarded, then a fresh snapshot is requested on the same socket.
+   */
+  prepare(): void {
+    if (this.stopped || this.prepared || this.socket || !this.needsPassword) return;
+    this.prepared = true;
+    this.awaitingPassword = true;
+    this.open();
+  }
+
   async start(): Promise<void> {
+    if (this.stopped) return;
+    const generation = ++this.unlockGeneration;
     if (this.descriptor?.kind === "key" || this.descriptor?.kind === "password" && this.descriptor.password) {
+      this.derivingKey = true;
       this.finishUnlock("cancelled");
       this.finishUnlock = beginProductOperation("terminal_unlock");
       try {
-        this.cipher = this.descriptor.kind === "key" ? await BrowserFrameCipher.fromKey(this.descriptor.key) :
+        const cipher = this.descriptor.kind === "key" ? await BrowserFrameCipher.fromKey(this.descriptor.key) :
           await BrowserFrameCipher.fromPassword(this.descriptor.password!, this.descriptor.salt);
+        if (this.stopped || generation !== this.unlockGeneration) return;
+        this.useCipher(cipher);
+        return;
       } catch (error) { this.finishUnlock("failed"); throw error; }
+      finally { if (generation === this.unlockGeneration) this.derivingKey = false; }
     }
     if (this.needsPassword) {
       this.awaitingPassword = true;
@@ -169,18 +192,45 @@ export class TerminalConnection {
    * message rather than from this call.
    */
   async submitPassword(password: string): Promise<void> {
-    if (this.descriptor?.kind !== "password") return;
+    if (this.stopped || this.descriptor?.kind !== "password") return;
+    const generation = ++this.unlockGeneration;
+    this.derivingKey = true;
     this.finishUnlock("cancelled");
     this.finishUnlock = beginProductOperation("terminal_unlock");
-    try { this.cipher = await BrowserFrameCipher.fromPassword(password, this.descriptor.salt); }
+    let cipher: BrowserFrameCipher;
+    try { cipher = await BrowserFrameCipher.fromPassword(password, this.descriptor.salt); }
     catch (error) { this.finishUnlock("failed"); throw error; }
+    finally { if (generation === this.unlockGeneration) this.derivingKey = false; }
+    if (this.stopped || generation !== this.unlockGeneration) return;
+    this.useCipher(cipher);
+  }
+
+  private useCipher(cipher: BrowserFrameCipher): void {
+    const reusePrepared = this.prepared && this.cipher === null;
+    this.cipher = cipher;
+    this.derivingKey = false;
     this.awaitingPassword = false;
     this.proven = false;
-    this.open();
+    if (!reusePrepared) {
+      const old = this.socket;
+      this.socket = null;
+      old?.close();
+      this.open();
+      return;
+    }
+    if (this.socket?.readyState === 1) {
+      if (this.waitingForCapacity) return;
+      // Do not replay deltas whose starting screen was discarded while locked.
+      this.awaitingSnapshot = true;
+      this.requestSnapshot();
+      this.options.events.onStatus("connected");
+    } else if (this.socket?.readyState !== 0 && this.retryTimer === null) {
+      this.open();
+    }
   }
 
   send(data: string): void {
-    if (this.readOnly) return;
+    if (this.readOnly || this.awaitingSnapshot) return;
     const bytes = new TextEncoder().encode(data);
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
@@ -190,7 +240,7 @@ export class TerminalConnection {
    * are not valid UTF-8, so they must not pass through TextEncoder.
    */
   sendBinary(data: string): void {
-    if (this.readOnly) return;
+    if (this.readOnly || this.awaitingSnapshot) return;
     const bytes = Uint8Array.from(data, (character) => character.charCodeAt(0) & 0xff);
     void this.transmit(encodeFrame(Opcode.Input, bytes));
   }
@@ -208,6 +258,7 @@ export class TerminalConnection {
   }
 
   close(): void {
+    this.unlockGeneration += 1;
     this.finishConnect("cancelled");
     this.finishUnlock("cancelled");
     this.stopped = true;
@@ -225,6 +276,8 @@ export class TerminalConnection {
   private async transmit(frame: Uint8Array<ArrayBuffer>): Promise<void> {
     const socket = this.socket;
     if (!socket || socket.readyState !== 1) return;
+    // A prepared socket must never turn encrypted-session input into plaintext.
+    if (this.descriptor && !this.cipher) return;
     try {
       const payload = this.cipher ? await this.cipher.seal(frame) : frame;
       if (this.socket === socket && socket.readyState === 1) socket.send(payload);
@@ -237,7 +290,7 @@ export class TerminalConnection {
     if (this.stopped) return;
     this.finishConnect("cancelled");
     this.finishConnect = beginProductOperation("terminal_connect");
-    this.options.events.onStatus(this.waitingForCapacity ? "full" : "connecting");
+    this.options.events.onStatus(this.waitingForCapacity ? "full" : this.needsPassword && !this.derivingKey ? "needs-password" : "connecting");
 
     const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
     const socket = create(this.options.url);
@@ -246,6 +299,7 @@ export class TerminalConnection {
     // A reconnect can reach a relay with different capabilities. Wait for
     // this socket's grid announcement before sending a resize request.
     this.resizable = false;
+    this.awaitingSnapshot = false;
 
     socket.addEventListener("open", () => {
       if (this.stopped || this.socket !== socket) return;
@@ -254,7 +308,7 @@ export class TerminalConnection {
       // real session message proving this retry was admitted.
       if (!this.waitingForCapacity) {
         this.retryAttempt = 0;
-        this.options.events.onStatus("connected");
+        this.options.events.onStatus(this.readyStatus());
       }
     });
 
@@ -286,10 +340,14 @@ export class TerminalConnection {
       trackProduct("terminal_closed", { outcome: terminalCloseOutcome(event.code) });
       this.socket = null;
       if (event.code === CLOSE_MISSING) {
+        this.stopped = true;
+        this.unlockGeneration += 1;
         this.options.events.onStatus("missing");
         return;
       }
       if (event.code === CLOSE_ENDED) {
+        this.stopped = true;
+        this.unlockGeneration += 1;
         this.options.events.onStatus("ended");
         return;
       }
@@ -312,7 +370,11 @@ export class TerminalConnection {
     if (!this.waitingForCapacity) return;
     this.waitingForCapacity = false;
     this.retryAttempt = 0;
-    this.options.events.onStatus("connected");
+    this.options.events.onStatus(this.readyStatus());
+  }
+
+  private readyStatus(): ConnectionStatus {
+    return this.needsPassword ? this.derivingKey ? "connecting" : "needs-password" : "connected";
   }
 
   private async handleFrame(
@@ -363,8 +425,10 @@ export class TerminalConnection {
 
     const opcode = frame[0];
     if (isSnapshotOpcode(opcode)) {
+      this.awaitingSnapshot = false;
       this.options.events.onData(frame.subarray(1), true);
     } else if (opcode === Opcode.Output) {
+      if (this.awaitingSnapshot) return;
       this.options.events.onData(frame.subarray(1), false);
     } else if (opcode === Opcode.FileResponse) {
       this.options.events.onFileFrame?.(frame);

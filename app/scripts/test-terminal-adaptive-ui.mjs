@@ -95,7 +95,22 @@ const SETUP = `
   container.id = 'adaptive-test';
   container.style.cssText = 'position: fixed; top: 0; left: 0; z-index: 2147483647; width: ' + innerWidth + 'px; height: ' + (innerHeight - 40) + 'px;';
   document.body.append(container);
-  const shareUrl = location.origin + '/s/' + 'a'.repeat(32);
+  let shareUrl = location.origin + '/s/' + 'a'.repeat(32);
+  if (globalThis.holdPassword) {
+    const { BrowserFrameCipher } = await import('/src/terminal/e2ee.ts');
+    const salt = new Uint8Array(16).fill(7);
+    shareUrl += '#salt=' + btoa(String.fromCharCode(...salt)).replace(/=+$/u, '') + '&password=fixture-password';
+    const derive = BrowserFrameCipher.fromPassword.bind(BrowserFrameCipher);
+    const hostCipher = await derive('fixture-password', salt);
+    adaptiveTest.encryptedSnapshot = async () => {
+      const text = new TextEncoder().encode('Ready at the fitted size');
+      const frame = new Uint8Array(text.length + 1); frame[0] = 3; frame.set(text, 1);
+      adaptiveTest.sockets[0].emitBinary((await hostCipher.seal(frame)).buffer);
+    };
+    BrowserFrameCipher.fromPassword = (...args) => new Promise(resolve => {
+      adaptiveTest.releasePassword = async () => { resolve(await derive(...args)); };
+    });
+  }
   let options = { active: true, canResize: true, renderer: 'adaptive', ...globalThis.fixtureOptions };
   const tree = () => React.createElement(AuthContext.Provider, { value: auth },
     React.createElement(BrowserRouter, null,
@@ -292,6 +307,28 @@ try {
     }
     console.log(`PASS auto-fit guard: ${guard.name}`);
   }
+  // Hold key derivation open: fitting must complete while the password is
+  // still being populated, and the first readable screen must use that grid.
+  await transport.setViewport({width: 1440, height: 900, dpr: 1, mobile: false});
+  await transport.navigate(`http://127.0.0.1:${port}/qa.html?run=${run += 1}`);
+  await waitFor(() => evaluate(`document.readyState === 'complete' && location.pathname === '/sessions'`), 'preparation page');
+  await evaluate('globalThis.holdPassword = true');
+  await evaluate(`(async () => { ${SETUP} })()`);
+  await waitFor(() => evaluate('adaptiveTest.sockets.length === 1 && adaptiveTest.sockets[0].readyState === 1'), 'socket while password pending');
+  await evaluate(`adaptiveTest.sockets[0].emitText(JSON.stringify({type:'terminal_size', cols:120, rows:36, dynamic:true})), true`);
+  const prepared = await evaluate(`adaptiveTest.sockets[0].sent.filter(m => typeof m === 'string').map(m => JSON.parse(m)).find(m => m.type === 'grid_request')`);
+  assert.ok(prepared?.cols > 120 && prepared?.rows > 36, 'grid requested before password derivation completed');
+  await evaluate(`adaptiveTest.sockets[0].emitText(JSON.stringify({type:'terminal_size', cols:${prepared.cols}, rows:${prepared.rows}, dynamic:true})), true`);
+  assert.equal((await evaluate(STATE)).fontSize, 13, 'normal font ready before unlocking');
+  assert.equal(await evaluate(`!!document.querySelector('#adaptive-test .pane-gate')`), false, 'a known password does not flash the manual password form');
+  await evaluate('adaptiveTest.releasePassword()');
+  await waitFor(() => evaluate(`adaptiveTest.sockets[0].sent.some(m => typeof m === 'string' && JSON.parse(m).type === 'snapshot_request')`), 'fresh snapshot after unlock');
+  await evaluate('adaptiveTest.encryptedSnapshot()');
+  await waitFor(() => evaluate(`adaptiveTest.rows().some(row => row.includes('Ready at the fitted size'))`), 'first readable screen');
+  const preparedState = await evaluate(STATE);
+  assert.equal(preparedState.fontSize, 13, 'first decrypted screen uses normal font');
+  assert.equal(await evaluate('adaptiveTest.sockets.length'), 1, 'preparation and unlock reuse one socket');
+  console.log('PASS automatic fit completes while password derivation is pending; first output is already fitted');
   console.log(`screenshots in ${shots}`);
 } finally {
   await transport?.close();

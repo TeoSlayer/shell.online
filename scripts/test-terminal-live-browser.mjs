@@ -670,6 +670,22 @@ try {
   await delay(800);
   await evaluate(`(async () => { ${SETUP(browserShareUrl(session))} })()`);
   rmSync(pauseFile, { force: true });
+  await evaluate(`(async () => {
+    const { BrowserFrameCipher } = await import('/src/terminal/e2ee.ts');
+    const derive = BrowserFrameCipher.fromPassword.bind(BrowserFrameCipher);
+    const send = WebSocket.prototype.send;
+    liveTest.preparation = {gridAt: null, keyAt: null};
+    BrowserFrameCipher.fromPassword = async (...args) => {
+      const [cipher] = await Promise.all([derive(...args), new Promise(resolve => setTimeout(resolve, 700))]);
+      liveTest.preparation.keyAt = performance.now();
+      return cipher;
+    };
+    WebSocket.prototype.send = function(data) {
+      if (typeof data === 'string' && JSON.parse(data).type === 'grid_request') liveTest.preparation.gridAt = performance.now();
+      return send.call(this, data);
+    };
+    return true;
+  })()`);
   await transport.call((url) => {
     const box = document.getElementById('live-stage');
     box.style.width = '1360px'; box.style.height = '820px';
@@ -681,6 +697,9 @@ try {
     return t && t.cols > 120 && t.rows > 36 && t.options.fontSize <= 14 &&
       t.buffer.active.getLine(0)?.getCell(0)?.getChars() === '┌';
   })()`), "automatically fitted desktop grid");
+  const preparation = await evaluate('liveTest.preparation');
+  check(preparation.gridAt !== null && preparation.keyAt !== null && preparation.gridAt < preparation.keyAt,
+    "grid request reaches the real relay before password derivation finishes");
   const fittedHost = await frozenHostScreen();
   await delay(350);
   const fittedViewer = await evaluate(`(() => {

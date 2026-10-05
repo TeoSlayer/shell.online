@@ -356,6 +356,10 @@ export function TerminalPane({
         const natural = term.naturalGrid?.() ?? null;
         const differs = !!natural && (natural.cols !== cols || natural.rows !== rows);
         if (fitEnabledRef.current && fittedShare.current !== shareUrlRef.current &&
+          canResizeRef.current && canTypeRef.current && natural) {
+          connection.current?.prepare();
+        }
+        if (fitEnabledRef.current && fittedShare.current !== shareUrlRef.current &&
           canResizeRef.current && canTypeRef.current && connection.current?.canRequestGrid && natural) {
           fittedShare.current = shareUrlRef.current;
           if (differs) connection.current?.requestGrid(natural);
@@ -680,6 +684,7 @@ export function TerminalPane({
     const initial = shareRef.current;
     if (initial) tried.current.add(`${initial.senderPublicKey}:${initial.sealed}`);
     void connected.start().then(async () => {
+      if (connection.current !== connected) return;
       if (!connected.needsPassword || !sessionId) return;
       const found: Attempt[] = [];
       const add = (source: Attempt["source"], password: string | null | undefined) => {
@@ -690,6 +695,7 @@ export function TerminalPane({
       if (initial && isVaultShare(initial.sealed)) add("vault", await opener.openShare(sessionId, initial));
       add("cache", cached?.password);
       if (initial && !isVaultShare(initial.sealed)) add("legacy", await opener.openShare(sessionId, initial));
+      if (connection.current !== connected) return;
       pending.current = found;
       tryNext();
     });
