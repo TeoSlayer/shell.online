@@ -1,0 +1,88 @@
+<p>On September 28 the Wall Street Journal reported that OpenAI had cancelled the release of GPT-6.1 Astra, a model that was due in October for ChatGPT and Codex. <a href="https://www.engadget.com/2271626/openai-cancels-gpt-6-1-astra-release-deceptive-behavior/">Engadget's account of the reasons</a> is short and specific. In internal testing the model took actions to finish a task without asking for permission, including reaching for external tools and services, and it was not honest with testers about what it had and had not done. <a href="https://gizmodo.com/openai-cancels-release-of-gpt-6-1-astra-because-it-regressed-on-safety-2000818566">Gizmodo describes the same two regressions</a>.</p>
+
+<p>OpenAI caught this before shipping, which is the process working. The two failure modes are still worth a minute if you run any agent unattended, because neither is exotic. Pushing ahead without asking is what OWASP files under <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive agency</a>, and the third root cause on its list, excessive autonomy, is the one you opt into the moment you turn off permission prompts. Misreporting is harder to guard against. A <a href="https://arxiv.org/abs/2609.30266">paper posted on September 24</a> tested agent harnesses and found that all but one let an agent delete its own traces when asked, without tripping a monitor.</p>
+
+<p>You cannot fix a model from the outside. You can decide in advance how long it gets, keep your own view of what it is running, and keep a way to stop it that does not depend on its cooperation. This guide sets up all three with <a href="https://shell.online/">shell.online</a>: a hard deadline on the run, a live view on your phone, and three stop controls of increasing bluntness.</p>
+
+<section>
+<h2>What you need</h2>
+<ul>
+<li>A computer with Claude Code, Codex or any other terminal agent installed.</li>
+<li>The <code>shell</code> command line tool, version 0.25.0 or newer. One line installs it: <code>curl -fsSL https://shell.online/install | sh</code>. The <a href="/docs/">docs</a> walk through a first session if you have not run one, and the source is <a href="https://github.com/TeoSlayer/shell.online">on GitHub</a>.</li>
+<li>A phone with a browser.</li>
+<li>For step 4 only, a free account at <a href="https://app.shell.online/">app.shell.online</a>. Everything else works without one.</li>
+</ul>
+</section>
+
+<section>
+<h2>Step 1: Start the run with a deadline</h2>
+<pre><code>shell --auto-close 2h --name "dep-upgrade" claude</code></pre>
+<p>shell starts Claude Code as a new process in the background and prints a link, a password and a QR code. <code>--name</code> labels the session so you can find it later. <code>--auto-close 2h</code> is the part this guide is about. It gives the run two hours and not a minute more.</p>
+<p>When the deadline arrives, shell does not ask the agent to wrap up. On macOS and Linux it sends <a href="https://man7.org/linux/man-pages/man7/signal.7.html">SIGTERM</a> to the agent's process group, waits two seconds, and sends SIGKILL to whatever is still there. On Windows it terminates the process directly. The share closes with the process. If you have ever wrapped a command in GNU <a href="https://www.gnu.org/software/coreutils/manual/html_node/timeout-invocation.html">timeout</a>, this is the same idea with a browser link attached.</p>
+<p>The value can be written several ways:</p>
+<ul>
+<li>A duration: <code>90m</code>, <code>1h30m</code>, <code>2d 3h</code>.</li>
+<li>A clock time: <code>18:30</code> means the next time it is 18:30. <code>today 18:30</code> and <code>tomorrow 09:00</code> work too.</li>
+<li>A date, or a full <a href="https://www.rfc-editor.org/rfc/rfc3339.html">RFC 3339</a> timestamp.</li>
+</ul>
+<p>A missing or malformed value makes shell exit with status 2. It never falls through and runs the value as your command. The <a href="/cli/">command reference</a> has the full grammar.</p>
+<p>Why not use the agent's own limits? Because for an interactive session there are none to speak of. Claude Code has <code>--max-turns</code> and <code>--max-budget-usd</code>, and its <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a> marks both as print mode only. <a href="https://code.claude.com/docs/en/permission-modes">Permission modes</a> decide what the agent may do. They say nothing about for how long.</p>
+<p>Pick a deadline longer than the job should take and shorter than the time until you next look. For an upgrade you expect to finish in forty minutes, two hours is generous. If you plan to check in after dinner, <code>--auto-close 21:00</code> says so directly.</p>
+</section>
+
+<section>
+<h2>Step 2: Keep your own view of it</h2>
+<p>Scan the QR code with your phone. The page that opens is the terminal itself, live: the commands the agent runs, as it runs them, and what they print. That is a different thing from the summary the agent writes when it finishes. The summary is the agent's account of the run, and the terminal is the run.</p>
+<p>Two practical notes. The QR code contains the password, so keep it out of screenshots. And if someone else should watch too, start the session with <code>--read-only</code> added, which gives everyone a link that cannot type. That includes you on the phone, so a read-only run is stopped with step 4 or step 5 and not with step 3. There is a full walkthrough in <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching a coding agent after you turn off its permission prompts</a>, and the <a href="/mobile/">mobile guide</a> covers the on-screen keys.</p>
+<p>If you are running several agents, the app's session list shows which ones are waiting on you, described in the post on <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">which agent session needs you</a>.</p>
+</section>
+
+<section>
+<h2>Step 3: Interrupt it from the phone</h2>
+<p>The gentlest stop is the one you would use at the keyboard. An ordinary link is interactive, so the terminal controls on the phone can send the keys a phone keyboard does not have. Claude Code prints "esc to interrupt" while it works, and the Escape key in the controls does exactly that: the current turn stops and the session stays open for your next instruction. For a plain command, Ctrl-C interrupts it.</p>
+<p>This is the right tool when the agent has wandered and you want to redirect it. It is the wrong tool when you no longer trust what it is doing, because an interrupt is a request, and the process on the other end handles it however it likes.</p>
+</section>
+
+<section>
+<h2>Step 4: Stop it from the app</h2>
+<p>This one needs a little setup before the run begins, because a session is published to your account at the moment it starts. Link the machine once:</p>
+<pre><code>shell auth</code></pre>
+<p>During linking, shell asks whether your signed-in browser may drive this machine. If you agree, a small daemon runs in the background, and the sessions you start from then on appear in <a href="https://app.shell.online/">the app</a> with a Stop button next to them. Pressing it sends a command to that daemon, which runs <code>shell kill</code> for the session on your machine. The daemon picks commands up by polling, so the row updates a moment later. The <a href="/app/">app guide</a> covers the rest of the list.</p>
+<p>Only the owner of a session gets the button. A teammate who has been assigned the session can open or watch it, but stopping controls a process on your computer, so it stays with you.</p>
+<div class="callout"><p><strong>The Stop button comes with a bigger permission.</strong> The consent that lets the browser stop sessions on this machine is the same one that lets it start them. While it is on, anyone signed in to your account can launch processes on that machine as you. Agree to it deliberately, protect the account accordingly, and withdraw it with <code>shell auth --no-remote-start</code> on machines where you do not want it. <code>shell daemon status</code> shows the current state.</p></div>
+<p>If you would like to know how that daemon stays reachable on a Mac nobody has touched for days, there is a post on <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">the launchd priority fix</a>.</p>
+</section>
+
+<section>
+<h2>Step 5: Stop it at the machine</h2>
+<p>The last control needs no account and no browser, only a terminal on the host, which can be an SSH session:</p>
+<pre><code>shell list
+shell kill -- &lt;ID&gt;</code></pre>
+<p><code>shell list</code> prints the active sessions on this machine with their IDs, names and uptime. <code>shell kill</code> stops one process and closes its link. The first six characters of an ID are enough if they are unambiguous, and the bare <code>--</code> is there so an ID that begins with a dash is not read as a flag.</p>
+<p>Be careful with <code>shell kill --all</code>. It stops every session shell manages on the machine, including the one you forgot was running a migration.</p>
+</section>
+
+<section>
+<h2>Step 6: Check the work yourself</h2>
+<p>Whichever way the run ended, read the result before you read the agent's description of it. <code>git status</code> and <a href="https://git-scm.com/docs/git-diff">git diff</a> show what changed in the repository. Your package manager's lockfile shows what was installed. If the task touched anything outside the repository, look there too.</p>
+<p>If you handed the link to anyone and the session is still running, finish with <code>shell password rotate &lt;ID&gt;</code>. It disconnects every viewer and issues a new password without touching the process. The post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared terminal link</a> explains the order of events.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>A deadline stops the clock. It does not undo anything. Whatever the agent did in its two hours stays done, so the deadline belongs next to limits on what the agent can touch, such as permission rules and <a href="https://code.claude.com/docs/en/sandboxing">sandboxing</a>, and never in place of them. The <a href="/security/">security page</a> is plain about this: stopping a session cannot take back earlier commands.</li>
+<li>The kill reaches the agent's process group, which is what a negative process ID means to <a href="https://man7.org/linux/man-pages/man2/kill.2.html">kill(2)</a>. A child that moved itself into a new session with <a href="https://man7.org/linux/man-pages/man2/setsid.2.html">setsid</a>, or that was handed to a service manager, is outside that group and can outlive the run. After a hard stop, look for stragglers.</li>
+<li>SIGKILL is not a graceful landing. The EU AI Act asks that people overseeing a high-risk system can interrupt it through <a href="https://artificialintelligenceact.eu/article/14/">a stop button "that allows the system to come to a halt in a safe state"</a>. A killed migration is half a migration. Give an unattended agent work that is safe to cut off, and reach for the interrupt in step 3 first when you can.</li>
+<li>The view is live and it is not a record. The relay keeps a bounded last screen so a returning viewer sees where things stand. It does not keep a transcript.</li>
+<li>Your machine enforces all of it. The deadline is a timer inside the shell process on the host, and the Stop button only works while the host is online. The <a href="/reliability/">reliability page</a> covers what happens when it is not.</li>
+</ul>
+</section>
+
+<section>
+<h2>The same rule, one layer down</h2>
+<p>shell.online is developed by Pilot Protocol, whose main project is a network for autonomous agents, and the rule behind this guide is the one that network is built on: the control that matters is the one that does not need the other side to agree. In Pilot's design an agent is private until both parties approve a handshake, as the post on <a href="https://pilotprotocol.network/blog/trust-model-agents-invisible-by-default">why agents should be invisible by default</a> explains, and taking trust back is a local action. The peer you revoke is not consulted and not even told. Its next connection simply fails.</p>
+<p>A deadline works the same way. So does a kill signal. If you are building agents that talk to each other and not only to you, Pilot's guide to <a href="https://pilotprotocol.network/blog/secure-ai-agent-communication-zero-trust">securing agent communication with zero trust</a> starts from the same place, and <a href="https://www.nist.gov/itl/ai-risk-management-framework">NIST's AI Risk Management Framework</a> is the long-form treatment of planning that oversight before a system runs.</p>
+</section>
+
+<div class="cta"><h3>Give your next unattended run a time limit</h3><p>Add <code>--auto-close 2h</code> to the command you already use. The agent gets its two hours, you get a live view on your phone, and the stop does not depend on the agent agreeing to it.</p><a href="https://shell.online/docs/">Get started with shell.online</a></div>

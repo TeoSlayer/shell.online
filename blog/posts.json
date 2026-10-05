@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-put-a-deadline-and-a-stop-button-on-an-unattended-coding-agent",
+    "title": "How to Put a Deadline and a Stop Button on an Unattended Coding Agent",
+    "description": "OpenAI pulled GPT-6.1 Astra for acting without asking. A step-by-step guide to time-boxing an agent run with shell.online and stopping it from your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "human-oversight",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-05",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-put-a-deadline-and-a-stop-button-on-an-unattended-coding-agent.webp"
+  },
+  {
     "slug": "how-to-watch-a-long-codex-run-from-your-phone-and-share-it-with-a-teammate",
     "title": "How to Watch a Long Codex Run From Your Phone and Share It With a Teammate",
     "description": "GPT-6.1 Sol made long Codex runs cheap. A step-by-step guide to starting one with shell.online, checking it from your phone and giving a teammate a read-only link.",
