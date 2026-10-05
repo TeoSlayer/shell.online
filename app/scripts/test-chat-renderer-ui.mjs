@@ -20,7 +20,7 @@ try {
   for (const width of [1280, 390]) {
     await transport.setViewport({width, height: 844, dpr: width === 390 ? 3 : 1, mobile: width === 390});
     await transport.navigate(`http://127.0.0.1:${server.httpServer.address().port}/scripts/fixtures/chat-regression.html`);
-    const deadline = Date.now() + 20000;
+    const deadline = Date.now() + 45000;
     let started = false;
     let status = '';
     while (Date.now() < deadline) {

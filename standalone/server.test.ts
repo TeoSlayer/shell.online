@@ -221,9 +221,12 @@ describe("standalone relay with a host that owns its grid", () => {
     expect(sizes(desk.received)).toEqual([{ type: "terminal_size", cols: 173, rows: 51, dynamic: true }]);
     expect(sizes(host.received)).toEqual([]);
 
+    // Delivery can exceed 40ms under CI load. Wait for the next size message,
+    // then assert its value so an incorrectly accepted invalid size still fails.
+    const resized = message(desk.socket, value => typeof value === "string" && JSON.parse(value).type === "terminal_size");
     host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 3, rows: 51 }));
     host.socket.send(JSON.stringify({ type: "terminal_grid", cols: 90, rows: 30 }));
-    await settle();
+    expect(JSON.parse(String(await resized))).toEqual({ type: "terminal_size", cols: 90, rows: 30, dynamic: true });
     expect(sizes(desk.received).at(-1)).toEqual({ type: "terminal_size", cols: 90, rows: 30, dynamic: true });
     expect(sizes(desk.received)).toHaveLength(2);
   });

@@ -8,14 +8,15 @@
 
    Radii follow the app rule: chips 7px, controls 10px, panels 18px.
 
-   No accent of its own. This used the app's blue for what the viewer
+   Conversation bubbles have no accent of their own. This used blue for what the viewer
    sent and its acid green for a program reading keys, and next to a
    conversation those read as two more things asking to be looked at.
    A chat is mostly other people's text; the only colour it needs is
    the one that separates what you said from what came back, and the
    app already has it -- the near-black it puts on its own primary
    controls. Red stays, because a command that failed is a fact about
-   the session rather than decoration.
+   the session rather than decoration. Informational notices retain the
+   app's blue, as requested, without applying it to conversation bubbles.
    --------------------------------------------------------------- */
 
 /*
@@ -458,6 +459,12 @@
   font-family: var(--sans);
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+
+.chat-msg[data-tone="info"] .chat-chip {
+  border-color: color-mix(in srgb, var(--blue) 30%, var(--line));
+  background: var(--blue-wash);
+  color: var(--blue-deep);
 }
 
 .chat-msg[data-tone="interrupt"] .chat-chip {
@@ -1129,4 +1136,3 @@
 }
 
 /* --- a question the agent is waiting on -------------------------- */
-

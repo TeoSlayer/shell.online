@@ -25,7 +25,7 @@
  * that the command exited, or the process simply going quiet.
  */
 
-import { looksPreformatted, startsNewParagraph } from "./paragraphs";
+import { insideCodeFence, looksPreformatted, startsNewParagraph } from "./paragraphs";
 import type { AgentUtterance } from "./agents/types";
 
 /**
@@ -221,7 +221,7 @@ export class Transcript {
    * nothing is open. The caller owns the timer; this module owns the rule.
    */
   get quietDeadline(): number | null {
-    if (this.agentOwned) return null;
+    if (this.agentOwned || insideCodeFence(this.open?.lines ?? [])) return null;
     return this.open && this.open.kind === "received" ? this.lastGrewAt + IDLE_CLOSE_MS : null;
   }
 
@@ -318,6 +318,7 @@ export class Transcript {
      * was growing shook rather than grew.
      */
     if (differs(target.lines, utterance.lines) || target.preformatted !== utterance.preformatted) {
+      if (utterance.open) target.open = true;
       target.lines = utterance.lines.slice();
       target.preformatted = utterance.preformatted;
       this.touch(target);
@@ -370,7 +371,9 @@ export class Transcript {
    * them. So the transcript is rebuilt in full and the view is told once.
    */
   beginReplay(): void {
-    const remembered = this.remembered;
+    // Reconnecting must retain output received during this visit as well.
+    this.close(this.lastGrewAt);
+    const remembered = this.items.slice();
     this.replaying = true;
     this.clear();
     /* Where the remembered conversation ends and the replayed screen begins. */
@@ -424,14 +427,60 @@ export class Transcript {
     const replayed = this.items.slice(base);
     const kept: Message[] = [];
     let claimed = 0;
+    let first = true;
+    let reachedNewOutput = false;
     for (const message of replayed) {
       const signature = signatureOf(message);
+      // Renderer notices describe how this visit reads the screen. They can
+      // follow cached answers in history but precede them in the snapshot,
+      // so they must not advance the conversation's chronological anchor.
+      if (message.kind === "notice" && message.tone === "info") {
+        if (!remembered.some(previous => signatureOf(previous) === signature)) kept.push(message);
+        continue;
+      }
+      if (reachedNewOutput) { kept.push(message); continue; }
       let found = -1;
+      let clipped = 0;
       for (let at = claimed; at < remembered.length; at += 1) {
         if (signatureOf(remembered[at]) === signature) { found = at; break; }
       }
-      if (found >= 0) { claimed = found + 1; continue; }
+      // Only the first output can have been clipped by the top of the screen.
+      // Require multiple complete rows, not a coincidental short last line.
+      // Agent previews replace their whole paragraph on the next frame, so
+      // only append-based terminal output can reopen a clipped answer.
+      if (found < 0 && first && (!message.open || !this.agentOwned)) {
+        for (let at = claimed; at < remembered.length; at += 1) {
+          clipped = clippedPrefixLength(remembered[at], message);
+          if (clipped > 0) { found = at; break; }
+        }
+      }
+      if (message.kind !== "notice") first = false;
+      if (found >= 0) {
+        claimed = found + 1;
+        if (message.open) {
+          // A replay taken mid-turn may continue this exact message. Keep the
+          // live object attached to the remembered identity so its next frame
+          // grows in place instead of creating a second answer.
+          const previous = remembered[found];
+          if (clipped > 0) {
+            message.lines = [...previous.lines.slice(0, clipped), ...message.lines];
+            message.preformatted = previous.preformatted;
+          }
+          message.id = previous.id;
+          message.at = previous.at;
+          message.revision = Math.max(message.revision, previous.revision + 1);
+          // Replaying identical text must not make a saved answer ineligible
+          // for caching during an immediate renderer switch. Its next changed
+          // agent frame can reopen it through the retained live object.
+          if (this.agentOwned) message.open = previous.open;
+          remembered[found] = message;
+        }
+        continue;
+      }
       kept.push(message);
+      // A new prompt or answer ends the overlap. Later identical words are
+      // a genuine repeat, not another part of the cached snapshot.
+      if (message.kind !== "notice") reachedNewOutput = true;
     }
     if (kept.length === replayed.length) return;
     this.items = [...remembered, ...kept];
@@ -513,7 +562,7 @@ export class Transcript {
        * the end of a thought, so it is where one bubble stops and the next
        * begins; see paragraphs.ts.
        */
-      if (stripped.text.trim() === "") {
+      if (stripped.text.trim() === "" && !insideCodeFence(this.open?.lines ?? [])) {
         this.close(at);
         continue;
       }
@@ -572,6 +621,17 @@ export class Transcript {
     const deadline = this.quietDeadline;
     if (deadline === null || at < deadline) return false;
     this.close(at);
+    return true;
+  }
+
+  /** Finish drawing/saving an idle preview without losing its live identity. */
+  closeAgentPreview(at: number): boolean {
+    if (!this.agentOwned || !this.open?.open) return false;
+    this.open.open = false;
+    this.touch(this.open);
+    this.lastGrewAt = at;
+    // The parser still owns this paragraph. A later frame can reopen it;
+    // a real prompt/paragraph boundary goes through close() and detaches it.
     return true;
   }
 
@@ -690,7 +750,9 @@ export class Transcript {
      * holding a hundred thousand DOM nodes it will never show again.
      */
     if (this.items.length > MAX_MESSAGES) {
-      this.items.splice(0, this.items.length - MAX_MESSAGES);
+      const dropped = this.items.length - MAX_MESSAGES;
+      this.items.splice(0, dropped);
+      if (this.replaying) this.replayBase = Math.max(0, this.replayBase - dropped);
     }
     this.rev += 1;
     return full;
@@ -726,6 +788,13 @@ export class Transcript {
 function signatureOf(message: Message): string {
   const body = message.text || message.lines.map((line) => line.text).join("\n");
   return `${message.kind}\u0000${body.trim()}`;
+}
+
+function clippedPrefixLength(previous: Message, replayed: Message): number {
+  if (previous.kind !== "received" || replayed.kind !== "received" || replayed.lines.length < 2) return 0;
+  const offset = previous.lines.length - replayed.lines.length;
+  if (offset <= 0) return 0;
+  return replayed.lines.every((line, index) => line.text === previous.lines[offset + index].text) ? offset : 0;
 }
 
 function echoMatches(line: string, command: string): boolean {
