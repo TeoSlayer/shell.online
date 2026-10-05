@@ -7,6 +7,7 @@ import { TerminalConnection, type ConnectionStatus, type HostState } from "./con
 import { hostIsAway, hostNotice } from "./host-presence";
 import { DESKTOP_TERMINAL_GRID, type TerminalGrid } from "./terminal-grid";
 import { layoutParameter } from "./wide-grid";
+import { terminalAutoFitEnabled } from "./auto-fit";
 import { fittedTerminal, type TerminalCell } from "./terminal-fit";
 import { cellMeasurer, terminalBox } from "./terminal-metrics";
 import { encryptionFragment, resolveSessionSocket, sessionIdFromShareUrl } from "./socket-url";
@@ -53,8 +54,8 @@ export interface TerminalPaneProps {
   canResize?: boolean;
   /**
    * Ask the program to run at this pane's size as soon as the host can take
-   * it, once. For a session this browser started, which has no terminal of
-   * its own to take a size from.
+   * it, once per open. Defaults on for existing and newly started sessions.
+   * The owner, write permission, active pane and host capability are still required.
    */
   fitOnOpen?: boolean;
   onFitted?: () => void;
@@ -164,7 +165,7 @@ export function TerminalPane({
   keyShare,
   canType = true,
   canResize = false,
-  fitOnOpen = false,
+  fitOnOpen = terminalAutoFitEnabled(),
   onFitted,
   host,
   renderer,
@@ -292,8 +293,13 @@ export function TerminalPane({
    */
   const [fitOffer, setFitOffer] = useState<TerminalGrid | null>(null);
   const resizable = useRef(false);
-  const fitPending = useRef(fitOnOpen);
-  fitPending.current = fitPending.current && fitOnOpen;
+  const fitEnabledRef = useRef(fitOnOpen);
+  fitEnabledRef.current = fitOnOpen;
+  // Keep this across renderer rebuilds and socket reconnects. Closing and
+  // reopening the pane (or reloading the page) gets a fresh measurement.
+  const fittedShare = useRef<string | null>(null);
+  const shareUrlRef = useRef(shareUrl);
+  shareUrlRef.current = shareUrl;
   const onFittedRef = useRef(onFitted);
   onFittedRef.current = onFitted;
   const canResizeRef = useRef(canResize);
@@ -349,8 +355,9 @@ export function TerminalPane({
         term.layout({ box, measure: measureCell, pixelRatio: window.devicePixelRatio || 1 });
         const natural = term.naturalGrid?.() ?? null;
         const differs = !!natural && (natural.cols !== cols || natural.rows !== rows);
-        if (fitPending.current && resizable.current && canResizeRef.current && natural) {
-          fitPending.current = false;
+        if (fitEnabledRef.current && fittedShare.current !== shareUrlRef.current &&
+          canResizeRef.current && canTypeRef.current && connection.current?.canRequestGrid && natural) {
+          fittedShare.current = shareUrlRef.current;
           if (differs) connection.current?.requestGrid(natural);
           onFittedRef.current?.();
         }
@@ -793,7 +800,7 @@ export function TerminalPane({
       if (!readOnly && canType) terminal.current?.focus();
     });
     return () => cancelAnimationFrame(frame);
-  }, [active, readOnly, canType, refit]);
+  }, [active, readOnly, canType, canResize, fitOnOpen, refit]);
 
   async function handleUnlock(event: FormEvent) {
     event.preventDefault();

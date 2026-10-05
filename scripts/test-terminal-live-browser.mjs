@@ -161,7 +161,7 @@ const SETUP = (shareUrl) => `
   stage.id = 'live-stage';
   stage.style.cssText = 'position: fixed; top: 8px; left: 8px; z-index: 2147483647; width: 560px; height: 420px;';
   document.body.append(stage);
-  globalThis.liveTest.mount = (key, active, url) => {
+  globalThis.liveTest.mount = (key, active, url, options = {}) => {
     const box = document.createElement('div');
     box.dataset.liveRoot = key;
     box.style.cssText = 'position: absolute; inset: 0;';
@@ -171,7 +171,7 @@ const SETUP = (shareUrl) => `
         React.createElement(VaultProvider, null,
           React.createElement(TeamKeyProvider, null,
             React.createElement(FeedbackProvider, null,
-              React.createElement(TerminalPane, { shareUrl: url, active: on, renderer: 'xterm' })
+              React.createElement(TerminalPane, { shareUrl: url, active: on, renderer: 'xterm', ...options })
             )
           )
         )
@@ -663,6 +663,37 @@ try {
     writeFileSync(join(shots, `${browser}-password-${theme}-${width}.png`), Buffer.from(await transport.screenshot(), "base64"));
   }
   }
+
+  stage = "automatic fit reaches the real PTY";
+  await transport.setViewport({ width: 1440, height: 900, dpr: 1, mobile: false });
+  await transport.navigate(`http://127.0.0.1:${vitePort}/qa.html?autoFit=${Date.now()}`);
+  await delay(800);
+  await evaluate(`(async () => { ${SETUP(browserShareUrl(session))} })()`);
+  rmSync(pauseFile, { force: true });
+  await transport.call((url) => {
+    const box = document.getElementById('live-stage');
+    box.style.width = '1360px'; box.style.height = '820px';
+    liveTest.mount('fit', true, url, {renderer: 'adaptive', canResize: true});
+    return true;
+  }, browserShareUrl(session));
+  await waitForPage(() => evaluate(`(() => {
+    const t = liveTest.terms.fit;
+    return t && t.cols > 120 && t.rows > 36 && t.options.fontSize <= 14 &&
+      t.buffer.active.getLine(0)?.getCell(0)?.getChars() === '┌';
+  })()`), "automatically fitted desktop grid");
+  const fittedHost = await frozenHostScreen();
+  await delay(350);
+  const fittedViewer = await evaluate(`(() => {
+    const t = liveTest.terms.fit, b = t.buffer.active, lines = [];
+    for (let i = 0; i < t.rows; i++) lines.push(b.getLine(b.viewportY + i)?.translateToString(true) ?? '');
+    return {cols: t.cols, rows: t.rows, fontSize: t.options.fontSize, lines};
+  })()`);
+  check(fittedHost.length === fittedViewer.rows && fittedHost[0].length === fittedViewer.cols,
+    "automatic fit changes the actual PTY dimensions");
+  check(fittedHost.every((row, index) => row === fittedViewer.lines[index]),
+    "automatic fit keeps the host and rendered screen identical");
+  console.log(`AUTO FIT ${browser}: ${fittedViewer.cols}x${fittedViewer.rows} at ${fittedViewer.fontSize}px`);
+  writeFileSync(join(shots, `${browser}-automatic-fit.png`), Buffer.from(await transport.screenshot(), "base64"));
 
   console.log(`screenshots in ${shots}`);
 } catch (error) {

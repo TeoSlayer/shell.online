@@ -656,6 +656,21 @@ describe("the session grid", () => {
     expect(FakeSocket.created).toBe(2);
     expect(connection.grid).toEqual(MOBILE_TERMINAL_GRID);
   });
+
+  it("waits for the new socket's resize capability after reconnecting", async () => {
+    const { connection, socket } = await connected();
+    socket.control({ type: "terminal_size", ...DESKTOP_TERMINAL_GRID, dynamic: true });
+    socket.closedWith(1006);
+    expect(connection.canRequestGrid).toBe(false);
+    await waitFor(() => FakeSocket.created === 2, "reconnect");
+    const replacement = FakeSocket.last!;
+    replacement.opened();
+    connection.requestGrid({ cols: 180, rows: 45 });
+    expect(replacement.sentControls("grid_request")).toEqual([]);
+    replacement.control({ type: "terminal_size", ...DESKTOP_TERMINAL_GRID, dynamic: true });
+    connection.requestGrid({ cols: 180, rows: 45 });
+    expect(replacement.sentControls("grid_request")).toEqual([{ type: "grid_request", cols: 180, rows: 45 }]);
+  });
 });
 
 /*

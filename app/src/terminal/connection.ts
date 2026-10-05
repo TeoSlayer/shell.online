@@ -119,7 +119,7 @@ export class TerminalConnection {
 
   /** Whether the host will run at a grid this viewer asks for. */
   get canRequestGrid(): boolean {
-    return this.resizable && !this.readOnly;
+    return this.resizable && !this.readOnly && this.socket?.readyState === 1;
   }
 
   /**
@@ -243,6 +243,9 @@ export class TerminalConnection {
     const socket = create(this.options.url);
     socket.binaryType = "arraybuffer";
     this.socket = socket;
+    // A reconnect can reach a relay with different capabilities. Wait for
+    // this socket's grid announcement before sending a resize request.
+    this.resizable = false;
 
     socket.addEventListener("open", () => {
       if (this.stopped || this.socket !== socket) return;

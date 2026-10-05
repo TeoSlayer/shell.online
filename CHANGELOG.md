@@ -4,6 +4,15 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Fixed
+
+- Existing terminal sessions now automatically run “Fit to my screen” once
+  when their owner opens them, restoring the grid density on laptops and
+  desktops. Manual fitting stays available. Hidden panes, read-only viewers,
+  reconnects and renderer changes do not cause repeated resize requests.
+  `?terminalAutoFit=0` opts out for one page; `VITE_TERMINAL_AUTO_FIT=0`
+  disables automatic fitting for an app build.
+
 ### Added
 
 - A blog at shell.online/blog/, listing every shell.online post published so
