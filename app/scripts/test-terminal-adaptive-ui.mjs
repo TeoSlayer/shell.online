@@ -250,6 +250,9 @@ try {
     await transport.setViewport({ width: 1440, height: 900, dpr: 1, mobile: false });
     await transport.navigate(`http://127.0.0.1:${port}/qa.html?run=${run += 1}`);
     await waitFor(() => evaluate(`document.readyState === 'complete' && performance.getEntriesByType('navigation')[0]?.name.endsWith('/qa.html?run=${run}')`), 'guard page');
+    // The signed-in QA app redirects through /login to /sessions. Wait for
+    // it before setting a page flag, otherwise that redirect can erase it.
+    await waitFor(() => evaluate(`location.pathname === '/sessions'`), 'QA redirect settled');
     await evaluate(`(() => {
       globalThis.fixtureOptions = ${JSON.stringify(guard.options ?? {})};
       history.replaceState(null, '', location.pathname + ${JSON.stringify(guard.search ?? '')});
