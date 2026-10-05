@@ -144,4 +144,5 @@ Chat, Fixed grid, and Refstream retain their existing sizing behavior.
 For troubleshooting, append `?terminalAutoFit=0` to the workspace URL to disable
 automatic fitting on that page. Set `VITE_TERMINAL_AUTO_FIT=0` (or `false`) at
 build time to disable it for an app deployment. Both switches keep manual fit
-available. No CLI update or new relay opcode is required.
+available. GitHub deployments read the `VITE_TERMINAL_AUTO_FIT` repository
+variable (unset means enabled). No CLI update or new relay opcode is required.
