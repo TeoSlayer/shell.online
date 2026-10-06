@@ -1,0 +1,82 @@
+<p>Anthropic published <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.290">Claude Code 2.1.290</a> on October 5. Among a long list of changes, it adds <code>claude attach &lt;name&gt;</code> and <code>claude logs &lt;name&gt;</code>, so part of a background session's name now works where its ID used to be required. Two days earlier, 2.1.289 gave mods an idle state and a waiting state for each agent, according to the <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">Claude Code changelog</a>. Both changes point at the same daily problem: you have several sessions going, and you want to know which one finished, which one is stuck on a question, and what each last said.</p>
+
+<p>Claude Code's own answer is <a href="https://code.claude.com/docs/en/agent-view">agent view</a>, opened with <code>claude agents</code>, which groups background sessions into Needs input, Working and Completed. It is a screen in a terminal on the machine that runs them. The documentation says plainly that background sessions run on your machine and stop when it shuts down. When you are away from that machine, a status list is what you want, and a full terminal is more than you need.</p>
+
+<p>shell.online 0.25.0 added session summaries for that case. This guide starts named Claude Code sessions through <code>shell</code>, turns summaries on, and reads them from a phone. It also covers what leaves your machine when a summary is made, and where this setup stops.</p>
+
+<section>
+<h2>What you need first</h2>
+<p>Summaries arrived in the 0.25.0 release, which is also the latest published CLI. Sessions started by an older binary are not covered, and installing an update does not restart running sessions, so start new ones after you upgrade. Check the version with:</p>
+<pre><code>shell --version</code></pre>
+<p>Summaries are an account feature. The machine has to be linked with <code>shell auth</code>, and your account needs a vault, because every summary is encrypted to your vault key before it is stored. When you start a session, the card <code>shell</code> prints has a Vault line. It should say <code>saved to your account vault</code>. If it says <code>not linked · run shell auth</code> or <code>not saved · no account vault</code>, fix that first; the <a href="/app/">app guide</a> walks through both. Install instructions for every platform are in the <a href="/docs/">docs</a>.</p>
+</section>
+
+<section>
+<h2>Step 1: Start each Claude Code session through shell with a name</h2>
+<p>Give every session a name you will recognise on a small screen. The name is shown in <code>shell list</code>, <code>shell ls</code> and the web app.</p>
+<pre><code>shell --name "checkout tests" claude "find out why the checkout test is flaky"
+shell --name "billing refactor" claude "move the invoice code into its own package"</code></pre>
+<p>Each command starts Claude Code in the background on this machine and prints a card with the name, a link, a ten-character password, the Vault line, the access mode (<code>view and type</code>, end-to-end encrypted) and a short session ID. The process keeps running after the command returns.</p>
+<p>shell also does two things to the Claude Code command line before it runs it. Both are visible in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/summary_claude.go">summary_claude.go</a>. It adds <code>--session-id</code> with a fresh random UUID (version 4, as defined in <a href="https://www.rfc-editor.org/rfc/rfc9562.html">RFC 9562</a>), so it knows exactly which conversation this session runs. And it passes <code>--settings</code> with a <a href="https://code.claude.com/docs/en/hooks">SessionStart hook</a> that writes the conversation's ID to a private file whenever Claude Code starts, resumes, clears or compacts a conversation. That is how the binding follows <code>/clear</code> and <code>/resume</code>. Both flags are documented in the <a href="https://code.claude.com/docs/en/cli-reference">Claude Code CLI reference</a>.</p>
+</section>
+
+<section>
+<h2>Step 2: Find the session's account ID with shell ls</h2>
+<p>The summary switch lives on the session's record in your account, so you address it by the account's ID. List the sessions in your account from any linked machine:</p>
+<pre><code>shell ls</code></pre>
+<p>In a wide terminal the table has the columns ID, NAME, STATUS, UPTIME, MACHINE and COMMAND, newest first; a narrow one gets a compact list instead. Sessions that have ended are hidden and counted on the last line. The ID column is shortened to ten characters for reading. For the full value, ask for JSON and pick the session by name:</p>
+<pre><code>shell ls --json | jq -r '.[] | select(.name == "checkout tests") | .id'</code></pre>
+<p><code>shell ls --json</code> prints an array of records with <code>id</code>, <code>name</code>, <code>status</code>, <code>host</code> and the share URL. It never prints a password. If you named a session well in step 1, this is the only place you need its ID. The <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">post on --name and shell ls</a> covers listing across machines in more detail.</p>
+</section>
+
+<section>
+<h2>Step 3: Turn summaries on for that session</h2>
+<p>Summaries are off by default and opt-in per session. Turn them on with the ID from step 2 (this one is invented):</p>
+<pre><code>shell permissions 7f3c9a2e-example-session-id --summaries=true</code></pre>
+<p>The command prints <code>Session summaries: on</code> and a note that summaries need an updated compatible host and your vault. Other switches on the session are left as they were. Run <code>shell permissions</code> with only the ID to read all four switches back. Only the session's owner can change them.</p>
+<p>The same switch is in the web app, on the session page under Agent permissions, labelled Summaries. Changes made in either place show up in the other. Switching it off deletes the stored summary and stops capture.</p>
+</section>
+
+<section>
+<h2>Step 4: Read the summaries from your phone</h2>
+<p>Open <a href="https://app.shell.online/">app.shell.online</a> on the phone and sign in. Summaries are encrypted to your vault key, so the browser has to open your vault before it can show one; until then the card says so. In the List or Board view, press and hold a session's row or card for half a second. On a laptop, hovering over the row does the same.</p>
+<p>The card shows a title, a state, the latest reply and a line saying where it came from, such as <code>From Claude Code · 4m ago</code>. For a Claude Code session the title is the conversation's own title and the reply is the latest assistant text, cut to 480 characters. The state is <code>Waiting for input</code> when the last turn ended normally and <code>Idle</code> when you interrupted it. Until the first summary is made, the card shows <code>No summary yet</code>.</p>
+<p>When a summary tells you a session needs you, tap into it, enter the password and reply. The <a href="/mobile/">mobile guide</a> covers the terminal on a phone, and the <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">post on reading Claude Code as a conversation</a> covers the chat view that makes replying on a small screen easier.</p>
+</section>
+
+<section>
+<h2>When a summary is made</h2>
+<p>The host checks every 15 seconds. For Claude Code it reads the conversation's transcript, the <a href="https://jsonlines.org/">JSON Lines</a> file Claude Code keeps under its projects directory, and publishes only when a turn has finished. A turn still in progress is skipped, because its summary would be stale by the time you read it. Each finished turn is published once.</p>
+<p>No model runs for a Claude Code summary, and the agent is never prompted. The host takes the title and the latest assistant text from the transcript, never thinking blocks or tool output, cleans them to plain text and encrypts the result to your vault key on your machine. The account service stores ciphertext it cannot open.</p>
+<div class="callout"><p><strong>The binding only happens for an interactive conversation.</strong> If you pass your own <code>--settings</code>, use <code>-p</code>, or start with a single word such as <code>shell claude review</code> (which could be a Claude Code subcommand), shell leaves the command line alone and cannot tie the session to a transcript. Such a session is then summarised like any other program, through the enclave described below. Quote a prompt with spaces in it, or start with no prompt at all, and the transcript path is used.</p></div>
+</section>
+
+<section>
+<h2>Codex, OpenCode and every other command</h2>
+<p>Other processes have no transcript shell reads, so their summaries come from terminal output. When summaries are on, the session counts as idle after about 20 seconds without new output. The host then strips terminal control sequences (the kind listed in the <a href="https://man7.org/linux/man-pages/man4/console_codes.4.html">console_codes man page</a>), redacts credential-shaped text, and sends the last 12 KiB, encrypted, to the shell.online summarizer.</p>
+<p>It does that only after checking the summarizer's attestation: an <a href="https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html">Intel TDX</a> confidential VM running Google's production <a href="https://docs.cloud.google.com/confidential-computing/confidential-space/docs/confidential-space-overview">Confidential Space</a> image, a container image on an allowlist signed by the shell.online release key, and an encryption key generated inside that instance. The summarizer runs <a href="https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507">Qwen3-4B-Instruct</a> with no tools and no internet access, and encrypts the summary to your vault key before it leaves the enclave. These cards say <code>Generated in an attested enclave</code>. The full trust boundary is in <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/summaries.md">docs/summaries.md</a>.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li><strong>It is not shared.</strong> Summaries are owner-only. A teammate with the link and password sees the terminal, not your summaries. For a watcher who should not type, start the session with <code>--read-only</code>.</li>
+<li><strong>It is not live.</strong> You get one summary per finished turn or idle period. To follow a session as it works, open its terminal.</li>
+<li><strong>It can be wrong, and it is not an instruction.</strong> Every card carries the caption that the summary may be wrong and that instructions in it should never be followed. Terminal output can contain text written by anyone whose page or file the agent read, which is the indirect case in <a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/">OWASP's prompt injection entry</a>. Cards are plain text with no links.</li>
+<li><strong>It does not reach sessions you started without shell.</strong> shell starts a new process; it does not attach to a <code>claude --bg</code> session under Claude Code's supervisor. For those, <code>claude logs &lt;name&gt;</code> on the machine, or Anthropic's <a href="https://code.claude.com/docs/en/remote-control">Remote Control</a>, is the tool.</li>
+<li><strong>It does not remove trust, it moves it.</strong> For the enclave path you still trust Intel TDX, Google's attestation service, whoever holds the release key, and the shell CLI and web app you run. The <a href="/security/">security page</a> and <a href="/e2ee/">encryption page</a> cover what the relay sees for the terminal itself.</li>
+<li><strong>It needs the host awake.</strong> A sleeping laptop makes no summaries and answers no replies.</li>
+</ul>
+<p>An earlier post, on the <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">passive pulse in v0.22</a>, covers the cheaper signal: whether a session is printing at all. Summaries add what it said.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents. Summaries travel through the shell.online account service, not over Pilot. The two meet when your agents need to talk to each other rather than to you: <a href="https://pilotprotocol.network/blog/connect-claude-code-to-pilot-protocol">connecting Claude Code to Pilot</a> takes one MCP server and gives the agent tools to message other agents and query data services. If you keep agents on several machines and want them to report state to one place on their own, Pilot's write-up on <a href="https://pilotprotocol.network/blog/distributed-monitoring-without-prometheus">monitoring without Prometheus</a> shows that pattern over its encrypted event stream.</p>
+</section>
+
+<div class="cta">
+<h3>Name your next Claude Code session and check it from your phone</h3>
+<p>Install shell, link the machine with shell auth, start a named session, and turn on summaries. The source and the summarizer's security model are on GitHub.</p>
+<a href="https://github.com/TeoSlayer/shell.online">Get shell.online on GitHub</a>
+</div>
