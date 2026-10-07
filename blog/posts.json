@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-choose-who-can-answer-claude-codes-prompts-in-a-shared-terminal",
+    "title": "How to Choose Who Can Answer Claude Code's Prompts in a Shared Terminal",
+    "description": "Decide who can approve a Claude Code permission prompt in a shell.online session: you on your phone, you at the host while others watch, or several typists.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "terminal-sharing",
+      "access-control",
+      "mcp"
+    ],
+    "iso_date": "2026-10-07",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-choose-who-can-answer-claude-codes-prompts-in-a-shared-terminal.webp"
+  },
+  {
     "slug": "how-to-see-what-each-claude-code-session-is-doing-from-your-phone",
     "title": "How to See What Each Claude Code Session Is Doing From Your Phone",
     "description": "Name your Claude Code sessions, turn on shell.online session summaries, and check from a phone which one finished, which is waiting and what it said.",
