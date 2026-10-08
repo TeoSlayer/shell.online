@@ -1,0 +1,79 @@
+<p>On September 26 the maintainers of brig, a tool that <a href="https://github.com/brig-sh/brig">runs a coding agent inside a microVM on your own machine</a>, published advisory <a href="https://github.com/brig-sh/brig/security/advisories/GHSA-wp6x-29qx-fpr7">GHSA-wp6x-29qx-fpr7</a>, rated high with a CVSS score of 8.2 and fixed in brig 0.3.0. Two days later Peyton Kennedy of Endor Labs, who reported it, <a href="https://www.endorlabs.com/learn/project-mount-symlink-traversal-in-brig-how-a-sandbox-reaches-host-directories-it-was-never-given">explained how it worked</a>. brig checked the workspace directory carefully but handed the project folder to the runtime as an unresolved path. An agent with write access to the project could replace a subdirectory with a symlink to any other directory on the host, and the next run that named that subdirectory mounted the link's target into the sandbox, read and write.</p>
+<p>Adversa AI put the bug in its <a href="https://adversa.ai/blog/top-ai-coding-agent-security-resources-october-2026/">October roundup of coding agent security research</a>, next to a run of other cases where the files in a project turned out to be the attack. The lesson reaches beyond sandboxes. Any time you expose a directory that an agent writes into, the agent decides what that directory contains, links included. If the code that exposes it trusts a path without resolving it, the agent can widen what you exposed.</p>
+<p>shell.online can expose a directory too. With <code>--files</code>, people watching a session in the browser can open files from the machine the session runs on. This guide shows how to choose that directory, how the host refuses a link that points outside it, and what it still lets through. Every behavior below comes from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> at v0.25.0, and I checked the symlink and hard link cases on macOS.</p>
+
+<section>
+<h2>Step 1: Pick the smallest root when you start the session</h2>
+<p>File access is off unless you ask for it when the session starts. There are two flags. <code>--files</code> shares regular files under the command's working directory. <code>--files-root</code> shares a directory you name and leaves the command's working directory alone:</p>
+<pre><code>cd ~/work/example-app
+shell --files-root ./out claude</code></pre>
+<p>Claude Code runs in <code>~/work/example-app</code> with its usual access, and browser viewers can reach only what sits under <code>./out</code>. The session card shows the root by its last path component:</p>
+<pre><code>  Access     view and type · end-to-end encrypted
+  Files      out · on demand</code></pre>
+<p>If you add <code>--json</code>, the new-session event carries the same value in a <code>files</code> field. If the directory does not exist, shell stops with an error that includes <code>open shared files root</code> and exits with status 1 before anything is shared.</p>
+<p>Two limits come with the flags. File sharing needs end-to-end encryption, so <code>shell --no-e2ee --files ...</code> stops with <code>shell: --files and --files-root require end-to-end encryption</code>. And the root is fixed for the life of the session. There is no command to add a directory to a running share, so choose before you press Enter. The <a href="/cli/">CLI reference</a> lists both flags.</p>
+<p>A good root is a directory the run produces output into: test reports, screenshots, a build's <code>dist</code> folder, a training run's checkpoints. A poor root is the repository itself, and a bad one is your home directory.</p>
+</section>
+
+<section>
+<h2>Step 2: Resolve the root yourself</h2>
+<p>The host opens the root once, at startup, with Go's <a href="https://pkg.go.dev/os#Root"><code>os.Root</code></a> type. If the path you pass is itself a symlink, that link is followed when the root is opened. I confirmed this on macOS: a root given as <code>linkroot</code>, a symlink to another directory, opened that other directory and served its files.</p>
+<p>That matters when the root is a directory the agent could have touched on an earlier run, which is the brig situation. Endor Labs' workaround for unpatched brig users applies here unchanged: resolve the path before you hand it over, so there is no link left to follow. <a href="https://man7.org/linux/man-pages/man1/pwd.1.html"><code>pwd -P</code></a> prints the physical directory with every symlink resolved:</p>
+<pre><code>ls -ld ./out
+shell --files-root "$(cd ./out &amp;&amp; pwd -P)" claude</code></pre>
+<p>The first command shows whether <code>out</code> is a real directory or a link, with an arrow and a target if it is a link. The second starts the session on the resolved path. If the card then shows a name you did not expect, stop the session and look at the directory before you share the link.</p>
+</section>
+
+<section>
+<h2>Step 3: Open files from the browser</h2>
+<p>Viewers see a Files control in both the xterm.js view and the Refstream view. Nothing is sent ahead of time. The browser asks for a directory listing when someone opens the panel, and asks for a file when someone opens that file. Refstream also turns filenames that appear in terminal output into previews, but the <a href="/refstream/">Refstream page</a> is explicit that a filename printed on screen does not grant access to it. The <a href="/security/">security page</a> adds that every request is checked on the host, including traversal and symlink escapes.</p>
+<p>From <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/shared_files.go">the file service in the CLI</a>, these are the limits a viewer meets:</p>
+<ul>
+<li>A listing holds at most 256 entries per directory and shows only directories and regular files. Symlinks, device files and sockets are left out.</li>
+<li>A preview can be up to 16 MiB and a download up to 128 MiB. Larger files are refused.</li>
+<li>Files move in 16 KiB chunks that the browser pulls one at a time, so a slow phone does not hold up the terminal.</li>
+<li>If a file changes while it is being sent, the transfer stops with "The file changed during transfer." rather than handing over half of two versions.</li>
+<li>The host serves at most eight file requests at once and answers the rest with a busy error.</li>
+</ul>
+<p>Requests and file bytes travel over the session's existing encrypted WebSocket. The relay routes request IDs and sees encrypted frame sizes, not paths or contents. The <a href="/e2ee/">encryption page</a> covers what the relay can and cannot read.</p>
+<p>One rule surprises people: a read-only link can still read files you opted in. <code>--read-only</code> blocks typing into the process. It does not withdraw file access. The <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">post on read-only links after Plugin4Shell</a> covers what read-only does block.</p>
+</section>
+
+<section>
+<h2>Step 4: See what happens when the agent plants a link</h2>
+<p>Here is the brig move against a shell root. Suppose the agent, or a script it ran, does this inside the shared directory while the session is live:</p>
+<pre><code>cd ~/work/example-app/out
+ln -s ~/.ssh keys</code></pre>
+<p>Two things happen on the host. First, <code>keys</code> does not appear in the Files panel, because listings skip symlinks. Second, if a viewer requests <code>keys/id_ed25519</code> by name anyway, the open fails and the host answers "File unavailable." A path with <code>..</code> in it, or an absolute path outside the root, is turned away even earlier by the host's own path check, with "File access denied."</p>
+<p>The refusal does not come from comparing strings. As the Go team's <a href="https://go.dev/blog/osroot">post introducing traversal-resistant file APIs</a> describes it, <code>os.Root</code> disallows any operation that would escape the root through <code>..</code> or through symlinks. A comment in shell's file service states the intent: escapes fail at the filesystem boundary rather than through string-prefix checks. In my macOS test, opening <code>escape/key</code> through a link pointing outside the root failed with "path escapes from parent". This is the class of bug <a href="https://cwe.mitre.org/data/definitions/59.html">CWE-59, link following</a>, describes, and it is close kin to the <a href="https://community.owasp.org/attacks/Path_Traversal">path traversal attacks OWASP documents</a> for web servers.</p>
+<p>A symlink that stays inside the root is different. <code>os.Root</code> permits it, so a viewer who already knows the link's name can open it, even though the listing does not show it.</p>
+<div class="callout"><p><strong>Everything regular under the root is readable, including dotfiles.</strong> The host does not hide names that start with a dot. If you run <code>shell --files claude</code> at the top of a repository, a viewer can open <code>.env</code>, <code>.git/config</code> and anything else in that tree. Manifold Security's <a href="https://www.manifold.security/blog/ai-coding-agents-git-hijack">GitSpawn research</a> is a reminder of how much can live in <code>.git/config</code> alone. Point <code>--files-root</code> at an output directory instead.</p></div>
+</section>
+
+<section>
+<h2>Step 5: End file access</h2>
+<p>File access lasts as long as the viewer's connection to the session. To cut off everyone who has the current password without stopping the agent, rotate it:</p>
+<pre><code>shell list
+shell password rotate 7f3a9c</code></pre>
+<p><code>shell list</code> prints your active sessions with their IDs, and the rotate command takes a session ID or a prefix of one. Rotation disconnects old viewers, changes the password and salt, and revokes existing MCP grants. The process keeps running. The <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">guide to revoking a link without killing the process</a> walks through what each viewer sees. To end the run and the link together, use <code>shell kill -- 7f3a9c</code>.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li><strong>It does not stop hard links.</strong> A hard link is another name for the same file, not a pointer to a path, as the <a href="https://man7.org/linux/man-pages/man7/symlink.7.html">symlink(7) manual page</a> explains. If the agent runs <code>ln ~/.config/example/token out/token</code> on the same filesystem, the root now holds a regular file with that content. In my macOS test, <code>os.Root</code> opened such a file without complaint. The defense is the same as in Step 1: a root that holds only output you would hand over anyway.</li>
+<li><strong>It does not sandbox the agent.</strong> The root limits what browser viewers can fetch. The process you wrap still runs with your user's permissions and can read whatever you can. Containing the agent is the job brig does, with its own bugs to patch. shell's <a href="/docker/">Docker guide</a> shows how to run a shared terminal inside a container if you want that boundary.</li>
+<li><strong>It does not cover mount points.</strong> The Go post says <code>os.Root</code> does not stop traversal of mount points such as Linux bind mounts, since only root can create them.</li>
+<li><strong>It does not let viewers write.</strong> The file protocol has three requests: capabilities, list and read. There is no upload, rename or delete.</li>
+<li><strong>It does not vet the content.</strong> A file the agent wrote is the agent's output. Treat a downloaded script or notebook from an agent run like any other untrusted file.</li>
+<li>I checked the symlink and hard link behavior on macOS only. Windows and Linux go through the same Go API, but I did not test them here.</li>
+</ul>
+<p>The earlier post on <a href="/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel/">sharing a session without handing over the filesystem</a> covers the design of the file feature when it shipped.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by the team behind Pilot Protocol, a networking stack for autonomous agents. A Files panel is for a person who wants to look at a report. When one agent needs to hand a dataset or a set of weights to another agent, Pilot's write-up on <a href="https://pilotprotocol.network/blog/peer-to-peer-file-transfer-agents">peer-to-peer file transfer between agents</a> shows how files stream over an encrypted tunnel without a storage bucket in the middle. The same scoping question applies there: decide which peer may receive what before anything moves. The <a href="https://pilotprotocol.network/docs/security">Pilot security docs</a> describe how a private node rejects streams from a peer unless it has an approved trust relationship with that peer or the two share a network.</p>
+</section>
+
+<div class="cta"><h3>Share the output, not the machine</h3><p>Start the run with <code>--files-root</code> pointed at a resolved output directory, and keep the repository and your home directory out of reach.</p><a href="/docs/">Read the shell.online docs</a></div>
