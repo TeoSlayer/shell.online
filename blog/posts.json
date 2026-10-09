@@ -1,5 +1,101 @@
 [
   {
+    "slug": "how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in",
+    "title": "How to Run a Claude Haiku 5.5 Job in the Background and Step Back In",
+    "description": "Start Claude Code on Haiku 5.5 with shell, attach from a local terminal, detach with Ctrl-X D without stopping it, and check the run from a phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "claude-haiku",
+      "background-jobs",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-09",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in.webp"
+  },
+  {
+    "slug": "how-to-share-a-coding-agents-files-without-letting-a-symlink-widen-access",
+    "title": "How to Share a Coding Agent's Files Without Letting a Symlink Widen Access",
+    "description": "Scope shell.online --files to one resolved output directory, see how the host refuses symlink escapes, and learn what hard links still let through.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "file-sharing",
+      "symlinks",
+      "coding-agents",
+      "path-traversal"
+    ],
+    "iso_date": "2026-10-08",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-coding-agents-files-without-letting-a-symlink-widen-access.webp"
+  },
+  {
+    "slug": "how-to-choose-who-can-answer-claude-codes-prompts-in-a-shared-terminal",
+    "title": "How to Choose Who Can Answer Claude Code's Prompts in a Shared Terminal",
+    "description": "Decide who can approve a Claude Code permission prompt in a shell.online session: you on your phone, you at the host while others watch, or several typists.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "terminal-sharing",
+      "access-control",
+      "mcp"
+    ],
+    "iso_date": "2026-10-07",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-choose-who-can-answer-claude-codes-prompts-in-a-shared-terminal.webp"
+  },
+  {
+    "slug": "how-to-see-what-each-claude-code-session-is-doing-from-your-phone",
+    "title": "How to See What Each Claude Code Session Is Doing From Your Phone",
+    "description": "Name your Claude Code sessions, turn on shell.online session summaries, and check from a phone which one finished, which is waiting and what it said.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "session-summaries",
+      "mobile",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-06",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-see-what-each-claude-code-session-is-doing-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-put-a-deadline-and-a-stop-button-on-an-unattended-coding-agent",
+    "title": "How to Put a Deadline and a Stop Button on an Unattended Coding Agent",
+    "description": "OpenAI pulled GPT-6.1 Astra for acting without asking. A step-by-step guide to time-boxing an agent run with shell.online and stopping it from your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "human-oversight",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-05",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-put-a-deadline-and-a-stop-button-on-an-unattended-coding-agent.webp"
+  },
+  {
+    "slug": "how-to-watch-a-long-codex-run-from-your-phone-and-share-it-with-a-teammate",
+    "title": "How to Watch a Long Codex Run From Your Phone and Share It With a Teammate",
+    "description": "GPT-6.1 Sol made long Codex runs cheap. A step-by-step guide to starting one with shell.online, checking it from your phone and giving a teammate a read-only link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "terminal-sharing",
+      "coding-agents",
+      "read-only-terminal"
+    ],
+    "iso_date": "2026-10-03",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-a-long-codex-run-from-your-phone-and-share-it-with-a-teammate.webp"
+  },
+  {
     "slug": "end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli",
     "title": "End-to-End Encrypted Terminal Sharing Has a Second Secret on the Host: shell.online v0.24.1 Takes the Session Password Out of Process Environments",
     "description": "What end-to-end encrypted terminal sharing hides from the relay, and why shell.online v0.24.1 moved the session password out of process environments.",
