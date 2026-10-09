@@ -1,0 +1,126 @@
+<p>Anthropic released <a href="https://www.anthropic.com/claude-haiku-5-5">Claude Haiku 5.5</a> on October 7, 2026. The announcement says it costs around 75% less to run than Haiku 4.5 on average, priced 90% lower for requests up to 100,000 tokens and 50% lower above that. The <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">Claude Code changelog</a> added it the same day in version 2.1.293 as the default Haiku model on the Anthropic API, at $0.10 per million input tokens and $0.50 per million output tokens for prompts up to 100K. Anthropic is plain about what it is for: Sonnet 5.5 and Opus 5.5 remain the better choices for complex agentic coding, while Haiku 5.5 suits narrowly scoped work that used to cost too much, such as summarization, compaction and subagent tasks.</p>
+
+<p>That kind of work has a particular shape. You hand an agent a pile of files and a narrow instruction, and it grinds through them for an hour. You do not want to watch it, and you do not want it tied to whichever terminal window you had open. You do want to step back in when it stops to ask a question, then step out again without killing it.</p>
+
+<p>This guide uses <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> to do exactly that with Claude Code on Haiku 5.5. You will start the session in the background, find it again, attach to it from a local terminal, detach with the right keys, check it from a phone, and stop it when you are done. Every command and key below comes from the shell 0.25.0 help text and source.</p>
+
+<section>
+<h2>Step 1: Start Claude Code on Haiku 5.5 in the background</h2>
+
+<p>Install shell if you have not already. Then, in an ordinary terminal (not inside another Claude Code session), go to the directory the job should work in and run:</p>
+
+<pre><code>shell --name "haiku changelog digest" claude --model claude-haiku-5-5</code></pre>
+
+<p>Everything before <code>claude</code> belongs to shell. <code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app, up to 120 characters on one line. Everything from <code>claude</code> onward is the command shell runs. <code>--model</code> is the <a href="https://code.claude.com/docs/en/cli-reference">Claude Code CLI flag</a> that picks the model for this session, and <code>claude-haiku-5-5</code> is the model ID from Anthropic's <a href="https://platform.claude.com/docs/en/models/haiku-5-5/migration-guide">Haiku 5.5 migration guide</a>. Claude Code also takes <code>--effort</code>; the CLI reference notes that the available levels depend on the model, so check the <a href="https://code.claude.com/docs/en/model-config">model configuration page</a> before you rely on a particular level.</p>
+
+<p>shell wraps the process in a <a href="https://man7.org/linux/man-pages/man7/pty.7.html">pseudoterminal</a>, connects it to the relay, prints a card and returns your prompt. The card looks like this, trimmed, with your own values:</p>
+
+<pre><code>  Name       haiku changelog digest
+  Open       https://shell.online/s/EXAMPLE-ONLY#salt=EXAMPLE
+  Password   (ten random characters)
+  Vault      not linked · run shell auth
+  Access     view and type · end-to-end encrypted
+  Session    a1B2c3D4e5 · background
+  Closes     when the task exits
+
+  Rejoin     shell attach a1B2c3D4e5
+  Stop       shell kill -- a1B2c3D4e5
+  Run these on this computer. Ctrl-X, then D detaches after rejoining.</code></pre>
+
+<p>The two lines at the bottom are the ones this guide is about. Claude Code is now running in the background with nobody attached to it. Closing the terminal you typed this in does not stop it; the session ends when the process exits.</p>
+</section>
+
+<section>
+<h2>Step 2: Find the session again</h2>
+
+<p>An hour later, in a different terminal window, you will not remember the ID. Ask shell:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>The table has one row per session on this machine, with its ID, name, uptime, relay status, closing rule, access mode, command, share URL and whether a password is stored. ACCESS reads <code>interactive+e2ee</code> for the session above. The table shortens long URLs, so use <code>shell list --json</code> when a script needs the complete record. If you linked the machine to an account with <code>shell auth</code>, <code>shell ls</code> lists sessions from every linked machine instead, without passwords. The <a href="/cli/">CLI page</a> has both side by side.</p>
+</section>
+
+<section>
+<h2>Step 3: Attach from a terminal on the same computer</h2>
+
+<p>Use the ID, or any unambiguous prefix of at least six characters:</p>
+
+<pre><code>shell attach a1B2c3</code></pre>
+
+<p>shell prints <code>Attached to a1B2c3D4e5. Press Ctrl-X, then D to detach (Ctrl-] also works).</code> and then replays the current screen, so you see Claude Code exactly where it is rather than a blank window waiting for the next repaint. It also sets the window title to <code>shell.online | Ctrl-X D to detach</code> and sets it again whenever Claude Code writes a title of its own, so the reminder stays visible. It uses the standard <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">xterm title sequences</a> to save your previous title on attach and restore it when you leave.</p>
+
+<p>While you are attached, your terminal window owns the size of the session. The comment in the source puts it as "this terminal owns the session's grid while it is attached": Claude Code is drawn at your window's size and follows it when you resize. A browser that asks for a larger grid during that time is held to your window's size. When you detach, that limit is dropped and the grid stays where it was until a viewer asks for something else. An earlier post covers how the browser side handles size: <a href="/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23/">watching a coding agent remotely without shrinking its terminal</a>.</p>
+
+<p>Only one local terminal can be attached at a time. A second <code>shell attach</code> to the same session gets the error <code>another local terminal is attached</code>. Browser viewers are not affected by that rule; they keep their own connection while you type locally.</p>
+
+<p>Now type into Claude Code as usual: give it the job, answer the permission prompt it is waiting on, or read what it has done.</p>
+</section>
+
+<section>
+<h2>Step 4: Detach without stopping Claude</h2>
+
+<p>Press Ctrl-X, let go, then press D. shell prints <code>Detached from a1B2c3D4e5.</code>, restores your terminal settings and gives you your prompt back. Claude Code keeps running and the browser link stays live.</p>
+
+<p>The detach sequence is read by shell before Claude Code ever sees it, and the code is specific about the timing. After Ctrl-X, shell waits up to 750 milliseconds for D. If any other key arrives, or the 750 milliseconds pass, shell forwards the Ctrl-X to the program as if nothing happened. That matters with Claude Code, because its <a href="https://code.claude.com/docs/en/interactive-mode">interactive mode</a> has several shortcuts that start with Ctrl+X: Ctrl+X Ctrl+E opens your editor, Ctrl+X Ctrl+S sends queued messages now, and Ctrl+X Ctrl+K stops all running background subagents. All three still reach Claude through an attached shell session. Only Ctrl-X followed by D is taken. Ctrl-] detaches at once, which is the older binding shell keeps for compatibility.</p>
+
+<p>If you have used <a href="https://www.gnu.org/software/screen/manual/screen.html">GNU Screen</a>, where C-a d detaches, or <a href="https://github.com/tmux/tmux/wiki">tmux</a>, the model is the same: the process belongs to the session, not to your window. The difference is that the session also has a browser link.</p>
+
+<div class="callout">
+<p><strong>Ctrl-C is not a detach key here.</strong> It goes straight through to Claude Code. Claude Code's documentation says that when nothing is running, the first Ctrl+C clears the prompt and a second press exits Claude Code. Under shell, the process exiting ends the session and takes the link offline. Claude Code 2.1.295 made a double Ctrl+C at the idle prompt detach from its own <code>claude attach</code>. If you carry that habit into a shell session, you will end the job. Use Ctrl-X then D.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 5: Check on it from your phone</h2>
+
+<p>Open the link from the card on your phone and enter the password, or scan the QR code shell printed in the original terminal if it printed one, which carries both. The key is derived in the browser from the password and the salt in the URL fragment, and the fragment never reaches the relay; the <a href="/e2ee/">encryption page</a> describes what the relay can and cannot see. The <a href="/mobile/">mobile guide</a> covers the phone layout.</p>
+
+<p>The app offers more than one way to draw a session, and its terminal view is built on <a href="https://xtermjs.org/">xterm.js</a>. Either way you can read the screen and type, since the session was started without <code>--read-only</code>. One key behaves differently there. In a browser, Ctrl-D has to be pressed twice within three seconds to send end of file, because the first press warns you. <a href="https://man7.org/linux/man-pages/man3/termios.3.html">termios(3)</a> explains what EOF does: typed at the start of a line, it makes the program's read return 0, which a shell takes as the end of its input. Closing the browser tab does not stop anything.</p>
+
+<p>If a teammate only needs to watch, start the job with <code>shell --read-only</code> instead. Read-only is fixed when the session starts, and the relay rejects browser input for it. If you have already sent the link to someone and want them out, <code>shell password rotate a1B2c3</code> replaces the password without restarting Claude. The steps are in <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">how to revoke a shared terminal link without killing the process behind it</a>.</p>
+</section>
+
+<section>
+<h2>Step 6: Stop it, or let it stop itself</h2>
+
+<p>When Claude Code exits, the share closes on its own. To stop it early from this machine:</p>
+
+<pre><code>shell kill -- a1B2c3</code></pre>
+
+<p>This terminates the wrapped process and takes the link offline. <code>shell kill --all</code> stops every session shell manages on this machine. If you want a ceiling on the run from the start, add a deadline when you launch it, for example <code>shell --auto-close 2h --name "haiku changelog digest" claude --model claude-haiku-5-5</code>. The session still closes when the task exits, and closes at the deadline if it is still going.</p>
+</section>
+
+<section>
+<h2>How this differs from Claude Code's own background sessions</h2>
+
+<p>Claude Code has its own background mode. The CLI reference documents <code>claude --bg</code>, which starts a session as a background agent, <code>claude attach</code> to bring it into a terminal, and <code>claude agents</code> to see them all in <a href="https://code.claude.com/docs/en/agent-view">agent view</a>. They are managed from a terminal on that machine.</p>
+
+<p>shell is narrower. It knows nothing about Claude's background supervisor. It wraps one process in a pseudoterminal and gives that terminal a browser link, so the same session can be attached locally, opened on a phone and handed to a teammate. It works the same for Codex, OpenCode or a plain script.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li><strong>It does not attach to a process that is already running.</strong> <code>shell attach</code> joins sessions that shell started. If Claude Code is already open in some terminal, shell cannot adopt it.</li>
+<li><strong>Attaching is local only.</strong> <code>shell attach</code> talks to a local control channel on the computer running the job. From anywhere else, use the browser link.</li>
+<li><strong>It does not keep the computer awake.</strong> If the machine sleeps or loses its network, the browser side goes offline. The card says this too: keep the computer awake and online.</li>
+<li><strong>It does not change what the job costs.</strong> The tokens are Claude Code's. Anthropic's migration guide notes that Haiku 5.5 uses a newer tokenizer that produces about 30% more tokens than Haiku 4.5 for the same text, so recount before you budget.</li>
+<li><strong>It does not make Haiku the right model for every job.</strong> Anthropic's own announcement points complex agentic coding at Sonnet 5.5 and Opus 5.5. Pick the model for the task; shell does not care which one runs.</li>
+<li><strong>It does not resume after a crash on its own.</strong> With <code>--persistent</code>, a clean restart restores the same link. The help text says a crash that leaves a local record or control socket blocks the resume until you review it, and nothing restarts automatically.</li>
+</ul>
+
+<p>The <a href="/reliability/">reliability page</a> lists the rest of the limits, and the <a href="/platforms/">platforms page</a> lists where the CLI runs. The help text says Windows supports the same background, list, attach and kill workflow; the timing and key handling above come from the shared CLI source.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>Anthropic's examples for Haiku 5.5 are mostly about a small model working alongside a larger one. Once those pieces live on different machines, the connection between them becomes the hard part. shell.online is built by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and its post on <a href="https://pilotprotocol.network/blog/chain-ai-models-across-machines">chaining AI models across machines</a> measures what persistent encrypted tunnels save over a fresh HTTP request per call in a multi-model pipeline. For passing results between agents rather than terminals, the <a href="https://pilotprotocol.network/docs/messaging">messaging docs</a> cover <code>send-message</code>, <code>send-file</code> and the inbox. shell covers the human side: seeing what one of those agents is doing and typing into it when it asks.</p>
+</section>
+
+<div class="cta">
+<h3>Put your next long run in the background</h3>
+<p>Install shell, start the job with <code>shell --name</code>, and use Ctrl-X then D whenever you want your terminal back. The source is on GitHub under the MIT license.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>

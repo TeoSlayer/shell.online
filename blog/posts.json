@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in",
+    "title": "How to Run a Claude Haiku 5.5 Job in the Background and Step Back In",
+    "description": "Start Claude Code on Haiku 5.5 with shell, attach from a local terminal, detach with Ctrl-X D without stopping it, and check the run from a phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "claude-haiku",
+      "background-jobs",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-09",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in.webp"
+  },
+  {
     "slug": "how-to-share-a-coding-agents-files-without-letting-a-symlink-widen-access",
     "title": "How to Share a Coding Agent's Files Without Letting a Symlink Widen Access",
     "description": "Scope shell.online --files to one resolved output directory, see how the host refuses symlink escapes, and learn what hard links still let through.",
