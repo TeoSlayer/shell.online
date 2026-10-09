@@ -14,7 +14,7 @@ Small fixes, clearer docs and reproducible bug reports are welcome.
 ## Run the checks for your change
 
 Run commands from the repository root. Go work uses the version in `go.mod`
-(currently 1.26.8). JavaScript work uses Node.js 22+ and npm; install the locked
+(currently 1.26.9). JavaScript work uses Node.js 22+ and npm; install the locked
 dependencies with `npm ci`, or `npm --prefix app ci` for the app.
 
 For README changes, also run `node scripts/test-landing-seo.mjs`: it checks

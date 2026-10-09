@@ -119,7 +119,7 @@ DragonFly BSD and Solaris. Phones need only a browser.
 
 ### Build from source
 
-Install **Git and Go 1.26.8**. Node.js is not needed to build the CLI or use the hosted relay.
+Install **Git and Go 1.26.9**. Node.js is not needed to build the CLI or use the hosted relay.
 
 ```sh
 git clone --depth 1 --branch v0.25.0 https://github.com/TeoSlayer/shell.online.git
