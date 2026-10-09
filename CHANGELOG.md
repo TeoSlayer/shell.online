@@ -6,6 +6,8 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Build with Go 1.26.9, which fixes two `net/http` vulnerabilities
+  (GO-2026-6613, GO-2026-6617) reported by govulncheck.
 - Existing terminal sessions now automatically run “Fit to my screen” once
   when their owner opens them, restoring the grid density on laptops and
   desktops. Sizing overlaps password lookup and unlock, reusing the connection

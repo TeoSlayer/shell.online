@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-release_go_toolchain="go1.26.8"
+release_go_toolchain="go1.26.9"
 export GOTOOLCHAIN="$release_go_toolchain"
 
 version="${npm_package_version:-$(node -p 'require("./package.json").version')}"

@@ -139,7 +139,7 @@
         ],
         [
           "Build the CLI from source",
-          "Install Git and Go 1.26.8 first. Clone the release tag, not an unpinned development branch. This builds the CLI only: you do not need Node.js or a local web server to use the hosted service. The Go build downloads the dependencies pinned by go.mod and go.sum.\n\nThe commands below assume a new checkout directory. On macOS, Linux and other Unix systems:",
+          "Install Git and Go 1.26.9 first. Clone the release tag, not an unpinned development branch. This builds the CLI only: you do not need Node.js or a local web server to use the hosted service. The Go build downloads the dependencies pinned by go.mod and go.sum.\n\nThe commands below assume a new checkout directory. On macOS, Linux and other Unix systems:",
           [
             [
               "git clone --depth 1 --branch v0.25.0 https://github.com/TeoSlayer/shell.online.git\ncd shell.online\ngo build -buildvcs=false -trimpath -ldflags=\"-X main.version=0.25.0\" -o shell ./cmd/shell\n./shell --version",
@@ -155,7 +155,7 @@
             ],
             [
               "Develop the website too?",
-              "That is a separate build using Node.js and npm. See the repository’s [development instructions](https://github.com/TeoSlayer/shell.online#development). On MIPS64, keep Go 1.26.8: the repository documents a Go 1.27 runtime regression."
+              "That is a separate build using Node.js and npm. See the repository’s [development instructions](https://github.com/TeoSlayer/shell.online#development). On MIPS64, keep Go 1.26.9: the repository documents a Go 1.27 runtime regression."
             ]
           ]
         ],
