@@ -9,7 +9,7 @@ go 1.26.9
 replace github.com/gitpod-io/xterm-go => ./third_party/xterm-go
 
 require (
-	github.com/Microsoft/go-winio v0.6.2
+	github.com/Microsoft/go-winio v0.6.3
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
