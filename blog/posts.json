@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-let-a-second-agent-watch-a-coding-agents-terminal-over-mcp",
+    "title": "How to Let a Second Agent Watch a Coding Agent's Terminal Over MCP",
+    "description": "Give a Codex watcher an observe-only, expiring MCP grant to a Claude Code session in shell.online, tell it what to flag, and revoke it when the run ends.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "mcp",
+      "coding-agents",
+      "agent-monitoring",
+      "codex"
+    ],
+    "iso_date": "2026-10-10",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-let-a-second-agent-watch-a-coding-agents-terminal-over-mcp.webp"
+  },
+  {
     "slug": "how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in",
     "title": "How to Run a Claude Haiku 5.5 Job in the Background and Step Back In",
     "description": "Start Claude Code on Haiku 5.5 with shell, attach from a local terminal, detach with Ctrl-X D without stopping it, and check the run from a phone.",
