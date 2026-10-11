@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-keep-a-local-agent-run-reachable-when-your-laptop-sleeps",
+    "title": "How to Keep a Local Agent Run Reachable When Your Laptop Sleeps",
+    "description": "Hold a laptop awake for exactly the length of a Claude Code run, read what shell.online reports when the link goes offline, and restart cleanly after a reboot.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "reliability",
+      "sleep"
+    ],
+    "iso_date": "2026-10-11",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-local-agent-run-reachable-when-your-laptop-sleeps.webp"
+  },
+  {
     "slug": "how-to-let-a-second-agent-watch-a-coding-agents-terminal-over-mcp",
     "title": "How to Let a Second Agent Watch a Coding Agent's Terminal Over MCP",
     "description": "Give a Codex watcher an observe-only, expiring MCP grant to a Claude Code session in shell.online, tell it what to flag, and revoke it when the run ends.",
