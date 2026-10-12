@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-run-codex-in-a-container-you-can-open-from-a-browser",
+    "title": "How to Run Codex in a Container You Can Open From a Browser",
+    "description": "Run OpenAI's Codex CLI inside shell.online's Docker image, open its terminal from a phone, and see where container isolation stops.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "docker",
+      "codex",
+      "coding-agents",
+      "isolation"
+    ],
+    "iso_date": "2026-10-12",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-codex-in-a-container-you-can-open-from-a-browser.webp"
+  },
+  {
     "slug": "how-to-keep-a-local-agent-run-reachable-when-your-laptop-sleeps",
     "title": "How to Keep a Local Agent Run Reachable When Your Laptop Sleeps",
     "description": "Hold a laptop awake for exactly the length of a Claude Code run, read what shell.online reports when the link goes offline, and restart cleanly after a reboot.",
