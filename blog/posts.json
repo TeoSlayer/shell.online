@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-try-muse-wonder-in-muse-code-and-approve-its-commands-from-your-phone",
+    "title": "How to Try Muse Wonder in Muse Code and Approve Its Commands From Your Phone",
+    "description": "Start Meta's Muse Code on Muse Wonder through shell, route its approval prompts to your phone, and put a time limit on the run.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "muse-code",
+      "mobile",
+      "approvals",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-14",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-try-muse-wonder-in-muse-code-and-approve-its-commands-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-start-a-coding-agent-on-your-own-computer-from-your-phone",
     "title": "How to Start a Coding Agent on Your Own Computer From Your Phone",
     "description": "Allow browser starts on a linked computer, then launch Codex or Claude Code from your phone in the right directory, and choose who can open and stop it.",
