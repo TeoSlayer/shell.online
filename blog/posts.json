@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-run-codex-in-parallel-git-worktrees-and-tell-the-sessions-apart",
+    "title": "How to Run Codex in Parallel Git Worktrees and Tell the Sessions Apart",
+    "description": "Give each Codex task its own git worktree and a shell.online session name, then find, open and stop the right one from shell ls or your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "git-worktrees",
+      "parallel-agents",
+      "session-names"
+    ],
+    "iso_date": "2026-10-15",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-codex-in-parallel-git-worktrees-and-tell-the-sessions-apart.webp"
+  },
+  {
     "slug": "how-to-try-muse-wonder-in-muse-code-and-approve-its-commands-from-your-phone",
     "title": "How to Try Muse Wonder in Muse Code and Approve Its Commands From Your Phone",
     "description": "Start Meta's Muse Code on Muse Wonder through shell, route its approval prompts to your phone, and put a time limit on the run.",
