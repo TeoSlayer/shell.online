@@ -1,0 +1,114 @@
+<p>On October 6, Cursor shipped <a href="https://cursor.com/changelog">remote control for local agents</a>. From the Cursor iOS app you can now see and reply to the agents running on your own computer. The agents run on your computer, the feature is on by default for everyone except Enterprise organizations, and the changelog adds the one condition every tool of this kind shares: the computer has to stay on and online. Anthropic's <a href="https://code.claude.com/docs/en/remote-control">Remote Control for Claude Code</a> works the same way for Claude, and its server mode can even create new sessions on demand.</p>
+
+<p>Both are tied to one vendor's agent and one vendor's app. If your day involves Codex in one project, Claude Code in another and a test suite in a third, you want the same thing for all of them, from whatever browser your phone has. You may also want to start a new run from the phone, in the right directory, and know who else can open it.</p>
+
+<p>shell.online can do that for any terminal program. This guide sets up a computer so that your phone can start a session on it, walks through the New session sheet in the app, and covers the parts that catch people out: which directory the agent starts in, who receives the password, and who can press Stop.</p>
+
+<section>
+<h2>Step 1: Link the computer and allow browser starts</h2>
+
+<p>Install the CLI on the computer that will run the agents (the <a href="/platforms/">platforms page</a> lists every build), create an account at app.shell.online, then link the machine:</p>
+
+<pre><code>shell auth</code></pre>
+
+<p>A browser opens on the approval screen. After you approve, the CLI asks one more question, and it is the important one. It reads "Start sessions from the browser?" and explains that anyone signed in to your account could start processes on this machine, as you, without touching this terminal. The default is No. Answer <code>y</code> only on a machine where that is acceptable.</p>
+
+<p>The question is asked once per account on a machine. To answer it without the prompt, or to change your mind later, use the flags instead:</p>
+
+<pre><code>shell auth --allow-remote-start
+shell auth --no-remote-start</code></pre>
+
+<p>After every sign-in the CLI prints a line saying which way it stands, such as "Your browser can start sessions here. Turn it off with 'shell auth --no-remote-start'." Without it, <code>shell &lt;command&gt;</code> still publishes sessions to your account; the browser just cannot launch new ones.</p>
+</section>
+
+<section>
+<h2>Step 2: Keep the listener running across restarts</h2>
+
+<p>Browser starts are carried out by a small daemon on the computer. Saying yes the first time also installs it as a service, so the machine is reachable after a reboot without anybody logging in. Check both halves:</p>
+
+<pre><code>shell daemon status
+shell service status</code></pre>
+
+<p>The first prints "Running. Your browser can start sessions on this machine." when the listener is up. The second prints "Installed at" and the path of the service file. If it says "No service is installed.", run <code>shell service install</code>. On macOS that file is a launch agent under <code>~/Library/LaunchAgents</code> with <code>KeepAlive</code> set, so <a href="https://keith.github.io/xcode-man-pages/launchd.plist.5.html">launchd</a> restarts the daemon if it exits; on Linux it is a systemd user unit enabled with <code>systemctl --user</code>.</p>
+
+<p>The daemon asks the accounts service for queued work every two seconds, and the app treats a machine as reachable only if it has asked within the last 15 seconds. The daemon also checks once, when it starts, which agent tools are on its PATH (<code>claude</code>, <code>codex</code>, <code>hermes</code>, <code>openclaw</code>), and the app warns when the tool you pick was not found. If you install a new agent while the daemon is running, the warning stays until the daemon restarts, though the command is still sent.</p>
+</section>
+
+<section>
+<h2>Step 3: Open the New session sheet on your phone</h2>
+
+<p>Open app.shell.online in your phone's browser, sign in and press New session. The sheet says what it does in its first line: it starts a new process on your linked computer, the process stays there, and the app opens its terminal. Then it asks what to run. The choices in the current app are Claude Code, GPT Codex, Hermes Agent, OpenClaw and Terminal process.</p>
+
+<p>Each choice is a short form that builds a command line. For GPT Codex you get a resume field, a model field, a "Resume the most recent session" switch, and two selectors that map straight onto Codex's own flags: Sandbox, which passes <code>--sandbox</code> with <code>read-only</code>, <code>workspace-write</code> or <code>danger-full-access</code>, and Approvals, which passes <code>--ask-for-approval</code> with <code>on-request</code> or <code>never</code>. The <a href="https://learn.chatgpt.com/docs/developer-commands?surface=cli">Codex CLI reference</a> describes what each value allows. The Claude Code form has a resume field, a model picker and a "Skip permission checks" switch that adds <code>--dangerously-skip-permissions</code>, which Anthropic's <a href="https://code.claude.com/docs/en/permission-modes">permission modes guide</a> recommends only for isolated containers and VMs.</p>
+
+<p>Under the form the sheet prints the exact command after a <code>$</code>, so nothing runs on your machine that you did not see. Pick the computer under "Run on". A machine that is not reachable is marked offline and the Start session button stays disabled. Each switch is defined in <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/src/lib/session-kinds.ts">session-kinds.ts</a>.</p>
+</section>
+
+<section>
+<h2>Step 4: Point the agent at the right directory</h2>
+
+<p>The forms have no directory field, and a browser-started session runs in whatever directory the daemon itself is running in. That is not your project. The 0.24.1 changelog in the repository records a machine where six Claude Code sessions started this way all reported <code>/</code> as their directory.</p>
+
+<div class="callout"><p>Put the directory in the command. Codex resumes "the most recent chat from the current working directory", so <code>codex resume --last</code> started from the wrong place finds nothing, and a fresh run works on the wrong tree. Choose Terminal process and type the directory yourself.</p></div>
+
+<p>For Codex, the <code>--cd</code> flag sets the working directory before the agent starts:</p>
+
+<pre><code>codex --cd /Users/you/code/demo-app --sandbox workspace-write --ask-for-approval on-request</code></pre>
+
+<p>That line contains no shell syntax, so the daemon runs it as a program with arguments and the session reads as Codex in your list. Write the full path: with <code>~</code> in it, the line counts as shell syntax and goes through <code>sh</code> instead.</p>
+
+<p>Claude Code has no equivalent flag, so change directory first:</p>
+
+<pre><code>cd /Users/you/code/demo-app &amp;&amp; claude</code></pre>
+
+<p>Because of the <code>&amp;&amp;</code>, this line goes to <code>sh -c</code> whole, so quoting and operators keep their normal meaning. The session list still shows the line you typed. Commands are limited to 500 characters. Add a session name in the form so the run is easy to find later; it shows up in <code>shell ls</code> and the app.</p>
+</section>
+
+<section>
+<h2>Step 5: Decide who can open it before you press Start</h2>
+
+<p>If you belong to an organization in the app, the sheet lists your colleagues under "Who can open it", and nobody is ticked. With nobody ticked it says "Only you will be able to open this session. You can add people to it afterwards." Tick a person and they can open it without being sent anything.</p>
+
+<p>No password is typed at any point. Your phone's browser generates the session password and seals it to the daemon's public key, and to each person you ticked, using P-256 key agreement, <a href="https://www.rfc-editor.org/rfc/rfc5869">HKDF</a> and <a href="https://csrc.nist.gov/pubs/sp/800/38/d/final">AES-GCM</a> through the browser's <a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/deriveKey">Web Crypto API</a>. The accounts service passes the envelope along without a key to open it; the server code says it is "relayed verbatim". The daemon opens it, hands the password to the new session over a pipe rather than its environment, and the session encrypts its terminal end to end as any share does. The <a href="/e2ee/">encryption guide</a> describes the frame cipher, and an earlier post explains <a href="/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it/">how a teammate gets a sealed copy of a password</a>.</p>
+
+<p>Two details follow from that design. A colleague who has never opened the app in a browser has no key to seal to, and the sheet says so instead of listing them. And the daemon makes a new key each time it starts, so stopping it ends its ability to open anything sealed to the old one.</p>
+</section>
+
+<section>
+<h2>Step 6: Answer it, check it and stop it</h2>
+
+<p>Press Start session. The command is queued, the daemon picks it up on its next poll and the session appears in your list. Open it to get the terminal. The <a href="/mobile/">phone guide</a> covers the controls: tap to bring up the keyboard, use the terminal key bar for keys a phone keyboard lacks, and remember that Ctrl-C interrupts the command rather than copying. Ctrl-D warns on the first press and sends end-of-file only if you press it again within three seconds. For Claude Code there is also a chat view, described in <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">the post on reading Claude Code as a conversation</a>.</p>
+
+<p>Back at the computer, the session is an ordinary local one:</p>
+
+<pre><code>shell list
+shell attach &lt;ID&gt;</code></pre>
+
+<p><code>shell list</code> shows its ID, uptime and relay status, and <code>shell attach</code> joins it in your terminal. Press Ctrl-X, then D to detach without stopping it.</p>
+
+<p>To end the run from the phone, use Stop on the session. The server only accepts it from the session's owner and answers anyone else with "only the session owner can stop its process", even inside an organization. The daemon then runs <code>shell kill</code> on that session. If the agent has already finished, there is nothing to stop: the share closes when its process exits.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not take over a process that is already running. The sheet says so in its first line.</li>
+<li>It cannot wake a sleeping or offline computer. The app refuses to queue work for a machine that has not polled in 15 seconds.</li>
+<li>It cannot change shell's own options. The daemon puts <code>--</code> before every browser command, so a session started this way cannot be made read-only, given file access or an <code>--auto-close</code> deadline from the phone. The code comment in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/agent_loop.go">agent_loop.go</a> states the rule: the service may choose what program runs, but not weaken encryption or widen file sharing. Start those runs at the keyboard.</li>
+<li>It is not a sandbox. The process runs as your user, with your files and credentials. What limits a Codex or Claude Code run is the agent's own sandbox and approval setting, which is why the sheet exposes them. OWASP lists <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive permissions and excessive autonomy</a> among the root causes of agent damage, and an agent started from a phone with approvals off is both.</li>
+<li>It is limited to your own machines. The server looks the machine up among the ones linked to the account making the request, so a colleague can open a session you share with them but cannot start one on your computer.</li>
+</ul>
+
+<p>The <a href="/security/">security page</a> explains how read-only links and input access fit together, and the <a href="/cli/">CLI reference</a> lists every command used here. The setup itself, including the launchd priority fix that matters on a Mac left running for days, is covered in <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">an earlier post on browser-started sessions</a>.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, which builds networking for autonomous agents. Whether you agreed to what a feature lets others do with your machine is a question Pilot answers in writing too: its <a href="https://pilotprotocol.network/docs/consent">consent page</a> lists each feature that is on by default, what it costs you, and the exact setting that turns it off. If you came here from Cursor, the Pilot blog also shows how to <a href="https://pilotprotocol.network/blog/connect-cursor-to-pilot-protocol">connect Cursor to Pilot Protocol</a> through a hosted MCP server, which gives its agent an address on a network of other agents rather than a link for a person to open.</p>
+
+<p>The source for everything above is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>, MIT licensed, and the <a href="/docs/">docs</a> cover the rest.</p>
+</section>
+
+<div class="cta"><h3>Start the next run from your phone</h3><p>Link the computer once with shell auth, allow browser starts if it is a machine you trust, and the New session sheet will run Codex, Claude Code or any command there, in the directory you name.</p><a href="/app/">Set up the app</a></div>

@@ -1,5 +1,117 @@
 [
   {
+    "slug": "how-to-keep-one-browser-link-for-a-multi-night-antigravity-cli-run",
+    "title": "How to Keep One Browser Link for a Multi-Night Antigravity CLI Run",
+    "description": "Run Gemini 4 Argon in the Antigravity CLI through shell --persistent so a teammate keeps the same link and password every night of a long migration.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "antigravity-cli",
+      "gemini-4-argon",
+      "persistent-sessions",
+      "long-running-agents"
+    ],
+    "iso_date": "2026-10-16",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-one-browser-link-for-a-multi-night-antigravity-cli-run.webp"
+  },
+  {
+    "slug": "how-to-run-codex-in-parallel-git-worktrees-and-tell-the-sessions-apart",
+    "title": "How to Run Codex in Parallel Git Worktrees and Tell the Sessions Apart",
+    "description": "Give each Codex task its own git worktree and a shell.online session name, then find, open and stop the right one from shell ls or your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "git-worktrees",
+      "parallel-agents",
+      "session-names"
+    ],
+    "iso_date": "2026-10-15",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-codex-in-parallel-git-worktrees-and-tell-the-sessions-apart.webp"
+  },
+  {
+    "slug": "how-to-try-muse-wonder-in-muse-code-and-approve-its-commands-from-your-phone",
+    "title": "How to Try Muse Wonder in Muse Code and Approve Its Commands From Your Phone",
+    "description": "Start Meta's Muse Code on Muse Wonder through shell, route its approval prompts to your phone, and put a time limit on the run.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "muse-code",
+      "mobile",
+      "approvals",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-14",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-try-muse-wonder-in-muse-code-and-approve-its-commands-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-start-a-coding-agent-on-your-own-computer-from-your-phone",
+    "title": "How to Start a Coding Agent on Your Own Computer From Your Phone",
+    "description": "Allow browser starts on a linked computer, then launch Codex or Claude Code from your phone in the right directory, and choose who can open and stop it.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "remote-start",
+      "mobile",
+      "codex",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-13",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-start-a-coding-agent-on-your-own-computer-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-run-codex-in-a-container-you-can-open-from-a-browser",
+    "title": "How to Run Codex in a Container You Can Open From a Browser",
+    "description": "Run OpenAI's Codex CLI inside shell.online's Docker image, open its terminal from a phone, and see where container isolation stops.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "docker",
+      "codex",
+      "coding-agents",
+      "isolation"
+    ],
+    "iso_date": "2026-10-12",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-run-codex-in-a-container-you-can-open-from-a-browser.webp"
+  },
+  {
+    "slug": "how-to-keep-a-local-agent-run-reachable-when-your-laptop-sleeps",
+    "title": "How to Keep a Local Agent Run Reachable When Your Laptop Sleeps",
+    "description": "Hold a laptop awake for exactly the length of a Claude Code run, read what shell.online reports when the link goes offline, and restart cleanly after a reboot.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "reliability",
+      "sleep"
+    ],
+    "iso_date": "2026-10-11",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-local-agent-run-reachable-when-your-laptop-sleeps.webp"
+  },
+  {
+    "slug": "how-to-let-a-second-agent-watch-a-coding-agents-terminal-over-mcp",
+    "title": "How to Let a Second Agent Watch a Coding Agent's Terminal Over MCP",
+    "description": "Give a Codex watcher an observe-only, expiring MCP grant to a Claude Code session in shell.online, tell it what to flag, and revoke it when the run ends.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "mcp",
+      "coding-agents",
+      "agent-monitoring",
+      "codex"
+    ],
+    "iso_date": "2026-10-10",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-let-a-second-agent-watch-a-coding-agents-terminal-over-mcp.webp"
+  },
+  {
     "slug": "how-to-run-a-claude-haiku-5-5-job-in-the-background-and-step-back-in",
     "title": "How to Run a Claude Haiku 5.5 Job in the Background and Step Back In",
     "description": "Start Claude Code on Haiku 5.5 with shell, attach from a local terminal, detach with Ctrl-X D without stopping it, and check the run from a phone.",

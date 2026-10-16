@@ -1,0 +1,111 @@
+<p>Google released Gemini 4 Argon on October 13. In the <a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/">launch post by Koray Kavukcuoglu</a>, the model works longer on hard coding and agentic problems, and one example describes Argon working autonomously overnight on Google's <a href="https://adk.dev/">Agent Development Kit</a>, an open source agent framework, and surfacing optimizations that were later merged. The <a href="https://blog.google/innovation-and-ai/technology/developers-tools/build-with-gemini-4-argon/">developer announcement</a> names code migrations as the kind of long-horizon workflow it was designed for. Through the Gemini API, the launch post says, input and output share a single limit of 1M tokens.</p>
+
+<p>For terminal users, the relevant line is in the <a href="https://antigravity.google/blog/gemini-4-argon-in-google-antigravity">Antigravity team's post</a>: Argon is rolling out in the Antigravity desktop app and in the Antigravity CLI for Google AI Pro and Ultra subscribers. On the Gemini CLI side, an <a href="https://github.com/google-gemini/gemini-cli/issues/29689">open issue on the Gemini CLI repository</a> asks for the same model, so if you want Argon on a migration in a terminal this week, you run <code>agy</code>.</p>
+
+<p>A migration that takes several nights is several runs of the agent, and that is where a shared terminal usually gets annoying. An ordinary shell.online link belongs to one run. When the task exits, its share closes, and the next start prints a new link and a new password that you have to send again. This guide uses <code>--persistent</code> so the teammate following the migration keeps one bookmark for the whole job. You will install both tools, put the state file somewhere the agent will not commit it, start the first night, resume the second night on the same link, and retire the link when the work is done.</p>
+
+<section>
+<h2>Step 1: Install shell and the Antigravity CLI</h2>
+
+<p>Install shell on the computer that holds the repository. The installer checks release checksums, and the <a href="/platforms/">platforms page</a> lists Homebrew and the other options. The commands here match shell 0.25.0, the current release named in the <a href="https://github.com/TeoSlayer/shell.online">project README</a>.</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell --version</code></pre>
+
+<p>Install <code>agy</code> the way Google's <a href="https://antigravity.google/docs/getting-started?tab=cli">Antigravity CLI getting started page</a> describes. On macOS and Linux the binary lands in <code>~/.local/bin/agy</code>.</p>
+
+<pre><code>curl -fsSL https://antigravity.google/cli/install.sh | bash
+agy --version</code></pre>
+
+<p>Run <code>agy</code> once by itself, finish any sign-in it asks for, then quit it. Doing that before you share anything keeps the sign-in out of the link entirely.</p>
+</section>
+
+<section>
+<h2>Step 2: Pick a home for the state file</h2>
+
+<p><code>--persistent</code> takes a path to a state file. The first run creates it. Every later run that names the same file reuses what is inside, and the <a href="/cli/">CLI reference</a> says plainly what that is: the host credentials, the browser password and the decryption material. Anyone who holds the file can resume the session as you and read it.</p>
+
+<p>I would put it under your user's state directory, outside any repository. <code>~/.local/state</code> is the default user state location in the <a href="https://specifications.freedesktop.org/basedir-spec/latest/">XDG base directory specification</a>, and it works as a convention on macOS too.</p>
+
+<pre><code>mkdir -p ~/.local/state/shell-online
+chmod 700 ~/.local/state/shell-online</code></pre>
+
+<p>shell enforces part of this itself. In <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/persistent.go">persistent.go</a> it creates a missing parent directory with mode 0700, writes the file with mode 0600, and refuses to read a state file that the group or other users can access, with the error <code>persistent state must not be accessible by group or other users</code>. It also refuses a path that is a symlink rather than a regular file. If you are unsure what those modes mean, the <a href="https://man7.org/linux/man-pages/man1/chmod.1.html">chmod manual page</a> covers them.</p>
+
+<div class="callout">
+<p>Do not put the state file inside the repository the agent is migrating. A <a href="https://git-scm.com/docs/gitignore">.gitignore entry</a> keeps it out of a normal <code>git add</code>, but the agent runs as your user and can read any file you can, and a broad commit or a forced add can still pick it up. The <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">OWASP secrets management cheat sheet</a> treats a secret in source control as exposed. If that happens, rotate the password (Step 5) and start a new state file.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 3: Start the first night's run</h2>
+
+<p>Change into the repository and start <code>agy</code> through shell with the state file and a name. The repository and session name here are invented.</p>
+
+<pre><code>cd ~/src/invoice-service
+shell --persistent ~/.local/state/shell-online/invoice-migration.json \
+  --name "invoice migration" agy</code></pre>
+
+<p>shell starts <code>agy</code> in the background, prints the browser link and a ten-character password, and in an interactive terminal shows a QR code that carries both. Because the state file did not exist, this run created it with a new identity. Then run <code>shell list</code>. The ID it shows comes from the host token in the state file, so it will be the same ID every night.</p>
+
+<pre><code>shell list
+shell attach &lt;ID&gt;</code></pre>
+
+<p><code>shell attach</code> puts the running agent in your local terminal. In <code>agy</code>, choose Gemini 4 Argon in the model selector; the <a href="https://antigravity.google/docs/models">Antigravity models page</a> lists Argon as available in the CLI for Pro, Ultra and Enterprise plans. Give it the migration prompt, then press Ctrl-X, release it, and press D to detach. The agent keeps running and the link stays live.</p>
+
+<p>Send the link and the password to your teammate through two different channels. The <a href="/e2ee/">encryption page</a> explains why: the URL carries only a random salt in its fragment, and the password is what derives the key in the browser. The QR code holds both, so treat a photo of it as the credential.</p>
+</section>
+
+<section>
+<h2>Step 4: Resume the second night on the same link</h2>
+
+<p>When <code>agy</code> exits, because the night's work finished or you quit it, the session shows as ended and the state file stays where it is. The relay holds a persistent session's record for up to 30 days, where an ordinary disconnected share gets 12 hours; both numbers are in <a href="https://github.com/TeoSlayer/shell.online/blob/main/shared/session-lifetime.ts">session-lifetime.ts</a>. Even after that record expires, the same session comes back, because its ID is derived from the host token inside the state file.</p>
+
+<p>The next evening, run the exact command again from the same directory.</p>
+
+<pre><code>cd ~/src/invoice-service
+shell --persistent ~/.local/state/shell-online/invoice-migration.json \
+  --name "invoice migration" agy</code></pre>
+
+<p>shell reads the state file, resumes the same session ID with the same host token, and prints the same link with the same password. Your teammate reloads the bookmark from yesterday and enters the password they already have. The name carries over too: per the CLI reference, a persistent session that restarts without <code>--name</code> keeps the name it had, including one somebody set in the <a href="/app/">web app</a>.</p>
+
+<p>Inside <code>agy</code>, pick up the conversation with the <code>/resume</code> slash command. Google's docs list it without describing its options, so look at what your version offers before you rely on it to bring back the previous night's context.</p>
+
+<p>Two settings are fixed by the state file. If you add <code>--read-only</code> on a later night, or set <code>SHELL_ONLINE_E2EE_PASSWORD</code> to something different from the saved password, shell stops before contacting the relay and leaves the saved identity untouched. Decide on read-only before the first run.</p>
+</section>
+
+<section>
+<h2>Step 5: Rotate or retire the link</h2>
+
+<p>If the teammate leaves the project, or the state file ends up somewhere it should not be, rotate while the session runs.</p>
+
+<pre><code>shell password rotate &lt;ID&gt;</code></pre>
+
+<p>This generates a fresh password and URL salt without restarting <code>agy</code>, disconnects current viewers, and rewrites the state file, so tomorrow's resume uses the new credentials. The path of the link stays the same and the fragment changes, so share the full new link and password with whoever should keep access. The <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">guide to revoking a shared link</a> goes through the same command in more detail.</p>
+
+<p>When the migration is merged, stop the run with <code>shell kill &lt;ID&gt;</code> and delete the state file. Resuming requires the host token inside that file, so once it is gone nobody can bring the link back, and the relay's record expires on its own.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<p>It does not save the agent. The <a href="/reliability/">reliability page</a> puts it in one sentence: a persistent identity can be reused, but it is not a process checkpoint. Each night is a new <code>agy</code> process, and whatever it remembers comes from Antigravity, not from shell.</p>
+
+<p>It does not restart anything by itself. If shell crashes or the machine loses power and leaves a local record or control socket behind, the next start refuses to resume and says recovery is needed. That is deliberate, and nothing restarts the session automatically.</p>
+
+<p>It does not keep MCP grants. The relay clears grants when a persistent session resumes, so an observer agent you connected on night one needs a new grant on night two.</p>
+
+<p>It does not work without encryption. <code>--persistent</code> cannot be combined with <code>--no-e2ee</code>. It also does not keep the computer awake: a sleeping laptop drops the host off the relay until it wakes. If you would rather run the migration inside a container, the <a href="https://pilotprotocol.network/blog/a-browser-terminal-for-a-docker-container-that-keeps-one-link-across-restarts-af">post on a Docker terminal that keeps one link across restarts</a> applies the same flag to the <a href="/docker/">Docker image</a>.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>A stable link to a process that keeps restarting is a small version of a problem Pilot Protocol was built around. shell.online is developed by Pilot, and Pilot gives each agent an address tied to its cryptographic identity rather than to the machine's IP, which is the subject of its post on <a href="https://pilotprotocol.network/blog/persistent-addresses-distributed-autonomous-systems">persistent addresses for autonomous systems</a>. The <a href="https://pilotprotocol.network/docs/concepts">Pilot concepts page</a> covers how nodes, addresses and trust fit together. None of that is needed for this guide, where one state file on one computer does the job. The other walkthrough that pairs well with this one is <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">starting a session from the browser on a Mac that sat idle for days</a>.</p>
+</section>
+
+<div class="cta">
+<h3>Give your next long migration one link</h3>
+<p>Install shell, keep the state file outside the repository, and start agy with --persistent so the same link and password work every night of the job.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>
