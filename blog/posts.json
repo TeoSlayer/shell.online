@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-keep-one-browser-link-for-a-multi-night-antigravity-cli-run",
+    "title": "How to Keep One Browser Link for a Multi-Night Antigravity CLI Run",
+    "description": "Run Gemini 4 Argon in the Antigravity CLI through shell --persistent so a teammate keeps the same link and password every night of a long migration.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "antigravity-cli",
+      "gemini-4-argon",
+      "persistent-sessions",
+      "long-running-agents"
+    ],
+    "iso_date": "2026-10-16",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-one-browser-link-for-a-multi-night-antigravity-cli-run.webp"
+  },
+  {
     "slug": "how-to-run-codex-in-parallel-git-worktrees-and-tell-the-sessions-apart",
     "title": "How to Run Codex in Parallel Git Worktrees and Tell the Sessions Apart",
     "description": "Give each Codex task its own git worktree and a shell.online session name, then find, open and stop the right one from shell ls or your phone.",
