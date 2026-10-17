@@ -1,0 +1,124 @@
+<p>OpenAI published <a href="https://github.com/openai/codex/releases/tag/rust-v0.163.0">Codex CLI 0.163.0 on October 15, 2026</a>, and two lines in its release notes change how a long Codex run feels when you are away from the keyboard. The first: "Send a follow-up while Codex is responding to steer it immediately." The pull request behind it, <a href="https://github.com/openai/codex/pull/51812">#51812, turns on instant interrupts by default</a>, so new input preempts the response in progress instead of waiting for the turn to end. The second: Codex now has a leader key you configure in <code>/keymap</code>, and <a href="https://github.com/openai/codex/pull/52273">the default leader is Ctrl+X</a>. Voice mute, which used to sit on Ctrl+X, moved to F9.</p>
+
+<p>Steering is the kind of correction you can make from a phone. You see the agent heading toward the wrong file, you type one sentence, and it changes course without you throwing away the turn. That only works if you can see the run and type into it from wherever you are, which is what <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> is for: it runs Codex on your own computer and prints a browser link to that terminal. OpenAI's own <a href="https://learn.chatgpt.com/docs/codex/cli">Codex CLI page</a> pitches the same loop from the other side: steer the active turn and keep follow-up work in the same session.</p>
+
+<p>The leader key is the part that needs care. Ctrl-X is also the first half of the sequence that detaches you from a session in <code>shell attach</code>. This guide starts Codex 0.163.0 under shell, steers it from a phone, and then goes through exactly what happens to a Ctrl-X when you are attached at the laptop, based on the shell source at release v0.25.0.</p>
+
+<section>
+<h2>Step 1: Install Codex 0.163.0 and shell</h2>
+
+<p>The <a href="https://github.com/openai/codex">Codex README</a> installs it from npm as <code>@openai/codex</code>, and 0.163.0 is the current <code>latest</code> tag there. Pin the version so you know which keymap you are getting:</p>
+
+<pre><code>npm install -g @openai/codex@0.163.0
+codex --version</code></pre>
+
+<p>The second command should print 0.163.0. If you use Codex through another installer, check the version the same way before you rely on steering, because older builds wait for the turn to finish.</p>
+
+<p>Then install shell on the same computer. On macOS and Linux the installer checks release checksums before it puts the binary in place:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell --version</code></pre>
+
+<p>Windows has a PowerShell installer, and Homebrew is covered on the <a href="/platforms/">platforms page</a>. The CLI command reference is at <a href="/cli/">/cli/</a>.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Codex as a shared session</h2>
+
+<p>Give the session a name so you can pick it out later, then hand shell the agent command:</p>
+
+<pre><code>cd ~/code/example-api
+shell --name steer-demo codex</code></pre>
+
+<p>shell starts Codex in the background on this machine and prints one browser link, a ten-character password and a QR code that carries both. The link holds only a random salt; the key is derived from the password in the CLI and in the browser, so the relay forwards encrypted frames it cannot read. The <a href="/e2ee/">end-to-end encryption page</a> covers the details.</p>
+
+<p>Because the session runs in the background, the terminal you typed into is free again. To see it from there:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>The table shows each session's ID, access mode, uptime, closing rule, command, share URL, whether a password is stored, and whether the relay is online. Copy the ID, or its first six characters; you need it in Step 4.</p>
+</section>
+
+<section>
+<h2>Step 3: Open the link on your phone and steer</h2>
+
+<p>Scan the QR code with your phone, or open the link and type the password. The page draws the terminal with <a href="https://xtermjs.org/">xterm.js</a> by default. The <a href="/mobile/">phone guide</a> describes what changes when you do: everyone sees one shared terminal grid, and a connected phone switches it to 80 columns by 40 rows. The grid returns to 120 by 36 when the last phone leaves, so a teammate watching on a laptop will see the layout change while you are connected.</p>
+
+<p>Give Codex a task that takes a few minutes. When you want to change course, tap the terminal to bring up the keyboard, type the correction as a normal sentence, and press the <strong>enter</strong> key. With 0.163.0, Codex takes the follow-up while it is still responding. Something like this is enough:</p>
+
+<pre><code>Stop editing the handlers. The bug is in the retry middleware, start there.</code></pre>
+
+<p>Below the terminal, shell's phone key row has eight buttons: <strong>esc</strong>, <strong>tab</strong>, the four arrows, <strong>enter</strong> and <strong>ctrl-c</strong>. They send the bytes your phone keyboard cannot produce. Two of them matter for Codex. Escape cancels a pending leader shortcut, according to the leader pull request. The <strong>ctrl-c</strong> button sends the interrupt byte; it is not a copy shortcut.</p>
+
+<p>Notice what is missing from that row: a Ctrl key. The buttons are a fixed list in the web app, and Ctrl-X is not on it, so you cannot press Codex's leader from a phone. Slash commands still work, because they are typed text. <code>/config</code> and <code>/keymap</code> open from a phone like any other prompt.</p>
+
+<div class="callout">
+<p>Only one person types at a time. The relay gives input to whoever typed most recently and holds that for 1.8 seconds. If you are typing at the laptop, keystrokes from the phone during that window are dropped, not queued, and the same applies between two browsers. If a steering message from your phone seems to vanish, check whether someone was typing at the other end, then send it again.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 4: Attach at the laptop and know where Ctrl-X goes</h2>
+
+<p>Back at your desk, take the session over in a local terminal:</p>
+
+<pre><code>shell attach 3f9c2a</code></pre>
+
+<p>shell replies with <code>Attached to 3f9c2a. Press Ctrl-X, then D to detach (Ctrl-] also works).</code> and sets the window title to a reminder of the same sequence. The browser link stays live while you are attached.</p>
+
+<p>Ctrl-X is byte 0x18, the control character the <a href="https://man7.org/linux/man-pages/man7/ascii.7.html">ASCII table</a> calls CAN. While you are attached, every byte you type passes through a small filter in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/attach_unix.go">attach_unix.go</a> before it reaches Codex. Reading that filter, this is what happens in each case:</p>
+
+<ul>
+<li><strong>Ctrl-X, then D or d.</strong> shell detaches. Codex receives neither byte.</li>
+<li><strong>Ctrl-X, then any other key.</strong> shell forwards Ctrl-X and that key together. Codex sees an ordinary leader shortcut, such as a <code>leader c</code> binding you defined.</li>
+<li><strong>Ctrl-X on its own.</strong> shell holds it for 750 milliseconds in case a D follows, then forwards it. Codex's hint menu opens a moment later than it would outside shell. The hints stay open until you choose or cancel, so the delay costs nothing else. The same pause applies to any program that uses a bare Ctrl-X, such as <a href="https://www.nano-editor.org/dist/latest/cheatsheet.html">GNU nano, where it closes the buffer</a>.</li>
+<li><strong>Ctrl-X, then Escape.</strong> Both bytes go through and Codex cancels the pending shortcut.</li>
+<li><strong>Ctrl-].</strong> shell always detaches on this legacy key, and Codex never sees it.</li>
+</ul>
+
+<p>The D has to arrive within that 750 millisecond window. If you press Ctrl-X, pause, and then press D, shell has already forwarded the Ctrl-X, and Codex receives a leader followed by a D.</p>
+
+<p>The filter exists only in <code>shell attach</code>. A Ctrl-X typed into the shared link in a desktop browser goes straight to Codex, and so does Ctrl-X D. You can only detach from a local attach, because that is the only place you are attached.</p>
+</section>
+
+<section>
+<h2>Step 5: Decide what to do about leader D</h2>
+
+<p>As far as I can read the 0.163.0 source, the leader code sets the prefix key without assigning any actions to it. The actions under the leader are the bindings you add yourself. That makes the collision narrow: it bites only if you bind something to <code>leader d</code> and also attach through shell.</p>
+
+<p>If you want that binding, change one side. shell's detach sequence is a constant in the source at v0.25.0, with no flag to change it, so the side to change is Codex. Open <code>/keymap</code> and use the <strong>Use leader...</strong> option to capture a different prefix, or set <code>tui.keymap.global.leader</code> in your Codex config. Codex refuses a plain letter as the leader, so ordinary typing is never intercepted, and on Unix it refuses Ctrl-Z, the <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap11.html">terminal SUSP character</a> that sends SIGTSTP to the foreground job.</p>
+
+<p>The same problem is older than either tool. <a href="https://man.openbsd.org/tmux.1">tmux uses Ctrl-B as its prefix</a> and <a href="https://www.gnu.org/software/screen/manual/html_node/Default-Key-Bindings.html">GNU screen uses Ctrl-A, with Ctrl-A d to detach</a>, and both shadow whatever the program inside wanted those keys for. <a href="https://www.gnu.org/software/emacs/manual/html_node/emacs/Keys.html">Emacs uses C-x as a prefix key</a>. Whatever wraps a terminal program takes some key away from it. What you need to know is which one, and here that is exactly two sequences, Ctrl-X D and Ctrl-].</p>
+
+<p>When you are done at the desk, press Ctrl-X and then D. shell prints <code>Detached from 3f9c2a.</code>, Codex keeps running, and your phone can pick the session up again. To end the run and close the link:</p>
+
+<pre><code>shell kill -- 3f9c2a</code></pre>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not let you press Codex's leader key from a phone. The phone key row has no Ctrl button. Use slash commands, or wait until you have a keyboard.</li>
+<li>shell does not read Codex's keymap. It treats Ctrl-X D and Ctrl-] as its own whatever Codex has bound, and it does not warn you about a conflict.</li>
+<li>Dropped keystrokes are not replayed. Input that loses the 1.8 second typing lease is discarded, so a phone and a laptop typing at once lose characters rather than interleaving them.</li>
+<li>Steering does not undo anything. A command Codex ran before your follow-up arrived has already run. The instant interrupt pull request also keeps the feature marked as under development, even though it is now on by default.</li>
+<li>A read-only link cannot steer. If a teammate should watch without typing, start the session with <code>shell --read-only codex</code>; the server blocks browser input on that link. To give an agent a narrow, expiring way to watch instead of a person, see <a href="/agents/">connecting an agent over MCP</a>.</li>
+<li>I read the attach code on the Unix path. I did not check how attach behaves on Windows.</li>
+<li>It does not keep a sleeping laptop reachable. The process runs on your computer, so the computer has to stay awake and online. The <a href="/reliability/">reliability page</a> covers reconnects.</li>
+</ul>
+
+<p>Earlier posts cover the parts around this one: <a href="/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23/">watching an agent without shrinking its terminal</a>, and <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching a coding agent after you turn off its permission prompts</a>, which matters more once you can redirect it from anywhere. The <a href="/security/">security page</a> lists who can reach a session and how.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>Steering from a phone is a person sending one message to one agent over a link they hold. Once agents start correcting each other across machines, the question becomes which agent is allowed to send to which, and that is the problem Pilot Protocol works on. Pilot agents are private by default: a private node silently rejects incoming streams unless the two sides share a network or have set up mutual trust, and <a href="https://pilotprotocol.network/docs/trust">trust starts with a handshake</a> that carries a justification and that the other agent approves or rejects. The right to send an agent instructions is granted, not assumed. The <a href="https://pilotprotocol.network/blog/how-mutual-trust-secures-decentralized-ai-agent-networks">post on how mutual trust secures agent networks</a> goes through the reasoning. shell.online is developed by the <a href="https://pilotprotocol.network/">Pilot Protocol</a> team.</p>
+</section>
+
+<div class="cta">
+<h3>Steer your next Codex run from your phone</h3>
+<p>Install shell, start Codex with <code>shell codex</code>, and scan the QR code. Everything above is in the open source repository.</p>
+<a href="https://github.com/TeoSlayer/shell.online">Read the shell.online source on GitHub</a>
+</div>
