@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-share-an-opencode-session-without-handing-over-your-provider-keys",
+    "title": "How to Share an OpenCode Session Without Handing Over Your Provider Keys",
+    "description": "After the OpenCode Console breach, rotate your provider key, then share an OpenCode run with a read-only link that keeps keys and auth.json out of reach.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "api-keys",
+      "read-only",
+      "credential-rotation"
+    ],
+    "iso_date": "2026-10-18",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-an-opencode-session-without-handing-over-your-provider-keys.webp"
+  },
+  {
     "slug": "how-to-steer-a-running-codex-turn-from-your-phone-and-keep-ctrl-x-working",
     "title": "How to Steer a Running Codex Turn From Your Phone and Keep Ctrl-X Working",
     "description": "Codex CLI 0.163 takes follow-ups mid-turn and makes Ctrl+X its leader key. Steer it from a phone through shell, and see where Ctrl-X goes when you attach.",

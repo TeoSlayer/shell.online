@@ -1,0 +1,79 @@
+<p>On October 17, OpenCode said on X that it had suffered a security breach the night before, "related to a large scale distillation attack", affecting 1.4% of OpenCode Console users, all of them people who had linked external providers. The email to those users, as <a href="https://officechai.com/ai/opencode-discloses-security-breach-says-attackers-may-have-accessed-users-openai-anthropic-and-google-api-keys/">OfficeChai reported it</a>, said the team had found unauthorized access to a legacy system it was decommissioning and that OpenAI, Anthropic and other provider keys saved in a workspace may have been exposed. OpenCode said it was working with OpenAI, Anthropic and Google, and that the incident was ongoing.</p>
+
+<p>The affected system was the hosted Console, where people store provider keys for OpenCode to use. <a href="https://startupfortune.com/opencode-breach-exposes-stored-openai-and-anthropic-keys-prompts-urgent-key-rotation/">Startup Fortune's write-up</a> notes that the company has not said whether keys held in local config files were exposed, and the advice in both comes down to revoking and reissuing keys in each provider's own dashboard and checking recent usage. Startup Fortune adds spending limits and a review of usage back to October 17. Anyone who uses <a href="https://github.com/anomalyco/opencode">OpenCode</a>, the open source terminal agent, will then put a fresh key into a local copy of it.</p>
+
+<p>That local agent is the subject of this guide. If you run it through shell.online so a teammate can follow along, the key it needs lives on the same computer as the session you are sharing. This guide puts the new key in place without showing it to anyone, starts a session your viewers can watch but not type into, keeps the files panel away from OpenCode's credential file, and closes access when the review is over. Everything below was checked against shell.online 0.25.0, the current release.</p>
+
+<section>
+<h2>Why an interactive link reaches your keys</h2>
+<p><code>shell opencode</code> starts OpenCode in a pseudo-terminal on your computer and prints a browser link and a password. The <a href="/security/">security page</a> is blunt about what that link gives: anyone with the complete link and password can view and type with the wrapped process's operating-system permissions. Payloads are encrypted between your computer and each browser, so the relay cannot read them, but encryption decides who can see the session, not what a viewer is allowed to do once inside.</p>
+<p>OpenCode makes this concrete. Its <a href="https://opencode.ai/docs/tui/">TUI documentation</a> says that starting a message with <code>!</code> runs a shell command and adds the output to the conversation. A viewer on an interactive link can type <code>!env</code> and read every variable OpenCode was started with, or print the credentials file. The <a href="https://opencode.ai/docs/cli/">CLI reference</a> says credentials are stored at <code>~/.local/share/opencode/auth.json</code>, and the <a href="https://opencode.ai/docs/providers/">providers page</a> lists the environment variables it reads for Bedrock, Vertex, NVIDIA and others.</p>
+<p>shell itself already keeps one secret out of that environment. Since 0.24.1 the session's browser password travels between shell's own processes over a pipe, and the wrapper strips <code>SHELL_ONLINE_E2EE_PASSWORD</code> and its other internal variables before it starts your program. The changelog gives the reason, and Pilot's write-up of the change, <a href="https://pilotprotocol.network/blog/end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli">a second secret on the host</a>, walks through it: any program running as the same user could read it, and on Linux <a href="https://man7.org/linux/man-pages/man5/proc_pid_environ.5.html"><code>/proc/&lt;pid&gt;/environ</code></a> keeps the environment a program started with, for as long as it runs. I read that stripping in the Unix session code; I did not check the Windows path. shell leaves your own variables alone, so an exported <code>OPENAI_API_KEY</code> reaches OpenCode, which is what you want for the provider it calls.</p>
+</section>
+
+<section>
+<h2>Step 1: Replace the key in a terminal nobody is watching</h2>
+<p>Revoke the old key in the provider's dashboard first, then create a new one. Do this in a plain terminal window that is not wrapped by shell. Anything that appears on a shared screen reaches every browser that has the link, and the relay also keeps a bounded copy of the last screen for offline viewing, encrypted in the default mode.</p>
+<p>Then swap the key inside OpenCode:</p>
+<pre><code>opencode auth logout
+opencode auth login
+opencode auth list</code></pre>
+<p><code>logout</code> clears a provider from the credentials file, <code>login</code> configures a provider's key, and <code>list</code> prints the providers stored there, so you can confirm the new entry exists before you share anything. If you supply keys through your shell profile instead, update the export there and open a fresh terminal so the old value is gone from the environment.</p>
+<p>While you are in the dashboards, the general advice applies. <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">OWASP's Secrets Management Cheat Sheet</a> recommends rotating so a stolen credential only works for a short time, and Google's <a href="https://docs.cloud.google.com/docs/authentication/api-keys-best-practices">best practices for managing API keys</a> say to restrict each key and delete the ones you no longer use.</p>
+</section>
+
+<section>
+<h2>Step 2: Start OpenCode without the keys it does not need</h2>
+<p>A process only needs the keys for the providers it will call in this session. If your profile exports several, start shell with the extras removed:</p>
+<pre><code>env -u GOOGLE_API_KEY -u NVIDIA_API_KEY \
+  shell --read-only --name "opencode review" opencode</code></pre>
+<p><a href="https://man7.org/linux/man-pages/man1/env.1.html"><code>env -u</code></a> removes a variable from the environment of the command it runs, and the flag exists on both GNU and macOS <code>env</code>. shell starts in that reduced environment and hands it on to OpenCode, so the removed keys are not in OpenCode's environment at all. Nothing changes in your own terminal. OpenCode still reads anything stored in <code>auth.json</code>, so a key you added with <code>opencode auth login</code> keeps working. If your OpenCode config refers to a key with the <code>{env:ANTHROPIC_API_KEY}</code> form the providers page documents, do not remove that one.</p>
+<p>Keeping keys out of environments where you can is a long-standing recommendation. MITRE files it as <a href="https://cwe.mitre.org/data/definitions/526.html">CWE-526, cleartext storage of sensitive information in an environment variable</a>, and the OWASP cheat sheet notes that environment variables are generally accessible to all processes and can end up in logs.</p>
+</section>
+
+<section>
+<h2>Step 3: Give viewers a read-only link</h2>
+<p>The command above already used <code>--read-only</code>. The start banner says so on the Access line, which reads <code>view only · end-to-end encrypted</code>, and the line under the QR code reads "Anyone who scans this can view this session." The <a href="/cli/">CLI reference</a> describes the flag as an immutable view-only session, and the security page adds that input is rejected by both the relay and the CLI, so a modified browser cannot turn it back into an interactive one. In the code, the host drops input and end-of-file frames from viewers when the session is read-only.</p>
+<p>Read-only applies to browsers, so you still drive OpenCode yourself from the computer it runs on:</p>
+<pre><code>shell list
+shell attach 3f9c2a</code></pre>
+<p><code>shell list</code> prints each local session with its ID, access mode, uptime and relay status. <code>shell attach</code> takes the ID or its first six or more characters and connects your terminal to OpenCode. Press Ctrl-X, release it, then press D to detach; OpenCode keeps running and the link stays live. An earlier post covers <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">when a read-only link is the right default for a coding agent</a>.</p>
+<div class="callout"><p><strong>Read-only stops typing, not reading.</strong> If OpenCode runs <code>cat .env</code> or prints a token in a stack trace, every viewer sees it, and the session password cannot take it back. Watch what the agent does with secrets, and keep files with keys out of the project directory it works in.</p></div>
+</section>
+
+<section>
+<h2>Step 4: If you share files, keep the root narrow</h2>
+<p>File access is off unless you ask for it. <code>--files</code> opens regular files under the command's working directory, and <code>--files-root</code> chooses another directory:</p>
+<pre><code>env -u GOOGLE_API_KEY -u NVIDIA_API_KEY \
+  shell --read-only --files-root ./artifacts --name "opencode review" opencode</code></pre>
+<p>The banner adds a Files line with the root and <code>on demand</code>. The browser gets nothing until a viewer asks for a file, and the CLI refuses parent traversal, device files and symlinks that point outside the root. A read-only link can still open files you opted in, which is why the root matters here. Never point it at your home directory, because <code>~/.local/share/opencode/auth.json</code> is a regular file under it.</p>
+</section>
+
+<section>
+<h2>Step 5: Send the password separately and rotate it afterward</h2>
+<p>The link holds only a random salt in its <code>#salt=</code> fragment, and the password is printed beside it. The QR code includes both, so the <a href="/e2ee/">encryption page</a> says to treat it as a bearer credential. Send the link in one channel and the password in another, and keep the QR out of screenshots.</p>
+<p>When the review is over, cut off everyone who joined without stopping OpenCode:</p>
+<pre><code>shell password rotate 3f9c2a</code></pre>
+<p>Rotation changes the password, URL salt and cipher, disconnects the current browsers, revokes existing MCP grants and updates your vault copy. The process keeps running, and you get a fresh link and password to give to whoever should keep access. To pick the replacement yourself, set <code>SHELL_ONLINE_E2EE_PASSWORD</code> for that one command. The earlier guide on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> goes through it in more detail. When the work is done, end the session:</p>
+<pre><code>shell kill -- 3f9c2a</code></pre>
+<p>That stops OpenCode and takes the link offline. Ordinary exit also closes the share, so you only need this when the agent would otherwise keep going.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does nothing about keys stored in the OpenCode Console. Those have to be revoked at each provider, which is Step 1.</li>
+<li>It does not hide keys from OpenCode. The agent needs a key to call a model, and its own tools run as you, so anything you can read, the agent can read.</li>
+<li>It does not scrub secrets from the screen. Read-only viewers see whatever the agent prints, and rotation cannot erase output somebody already saw.</li>
+<li>It does not keep the server out if you issue an MCP grant. A grant authorizes in-memory decryption on the server, and the controlling agent receives plaintext, as the <a href="/agents/">agents page</a> explains.</li>
+<li>End-to-end encryption does not protect against malicious code on your computer or in a viewer's browser.</li>
+<li><code>env -u</code> affects only the session you start with it. Other terminals, and the shell profile itself, still hold whatever you exported.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a network for autonomous agents in which every agent has its own Ed25519 key pair and a peer becomes reachable only after both sides agree to a handshake. The breach is a reminder of the same idea at a smaller scale: a credential is only as contained as the places it is copied to. Pilot's field note on <a href="https://pilotprotocol.network/blog/terminal-sharing-security-when-infostealers-go-after-coding-agents-what-shell-on">what shell.online leaves on disk and what to revoke when infostealers go after coding agents</a> lists the shell files on your own machine worth checking after an incident like this one. The source for everything above is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<div class="cta"><h3>Share the run, keep the key</h3><p>Install shell, rotate the provider key in a plain terminal, then start OpenCode with a read-only link for whoever needs to watch.</p><a href="/docs/">Read the shell.online quick start</a></div>
