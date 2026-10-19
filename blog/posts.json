@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-share-a-live-opencode-conversation-now-that-share-is-gone",
+    "title": "How to Share a Live OpenCode Conversation Now That /share Is Gone",
+    "description": "OpenCode retired /share on October 15. Fork the conversation you are in into an encrypted browser link a teammate can open, using shell opencode.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "terminal-sharing",
+      "conversation-fork",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-19",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-live-opencode-conversation-now-that-share-is-gone.webp"
+  },
+  {
     "slug": "how-to-share-an-opencode-session-without-handing-over-your-provider-keys",
     "title": "How to Share an OpenCode Session Without Handing Over Your Provider Keys",
     "description": "After the OpenCode Console breach, rotate your provider key, then share an OpenCode run with a read-only link that keeps keys and auth.json out of reach.",
