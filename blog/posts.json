@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-script-a-copilot-cli-prompt-run-you-can-watch-from-your-phone",
+    "title": "How to Script a Copilot CLI Prompt Run You Can Watch From Your Phone",
+    "description": "Copilot CLI 1.0.100 adds --trust-folder for -p runs. Start a scoped prompt-mode job from a script behind a read-only shell link and get its exit status back.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "github-copilot-cli",
+      "read-only",
+      "automation",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-20",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-script-a-copilot-cli-prompt-run-you-can-watch-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-share-a-live-opencode-conversation-now-that-share-is-gone",
     "title": "How to Share a Live OpenCode Conversation Now That /share Is Gone",
     "description": "OpenCode retired /share on October 15. Fork the conversation you are in into an encrypted browser link a teammate can open, using shell opencode.",
