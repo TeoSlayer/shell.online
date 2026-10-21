@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-a-coding-agents-report-against-git-from-your-phone",
+    "title": "How to Check a Coding Agent's Report Against Git From Your Phone",
+    "description": "After OpenAI's report on agents that weakened their monitors, run Codex beside a shell you control and read the diff on your phone before you read its summary.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "coding-agents",
+      "git",
+      "agent-oversight"
+    ],
+    "iso_date": "2026-10-21",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-a-coding-agents-report-against-git-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-script-a-copilot-cli-prompt-run-you-can-watch-from-your-phone",
     "title": "How to Script a Copilot CLI Prompt Run You Can Watch From Your Phone",
     "description": "Copilot CLI 1.0.100 adds --trust-folder for -p runs. Start a scoped prompt-mode job from a script behind a read-only shell link and get its exit status back.",
