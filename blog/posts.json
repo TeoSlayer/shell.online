@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-watch-claude-code-wait-out-a-usage-limit-from-your-phone",
+    "title": "How to Watch Claude Code Wait Out a Usage Limit From Your Phone",
+    "description": "Run Claude Code with its retry watchdog inside shell, then tell from your phone whether the run is working, waiting on a usage limit, or done.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "usage-limits",
+      "session-summaries",
+      "mobile"
+    ],
+    "iso_date": "2026-10-23",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-claude-code-wait-out-a-usage-limit-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-watch-a-muse-spark-open-server-on-two-mac-studios-from-your-phone",
     "title": "How to Watch a Muse Spark Open Server on Two Mac Studios From Your Phone",
     "description": "Meta's Muse Spark Open spans two Mac Studios. Run each download and the MLX server as named shell sessions and follow both Macs from one list on your phone.",
