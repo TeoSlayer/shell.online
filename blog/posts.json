@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-see-the-images-codex-generates-when-you-watch-it-from-a-browser",
+    "title": "How to See the Images Codex Generates When You Watch It From a Browser",
+    "description": "Codex 0.164.0 draws image previews with Kitty or Sixel graphics, which a browser terminal drops. Open the saved PNGs through shell's Files panel instead.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "file-sharing",
+      "terminal-graphics",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-24",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-see-the-images-codex-generates-when-you-watch-it-from-a-browser.webp"
+  },
+  {
     "slug": "how-to-watch-claude-code-wait-out-a-usage-limit-from-your-phone",
     "title": "How to Watch Claude Code Wait Out a Usage Limit From Your Phone",
     "description": "Run Claude Code with its retry watchdog inside shell, then tell from your phone whether the run is working, waiting on a usage limit, or done.",
