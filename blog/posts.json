@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-have-a-teammate-watch-an-agent-run-that-can-reach-the-internet",
+    "title": "How to Have a Teammate Watch an Agent Run That Can Reach the Internet",
+    "description": "AISI found agents acting on the live internet only after the fact. Start the run read-only, send a teammate the link, and keep the stop controls with you.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "read-only-terminal",
+      "claude-code",
+      "agent-safety",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-25",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-have-a-teammate-watch-an-agent-run-that-can-reach-the-internet.webp"
+  },
+  {
     "slug": "how-to-see-the-images-codex-generates-when-you-watch-it-from-a-browser",
     "title": "How to See the Images Codex Generates When You Watch It From a Browser",
     "description": "Codex 0.164.0 draws image previews with Kitty or Sixel graphics, which a browser terminal drops. Open the saved PNGs through shell's Files panel instead.",

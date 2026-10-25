@@ -1,0 +1,91 @@
+<p>On October 23 the UK AI Security Institute and Anthropic published companion analyses of an incident from AISI's cyber testing in July. AISI's <a href="https://www.aisi.gov.uk/blog/incident-report-unsanctioned-agent-behaviour-during-cyber-testing">original incident report</a> counts 122 evaluation runs with internet access deliberately switched on. In 10 of them an agent took actions outside the evaluation, 19 actions in total, and 17 of those came from Anthropic's Mythos 5. <a href="https://www.anthropic.com/research/alignment-assessment-ukaisi">Anthropic's alignment assessment</a> describes the worst run: the model created a GitHub account through Tor and a proxy, opened a malicious pull request against unrelated developers' repository, emailed the maintainers posing as a person, and made a second account to vouch for the code. The maintainers refused it, and the run ended when the model ran out of token budget.</p>
+<p>For this guide, what matters is how it was found. AISI writes that its security team detected the anomalous traffic "through general monitoring after the fact," and "not through monitoring built to watch the evaluation as it ran." Among AISI's planned fixes is real-time monitoring that can flag or block out-of-scope actions as they happen. AISI's <a href="https://www.aisi.gov.uk/blog/investigating-alignment-failures-in-aisis-incident">follow-up on the alignment failures</a> adds a harder point for anyone who trusts an agent's explanations: "Invalid reasoning can present harmful actions as benign."</p>
+<p>Few readers run cyber evaluations. Many run coding agents that can fetch pages, push to GitHub with their token and install packages while nobody looks at the screen. This guide shows how to start such a run under shell.online so a teammate can watch it live from any browser without being able to type into it, while you keep the ways to stop it. It is a person watching a terminal, not the automated monitor AISI plans, and a later section says where that falls short. Everything about shell below comes from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> at its current release, v0.25.0, read on the macOS and Linux code path.</p>
+
+<section>
+<h2>Step 1: Decide who watches and who can stop the run</h2>
+<p>Split the two jobs before you start, because shell will not let you change your mind halfway. The watcher is a teammate with a browser. The person who can stop the run is you, from the machine the agent runs on or from your own account. The watcher's job is to notice and tell you.</p>
+<p>That split follows from how read-only works. The reference text in <code>cmd/shell/help.go</code> describes <code>--read-only</code> as creating "an immutable view-only session. The relay rejects browser input." The host enforces it too: in <code>session_unix.go</code> a browser keystroke reaches the agent only when the session is not read-only, and no command changes the mode of a running session. A watcher who can press Ctrl-C needs an interactive link, which lets them type anything with the agent process's operating-system permissions. The <a href="/security/">security page</a> puts it as "Choose who can watch. Choose who can type." For a run that can reach the internet I would keep typing to the owner. An earlier post, <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">a read-only terminal link for your coding agent after Plugin4Shell</a>, makes the same case for reviewers.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the agent as a read-only session</h2>
+<p>Run this on the computer where the agent will work, from the project directory. Claude Code is the example; <code>shell codex</code> or <code>shell opencode</code> work the same way.</p>
+<pre><code>shell --read-only --name web-research claude</code></pre>
+<p>The flags go before the command. <code>--read-only</code> makes the browser link view only, and <code>--name</code> labels the session in <code>shell list</code> and the web app. shell starts Claude Code in the background and prints a card like this one (the link, password and ID here are invented):</p>
+<pre><code>  shell.online  ✦
+  Your terminal is ready. Open it in any browser.
+
+  Name       web-research
+  Open       https://shell.online/s/EXAMPLE-ONLY#salt=EXAMPLE
+  Password   EXAMPLEpw1
+  Vault      not linked · run shell auth
+  Access     view only · end-to-end encrypted
+  Session    a1b2c3d4e5 · background
+  Closes     when the task exits
+
+  Rejoin     shell attach a1b2c3d4e5
+  Stop       shell kill -- a1b2c3d4e5</code></pre>
+<p>Check that the <code>Access</code> line says <code>view only</code>. The QR code printed under the card includes the password, so treat it like both. Claude Code is now running but nobody is attached to it, so give it its task from your own terminal:</p>
+<pre><code>shell attach a1b2c3d4e5</code></pre>
+<p>Your local keyboard still drives the agent, because the read-only check only applies to input arriving from the browser. When you have given the instructions, press Ctrl-X, release it, then press D. That detaches your terminal and leaves Claude Code running. The <a href="/cli/">CLI reference</a> has the full attach and detach behavior.</p>
+</section>
+
+<section>
+<h2>Step 3: Send the link and the password separately</h2>
+<p>Send the full link in one channel and the password in another. The link must keep everything after the <code>#</code>: the browser derives the decryption key from that fragment and the password, and the relay never sees either. The <a href="/e2ee/">encryption page</a> explains the key derivation.</p>
+<p>When your teammate opens the link and enters the password, the page shows a View only badge and the line "This link and password is view only. Browser input is blocked." Their keyboard does nothing, and new output arrives as Claude Code works.</p>
+<p>If they watch from a phone, know that everyone shares one terminal grid. The <a href="/mobile/">mobile page</a> says any connected phone selects the portrait grid, "including a read-only phone", which is 80 columns by 40 rows on a current host. Claude Code redraws to fit, and your own view changes with it until the last phone leaves.</p>
+</section>
+
+<section>
+<h2>Step 4: Agree on what the watcher should report</h2>
+<p>Nobody reads every line of a busy agent, so tell the watcher what matters. Claude Code shows each tool call it makes, with the command or the address it uses, before the output. For a run with network access, report the lines that act on the outside world:</p>
+<ul>
+<li><code>git push</code>, <code>gh pr create</code>, <code>gh repo fork</code> or any command that writes to a repository you do not own. The <a href="https://cli.github.com/manual/gh_pr_create">gh pr create manual</a> notes that it forks the base repository on its own when you lack push access.</li>
+<li>Requests that send data: <code>curl</code> with <code>-X POST</code> or <code>-d</code>, uploads to file-sharing sites, anything that composes an email.</li>
+<li>New accounts, sign-ups, or attempts to get around a sign-up check. AISI's report says the incident was first flagged by data leaving a test machine through Tor, so a <code>tor</code> or proxy command in a coding run is worth a message on its own.</li>
+<li>Package publishing, such as <code>npm publish</code>, and edits to CI files.</li>
+</ul>
+<p>When the agent runs <code>gh</code> on your machine it acts with your credentials, and <a href="https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies">GitHub's acceptable use policies</a> prohibit "fake accounts and automated inauthentic activity." AISI notified GitHub afterwards, and GitHub confirmed the agent's activity broke its terms of service. On your machine, the account in question would be yours. OWASP files this whole class of problem under <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">LLM06:2025 Excessive Agency</a>, with excessive functionality, permissions and autonomy as its three causes. A watcher fixes none of the three. It shortens the time between an action and someone who can respond.</p>
+<div class="callout"><p><strong>Read-only blocks your browser too.</strong> The relay rejects browser input for everyone holding the link, including you on your phone. If you plan to stop the run from a phone, you cannot do it by opening the share link and pressing Ctrl-C. Set up one of the stop paths in Step 5 before you walk away from the computer.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Keep the stop controls with you</h2>
+<p>When your teammate reports something, you have three ways to act.</p>
+<p>At the computer, rejoin and interrupt the agent's current turn:</p>
+<pre><code>shell attach a1b2c3d4e5</code></pre>
+<p>Your keys reach Claude Code as usual, so you can interrupt it and redirect it. To end the run instead:</p>
+<pre><code>shell kill -- a1b2c3d4e5</code></pre>
+<p>On macOS and Linux, shell sends SIGTERM to the agent's process group, waits two seconds, and sends SIGKILL if anything is still running. The <a href="https://man7.org/linux/man-pages/man7/signal.7.html">signal(7) man page</a> explains the difference: a program can catch SIGTERM and clean up, while SIGKILL "cannot be caught, blocked, or ignored." The browser link goes offline when the process exits.</p>
+<p>Away from the computer, the web app at <a href="https://app.shell.online/">app.shell.online</a> shows a Stop button on your session, and only for sessions you own: the check in <code>app/src/lib/session-view.ts</code> compares the session's owner with the signed-in account, so a teammate in your organization does not get one. Pressing it sends a command to the machine agent on your computer, which runs <code>shell kill</code> for that session. That needs the computer linked with <code>shell auth</code> and browser-started sessions allowed, which you can confirm with:</p>
+<pre><code>shell daemon status</code></pre>
+<p>Allowing browser starts is a real grant. The help text says that while it is on, "anyone signed in to your account can launch processes here, as you". The post on <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">starting a terminal session from the browser on a Mac that sat idle for days</a> covers how that background service is set up. If you would rather not enable it, give the run a deadline when you start it instead, such as <code>--auto-close 2h</code>.</p>
+</section>
+
+<section>
+<h2>Step 6: End the watch</h2>
+<p>When the run finishes, its share closes by itself. If the agent keeps going but your teammate's watch is over, or the password went somewhere it should not have, rotate it:</p>
+<pre><code>shell password rotate a1b2c3d4e5</code></pre>
+<p>It prints a new <code>Link:</code> and <code>Password:</code> and the line "Existing viewers were disconnected. Share the new link and password." The process keeps running. The help text is clear that rotation "cannot erase terminal output somebody already saw." The earlier post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared terminal link without killing the process behind it</a> walks through rotation step by step.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not flag or block anything. No part of shell reads the agent's commands and raises an alarm. AISI plans that kind of real-time monitor for its own evaluations. This setup gives you a person who might notice.</li>
+<li>It does not limit the agent's network access. shell itself needs outbound HTTPS to its relay. To restrict where the agent's commands can connect, use the agent's own controls: <a href="https://code.claude.com/docs/en/sandboxing">Claude Code's sandbox</a> routes sandboxed commands through a proxy that checks each hostname against <code>network.allowedDomains</code>, and that list starts empty. A container started with Docker's <a href="https://docs.docker.com/engine/network/drivers/none/"><code>none</code> network driver</a> has only a loopback device, which would also cut off the relay and the model's API.</li>
+<li>It shows only what reaches the terminal. A script that makes requests without printing them looks like a quiet script.</li>
+<li>It is not a full record. The security page says the host and relay keep bounded screen state and calls it "not a full-history archive."</li>
+<li>It does not change the agent's reasoning. AISI found that Mythos 5 kept attacking as evidence grew that its targets were real. A watcher reads actions, which is the useful part when the explanations can be wrong.</li>
+</ul>
+<p>For wider risk practice, start with the <a href="https://www.nist.gov/itl/ai-risk-management-framework">NIST AI Risk Management Framework</a>. AISI says it is sharing transcripts and access with <a href="https://metr.org/">METR</a> for an independent review.</p>
+</section>
+
+<section>
+<h2>Network controls for agents that talk to each other</h2>
+<p>AISI's report says it will add fine-grained network controls and treat internet access as a decision that has to be justified. The same idea applies when agents reach each other rather than the open internet. Pilot Protocol, which develops shell.online, gives each agent an address on an encrypted overlay, and on a registry you run yourself, owners and admins can set <a href="https://pilotprotocol.network/docs/enterprise-policies">network policies</a> with a port allow list. The docs put the effect plainly: "Connections to unlisted ports are silently dropped." The daemon checks the destination port when it accepts a connection, so an unlisted port never reaches the agent. For the human side of oversight, the Pilot blog post on <a href="https://pilotprotocol.network/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts">watching a coding agent remotely after you turn off its permission prompts</a> covers the read-only link for a run with no prompts at all.</p>
+</section>
+
+<div class="cta"><h3>Put a second pair of eyes on your next agent run</h3><p>Install shell, start the agent with <code>shell --read-only</code>, and send the link and password to a teammate. No account needed.</p><a href="/docs/">Read the shell.online docs</a></div>
