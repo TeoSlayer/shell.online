@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-control-which-folder-a-shared-coding-agent-starts-in",
+    "title": "How to Control Which Folder a Shared Coding Agent Starts In",
+    "description": "A planted AGENTS.md in Downloads can steer Codex or Claude Code. See where shell starts each session, check the folder, and pin it from your phone.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "agents-md",
+      "prompt-injection",
+      "remote-start",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-26",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-control-which-folder-a-shared-coding-agent-starts-in.webp"
+  },
+  {
     "slug": "how-to-have-a-teammate-watch-an-agent-run-that-can-reach-the-internet",
     "title": "How to Have a Teammate Watch an Agent Run That Can Reach the Internet",
     "description": "AISI found agents acting on the live internet only after the fact. Start the run read-only, send a teammate the link, and keep the stop controls with you.",
