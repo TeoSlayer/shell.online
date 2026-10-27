@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-retire-a-machine-you-linked-to-shell-online-for-agent-runs",
+    "title": "How to Retire a Machine You Linked to shell.online for Agent Runs",
+    "description": "Arrakis found most enabled AI agents idle with live credentials. Retire a shell.online machine: revoke grants, stop shares, remove the service, unlink.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "offboarding",
+      "remote-start",
+      "credential-hygiene",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-27",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-retire-a-machine-you-linked-to-shell-online-for-agent-runs.webp"
+  },
+  {
     "slug": "how-to-control-which-folder-a-shared-coding-agent-starts-in",
     "title": "How to Control Which Folder a Shared Coding Agent Starts In",
     "description": "A planted AGENTS.md in Downloads can steer Codex or Claude Code. See where shell starts each session, check the folder, and pin it from your phone.",
