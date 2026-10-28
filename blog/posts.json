@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-keep-a-record-of-who-prompted-a-shared-codex-session",
+    "title": "How to Keep a Record of Who Prompted a Shared Codex Session",
+    "description": "Trial GPT-6.1 Terra in one Codex session your team can type into, then read the sealed audit log of who sent each prompt and interrupt.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "audit-log",
+      "team-sharing",
+      "gpt-6-1-terra"
+    ],
+    "iso_date": "2026-10-28",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-record-of-who-prompted-a-shared-codex-session.webp"
+  },
+  {
     "slug": "how-to-retire-a-machine-you-linked-to-shell-online-for-agent-runs",
     "title": "How to Retire a Machine You Linked to shell.online for Agent Runs",
     "description": "Arrakis found most enabled AI agents idle with live credentials. Retire a shell.online machine: revoke grants, stop shares, remove the service, unlink.",
