@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-read-the-exact-report-your-machine-would-send-to-shell-online",
+    "title": "How to Read the Exact Report Your Machine Would Send to shell.online",
+    "description": "Preview the gathering report with shell stats before it sends anything: what each count comes from, what --dir scopes, and what a linked machine sends.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "telemetry",
+      "privacy",
+      "coding-agents",
+      "cli"
+    ],
+    "iso_date": "2026-10-29",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-read-the-exact-report-your-machine-would-send-to-shell-online.webp"
+  },
+  {
     "slug": "how-to-keep-a-record-of-who-prompted-a-shared-codex-session",
     "title": "How to Keep a Record of Who Prompted a Shared Codex Session",
     "description": "Trial GPT-6.1 Terra in one Codex session your team can type into, then read the sealed audit log of who sent each prompt and interrupt.",
