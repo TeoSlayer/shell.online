@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-what-a-coding-agent-left-running-after-you-stop-its-terminal",
+    "title": "How to Check What a Coding Agent Left Running After You Stop Its Terminal",
+    "description": "What shell kill and an agent's own exit stop on macOS, Linux and Windows, how to list what a session left running, and how to give a dev server its own stop.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "process-groups",
+      "signals"
+    ],
+    "iso_date": "2026-10-31",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-what-a-coding-agent-left-running-after-you-stop-its-terminal.webp"
+  },
+  {
     "slug": "how-to-keep-a-shared-agent-terminals-password-apart-from-its-link",
     "title": "How to Keep a Shared Agent Terminal's Password Apart From Its Link",
     "description": "Choose your own session password, send it apart from the link, open it in an ordinary browser, and know when the QR code and copy button carry it too.",
