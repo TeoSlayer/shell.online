@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-tell-which-of-your-agent-terminals-needs-you-from-one-browser-tab",
+    "title": "How to Tell Which of Your Agent Terminals Needs You From One Browser Tab",
+    "description": "Open several named agent sessions as tabs in the shell.online app, read the badge each tab shows, see which prompts it catches, and check the rest with shell ls.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "codex",
+      "multi-agent",
+      "terminal-monitoring"
+    ],
+    "iso_date": "2026-11-01",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-tell-which-of-your-agent-terminals-needs-you-from-one-browser-tab.webp"
+  },
+  {
     "slug": "how-to-check-what-a-coding-agent-left-running-after-you-stop-its-terminal",
     "title": "How to Check What a Coding Agent Left Running After You Stop Its Terminal",
     "description": "What shell kill and an agent's own exit stop on macOS, Linux and Windows, how to list what a session left running, and how to give a dev server its own stop.",

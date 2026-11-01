@@ -1,0 +1,110 @@
+<p>On October 31 DeepSeek published <a href="https://github.com/deepseek-ai/dsh-superagent-prototype">dsh-superagent</a>, an MIT-licensed research prototype of a coding agent that works on one GitHub repository and, optionally, listens to Feishu chats. The README calls it "not an official DeepSeek product". It runs as a bundle for <a href="https://www.deepseek.com/en/harness/">DeepSeek Harness</a>, the company's open source agent harness. When an allowed person asks for work, a main session routes the request, and each piece of work runs in its own worker session and directory. <a href="https://thenextweb.com/news/deepseek-super-agent-open-source-coding-agent">The Next Web's report</a>, citing Bloomberg, says DeepSeek aims it at Anthropic's Claude Code, and the README itself says the published code is not identical to the internal version.</p>
+<p>The part worth reading even if you never install it is the design principle. The <a href="https://github.com/deepseek-ai/dsh-superagent-prototype/blob/main/docs/000-philosophy.md">philosophy document</a> says: "Take as little human attention as possible, and give as much value as possible." The <a href="https://github.com/deepseek-ai/dsh-superagent-prototype/blob/main/docs/005-panel.md">panel document</a> turns that into three questions the supervisor's screen answers in order. The first is "Does anything need me now?" The second is whether the system is healthy. The third is the history of one piece of work.</p>
+<p>If you run three or four coding agents yourself, each in its own terminal, nobody has built that panel for you. You are the router, and you answer the first question by clicking through every window. This guide sets up the closest thing shell.online has: named sessions from a linked machine, opened as tabs in the web app, where each tab carries a small badge computed from the output your browser already receives. It also shows which lines the badge recognises, why a Codex approval prompt is not one of them, and how to check the machine side from a terminal.</p>
+
+<section>
+<h2>Step 1: Link the machine that runs the agents</h2>
+<p>The tabs live in the <a href="/app/">web app</a>, and the app lists sessions only from machines linked to your account. Linking is optional for plain sharing, but this setup needs it. On the computer that will run the agents:</p>
+<pre><code>shell auth
+shell whoami</code></pre>
+<p><code>shell auth</code> opens a browser approval page and links this machine, so its sessions appear at app.shell.online. Remote start is a separate choice during setup, and you do not need it here. <code>shell whoami</code> prints the linked account.</p>
+</section>
+
+<section>
+<h2>Step 2: Start each agent as a named session</h2>
+<p>Give every session a name you will recognise in a tab strip. The command name alone is not enough when two tabs both say <code>codex</code>.</p>
+<pre><code>cd ~/src/example-api
+shell --name "api: retry fix" codex
+
+cd ~/src/example-docs
+shell --name "docs: install page" claude
+
+cd ~/src/example-api
+shell --name "api: nightly checks" -- ./checks.sh</code></pre>
+<p>Each command starts the program in the background on this machine and prints a browser link, a session password and a QR code. The <code>--name</code> label shows in <code>shell list</code>, <code>shell ls</code> and the web app, where it can be renamed later. The <code>--</code> before <code>./checks.sh</code> tells shell that everything after it is the command to run. The <a href="/cli/">CLI reference</a> lists the other start options, and an <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">earlier post on naming sessions</a> covers labels across several machines.</p>
+<p>How many to start is your call. My own view is that three tabs you actually read beat eight you scan past.</p>
+</section>
+
+<section>
+<h2>Step 3: Open them as tabs and read the badge</h2>
+<p>Sign in at app.shell.online, open each session from the list, and enter its password or open your personal vault if the password is stored there. A listing alone does not decrypt anything. Tabs stay connected while you switch between them, and that is what makes the badge work: a background tab keeps receiving output, so its badge keeps updating.</p>
+<p>The badge is the session pulse, and its code is short enough to read in one sitting in <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/src/terminal/session-pulse.ts">session-pulse.ts</a>. On a tab it is compact: a dot, plus either a hint label or the words New output. Hover over it for the full description. What drives it:</p>
+<ul>
+<li><strong>Activity.</strong> The dot reflects one of three states: Not observed, Output active, or Quiet. A tab turns Quiet after 15 seconds without new bytes. The app recomputes the badge at most once a second.</li>
+<li><strong>New output.</strong> Bytes that arrive while you are not looking at a pane are counted, up to 1 MiB, and shown as New output. Looking at the pane clears the count.</li>
+<li><strong>Hints.</strong> Three fixed labels: Input may be needed, Context limit reported, and Test result reported. A hint expires after two minutes. The label is chosen by the app; no text from the terminal is ever copied into it.</li>
+</ul>
+<p>The tracker strips control sequences of the kind defined in <a href="https://ecma-international.org/publications-and-standards/standards/ecma-48/">ECMA-48</a> before it looks at text, decodes with a streaming <a href="https://developer.mozilla.org/en-US/docs/Web/API/TextDecoder/decode">TextDecoder</a> so a character split across two frames survives, and drops any line longer than 1,024 characters. A screen replay after a reconnect can replace a hint but does not count as new output.</p>
+<p>The <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">post that introduced the pulse in v0.22</a> explains why it reports observations and not agent state.</p>
+</section>
+
+<section>
+<h2>Step 4: Know which lines raise a hint</h2>
+<p>A hint fires only when a whole line, after trimming spaces, matches one of a few patterns. I ran the tracker from the repository against sample lines to check them. These raise Input may be needed:</p>
+<pre><code>Approval required.
+Allow this command? [y/n]
+Proceed? [y/n]</code></pre>
+<p>These raise Test result reported. They are the summary lines printed by <a href="https://vitest.dev/guide/cli">Vitest</a>, <a href="https://jestjs.io/docs/cli">Jest</a>, <a href="https://docs.pytest.org/en/stable/how-to/output.html">pytest</a> and <a href="https://doc.rust-lang.org/cargo/commands/cargo-test.html">cargo test</a>:</p>
+<pre><code>Tests  2 failed | 3 passed (5)
+Tests:       2 failed, 3 passed, 5 total
+===== 3 passed in 0.12s =====
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out</code></pre>
+<p>And <code>Error: context window exceeded</code> raises Context limit reported. These, on the other hand, raise nothing:</p>
+<pre><code>Would you like to run the following command?
+Do you want to proceed?
+&gt; Approval required.</code></pre>
+<p>The first is the title Codex gives its command approval overlay. In the <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/tui/src/bottom_pane/approval_overlay.rs">approval overlay source for Codex 0.164.0</a> it reads "Would you like to run the following command?", with no <code>[y/n]</code> after it, so none of the patterns match. The same file asks "Do you want to approve network access to" a host for network requests, and that misses too. The third fails because the line has to start with the phrase; a quote marker or a box border in front of it is enough to miss.</p>
+<div class="callout"><p><strong>A Codex session waiting for your approval gets no hint.</strong> Its tab can only tell you that output stopped. If the screen stops changing for 15 seconds the dot goes Quiet; if anything on the screen keeps redrawing, such as a clock, the tab stays Output active, because the tracker counts any new bytes as output. Read Quiet as "go and look", never as "it is waiting for me", and do not assume a tab with no hint is busy.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Make your own scripts ask in a way the tab sees</h2>
+<p>For the commands you write yourself, you can choose the wording. The <code>checks.sh</code> session from Step 2 can stop and ask before a step that needs a person, using the <code>read</code> builtin, whose <code>-p</code> option, as the <a href="https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html">Bash manual</a> puts it, will "Display prompt, without a trailing newline, before attempting to read any input":</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+npx vitest run
+
+read -r -p "Proceed? [y/n] " answer
+[ "$answer" = "y" ] || exit 1
+
+./deploy-preview.sh</code></pre>
+<p>The Vitest summary line raises Test result reported when the tests finish. The prompt then raises Input may be needed even though it has no newline after it, because the tracker checks the line it is holding at the end of every chunk of output; I confirmed that case against the tracker as well. The hint expires after two minutes, while the New output marker stays until you view the tab or the connection drops, so a prompt you miss for a while still leaves a sign. You can answer from a phone too; see the <a href="/mobile/">mobile guide</a>.</p>
+</section>
+
+<section>
+<h2>Step 6: Check the machine side with shell ls</h2>
+<p>The badge only knows what your browser saw. The second of DeepSeek's questions, whether the system is healthy, is better answered from the account's own records. From any linked machine:</p>
+<pre><code>shell ls
+shell ls --all</code></pre>
+<p><code>shell ls</code> lists the sessions you started on every linked machine, newest first, with ID, name, status, uptime, machine and command. Ended sessions are hidden and counted; <code>--all</code> includes them. The status column uses the same words as the web app:</p>
+<ul>
+<li><code>online</code> or <code>starting</code>: the host is connected or on its way.</li>
+<li><code>offline</code>: the host dropped its connection recently and may come back.</li>
+<li><code>machine gone</code>: the host has been away for ten minutes and is treated as over, unless the session is persistent.</li>
+<li><code>finished</code>: the process exited. This is not proof that the work succeeded; <code>shell ls --json</code> includes the exit code when there is one.</li>
+<li><code>unavailable</code> or <code>unknown</code>: the relay has no usable record right now. Check the machine before assuming the process stopped.</li>
+</ul>
+<p><code>shell ls</code> never prints a password. To stop a session, run <code>shell kill -- &lt;ID&gt;</code> on the machine that started it. The <a href="/reliability/">reliability guide</a> covers what to do when a session shows offline.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not notify you. There is no push notification and no sound. You see the badge when you look at the tab strip.</li>
+<li>It covers only tabs you have open, in the browser you have open. Close the tab or the browser and that session has no pulse. Nothing is stored, and a session you never opened shows no badge at all.</li>
+<li>It does not know what an agent is doing. Quiet means no bytes for 15 seconds. A hint means a line matched a pattern. Neither proves an agent is idle, finished, stuck or successful, and the tooltip says so.</li>
+<li>It does not recognise every agent's prompts. As Step 4 shows, a Codex approval prompt raises no hint, and an agent that wraps its question in a border or a marker will miss as well.</li>
+<li>It does not route work. DeepSeek's prototype has a main session that hands work to workers and a panel built from reports the workers send. shell shows you terminals; deciding which one to answer is still yours.</li>
+<li>It does not answer the third panel question. For the history of one session you have its scrollback, and the opt-in, owner-only session summaries you turn on with <code>shell permissions &lt;ID&gt; --summaries=true</code>.</li>
+</ul>
+<p>The badge can only be computed in your browser because, for a browser share, the relay never holds the plaintext; the <a href="/e2ee/">encryption page</a> explains why, and the <a href="/security/">security page</a> covers who can watch.</p>
+</section>
+
+<section>
+<h2>Where agents report for themselves</h2>
+<p>The difference between the two designs is where the signal comes from. A browser tab guesses from bytes on a screen. DeepSeek's workers file reports such as ready, waiting, blocked or failed, and the panel derives each piece of work's stage from them in a table the <a href="https://github.com/deepseek-ai/dsh-superagent-prototype/blob/main/docs/003-execution.md">execution document</a> lays out row by row. Once agents run on more than one machine, that kind of report needs a way for one agent to reach another directly.</p>
+<p>That is the layer <a href="https://pilotprotocol.network/">Pilot Protocol</a>, the team behind shell.online, works on: each agent gets an address and an encrypted tunnel to the peers it trusts. The Pilot post on <a href="https://pilotprotocol.network/blog/build-agent-swarm-self-organizes">building a self-organizing agent swarm</a> shows agents announcing their role on a pub/sub topic and building their own roster from those announcements, with no central scheduler. A worker that announces it needs a person beats a tab that went quiet. Until your agents do that, the tab strip and <code>shell ls</code> are the panel, and the source for both is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<div class="cta"><h3>Put your agents in tabs you can scan</h3><p>Link a machine with shell auth, start each agent with a name, and open them side by side in the web app. Encrypted end to end, with the badge computed in your own browser.</p><a href="/docs/">Read the shell.online docs</a></div>
