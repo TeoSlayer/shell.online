@@ -1,0 +1,96 @@
+<p>GitHub released <a href="https://github.com/github/copilot-cli/releases/tag/v1.0.100">Copilot CLI 1.0.100</a> on October 19. Two of its additions are for people who start Copilot and walk away: a <code>--trust-folder</code> flag "for one-off prompt-mode sessions started with -p or piped stdin", and a <code>--disable-client-telemetry</code> flag that turns off client telemetry uploads from the CLI. Prompt mode is the form you put in a script or a scheduled job. GitHub's <a href="https://docs.github.com/en/enterprise-cloud@latest/copilot/reference/copilot-cli-reference/cli-programmatic-reference">programmatic reference</a> describes <code>-p</code> as running a prompt in non-interactive mode and exiting when it is done.</p>
+
+<p>A run like that has nobody watching it. It edits files and runs commands with the tools you allowed, prints its progress to a terminal you are not looking at, and exits. If it stalls or wanders somewhere unexpected, you find out when you come back. The new flag also makes it easier to hand one run more of the repository's own configuration, which is a reason to look harder at what the run may do.</p>
+
+<p>This guide puts a prompt-mode run behind a <a href="/">shell.online</a> link you can open on your phone, and concentrates on the parts a script needs. You will scope the Copilot command, keep the prompt out of the recorded command line, start the run as a view-only share with a deadline, collect the link as JSON, and get Copilot's exit status back. The earlier guide to <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching a coding agent after you turn off its permission prompts</a> covers the viewing side for a headless Claude Code run. The shell behavior below comes from the 0.25.0 help text and source.</p>
+
+<section>
+<h2>What --trust-folder trusts, and what it does not</h2>
+<p>The reference is specific. <code>--trust-folder</code> trusts the working directory's hooks, workspace MCP servers and repository plugin settings. The trust is not saved to <code>trustedFolders</code>, it does not extend to parent or sibling directories, managed policy still applies, and the flag grants no tool, path or URL permissions. GitHub's own advice on the flag is "Only use this for configuration you have reviewed." A hook in a repository you did not write is code that runs on your machine, so read it first or leave the flag off.</p>
+<p>Permissions come from a different place. GitHub's guide to <a href="https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/run-cli-programmatically">running Copilot CLI programmatically</a> grants them with <code>--allow-tool</code>, using forms such as <code>shell(git:*)</code> for one command family and <code>write</code> for file edits, and it advises against <code>--allow-all</code> outside a sandbox. That is the same rule OWASP lists under <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">LLM06:2025 Excessive Agency</a>: limit the extensions an agent may call to the minimum necessary. NIST's glossary calls it <a href="https://csrc.nist.gov/glossary/term/least_privilege">least privilege</a>. A watched run does not change that rule. It only means you see sooner when the rule was too loose.</p>
+</section>
+
+<section>
+<h2>Step 1: Install shell and check both versions</h2>
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell --version
+copilot --version</code></pre>
+<p><code>shell --version</code> prints <code>shell 0.25.0</code> for the current release. On Windows, the <a href="/platforms/">platforms page</a> has the PowerShell installer instead. Copilot needs to be 1.0.100 or later for the two flags above; the <a href="https://github.com/github/copilot-cli">Copilot CLI repository</a> has the install instructions.</p>
+</section>
+
+<section>
+<h2>Step 2: Put the prompt in a script</h2>
+<p>shell records the command it starts. On this machine that record is what <code>shell list</code> prints. If you linked the machine with <code>shell auth</code>, the same command goes to your account, where <code>shell ls</code> and the web app show it. The help text calls this the command name. In the 0.25.0 source the field holds the whole command line as shell displays it, arguments included, and a prompt passed with <code>-p</code> is an argument. A prompt that mentions a customer, an internal hostname or a ticket would sit in that list, and on the account it stays after the run ends, because <code>shell ls --all</code> shows ended sessions too.</p>
+<p>A short script keeps the recorded command to its own file name:</p>
+<pre><code>#!/bin/sh
+exec copilot -p 'Fix all ESLint errors in this project' \
+  --allow-tool='write, shell(npx:*)' \
+  --no-ask-user \
+  --disable-client-telemetry \
+  --share=./copilot-lint.md</code></pre>
+<p>Save it as <code>copilot-lint.sh</code> and run <code>chmod +x copilot-lint.sh</code>. Each flag comes from GitHub's documentation:</p>
+<ul>
+<li><code>-p</code> runs the prompt without an interactive session and exits when done.</li>
+<li><code>--allow-tool='write, shell(npx:*)'</code> lets Copilot edit files and run <code>npx</code> commands. GitHub's own ESLint example also allows <code>npm</code> and <code>git</code>. I left both out: this job needs no commits, and I would rather read the diff myself. Note that <a href="https://docs.npmjs.com/cli/v11/commands/npx">npx</a> runs a command from a package installed locally or fetched remotely, so keep ESLint in the project's dev dependencies.</li>
+<li><code>--no-ask-user</code> stops the agent from pausing to ask you something. Nobody would be there to answer.</li>
+<li><code>--disable-client-telemetry</code> is new in 1.0.100.</li>
+<li><code>--share=./copilot-lint.md</code> exports the session transcript to a Markdown file after a non-interactive run completes.</li>
+</ul>
+<p><code>exec</code> replaces the script's shell with Copilot, so the process shell wraps is Copilot itself and its exit status is the script's. Add <code>--trust-folder</code> only if the run needs the repository's hooks or MCP servers and you have read them.</p>
+</section>
+
+<section>
+<h2>Step 3: Start it as a view-only share with a deadline</h2>
+<pre><code>shell --read-only --name "copilot lint" --auto-close 30m -- ./copilot-lint.sh</code></pre>
+<p><code>--read-only</code> creates a view-only session: the relay rejects browser input, so anyone with the link can watch and nobody can type into Copilot. <code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app. <code>--auto-close 30m</code> adds a deadline on top of the normal rule that the share closes when the task exits. <code>--</code> marks the end of shell's own options.</p>
+<p>When the deadline arrives, the macOS and Linux code sends SIGTERM to the process group, waits two seconds, then sends SIGKILL, which the <a href="https://man7.org/linux/man-pages/man7/signal.7.html">signal(7) man page</a> notes cannot be caught, blocked or ignored.</p>
+<p>shell prints a session card and returns while Copilot keeps running. The card shows the link, the password, <code>view only · end-to-end encrypted</code> on the Access line, the session ID marked <code>background</code>, the closing time followed by "or when the task exits", and the <code>shell attach</code> and <code>shell kill</code> commands for this session. In an interactive terminal it also draws a QR code.</p>
+<p>Short prompts can catch you here. If the task exits during the startup handshake, shell prints its exit status and no link at all.</p>
+</section>
+
+<section>
+<h2>Step 4: Open it on your phone</h2>
+<p>Scan the QR code. It carries the link and the password in the URL fragment, the part after <code>#</code>, which <a href="https://www.rfc-editor.org/rfc/rfc3986#section-3.5">RFC 3986</a> says is dereferenced solely by the user agent. shell's help says the same in its own terms: fragments never reach the relay. That makes the QR code a credential. The <a href="/mobile/">phone guide</a> covers the viewer itself.</p>
+<p>Back at the desk, <code>shell list</code> shows each local session's ID, access mode, uptime, closing rule, command, share URL, whether a password is stored and the relay status. The command column now reads <code>./copilot-lint.sh</code> and nothing more. To stop the run before its deadline, use <code>shell kill -- &lt;ID&gt;</code> with the ID or its first six characters.</p>
+<div class="callout"><p><strong>The link closes when the job does.</strong> A tab that was open when Copilot exited keeps what it drew and adds "Session ended. This sharing link no longer exists." Opening the link after that, or a tab reconnecting after the end, shows "Session no longer exists. The task ended or the sharing link expired." shell gives you no way to read the output once the session is over. The transcript from <code>--share</code> is your record. The reference says Copilot writes it after the run completes, so a run that the deadline stops may leave no file at all.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Start it from a script and pass the link on</h2>
+<p>For cron or CI, ask shell for the session event as JSON instead of the card:</p>
+<pre><code>umask 077
+shell --json --read-only --name "copilot lint" --auto-close 30m \
+  -- ./copilot-lint.sh 2&gt; session.json
+jq -r .share_url session.json
+jq -r .e2ee_password session.json</code></pre>
+<p><code>--json</code> writes the new-session event as one JSON object on stderr. In 0.25.0 a background start includes <code>session_id</code>, <code>share_url</code>, <code>read_only</code>, <code>encrypted</code>, <code>auto_close</code> (set to <code>deadline</code> here, with a <code>closes_at</code> time), <code>expires_at</code>, <code>name</code> and <code>e2ee_password</code>. The <a href="https://jqlang.org/manual/">jq manual</a> explains the two filters: <code>.share_url</code> picks one key, and <code>-r</code> writes a string without JSON quotes. Keep the whole URL. The browser derives the key from the password and the random salt in its <code>#salt=</code> fragment, as the <a href="/e2ee/">encryption guide</a> explains, and the help text tells agents to preserve it.</p>
+<p>The file holds the password, so <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/umask.html">umask</a> 077 makes it readable only by you. Delete it when the run is over. If the start fails, stderr carries an error line instead of JSON, so check shell's exit status before you parse: 0 once the share is ready, 1 for a failed start, 2 for invalid usage. When the channel matters, send the link and the password by separate routes, which is what shell's own help recommends. For a teammate with their own account, the post on <a href="/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it/">sharing a session password without the service seeing it</a> covers the account route.</p>
+</section>
+
+<section>
+<h2>Step 6: Get Copilot's exit status back</h2>
+<p>A background start returns 0 as soon as the share is ready. It tells you nothing about how Copilot finished. When the script needs that, run in the foreground:</p>
+<pre><code>shell --foreground --read-only --name "copilot lint" --auto-close 30m -- ./copilot-lint.sh
+echo "copilot exited with $?"</code></pre>
+<p><code>--foreground</code> mirrors the output in the launching terminal, blocks until Copilot exits, and returns the wrapped process status, which the shell's <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_05_02">special parameter <code>?</code></a> then holds. The link works the same way meanwhile. If the deadline ends the run and Copilot dies from the signal, the Unix code reports 128 plus the signal number, so 143 for SIGTERM and 137 for SIGKILL. A program that catches SIGTERM and exits by itself reports its own code.</p>
+<p>On a linked machine there is a second route that works after a background start: <code>shell ls --all --json</code> lists ended sessions too, with an <code>exit_code</code> field once the host has reported one.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not limit Copilot. <code>--read-only</code> blocks browser input and nothing else. Copilot's tools run as your user with whatever <code>--allow-tool</code> grants. For isolation, use Copilot's own sandbox or a container; the <a href="/docker/">Docker guide</a> covers running shell in one. Note that 1.0.100 lets sandboxed commands reach localhost and private-network services by default.</li>
+<li>It is not a log. Apart from the transcript file, the only copy of the output is whatever an open tab has drawn.</li>
+<li><code>--disable-client-telemetry</code> covers Copilot's client only. The shell relay still sees ciphertext plus routing, size, timing, IP and lifecycle metadata. A linked account gets the share URL, the command line, the host name and the timing, never terminal contents or the key. The <a href="/security/">security model</a> lists the rest.</li>
+<li>It does not attach to a Copilot run you already started without shell. shell starts a new process.</li>
+<li>It shows what reaches the terminal. It does not show Copilot's model calls or MCP traffic.</li>
+<li>The signal and exit-code details above are from the macOS and Linux code. Windows has its own process code, which I did not check.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by the team behind Pilot Protocol, a networking stack for autonomous agents, and a scripted Copilot run is one place the two meet. Pilot's guide to <a href="https://pilotprotocol.network/blog/connect-github-copilot-to-pilot-protocol">connecting GitHub Copilot to Pilot Protocol</a> adds a hosted MCP server with one <code>copilot mcp add</code> command and gives the agent its own node, so a run can send its result to another agent as a message. If you add it, it is one more MCP server the run can call, so allow its tools as deliberately as the rest. On the receiving side, <a href="https://pilotprotocol.network/docs/webhooks">Pilot webhooks</a> post a JSON event to a URL you choose when a message arrives on a node, which saves the waiting machine from polling. The shell side of all this is open source in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<div class="cta"><h3>Give the unattended run a window</h3><p>Install shell, wrap your next copilot -p job in a read-only share, and check on it from your phone instead of waiting for it to finish.</p><a href="/cli/">Read the CLI reference</a></div>

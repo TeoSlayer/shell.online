@@ -1,5 +1,261 @@
 [
   {
+    "slug": "how-to-tell-which-of-your-agent-terminals-needs-you-from-one-browser-tab",
+    "title": "How to Tell Which of Your Agent Terminals Needs You From One Browser Tab",
+    "description": "Open several named agent sessions as tabs in the shell.online app, read the badge each tab shows, see which prompts it catches, and check the rest with shell ls.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "codex",
+      "multi-agent",
+      "terminal-monitoring"
+    ],
+    "iso_date": "2026-11-01",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-tell-which-of-your-agent-terminals-needs-you-from-one-browser-tab.webp"
+  },
+  {
+    "slug": "how-to-check-what-a-coding-agent-left-running-after-you-stop-its-terminal",
+    "title": "How to Check What a Coding Agent Left Running After You Stop Its Terminal",
+    "description": "What shell kill and an agent's own exit stop on macOS, Linux and Windows, how to list what a session left running, and how to give a dev server its own stop.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "claude-code",
+      "process-groups",
+      "signals"
+    ],
+    "iso_date": "2026-10-31",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-what-a-coding-agent-left-running-after-you-stop-its-terminal.webp"
+  },
+  {
+    "slug": "how-to-keep-a-shared-agent-terminals-password-apart-from-its-link",
+    "title": "How to Keep a Shared Agent Terminal's Password Apart From Its Link",
+    "description": "Choose your own session password, send it apart from the link, open it in an ordinary browser, and know when the QR code and copy button carry it too.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "end-to-end-encryption",
+      "terminal-sharing",
+      "coding-agents",
+      "passwords"
+    ],
+    "iso_date": "2026-10-30",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-shared-agent-terminals-password-apart-from-its-link.webp"
+  },
+  {
+    "slug": "how-to-read-the-exact-report-your-machine-would-send-to-shell-online",
+    "title": "How to Read the Exact Report Your Machine Would Send to shell.online",
+    "description": "Preview the gathering report with shell stats before it sends anything: what each count comes from, what --dir scopes, and what a linked machine sends.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "telemetry",
+      "privacy",
+      "coding-agents",
+      "cli"
+    ],
+    "iso_date": "2026-10-29",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-read-the-exact-report-your-machine-would-send-to-shell-online.webp"
+  },
+  {
+    "slug": "how-to-keep-a-record-of-who-prompted-a-shared-codex-session",
+    "title": "How to Keep a Record of Who Prompted a Shared Codex Session",
+    "description": "Trial GPT-6.1 Terra in one Codex session your team can type into, then read the sealed audit log of who sent each prompt and interrupt.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "audit-log",
+      "team-sharing",
+      "gpt-6-1-terra"
+    ],
+    "iso_date": "2026-10-28",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-record-of-who-prompted-a-shared-codex-session.webp"
+  },
+  {
+    "slug": "how-to-retire-a-machine-you-linked-to-shell-online-for-agent-runs",
+    "title": "How to Retire a Machine You Linked to shell.online for Agent Runs",
+    "description": "Arrakis found most enabled AI agents idle with live credentials. Retire a shell.online machine: revoke grants, stop shares, remove the service, unlink.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "offboarding",
+      "remote-start",
+      "credential-hygiene",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-27",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-retire-a-machine-you-linked-to-shell-online-for-agent-runs.webp"
+  },
+  {
+    "slug": "how-to-control-which-folder-a-shared-coding-agent-starts-in",
+    "title": "How to Control Which Folder a Shared Coding Agent Starts In",
+    "description": "A planted AGENTS.md in Downloads can steer Codex or Claude Code. See where shell starts each session, check the folder, and pin it from your phone.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "agents-md",
+      "prompt-injection",
+      "remote-start",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-26",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-control-which-folder-a-shared-coding-agent-starts-in.webp"
+  },
+  {
+    "slug": "how-to-have-a-teammate-watch-an-agent-run-that-can-reach-the-internet",
+    "title": "How to Have a Teammate Watch an Agent Run That Can Reach the Internet",
+    "description": "AISI found agents acting on the live internet only after the fact. Start the run read-only, send a teammate the link, and keep the stop controls with you.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "read-only-terminal",
+      "claude-code",
+      "agent-safety",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-10-25",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-have-a-teammate-watch-an-agent-run-that-can-reach-the-internet.webp"
+  },
+  {
+    "slug": "how-to-see-the-images-codex-generates-when-you-watch-it-from-a-browser",
+    "title": "How to See the Images Codex Generates When You Watch It From a Browser",
+    "description": "Codex 0.164.0 draws image previews with Kitty or Sixel graphics, which a browser terminal drops. Open the saved PNGs through shell's Files panel instead.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "file-sharing",
+      "terminal-graphics",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-24",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-see-the-images-codex-generates-when-you-watch-it-from-a-browser.webp"
+  },
+  {
+    "slug": "how-to-watch-claude-code-wait-out-a-usage-limit-from-your-phone",
+    "title": "How to Watch Claude Code Wait Out a Usage Limit From Your Phone",
+    "description": "Run Claude Code with its retry watchdog inside shell, then tell from your phone whether the run is working, waiting on a usage limit, or done.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "usage-limits",
+      "session-summaries",
+      "mobile"
+    ],
+    "iso_date": "2026-10-23",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-claude-code-wait-out-a-usage-limit-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-watch-a-muse-spark-open-server-on-two-mac-studios-from-your-phone",
+    "title": "How to Watch a Muse Spark Open Server on Two Mac Studios From Your Phone",
+    "description": "Meta's Muse Spark Open spans two Mac Studios. Run each download and the MLX server as named shell sessions and follow both Macs from one list on your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "muse-spark-open",
+      "mlx",
+      "local-models",
+      "mac-studio"
+    ],
+    "iso_date": "2026-10-22",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-watch-a-muse-spark-open-server-on-two-mac-studios-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-check-a-coding-agents-report-against-git-from-your-phone",
+    "title": "How to Check a Coding Agent's Report Against Git From Your Phone",
+    "description": "After OpenAI's report on agents that weakened their monitors, run Codex beside a shell you control and read the diff on your phone before you read its summary.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "coding-agents",
+      "git",
+      "agent-oversight"
+    ],
+    "iso_date": "2026-10-21",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-a-coding-agents-report-against-git-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-script-a-copilot-cli-prompt-run-you-can-watch-from-your-phone",
+    "title": "How to Script a Copilot CLI Prompt Run You Can Watch From Your Phone",
+    "description": "Copilot CLI 1.0.100 adds --trust-folder for -p runs. Start a scoped prompt-mode job from a script behind a read-only shell link and get its exit status back.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "github-copilot-cli",
+      "read-only",
+      "automation",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-20",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-script-a-copilot-cli-prompt-run-you-can-watch-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-share-a-live-opencode-conversation-now-that-share-is-gone",
+    "title": "How to Share a Live OpenCode Conversation Now That /share Is Gone",
+    "description": "OpenCode retired /share on October 15. Fork the conversation you are in into an encrypted browser link a teammate can open, using shell opencode.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "terminal-sharing",
+      "conversation-fork",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-19",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-live-opencode-conversation-now-that-share-is-gone.webp"
+  },
+  {
+    "slug": "how-to-share-an-opencode-session-without-handing-over-your-provider-keys",
+    "title": "How to Share an OpenCode Session Without Handing Over Your Provider Keys",
+    "description": "After the OpenCode Console breach, rotate your provider key, then share an OpenCode run with a read-only link that keeps keys and auth.json out of reach.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "api-keys",
+      "read-only",
+      "credential-rotation"
+    ],
+    "iso_date": "2026-10-18",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-an-opencode-session-without-handing-over-your-provider-keys.webp"
+  },
+  {
+    "slug": "how-to-steer-a-running-codex-turn-from-your-phone-and-keep-ctrl-x-working",
+    "title": "How to Steer a Running Codex Turn From Your Phone and Keep Ctrl-X Working",
+    "description": "Codex CLI 0.163 takes follow-ups mid-turn and makes Ctrl+X its leader key. Steer it from a phone through shell, and see where Ctrl-X goes when you attach.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "mobile",
+      "keyboard-shortcuts",
+      "coding-agents"
+    ],
+    "iso_date": "2026-10-17",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-steer-a-running-codex-turn-from-your-phone-and-keep-ctrl-x-working.webp"
+  },
+  {
     "slug": "how-to-keep-one-browser-link-for-a-multi-night-antigravity-cli-run",
     "title": "How to Keep One Browser Link for a Multi-Night Antigravity CLI Run",
     "description": "Run Gemini 4 Argon in the Antigravity CLI through shell --persistent so a teammate keeps the same link and password every night of a long migration.",

@@ -1,0 +1,98 @@
+<p>On October 21 Arrakis Security released its <a href="https://arrakis.security/">2026 Autonomous Agents Threat Report</a>, built from 12 weeks of production telemetry on thousands of agents in its customers' environments. <a href="https://www.helpnetsecurity.com/2026/10/26/arrakis-dormant-ai-agent-risks-report/">Help Net Security's write-up on October 26</a> gives the headline figure: about 76% of enabled agents examined had not run in 60 days, and 44% had not run in 180 days. About a quarter of the dormant ones could still be started through an unsigned webhook from outside the organization, and 19% used API keys and tokens that never expired and were embedded in their configurations. <a href="https://letsdatascience.com/news/arrakis-security-report-finds-76-of-ai-agents-dormant-cd524be9">Let's Data Science summarized the same report</a> as agents whose "credentials still work and their triggers still fire." Tal Baron, the company's CEO, explained it this way: "When an agent stops being used, nobody removes anything, because in most companies nobody owns it."</p>
+<p>The report is about enterprise agents wired to SaaS integrations, but the same shape shows up on a single developer's desk. You link a spare Mac or a Linux box to shell.online so you can run Codex or Claude Code there and watch it from your phone. You allow browser starts so you can launch a run from the couch. A month later the project is over, and the machine still holds an account token, still runs a background service that your signed-in browser can use to start processes as you, and may still have a persistent link on disk that comes back the moment anyone reruns a script. OWASP lists this as the first item in its <a href="https://owasp.org/www-project-non-human-identities-top-10/">Non-Human Identities Top 10</a>: improper offboarding.</p>
+<p>This guide retires such a machine in order: find it, revoke agent grants, stop what is shared, remove the service, delete persistent state, and unlink it. Every shell command and message below comes from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> at the current release, v0.25.0, plus the web app's Machines page on the main branch. The service details cover macOS and Linux, the two platforms that have an installer.</p>
+
+<section>
+<h2>What a linked machine can still do while nobody uses it</h2>
+<p>Three separate things keep working after you stop paying attention, and each has its own off switch.</p>
+<ul>
+<li><strong>The account link.</strong> <code>shell auth</code> stores credentials in your user config directory. In the <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/server/lib/tokens.ts">accounts server's token code</a>, the access token lasts one hour, and the machine gets a new one with its <a href="https://www.rfc-editor.org/rfc/rfc6749#section-1.5">refresh token</a>, which the server accepts as long as it exists and has not been revoked. There is no idle expiry. <a href="https://www.rfc-editor.org/rfc/rfc9700#section-4.14.2">RFC 9700, the OAuth security best current practice</a>, says refresh tokens "SHOULD expire if the client has been inactive for some time," so this is a choice worth knowing about: the link lasts until you revoke it.</li>
+<li><strong>Remote start.</strong> If you said yes at <code>shell auth</code>, a daemon polls for sessions your browser queues. The prompt states the cost plainly: anyone signed in to your account could start processes on this machine, as you, without touching its terminal. On macOS and Linux, the first yes also installs that daemon as an operating system service so it survives a restart.</li>
+<li><strong>Shares and grants.</strong> Each running session has a browser link and password, and possibly MCP bearer grants for other agents. A persistent session also has a state file that brings the same link back whenever it is reused.</li>
+</ul>
+</section>
+
+<section>
+<h2>Step 1: Find the machine and its sessions</h2>
+<p>Open the Machines page in the web app at app.shell.online. It lists every machine that can publish sessions to your account, with when each was linked and when it was last used. An Online badge means its agent checked in within the last 15 seconds. Offline usually means the machine is publish-only, and the page says so under the row. A machine that shows Online and that you have not touched in weeks comes first, because it accepts browser starts right now.</p>
+<p>From any linked machine you can also list the sessions in the account:</p>
+<pre><code>shell ls --all</code></pre>
+<p>This prints every session from every linked machine, newest first, with its name, status, uptime and machine. Without <code>--all</code>, ended sessions are hidden and only counted. The <a href="/app/">web app guide</a> covers the rest of that page.</p>
+</section>
+
+<section>
+<h2>Step 2: Revoke MCP grants before anything else</h2>
+<p>An MCP grant is a separate bearer credential that lets another agent read a session, and with a control grant, type into it. It is a credential separate from the browser link and password. On the machine itself, list the local sessions and then the grants on each one:</p>
+<pre><code>shell list
+shell mcp list k3v9q2m7xa</code></pre>
+<p><code>shell list</code> shows each session ID, access mode, uptime, closing rule, command and relay status. <code>shell mcp list</code> prints <code>No MCP grants.</code> or one line per grant: its ID, whether it is live, revoked or expired, its scopes, its label and its expiry time. Revoke them all for that session:</p>
+<pre><code>shell mcp revoke-all k3v9q2m7xa</code></pre>
+<p>Do this before you stop the session, while you can still see what was granted and to whom. Revocation cannot undo completed actions or erase output an agent already received. The earlier post on <a href="https://pilotprotocol.network/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke">MCP grants that expire and revoke</a> explains how the grants work.</p>
+</section>
+
+<section>
+<h2>Step 3: Stop every shared process</h2>
+<pre><code>shell kill --all
+shell list</code></pre>
+<p><code>shell kill --all</code> stops every locally managed shell.online process and takes its browser link offline. The second <code>shell list</code> should come back empty. If you only want to close one link and keep the process, the post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a link without killing the process</a> covers <code>shell password rotate</code>. For a machine you are retiring, stopping the process is the point.</p>
+
+<div class="callout"><strong>Unlinking does not stop a running terminal.</strong> The Machines page says it directly: unlinking cuts the account link, and a terminal already running keeps running. Its share link and password still work, because a share is a relay session between that machine and the browser, not an account feature. If you unlink a machine from the browser and never get back to it, its shares stay open until their processes exit. Run <code>shell kill --all</code> on the machine before you sign it out.</div>
+</section>
+
+<section>
+<h2>Step 4: Remove the background service</h2>
+<pre><code>shell service status</code></pre>
+<p>This prints <code>Installed at</code> followed by the path, or <code>No service is installed.</code> On macOS the file is <code>~/Library/LaunchAgents/online.shell.daemon.plist</code>. On Linux it is a systemd user unit, <code>~/.config/systemd/user/shell-online.service</code>.</p>
+<p>The unit is written to come back. The macOS plist sets <code>KeepAlive</code> to true with a <code>ThrottleInterval</code> of 10, and the <a href="https://keith.github.io/xcode-man-pages/launchd.plist.5.html">launchd.plist manual</a> describes that as keeping the job alive unconditionally. The Linux unit sets <code>Restart=always</code> with <code>RestartSec=10</code>, which the <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html">systemd.service manual</a> says restarts the service "regardless of whether it exited cleanly or not." You can read both definitions in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/service_darwin.go">service_darwin.go</a> and its Linux sibling. Remove it:</p>
+<pre><code>shell service uninstall</code></pre>
+<p>It prints <code>Removed. The daemon still starts when you run a shell command.</code> On macOS the command boots the job out of launchd and deletes the plist. On Linux it disables and stops the unit, deletes the unit file and reloads systemd. To confirm on a Mac, ask launchd directly with <a href="https://ss64.com/mac/launchctl.html">launchctl print</a>, which should now fail with an error instead of printing the job:</p>
+<pre><code>launchctl print gui/$(id -u)/online.shell.daemon</code></pre>
+<p>Note that <code>shell daemon stop</code> is not a substitute. It prints <code>Stopped. Sessions it started keep running.</code>, and the code comment beside it is explicit that stopping is not withdrawing consent: the next shell command starts the daemon again.</p>
+</section>
+
+<section>
+<h2>Step 5: Delete persistent state files</h2>
+<p>If you ever ran a session with <code>--persistent &lt;state-file&gt;</code>, that file holds the host credentials, the browser password and the decryption material. shell never deletes it, and killing the session leaves it on disk. Anyone who reruns the same command with the same file gets the same URL and password back, and the relay keeps a persistent session's record for 30 days after the host was last connected, against 12 hours for an ordinary one. Find the files your scripts pointed at and remove them:</p>
+<pre><code>grep -rn -- "--persistent" ~/bin ~/scripts 2>/dev/null
+rm ~/.local/state/agent-nightly.shellstate</code></pre>
+<p>The paths are examples; use whatever your own scripts or cron entries name. The <a href="/reliability/">reliability guide</a> explains what a persistent session restores and what it does not.</p>
+</section>
+
+<section>
+<h2>Step 6: Sign the machine out</h2>
+<pre><code>shell logout
+shell whoami</code></pre>
+<p><code>shell logout</code> stops the daemon first, so nothing is left polling with a dead token, then revokes the machine's token on the server and clears the local credentials. It prints <code>Signed out of you@example.com.</code> with your address. If the server cannot be reached it still clears the local file and says <code>could not revoke remotely</code>. In that case, finish the job from the browser in Step 7. <code>shell whoami</code> should now print <code>Not signed in. Run 'shell auth' to link this machine.</code></p>
+</section>
+
+<section>
+<h2>Step 7: Confirm from the browser, or unlink a machine you cannot reach</h2>
+<p>Reload the Machines page. The machine should be gone. If you are retiring a box you no longer have, because it was wiped, sold or lost, press Unlink on its row instead. The page says unlinking revokes its token immediately, and the server scopes the request to your account so a guessed ID cannot touch anyone else's machine. You cannot kill that machine's terminals from here, which is one more reason to do Steps 2 to 5 while you still have it.</p>
+</section>
+
+<section>
+<h2>If you want to keep the machine but stop browser starts</h2>
+<p>To keep the machine and drop only the remote capability, run:</p>
+<pre><code>shell auth --no-remote-start
+shell service uninstall</code></pre>
+<p>The first command goes through sign-in again (add <code>--no-browser</code> on a headless box), saves the machine as publish-only and stops the daemon. It ends with <code>Publish-only. Run 'shell auth --allow-remote-start' to start sessions from the browser.</code> It does not remove the service, so the second command does. You can still run <code>shell codex</code> in a terminal there and get a link. The help text lists what a linked machine publishes for each session: the share URL, the command name, the host name and the timing, never the terminal contents or the key. The <a href="/security/">security page</a> covers the rest of the model.</p>
+</section>
+
+<section>
+<h2>What this does not do</h2>
+<ul>
+<li>It does not touch the agent's own credentials. Codex, Claude Code and OpenCode keep their sign-ins and any provider API keys in their own files and environment. Revoke those with each tool.</li>
+<li>It does not erase anything a viewer or an MCP client already saw. Rotation and revocation only protect what comes after.</li>
+<li>Nothing in this build unlinks a machine because it has gone quiet. The Machines page shows when it was last used and leaves the decision to you.</li>
+<li>It only covers shell.online. SSH keys, cron jobs, cloud credentials and other remote tools on the same machine need their own review.</li>
+<li>Windows has no service installer in this release, so Step 4 does not apply there. This guide follows the macOS and Linux code paths; the Windows ones were not checked.</li>
+</ul>
+<p>For the full command list see the <a href="/cli/">CLI reference</a>, and for the history of the background service on a Mac see <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">the launchd priority fix in v0.23.3</a>. Sessions across machines were introduced in <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">the post on --name and shell ls</a>.</p>
+</section>
+
+<section>
+<h2>Offboarding agents on a network</h2>
+<p>The Arrakis numbers describe a missing owner more than a missing feature. <a href="https://pilotprotocol.network/">Pilot Protocol</a>, which develops shell.online, builds the owner into the network for agents that talk to each other: a self-hosted Pilot registry can sync membership from your directory, and with <code>remove_unlisted</code> set, any member missing from the exported list is removed from the network. The <a href="https://pilotprotocol.network/docs/enterprise-identity">Pilot identity and directory sync docs</a> also describe a key-info call that reports each key's age in days, which is the number you need for a rotation policy. On a single machine, the steps above do the same job by hand.</p>
+</section>
+
+<div class="cta"><h3>Retire the machine before you forget it</h3><p>Run <code>shell list</code>, <code>shell service status</code> and <code>shell whoami</code> on any box you linked for an agent project, and close what you no longer use.</p><a href="/docs/">Read the shell.online docs</a></div>

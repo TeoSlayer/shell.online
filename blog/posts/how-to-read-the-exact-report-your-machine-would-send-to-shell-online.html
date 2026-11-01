@@ -1,0 +1,123 @@
+<p>Warp disclosed a security incident this week that lands on the data developer tools collect about their users. In a post on X, chief executive Zach Lloyd said that on Friday, October 23, Warp became aware of what he called active and narrow-banded exploitation of a vendor in its infrastructure. <a href="https://www.bleepingcomputer.com/news/security/warp-discloses-breach-exposing-ai-agent-logs-user-telemetry-data/">BleepingComputer reported on October 27</a> that agent decision logs and user telemetry were exposed, that Lloyd put the affected share at roughly 1% of Warp users, and that CrowdStrike had been brought in. Warp has not named the vendor, and it has not said whether the logs held source code, prompts or credentials. <a href="https://letsdatascience.com/news/warp-discloses-breach-exposing-ai-agent-logs-and-telemetry-084ffdf4">Let's Data Science's summary</a> notes that the exposure came through a third party, not through Warp's own systems.</p>
+
+<p>Telemetry is usually explained in a settings page. <a href="https://docs.warp.dev/support-and-community/privacy-and-security/privacy">Warp's privacy page</a> says what its "Help improve Warp" switch collects and names the third parties that receive crash reports and analytics. That is better than most tools manage, but it is still a paragraph you take on trust. When an agent runs in your terminal, anything it prints or decides can end up in a log somewhere, and the useful question is what a tool sends about your work and how you can check it yourself.</p>
+
+<p>One shell.online feature reads your work in order to report numbers about it: the optional gathering in Shell Keep, the game in the web app. It never runs unless you turn it on. Before you do, you can print the exact report your machine would send, on your machine, with nothing sent. This guide runs that preview, reads what each number comes from, shows the one flag that scopes less than it looks like, and lists what else a linked machine sends so the report is not mistaken for the whole picture.</p>
+
+<section>
+<h2>Step 1: Check that your CLI has the command</h2>
+
+<p><code>shell stats</code> first appears in the <a href="https://github.com/TeoSlayer/shell.online/releases/tag/v0.16.1">v0.16.1 release</a>, and the current release is 0.25.0. Check your version before anything else:</p>
+
+<pre><code>shell --version
+shell help stats</code></pre>
+
+<p>The first command prints the version. The second prints a page titled "What this machine would report" with the usage line <code>shell stats [--json] [--days N] [--dir PATH]</code>.</p>
+
+<div class="callout">
+<p>On a CLI older than 0.16.1, <code>stats</code> is not a subcommand, so <code>shell stats</code> is read as a program to start and share. On a Mac running 0.11.1 it failed with <code>start stats: exec: "stats": executable file not found in $PATH</code>. If a program called <code>stats</code> happened to be on your PATH, that program would start inside a new shared session instead. Run <code>shell --version</code> first, and update with the installer from the <a href="/docs/">docs</a> if it is old. The <a href="/cli/">command reference</a> lists every subcommand the current release has.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 2: Run the preview in a repository</h2>
+
+<p>Change into a repository you work in and run the command with no flags:</p>
+
+<pre><code>cd ~/src/example-app
+shell stats</code></pre>
+
+<p>It prints a short table. The numbers below are invented, but the layout is what the command prints:</p>
+
+<pre><code>Over the last 7 days, this machine would report:
+
+  tokens           1840233
+  pull requests    3
+  commits          12
+  lines            +940 -311
+
+That is the whole report. No file contents, no diffs, no commit
+messages, no branch names, and nothing from any terminal session.</code></pre>
+
+<p>If a source could not be read, a line such as <code>not read: gh: unavailable</code> appears above the closing sentence. A machine without git, the GitHub CLI or any agent history is normal; that source reports zero and the others still count. <code>--days</code> changes the window from the default of seven days, and a value below 1 is refused with exit status 2.</p>
+
+<p>Add <code>--json</code> to see the report as data:</p>
+
+<pre><code>shell stats --json --days 3</code></pre>
+
+<pre><code>{
+  "tokens": 412907,
+  "pull_requests": 1,
+  "commits": 4,
+  "insertions": 210,
+  "deletions": 38,
+  "error": "gh: unavailable"
+}</code></pre>
+
+<p>The flag's own description is "print the report as JSON, exactly as it would be sent". When the machine sends a real run, it adds one field, an <code>id</code> named after the request, so a report sent twice after a lost reply is counted once. There is no field for a path, a branch or a message.</p>
+</section>
+
+<section>
+<h2>Step 3: See where each number comes from</h2>
+
+<p>The collector is one file, <a href="https://github.com/TeoSlayer/shell.online/blob/main/internal/stats/stats.go">internal/stats/stats.go</a>, and it is short enough to read in one sitting. Each number has one source.</p>
+
+<p><strong>Commits and lines</strong> come from <a href="https://git-scm.com/docs/git-log">git log</a> with <code>--since</code>, <code>--no-merges</code> and <code>--numstat</code>. That option prints added and deleted line counts and the path for each changed file. shell adds up the counts and throws the path away. Binary files, which git marks with two dashes instead of numbers, are skipped. You can run the same command yourself and compare:</p>
+
+<pre><code>git log --since="7 days ago" --no-merges --pretty=tformat:%H --numstat</code></pre>
+
+<p><strong>Pull requests</strong> come from <a href="https://cli.github.com/manual/gh_pr_list">gh pr list</a> with <code>--author @me --state open --limit 100 --json number</code>. Asking only for the <code>number</code> field means titles and branch names never reach shell. The count therefore stops at 100.</p>
+
+<p><strong>Tokens</strong> come from the agents' own history files. shell walks <code>~/.claude/projects</code> and <code>~/.codex/sessions</code>, opens each <code>.jsonl</code> file modified inside the window, and decodes every line into a structure that only has token-count fields. <a href="https://code.claude.com/docs/en/data-usage">Anthropic's data usage page</a> says Claude Code keeps its session transcripts in plaintext under <code>~/.claude/projects/</code> for 30 days by default, so these files hold your prompts and the agent's replies. They stay behind because Go's <a href="https://pkg.go.dev/encoding/json">encoding/json</a> ignores object keys that have no matching struct field. Input, output and cache-creation tokens are added up. Cache reads are skipped on purpose, and lines in a different shape add nothing rather than raising an error.</p>
+</section>
+
+<section>
+<h2>Step 4: Know what --dir changes and what it does not</h2>
+
+<p>The <code>--dir</code> flag looks like it scopes the whole report to one repository. It does not. Only git takes the directory. The GitHub CLI runs in whatever directory you are in, and the token count reads every history file under your home directory.</p>
+
+<pre><code>cd ~/src/example-app
+shell stats --dir ~/src/side-project</code></pre>
+
+<p>Run from inside the shell.online repository on a Mac with <code>--dir</code> pointed at a scratch repository, the commits and lines came from the scratch repository while the pull request count was the open pull requests in the shell.online repository. Outside any git repository, <code>gh pr list</code> fails and the report says <code>gh: unavailable</code>. So treat the token line as machine-wide and the pull request line as belonging to your current directory.</p>
+</section>
+
+<section>
+<h2>Step 5: Decide whether to turn the gathering on</h2>
+
+<p>The preview sends nothing. A comment at the top of the command says so plainly: nothing in it talks to the network. A real run needs three things. The machine must be linked with <code>shell auth</code>, as the <a href="/app/">app guide</a> describes, its machine agent must be running (<code>shell agent</code> in a terminal, or the background daemon from <code>shell daemon start</code>), and you must open "The gathering" in Shell Keep at app.shell.online and press "Turn gathering on". The notice there lists what the machine would read and what it never reads before it shows the button.</p>
+
+<p>The request the browser sends carries no arguments at all. It cannot name a directory or a repository, so what is read is decided on the machine by the same collector the preview runs. On the service side, <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/server/routes/gathering.ts">the gathering route</a> answers with 403 and "the gathering has not been agreed to" both when a browser asks for a run and when a machine reports one without consent. It reads only the five counts and an error sentence cut to 200 characters, caps each count at ten billion, and stores the run with the machine's name and the time it ran. "Stop gathering" turns it off again, and each run is listed per machine with its counts.</p>
+</section>
+
+<section>
+<h2>What else a linked machine sends</h2>
+
+<p>The gathering report is small, and it is not everything. If <code>shell whoami</code> shows a linked account, the machine also publishes each session to that account: its name, the command line shell displays, its share link and whether it is read-only, encrypted or persistent. The relay carries terminal traffic as ciphertext and still sees timing, sizes, addresses, labels and lifecycle events, as the <a href="/e2ee/">encryption page</a> sets out and as the earlier post on <a href="/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon/">what the relay sees</a> walks through. Session summaries are off by default and turned on per session. The <a href="/security/">security page</a> covers the rest, and the post on <a href="/blog/team-terminal-sharing-sealed-so-the-service-cant-open-it/">sealed team sharing</a> walks through what linking a machine publishes.</p>
+
+<p><a href="https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html">OWASP's logging cheat sheet</a> lists source code, session identifiers, access tokens and passwords among the things that should usually not be logged directly. A report made of five integers has nowhere to put any of them, and that is the property worth checking in any tool you give a terminal to.</p>
+</section>
+
+<section>
+<h2>What this does not tell you</h2>
+
+<ul>
+<li>It does not cover the agents. Claude Code, Codex and the rest send prompts and output to their model providers and may send their own telemetry. The Claude Code page linked above lists the environment variables that switch its metrics and error reports off.</li>
+<li>It does not prove what the service stores. The preview shows what your machine would send. The service code is in the same repository, but a hosted deployment is something you trust, not something you can inspect from the CLI.</li>
+<li>Counts still say something. Token volume, commit counts and the times of runs describe how much you worked and when.</li>
+<li>The preview runs where you stand. A real run uses the machine agent's own process, so its git and pull request counts may come from a different directory than the one you previewed.</li>
+<li>It reports nothing about other sessions you shared. Terminal output is not read by the collector, and the gathering is separate from summaries and the audit log.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is built by the team behind Pilot Protocol, and the gathering follows a rule Pilot's own writing keeps coming back to: do the reading where the data already lives and move only what is needed. The post on <a href="https://pilotprotocol.network/blog/secure-research-collaboration-share-models-not-data">sharing models, not data</a> applies that to research sites that cannot move raw datasets. <a href="https://pilotprotocol.network/blog/run-agent-network-without-cloud-dependency">Running an agent network without cloud dependency</a> explains how Pilot agents keep their identity keys on the device and use direct encrypted tunnels, so a registry or relay operator cannot read what they exchange. If you are wiring agents on different machines together and want the same property for their messages, <a href="https://pilotprotocol.network/">Pilot Protocol</a> is where to start.</p>
+</section>
+
+<div class="cta">
+<h3>Read the report before you agree to it</h3>
+<p>Install or update the CLI, run shell stats --json in your repository, and compare it with the collector's source on GitHub.</p>
+<a href="https://github.com/TeoSlayer/shell.online">Open shell.online on GitHub</a>
+</div>

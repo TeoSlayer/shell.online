@@ -1,0 +1,94 @@
+<p>On October 22 Gal Weizman and Omer Samet of Forever Security published <a href="https://forever.security/blog/hijacking-ai-agents-via-downloads-folder">a report on hijacking coding agents through the Downloads folder</a>. They found a malicious <code>AGENTS.md</code> in a customer's <code>~/Downloads</code>, which was also the working directory of that customer's coding agent, and the agent tried to install an npm package called <code>function-color</code>. Their argument rests on one line: "~/Downloads is special. It is the one folder the web can write to on its own." In their tests, run mostly with a harmless stand-in payload, a planted file got Codex to run it in more than 90% of attempts, and got Claude Code to rewrite its own project settings about half the time. They also wrote, "There is nothing here for OpenAI or Anthropic to patch," because both agents are doing what they were built to do.</p>
+<p>Bill Toulas covered the research for <a href="https://www.bleepingcomputer.com/news/security/ai-coding-agents-hijacked-using-agentsmd-file-in-downloads-folder/">BleepingComputer on October 25</a>, and noted that Chrome, Edge and Firefox save downloads without asking by default. <a href="https://support.google.com/chrome/answer/95759">Chrome's own help page</a> confirms it: files go to your Downloads folder unless you turn on "Ask where to save each file before downloading."</p>
+<p>The lesson for anyone sharing an agent session is that the folder a session starts in decides which instruction files the agent reads before you type anything. A session you start in a terminal keeps that terminal's folder, and a session you start from your phone inherits the folder of a background process you may never have thought about. This guide shows where shell starts each kind of session, how to check it, and how to pin the folder before you send a link to anyone. The shell details come from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> at the current release, v0.25.0, read on the macOS and Linux code path.</p>
+
+<section>
+<h2>Why the starting folder decides what the agent reads</h2>
+<p><a href="https://agents.md/">AGENTS.md</a> describes itself as "a simple, open format for guiding coding agents," and agents load it without asking. The exact rules differ by agent, and both are tied to the working directory.</p>
+<p><a href="https://learn.chatgpt.com/docs/agent-configuration/agents-md">Codex's AGENTS.md guide</a> says Codex first reads a global file from <code>~/.codex</code>, then starts at the project root, usually the Git root, and walks down to your current directory, taking at most one file per directory. If it cannot find a project root, it checks only the current directory. That second case is the Downloads case: a folder that is not a repository, holding one file the agent will read.</p>
+<p><a href="https://code.claude.com/docs/en/memory">Claude Code's memory docs</a> say it loads <code>CLAUDE.md</code> "from your current working directory and every directory above it," and since v2.1.277 it reads <code>AGENTS.md</code> directly when no <code>CLAUDE.md</code> is present. OWASP lists this class of problem as <a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/">indirect prompt injection</a>: instructions that reach the model through files or websites rather than through you.</p>
+<p>A shared session adds a second way to start an agent, from a browser, where the folder is chosen for you.</p>
+</section>
+
+<section>
+<h2>Step 1: Start terminal sessions from the project root</h2>
+<p>shell runs the command you give it in the directory you ran shell from. I checked the CLI source for any call that changes directory and found none, including in the background start path, which detaches the process with <code>setsid</code> and leaves its directory alone. So the folder is set by your <code>cd</code>:</p>
+<pre><code>cd ~/src/invoice-app
+git rev-parse --show-toplevel
+shell --name invoice codex</code></pre>
+<p><code>git rev-parse --show-toplevel</code> prints the repository root, which tells you both that you are inside a repository and where Codex will start its walk. If it prints an error instead, you are not in a repository, and Codex will read only the folder you are in. The <code>shell</code> line starts Codex under the name <code>invoice</code> and prints a link, a password and a QR code, as the <a href="/docs/">getting started guide</a> describes.</p>
+<p>Codex can also take the folder as a flag. The <a href="https://learn.chatgpt.com/docs/cli/reference">Codex CLI reference</a> lists <code>--cd</code> (short form <code>-C</code>) to "set the working directory for the agent before it starts processing your request":</p>
+<pre><code>shell --name invoice -- codex --cd ~/src/invoice-app</code></pre>
+<p>shell's help says to use <code>--</code> "before a command when argument boundaries are ambiguous," which is the case when the agent takes flags of its own. Claude Code has no equivalent flag in its docs, so for Claude the <code>cd</code> comes first.</p>
+</section>
+
+<section>
+<h2>Step 2: Read the instruction files that folder will load</h2>
+<p>Forever also recommends reading any <code>AGENTS.md</code> or <code>CLAUDE.md</code> you did not write before an agent uses it. Because both agents look above the current folder as well as inside it, check the parents too. This loop walks from where you are up to <code>/</code> and lists every instruction file on the way:</p>
+<pre><code>d=$PWD
+while :; do
+  ls -l "$d"/AGENTS.md "$d"/AGENTS.override.md "$d"/CLAUDE.md "$d"/CLAUDE.local.md 2&gt;/dev/null
+  [ "$d" = / ] &amp;&amp; break
+  d=$(dirname "$d")
+done</code></pre>
+<p>It prints one line per file it finds. Open each one before you start the agent, including any in your home directory.</p>
+<p>The report also shows what a planted file tried to change, so look there as well. In the Codex chain the file added an MCP server to <code>~/.codex/config.toml</code>, which loads in every later session in any folder. In the Claude Code chain it wrote a project <code>.claude/settings.json</code> that sent API traffic to a server the attacker controlled:</p>
+<pre><code>grep -n '^\[mcp_servers' ~/.codex/config.toml
+grep -n -i 'base_url' .claude/settings.json 2&gt;/dev/null</code></pre>
+<p>The first command lists every MCP server Codex will start. The second shows any API endpoint override in this project's Claude settings. Anything you do not recognise is a reason to stop, and Forever's advice for a suspected compromise is to rotate credentials, since a leaked token is a live session.</p>
+</section>
+
+<section>
+<h2>Step 3: Find out where browser-started sessions land</h2>
+<p>If you agreed to remote start during <code>shell auth</code>, a daemon on your machine starts sessions when you press New session in the <a href="/app/">web app</a>. In <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/agent_loop.go">the daemon's command loop</a> the start command runs <code>shell -- &lt;your command&gt;</code> without setting a directory, so the new session starts wherever the daemon itself is running. Which folder that is depends on how the daemon was started:</p>
+<ul>
+<li><strong>Installed as a service on macOS.</strong> <code>shell service install</code> writes a LaunchAgent plist with no <code>WorkingDirectory</code> key, so the folder is whatever launchd gives the job. shell's own <a href="https://github.com/TeoSlayer/shell.online/blob/main/CHANGELOG.md">changelog for 0.24.1</a> notes six Claude transcripts on one machine that all named <code>/</code> as their directory, because a launcher started every session in the same place.</li>
+<li><strong>Installed as a service on Linux.</strong> The systemd user unit sets no <code>WorkingDirectory=</code> either, and the <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html">systemd.exec manual</a> says that for a user manager it then defaults to "the respective user's home directory."</li>
+<li><strong>No service.</strong> The built-in help says "the daemon still starts whenever you run a shell command." The code starts it as a detached child of that command, so it keeps that command's directory.</li>
+</ul>
+<p>Check which case you have, then look at the daemon's directory directly:</p>
+<pre><code>shell service status
+shell daemon status
+pgrep -f 'shell daemon'
+lsof -a -p 4242 -d cwd</code></pre>
+<p><code>shell daemon status</code> prints "Running. Your browser can start sessions on this machine." when the daemon is up. <code>pgrep</code> prints its process ID; put that number in place of <code>4242</code>. <code>lsof</code> then prints one line whose last column is the daemon's working directory. On Linux, <code>readlink /proc/4242/cwd</code> gives the same answer, since <a href="https://man7.org/linux/man-pages/man5/proc_pid_cwd.5.html">/proc/pid/cwd</a> is "a symbolic link to the current working directory of the process."</p>
+<div class="callout"><p>Without the service, the first ordinary shell command after a restart starts the daemon in whatever folder you happened to be in. If that command was <code>shell claude</code> run from <code>~/Downloads</code> to sort some files, every session you start from your phone afterwards begins in <code>~/Downloads</code> too, until the daemon restarts. Without a service, <code>shell daemon start</code> and a fresh <code>shell auth</code> also start the daemon from the folder you run them in, so to move it, <code>cd</code> to a project or an empty folder, run <code>shell daemon stop</code>, then <code>shell daemon start</code>.</p></div>
+</section>
+
+<section>
+<h2>Step 4: Put the folder in the command you start from the phone</h2>
+<p>Rather than depend on the daemon's folder, put the folder in the command itself. The New session sheet's Claude Code and Codex forms have no folder field; they build a command from fields such as the model, a resume ID and permission options. The Terminal process form takes any command line, so use that one:</p>
+<pre><code>cd ~/src/invoice-app &amp;&amp; claude
+cd ~/src/invoice-app &amp;&amp; codex</code></pre>
+<p>Use <code>&amp;&amp;</code> rather than <code>;</code>. If the path is wrong, <code>cd</code> fails and the agent never starts, instead of starting in the daemon's folder. A line containing <code>&amp;</code> or <code>~</code> is one shell.online cannot split into arguments itself, so it hands the whole line to <code>sh -c</code>, where the tilde expands and the <code>&amp;&amp;</code> works as usual.</p>
+<p>Claude Code adds one check of its own. Its <a href="https://code.claude.com/docs/en/security">security docs</a> say that in an interactive session it "shows the workspace trust dialog when you start it in a folder you haven't trusted." In a shared session that dialog appears in the terminal on your phone, and it is worth reading the folder path it names before you accept. The same page notes that trust given in your home directory is not saved, so a daemon that starts Claude in your home folder will ask every time.</p>
+</section>
+
+<section>
+<h2>Step 5: Check the folder of a session that is already running</h2>
+<p><code>shell list --json</code> gives each local session's <code>pid</code>, which is the shell process hosting the session:</p>
+<pre><code>shell list --json
+lsof -a -p 5151 -d cwd
+lsof -a -d cwd -c codex</code></pre>
+<p>For a session you started in a terminal, the host process never changes directory, so <code>lsof</code> on its pid shows the folder the agent started in. For a session started from the phone with a <code>cd</code> in the command, the host shows the daemon's folder and the agent moved after that, so ask about the agent process by name instead, as in the last line. Replace <code>codex</code> with <code>claude</code> for Claude Code. This matches on the process name, so it finds the agent only if its process is called that on your machine. Claude also says which instruction file it loaded: its docs show a line such as <code>no CLAUDE.md found; AGENTS.md loaded: /home/you/repo/AGENTS.md</code> at the start of the conversation, and you can read that line from the phone.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>shell does not read, scan or block instruction files. It starts the command you gave it in a folder, and the agent reads what it reads.</li>
+<li>Choosing the right folder does not help when the planted file is inside the repository, for example in a project you just cloned. Step 2 is the part that covers that case.</li>
+<li>The folder is a starting point, not a boundary. Claude Code's docs say a Bash command you approve "can still write anywhere your user account can," and the agent can change directory at any time.</li>
+<li>Codex reads its global file in <code>~/.codex</code> whatever folder you start in.</li>
+<li>A <a href="/security/">read-only link</a> stops a viewer from typing, and file access stays off unless you pass <code>--files</code> or <code>--files-root</code>. Neither changes what the agent itself can read on your machine.</li>
+<li>I read the macOS and Linux code paths. Windows starts processes through different files, and I have not checked how the folder behaves there.</li>
+</ul>
+<p>For more on keeping a shared session's files narrow, see the earlier post on <a href="/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel/">sharing a terminal session without handing over the filesystem</a>. For what the LaunchAgent does to browser-started sessions on a Mac, see <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">the launchd priority fix in v0.23.3</a>. The full command list is in the <a href="/cli/">CLI reference</a>.</p>
+</section>
+
+<section>
+<h2>Trust given on purpose, not by location</h2>
+<p>The Downloads attack works because a folder is trusted for being where the agent started. Pilot Protocol, which develops shell.online, takes the opposite default for agents that talk to each other over its network: an agent is private until its owner opts in, and two agents connect only after a mutual trust handshake that either side can revoke. The Pilot post on <a href="https://pilotprotocol.network/blog/why-autonomous-agents-need-private-discovery">why autonomous agents need private-by-default discovery</a> puts it as "invisible until you decide otherwise." Remote start is also a deliberate grant: anyone signed in to your account can launch processes on that machine as you, and the Pilot write-up of <a href="https://pilotprotocol.network/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la">the LaunchAgent behind browser-started sessions</a> makes the same point.</p>
+</section>
+
+<div class="cta"><h3>Start your next shared agent in the folder you meant</h3><p>Install shell, <code>cd</code> to the project root, read its instruction files, and run <code>shell codex</code> or <code>shell claude</code>. No account needed.</p><a href="/docs/">Read the shell.online docs</a></div>

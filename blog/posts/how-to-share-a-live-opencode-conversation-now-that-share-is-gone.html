@@ -1,0 +1,99 @@
+<p>On October 15, OpenCode shipped <a href="https://github.com/anomalyco/opencode/releases/tag/v1.19.1">release 1.19.1</a> with a single entry in its notes: session sharing has been discontinued, existing share links and session-sharing commands no longer work, and sessions can no longer be imported from share URLs. The same day, the <a href="https://opencode.ai/changelog">OpenCode changelog</a> recorded 2.0.30 removing "the retired session-sharing backend and unavailable <code>/share</code> command" from the 2.x line. In the 1.19.3 source, the <a href="https://github.com/anomalyco/opencode/blob/v1.19.3/packages/opencode/src/share/session.ts">share service</a> now fails every request with "Session sharing has been discontinued".</p>
+
+<p>Until then, <code>/share</code> was OpenCode's built-in way to show a teammate what the agent was doing. The <a href="https://github.com/anomalyco/opencode/blob/v1.19.3/packages/web/src/content/docs/share.mdx">old share documentation</a>, still in the repository, describes it: OpenCode synced the conversation history to its servers and published it at a public <code>opncd.ai/s/&lt;share-id&gt;</code> address that anyone holding the link could read. If your team review habit depended on those links, it stopped working this week, and links you posted in old pull requests and chat threads are dead too.</p>
+
+<p>This guide covers a different way to put an OpenCode conversation in front of a teammate. <a href="/">shell.online</a> has a handoff for this case: when OpenCode itself runs <code>shell opencode</code>, shell forks the conversation you are in and serves the fork as a live, end-to-end encrypted terminal in the browser. Below you will make OpenCode ask before it does that, start the fork, replace the password the model has already seen, pick an exact session when the automatic choice is ambiguous, and close the link afterward. Everything was checked against shell.online 0.25.0 and the OpenCode 1.19.3 source.</p>
+
+<section>
+<h2>What shell does when OpenCode runs it</h2>
+<p>The <a href="/cli/">CLI reference</a> says it in one paragraph: when opencode runs <code>shell opencode</code>, shell detects the current conversation and starts a shareable fork with its history. The original process stays open, the two conversations then diverge, and shell does not move the running process anywhere.</p>
+<p>The detection is simple. OpenCode sets <code>OPENCODE=1</code>, <code>OPENCODE_PID</code> and <code>AGENT=1</code> in its own environment at startup, as you can see in its <a href="https://github.com/anomalyco/opencode/blob/v1.19.3/packages/opencode/src/index.ts">entry point</a>, so every command its Bash tool runs inherits them. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/handoff_opencode.go">OpenCode adapter</a> in shell looks for <code>OPENCODE=1</code>, and only when the command after shell's own flags is the single word <code>opencode</code> and the start is not <code>--foreground</code>.</p>
+<p>OpenCode does not tell its subprocesses which session they belong to, so shell works it out. It reads the working directory of the OpenCode process with <a href="https://github.com/lsof-org/lsof">lsof</a>, then asks <code>opencode db</code>, which queries OpenCode's local <a href="https://sqlite.org/cli.html">SQLite</a> database, for the most recently updated session in that directory and for how many sessions the directory has. It starts <code>opencode --session &lt;id&gt; --fork</code>, using the flags the <a href="https://opencode.ai/docs/cli/">OpenCode CLI reference</a> documents for continuing a session as a fork, and removes the three OpenCode variables from the fork's environment so the new process does not believe it is running inside the old one. If the lookup fails, it falls back to <code>opencode --continue --fork</code>, which a comment in the adapter says can leave the forked TUI degraded.</p>
+</section>
+
+<section>
+<h2>Step 1: Make OpenCode ask before it shares anything</h2>
+<p>A share started by the agent is a share you did not type. OpenCode's <a href="https://opencode.ai/docs/permissions/">permissions page</a> says most permissions default to allow, so a Bash command such as <code>shell opencode</code> runs without a prompt unless you configure one. Add a rule to <code>opencode.json</code>:</p>
+<pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "allow",
+      "shell *": "ask"
+    }
+  }
+}</code></pre>
+<p>The last matching rule wins, so the catch-all goes first and the <code>shell *</code> rule after it. When the agent tries to run a command that starts with <code>shell</code>, OpenCode stops and offers once, always or reject. I would keep it on ask: starting a share is a decision about who sees your terminal, and a model should not make it alone.</p>
+</section>
+
+<section>
+<h2>Step 2: Ask OpenCode to fork itself into a browser link</h2>
+<p>Check both tools first, in a terminal of your own:</p>
+<pre><code>opencode --version
+shell --version</code></pre>
+<p>Then, in the OpenCode conversation you want to share, ask it to run this exact command with its Bash tool:</p>
+<pre><code>shell --read-only --name "auth refactor review" opencode</code></pre>
+<p><code>--read-only</code> makes the browser side view only, which suits a review. <code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the <a href="/app/">web app</a>. Both are shell's flags and come before <code>opencode</code>, so the command is still the single word the adapter looks for. If you leave them out, the fork is interactive and anyone with the link can type into it. If you add anything after <code>opencode</code>, such as a model flag, there is no handoff and shell starts a fresh OpenCode instead.</p>
+<p>Approve the prompt from Step 1. shell prints its session card into the tool output, which looks like this with invented values:</p>
+<pre><code>  Name       auth refactor review
+  Open       https://shell.online/s/EXAMPLE-ONLY#salt=EXAMPLE
+  Password   Exampl3pw0
+  Vault      not linked · run shell auth
+  Access     view only · end-to-end encrypted
+  Session    a1b2c3d4e5 · background
+  Closes     when the task exits
+  Handoff    forked opencode conversation; the original stays open
+  Note       most recent session in this project; with multiple concurrent opencode sessions this may not be the one you are in</code></pre>
+<p>The card goes on with the Rejoin and Stop commands for this session. The Handoff line tells you the fork happened. The Note line appears whenever the project directory has more than one OpenCode session, or the lookup failed, because then the pick is a guess. The session you are typing in was just updated by the tool call, so the most recent one is usually right, but a second OpenCode window in the same directory can win the race. If you see the Note, open the link yourself before you send it, or use Step 4.</p>
+<p>The fork keeps running after the tool call returns. A background start exits once the share is ready, and on macOS and Linux shell starts the background host in a new session with <a href="https://man7.org/linux/man-pages/man2/setsid.2.html">setsid</a>, the call <a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/setsid.html">POSIX defines</a> for exactly that.</p>
+</section>
+
+<section>
+<h2>Step 3: Replace the password the model has seen</h2>
+<div class="callout"><p><strong>The card went into the conversation.</strong> Tool output is part of the context OpenCode sends to your model provider, so the link and password above have left your computer in a request to that provider. OWASP lists credentials in a model's context under <a href="https://genai.owasp.org/llmrisk/llm022025-sensitive-information-disclosure/">LLM02, sensitive information disclosure</a>. Rotate before you give the link to anyone.</p></div>
+<p>In your own terminal, find the session and rotate its credentials:</p>
+<pre><code>shell list
+shell password rotate a1b2c3</code></pre>
+<p><code>shell list</code> shows each local session with its ID, access mode, uptime and relay status. <code>shell password rotate</code> takes the ID or its first six or more characters, generates a fresh password and URL salt, switches the host to the new cipher and disconnects any browser that was already connected. It prints:</p>
+<pre><code>Link: https://shell.online/s/EXAMPLE-ONLY#salt=NEWEXAMPLE
+Password: N3wExampl3
+Existing viewers were disconnected. Share the new link and password.</code></pre>
+<p>The fork keeps running through this, and the new values never appear in the conversation. The earlier post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> covers rotation in more depth.</p>
+</section>
+
+<section>
+<h2>Step 4: Fork a specific session from your own terminal</h2>
+<p>When you want no guessing at all, skip the handoff and give OpenCode the session ID yourself. From the project directory:</p>
+<pre><code>opencode session list
+shell --read-only --name "auth refactor review" -- opencode --session ses_EXAMPLE01 --fork</code></pre>
+<p><code>opencode session list</code> prints each session's ID, title and last update. In your own terminal <code>OPENCODE</code> is not set and the command has several words, so shell runs exactly what you typed: a fork of that session, and nothing else. The <code>--</code> separates shell's flags from OpenCode's. This path also keeps the card out of the model's context, because no agent ran it, so there is nothing to rotate before you send it.</p>
+</section>
+
+<section>
+<h2>Step 5: Send it, follow along, and close it</h2>
+<p>The link holds only a random salt in its <code>#salt=</code> fragment. <a href="https://www.rfc-editor.org/rfc/rfc3986#section-3.5">RFC 3986</a> says a fragment is dereferenced solely by the user agent, and the browser exposes it to the page as the <a href="https://developer.mozilla.org/en-US/docs/Web/API/URL/hash">URL hash</a>; shell derives the key in the browser from the password and that salt. Send the link in one channel and the password in another. The <a href="/e2ee/">encryption page</a> explains what the relay can and cannot see.</p>
+<p>Up to 16 browsers can hold one session open; a seventeenth is turned away with "session is full". Your teammate sees the forked OpenCode TUI with the conversation history up to the fork. To work in the fork yourself, attach from the computer it runs on:</p>
+<pre><code>shell attach a1b2c3</code></pre>
+<p>Press Ctrl-X, release it, then press D to detach. The fork keeps running and the link stays live. When the review is over:</p>
+<pre><code>shell kill -- a1b2c3</code></pre>
+<p>That stops the forked OpenCode and takes the link offline. Your original conversation is a separate process and is not touched.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not recreate <code>/share</code>. There is no static page with a permanent URL. The link lives as long as the fork runs and your computer stays awake and online.</li>
+<li>It does not sync the two conversations. Whatever happens in the fork stays in the fork, and the original carries on without it.</li>
+<li>It does not separate their files. The original and the fork work in the same directory, so if both are allowed to edit, they edit the same checkout. For a review, let only one of them write.</li>
+<li>It does not limit what an interactive viewer can do. Without <code>--read-only</code>, a viewer types into OpenCode with your operating-system account's permissions and your provider keys. The post on <a href="/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it/">handing a teammate the password without the service seeing it</a> covers the account-based route.</li>
+<li>It depends on lsof for the automatic pick. On a machine without it, such as Windows or a minimal Linux image, shell falls back to <code>--continue --fork</code>. Use Step 4 there.</li>
+<li>I checked the adapter against OpenCode 1.19.3 only. OpenCode 2 is a separate release line, and I have not tested the handoff there.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the problem is the same one at a different layer: two parties behind different networks who need to reach each other without opening a port. Pilot's guide to <a href="https://pilotprotocol.network/blog/connect-ai-agents-behind-nat-without-vpn">connecting agents behind NAT without a VPN</a> explains how it tries a direct path first and falls back to an encrypted relay that forwards only ciphertext. If your review turns into two people typing in the fork, Pilot's write-up on <a href="https://pilotprotocol.network/blog/two-people-one-collaborative-terminal-session-in-the-browser-how-shell-online-de">how shell.online decides who types</a> explains what happens when a viewer and the host type at once. The code for all of it is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<div class="cta"><h3>Fork the conversation, not the transcript</h3><p>Install shell, add the ask rule to OpenCode, and the next time a teammate asks what the agent is doing, give them a fork they can watch live.</p><a href="/docs/">Read the shell.online docs</a></div>
