@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-where-a-shared-codex-session-sends-your-prompts",
+    "title": "How to Check Where a Shared Codex Session Sends Your Prompts",
+    "description": "Read the host and sandbox a shared Codex session really uses from a view-only shell.online link, pin them for the run, and check Claude Code the same way.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "codex",
+      "claude-code",
+      "coding-agents",
+      "agent-security"
+    ],
+    "iso_date": "2026-11-02",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-where-a-shared-codex-session-sends-your-prompts.webp"
+  },
+  {
     "slug": "how-to-tell-which-of-your-agent-terminals-needs-you-from-one-browser-tab",
     "title": "How to Tell Which of Your Agent Terminals Needs You From One Browser Tab",
     "description": "Open several named agent sessions as tabs in the shell.online app, read the badge each tab shows, see which prompts it catches, and check the rest with shell ls.",

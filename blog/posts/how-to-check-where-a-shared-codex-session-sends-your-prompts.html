@@ -1,0 +1,92 @@
+<p>On October 29 Symantec's Threat Hunter Team <a href="https://www.security.com/threat-intelligence/openai-claude-unauthorized-relays">described an unauthorized relay service</a> that provides access to Codex and Claude Code, mainly in mainland China, where neither vendor officially operates. It does not ship a modified client. It installs the genuine CLI, then rewrites the configuration so every request goes through its own servers. For Codex that includes a new base URL, relay-issued credentials, <code>sandbox_mode = "danger-full-access"</code> and network access for the write sandbox. Telemetry and error reporting go off as well. Symantec found it at a dozen organizations, active since at least early 2026, most of them in mainland China, with multinational subsidiaries in South Korea, Taiwan and Malaysia on the list. <a href="https://darkreading.com/threat-intelligence/ai-relay-service-openai-codex-claude-code-sandboxes">Dark Reading's coverage</a> leads on the disabled sandboxes.</p>
+<p>Symantec says this is not a vulnerability: "The tools are behaving as designed once their configuration has been changed." And it has no evidence that the operator abused its position, though the configuration would let the operator read every prompt, file and secret passed through the agent, and run commands with the user's full privileges.</p>
+<p>Most readers will never use a service like this. The part that applies to anyone who shares a terminal is simpler: the screen looks the same either way. When you open a teammate's <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> link and type into their Codex session, <a href="/e2ee/">end-to-end encryption</a> protects your keystrokes between your browser and their machine. After that, Codex sends the text wherever that machine's configuration says. This guide checks that destination and the sandbox before you type, using <code>codex doctor --network-only</code>, which <a href="https://github.com/openai/codex/releases/tag/rust-v0.166.0">arrived in Codex 0.166.0</a> the same day as the report. Outputs below come from Codex 0.166.0 and shell 0.25.0 on macOS, and <code>relay.example.invalid</code> is an invented host.</p>
+<p>shell.online has a relay of its own, which carries encrypted frames between browser and host. It has nothing to do with this service.</p>
+
+<section>
+<h2>Step 1: Read the settings and print names only</h2>
+<p>On the machine that runs Codex, in a terminal nobody is watching:</p>
+<pre><code>grep -nE 'model_provider|base_url|env_key|sandbox_mode|network_access' \
+  "${CODEX_HOME:-$HOME/.codex}/config.toml"
+env | cut -d= -f1 | grep -E '^(OPENAI|CODEX|ANTHROPIC)_'</code></pre>
+<p>The <a href="https://learn.chatgpt.com/docs/config-file/config-reference">Codex configuration reference</a> explains what you are reading: <code>openai_base_url</code> overrides the base URL of the built-in provider, <code>model_provider</code> picks an entry from <code>model_providers</code>, and each entry has its own <code>base_url</code> and an <code>env_key</code> naming the variable that holds its key. Codex ignores those endpoint keys in a project's <code>.codex/config.toml</code>, so a changed endpoint lives in your user file or in a profile file beside it, such as <code>$CODEX_HOME/name.config.toml</code>. <code>sandbox_mode</code> is not on that ignore list, so the next step reads the effective value.</p>
+<p>The second command prints variable names and drops the values. Symantec tells defenders to look for <code>OPENAI_BASE_URL</code>, <code>CODEX_API_KEY</code> and <code>ANTHROPIC_AUTH_TOKEN</code> set outside an approved deployment process.</p>
+<p>Keep the values out of any shared window. A session started from your terminal inherits your environment, as you can see in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/session_unix.go">session_unix.go</a>. shell removes its own password and session variables, sets <code>TERM</code> to <code>xterm-256color</code>, adds <code>COLORTERM</code>, <code>COLORFGBG</code> and <code>SHELL_ONLINE=1</code>, and passes the rest. A plain <code>env</code> inside a share therefore shows your provider keys to everyone watching.</p>
+</section>
+
+<section>
+<h2>Step 2: Run the doctor in a view-only share</h2>
+<p>If a teammate is about to type into this machine, let them read the answer themselves:</p>
+<pre><code>shell --foreground --read-only --name codex-check</code></pre>
+<p>With no command, shell shares a fresh shell. <code>--foreground</code> keeps it in your terminal, and <code>--read-only</code> makes the link view only. The banner prints the link, a password and <code>Access view only · end-to-end encrypted</code>. Your local keyboard still works and browser input is blocked, as the <a href="/security/">security page</a> describes. Send the link and password to your teammate, then run this inside the share:</p>
+<pre><code>codex doctor --network-only</code></pre>
+<p>The <a href="https://github.com/openai/codex/pull/57606">pull request that added the flag</a> limits the report to effective configuration, network environment, provider HTTP reachability and the Responses WebSocket check. With a custom provider in <code>config.toml</code>, the rows that matter look like this:</p>
+<pre><code>model provider           example-relay
+provider name            Example relay
+example-relay API inference URL https://relay.example.invalid/v1/&lt;redacted&gt; connect failed (required)</code></pre>
+<p>Paths are redacted and hosts are not, and the host is what you came for. With <code>openai_base_url</code> set in the file instead, the report still calls the provider OpenAI:</p>
+<pre><code>model provider           openai
+provider name            OpenAI
+endpoint                 wss://relay.example.invalid/v1/&lt;redacted&gt;
+openai API inference URL https://relay.example.invalid/v1/&lt;redacted&gt; connect failed (required)</code></pre>
+<p>A stock configuration with no login printed <code>wss://api.openai.com/v1/&lt;redacted&gt;</code> and <code>https://chatgpt.com/backend-api/&lt;redacted&gt;</code>. The command exits 1 when a required endpoint is unreachable and 0 with only a warning. It probes the host it reports, so it does contact a host you may not trust. On 0.166.0, exporting <code>OPENAI_BASE_URL</code> did not change the endpoint in the report, which is why Step 1 lists variable names separately.</p>
+<p><code>--network-only</code> has no sandbox row. The full doctor does:</p>
+<pre><code>codex doctor | grep -i sandbox</code></pre>
+<p>With <code>danger-full-access</code> in the file it printed <code>filesystem unrestricted · network enabled</code> and <code>unrestricted fs + enabled network · approval OnRequest</code>. Overriding to <code>workspace-write</code> printed <code>restricted fs + restricted network</code>, which fits the <a href="https://learn.chatgpt.com/docs/agent-approvals-security">OpenAI documentation</a> saying that mode keeps network access off unless you enable it. Type <code>exit</code> when you are done, and the link closes with the shell.</p>
+<p>For a session already running, the owner can type <a href="https://learn.chatgpt.com/docs/cli/slash-commands"><code>/status</code></a> in Codex, which the docs say confirms the active model, approval policy and writable roots. Anyone on the link sees the same card.</p>
+</section>
+
+<section>
+<h2>Step 3: Pin what this run uses</h2>
+<p>You can set the endpoint and the sandbox for one run without touching the file:</p>
+<pre><code>shell --name api-migration codex --sandbox workspace-write -c 'model_provider="openai"'</code></pre>
+<p>Everything after <code>codex</code> goes to Codex. <code>--sandbox</code> takes <code>read-only</code>, <code>workspace-write</code> or <code>danger-full-access</code>, and <code>-c</code> overrides a config value for this invocation. Run over a file naming a custom provider, the doctor with that <code>-c</code> reported <code>api.openai.com</code>. An <code>openai_base_url</code> line stays in force, though. With an API key you can add <code>-c 'openai_base_url="https://api.openai.com/v1"'</code>, which the doctor also reported correctly. With a ChatGPT login, whose stock report shows <code>chatgpt.com/backend-api</code>, I would delete the line instead of pinning a URL. Pinned flags do not restore a login. On one host, Symantec saw the script run <code>claude /logout</code> and delete the authentication variables first. If you find endpoint lines you did not write, I would stop sharing that machine and replace its credentials before doing anything clever with flags.</p>
+<p>From a phone, the <a href="/app/">web app's</a> new session form has a Sandbox select for Codex, defined in <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/src/lib/session-kinds.ts">session-kinds.ts</a>. <code>codex default</code> adds no flag, so the file decides. Any other choice adds <code>--sandbox</code> with that value, and <code>danger-full-access</code> is one of the choices.</p>
+</section>
+
+<section>
+<h2>Step 4: Look at the connections during the run</h2>
+<p>Configuration says where requests should go. To see where they go, use a terminal that is not shared:</p>
+<pre><code>host=$(shell list --json | jq -r '.[] | select(.name == "api-migration") | .pid')
+agent=$(pgrep -P "$host")
+lsof -a -i -P -g "${agent:?no wrapped process found}"</code></pre>
+<p><code>shell list --json</code> gives the <code>pid</code> of the shell host, along with each session's password and share URL, so keep it behind <code>jq</code> and away from anything being watched. <a href="https://man7.org/linux/man-pages/man1/pgrep.1.html"><code>pgrep -P</code></a> returns the wrapped program, which is the host's child and leads its own process group. In <a href="https://man7.org/linux/man-pages/man8/lsof.8.html"><code>lsof</code></a>, <code>-a</code> ANDs the selections, <code>-i</code> picks network files, <code>-g</code> picks the process group and <code>-P</code> keeps port numbers numeric.</p>
+<p>In a test session whose program opened one TCP connection, the group listing showed that one line, and shell's own connection to its relay appeared only under the host's PID. The <code>:?</code> guard is there because an empty value makes <code>lsof</code> list the network connections of every process on the machine.</p>
+<p>The <code>NAME</code> column shows a reverse DNS name or an address, so an address you cannot place is a lead and not a finding. A tool command that the agent starts in its own process group or session will not be in this list either.</p>
+</section>
+
+<section>
+<h2>Step 5: Run the same check for Claude Code</h2>
+<p>Claude Code keeps this in <code>ANTHROPIC_BASE_URL</code>, which can sit in your shell or in the <code>env</code> block of a settings file. List names first:</p>
+<pre><code>jq -r '.env // {} | keys[]' ~/.claude/settings.json</code></pre>
+<p>Then run <code>/status</code> inside Claude Code. <a href="https://code.claude.com/docs/en/llm-gateway-connect">Anthropic's gateway guide</a> says the <code>Anthropic base URL</code> line appears only when a gateway address is set, and that a line naming <code>ANTHROPIC_AUTH_TOKEN</code>, <code>ANTHROPIC_API_KEY</code> or an <code>apiKeyHelper</code> means a gateway credential is active. If both a shell export and a settings file set the variable, the settings file wins. A gateway your company runs produces the same line, so the question is whether you recognize the host.</p>
+</section>
+
+<section>
+<h2>Step 6: Repeat it for sessions started from your phone</h2>
+<p>A session started from the app is not launched by your terminal. The machine's daemon <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/browser_command_unix.go">runs the command directly, or through <code>sh -c</code></a> if it contains shell metacharacters, and the session gets the daemon's environment. <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">A background service</a> starts from the operating system, and the <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/service.go">source says so plainly</a>: it sees none of the environment the person who installed it had. The launchd plist's <a href="https://keith.github.io/xcode-man-pages/launchd.plist.5.html"><code>EnvironmentVariables</code></a> key carries only shell's own settings. PATH is the exception, and the daemon <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/tool_path.go">asks your login shell for it</a>. Without a service, the daemon keeps the environment of whichever terminal command happened to start it.</p>
+<div class="callout"><strong>The same command can reach a different endpoint.</strong> zsh reads <a href="https://zsh.sourceforge.io/Doc/Release/Files.html"><code>.zshrc</code> only for interactive shells</a>. If you export <code>CODEX_HOME</code> or <code>ANTHROPIC_BASE_URL</code> there, <code>shell codex</code> in a terminal sees it, and the same agent started from the app under the service does not. Codex then reads <code>~/.codex/config.toml</code>, and Claude Code goes wherever its settings files say. Anthropic warns about the same gap for its own background agents and recommends a settings file.</div>
+<p>To compare, start a session from the app with the command <code>sh</code>, then run <code>codex doctor --network-only</code> in it and set it beside your Step 2 output. This step comes from reading the code at this commit for macOS and Linux. It was not run on a linked machine, and Windows was not checked.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li><strong>shell does not know.</strong> Nothing in the CLI reads Codex's <code>config.toml</code>, and shell cannot tell you which provider a wrapped program uses. Encryption covers browser to host, and an <a href="/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon/">earlier post</a> goes through what the relay sees. A read-only link limits browser input, not the agent's network.</li>
+<li><strong>The doctor reports configuration.</strong> It cannot tell you what a host does with your data. A familiar hostname behind a proxy or a modified binary would not stand out here.</li>
+<li><strong>Approval prompts do not cover this.</strong> HiddenLayer <a href="https://www.hiddenlayer.com/research/blog-llm-gateway-coding-agent-security">showed on October 22</a> that whoever controls a gateway can forge tool calls that appear to come from the model, run them under existing approvals, and remove them from what the user sees. A teammate approving from a phone would not see it.</li>
+<li><strong>It is one machine at one moment.</strong> The file can change after you check. For a fleet, the config reference describes <code>requirements.toml</code> as admin-enforced, and Anthropic's <a href="https://code.claude.com/docs/en/llm-gateway"><code>allowedProviders</code> managed setting</a> refuses sessions pointed elsewhere from Claude Code v2.1.285.</li>
+</ul>
+<p>The <a href="/docs/">shell.online docs</a> cover the rest of the product.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is developed by Pilot Protocol, a networking stack for autonomous agents. Pilot does not sit between Codex and OpenAI and would not have caught this relay. The same question comes up when your agents talk to each other: who is on the other end, and who is in the middle. Pilot's <a href="https://pilotprotocol.network/security">security page</a> gives its answer. "Each daemon has a persistent Ed25519 key pair," and "Relayed payloads are ciphertext; the beacon has no tunnel keys." Its post on <a href="https://pilotprotocol.network/blog/peer-to-peer-agent-communication-no-server">peer-to-peer agent communication</a> adds the limit: a relay can still observe timing and volume. The security page is also direct about what stays with you: "Whether an agent may read data, spend money or make a commitment is decided by your application."</p>
+</section>
+
+<div class="cta">
+<h3>Read the host before you type</h3>
+<p>Open a view-only share, run the doctor, and pin the run if anything looks unfamiliar.</p>
+<a href="/cli/">Read the shell CLI reference</a>
+</div>
