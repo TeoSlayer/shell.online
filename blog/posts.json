@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-fork-a-claude-code-conversation-into-a-browser-link-mid-session",
+    "title": "How to Fork a Claude Code Conversation Into a Browser Link Mid-Session",
+    "description": "Fork a live Claude Code conversation into a browser link with shell claude, keep the password out of the transcript, and see what the copy keeps and loses.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "session-fork",
+      "terminal-sharing",
+      "coding-agents"
+    ],
+    "iso_date": "2026-11-03",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-fork-a-claude-code-conversation-into-a-browser-link-mid-session.webp"
+  },
+  {
     "slug": "how-to-check-where-a-shared-codex-session-sends-your-prompts",
     "title": "How to Check Where a Shared Codex Session Sends Your Prompts",
     "description": "Read the host and sandbox a shared Codex session really uses from a view-only shell.online link, pin them for the run, and check Claude Code the same way.",
