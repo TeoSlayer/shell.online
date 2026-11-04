@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-read-an-agent-skill-before-it-can-share-your-terminal",
+    "title": "How to Read an Agent Skill Before It Can Share Your Terminal",
+    "description": "Check a SKILL.md against its release, list its hosts, find loosened oversight and watch its first run, using the shell.online skill as the worked example.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "agent-skills",
+      "coding-agents",
+      "supply-chain",
+      "read-only-links"
+    ],
+    "iso_date": "2026-11-04",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-read-an-agent-skill-before-it-can-share-your-terminal.webp"
+  },
+  {
     "slug": "how-to-fork-a-claude-code-conversation-into-a-browser-link-mid-session",
     "title": "How to Fork a Claude Code Conversation Into a Browser Link Mid-Session",
     "description": "Fork a live Claude Code conversation into a browser link with shell claude, keep the password out of the transcript, and see what the copy keeps and loses.",
