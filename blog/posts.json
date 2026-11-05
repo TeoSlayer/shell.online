@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-track-parallel-coding-agents-on-a-board-as-conductor-cloud-closes",
+    "title": "How to Track Parallel Coding Agents on a Board as Conductor Cloud Closes",
+    "description": "Move Conductor workspaces to your machine before November 13, start each agent under shell.online with a name, and follow them all on the app's session board.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "coding-agents",
+      "git-worktrees",
+      "parallel-agents",
+      "team-sessions"
+    ],
+    "iso_date": "2026-11-05",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-track-parallel-coding-agents-on-a-board-as-conductor-cloud-closes.webp"
+  },
+  {
     "slug": "how-to-read-an-agent-skill-before-it-can-share-your-terminal",
     "title": "How to Read an Agent Skill Before It Can Share Your Terminal",
     "description": "Check a SKILL.md against its release, list its hosts, find loosened oversight and watch its first run, using the shell.online skill as the worked example.",
