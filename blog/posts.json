@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-review-a-codex-patch-from-a-browser-before-you-approve-it",
+    "title": "How to Review a Codex Patch From a Browser Before You Approve It",
+    "description": "Run Codex 0.167.0 under shell.online, open its patch details from a laptop or phone while the approval prompt waits, and decide who answers.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "approvals",
+      "code-review",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-06",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-review-a-codex-patch-from-a-browser-before-you-approve-it.webp"
+  },
+  {
     "slug": "how-to-track-parallel-coding-agents-on-a-board-as-conductor-cloud-closes",
     "title": "How to Track Parallel Coding Agents on a Board as Conductor Cloud Closes",
     "description": "Move Conductor workspaces to your machine before November 13, start each agent under shell.online with a name, and follow them all on the app's session board.",
