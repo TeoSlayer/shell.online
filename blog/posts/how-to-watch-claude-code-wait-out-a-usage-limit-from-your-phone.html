@@ -1,0 +1,102 @@
+<p>On October 20, Anthropic shipped <a href="https://code.claude.com/docs/en/changelog">Claude Code 2.1.305</a> with a new setting for its unattended retry mode. With <code>CLAUDE_CODE_RETRY_WATCHDOG=1</code>, Claude Code already retried 429 and 529 capacity errors indefinitely, and a session that hit a usage limit waited out the rest of the window. The new <code>CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS</code> makes it check, at an interval you choose, whether the limit was lifted early, and send the request at once if it was. Five days earlier, 2.1.301 added a companion variable that ends a request at a usage limit whose reset is too far away instead of waiting for it.</p>
+
+<p>The <a href="https://code.claude.com/docs/en/env-vars">environment variable reference</a> describes the watchdog as a setting for eval harnesses, CI jobs and remote workers. It backs off up to five minutes between attempts, or until the limit resets when the response says when that is. In practice that means a Claude Code run can now sit in your terminal for hours, alive and doing nothing, and then pick up again on its own. That is what you want from an overnight job. It also means the question you have at 2am is no longer whether the run crashed. It is whether it is working, waiting on a limit, or finished.</p>
+
+<p>This guide starts such a run inside <a href="/">shell.online</a> so you can answer that from a phone. You put the watchdog in the run's environment, start it as a named session, turn on the summary card that reports finished turns, read the live screen when the card has nothing to say, and put a deadline on the whole night. The shell behavior here comes from the 0.25.0 help text and the source in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>. The watchdog behavior comes from Anthropic's documentation as it reads today.</p>
+
+<section>
+<h2>What the watchdog waits for</h2>
+
+<p>Two kinds of refusal matter here. A 429 is the HTTP status for too many requests, defined in <a href="https://www.rfc-editor.org/rfc/rfc6585#section-4">RFC 6585</a>, and a server may send a <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After">Retry-After header</a> with it to say how long to wait. Anthropic's <a href="https://platform.claude.com/docs/en/api/errors">API error reference</a> lists 429 as <code>rate_limit_error</code> and 529 as <code>overloaded_error</code>, which can happen when the API sees high traffic across all users. Claude Code's <a href="https://code.claude.com/docs/en/errors">error guide</a> adds that a 529 is not your usage limit and does not count against your quota.</p>
+
+<p>The watchdog treats them differently from a spend limit. Per the reference, it fails at once when a standard-speed request gets a 429 that reports a spend limit or exhausted usage credits. The new recheck is narrower still: checks are made only for a claude.ai subscription's session or weekly limit while usage credits are not in use, and not while <code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code> is set. The interval must be a whole number of milliseconds from 60000 to 10800000. Outside that range, no checks are made at all.</p>
+</section>
+
+<section>
+<h2>Step 1: Start the run with the watchdog in its environment</h2>
+
+<p>shell passes the environment of the terminal you start it from to the program it wraps. Since 0.24.1 it keeps its own session password out of that environment, but your variables go through. So export the watchdog settings first, then start Claude Code as a named session with the task as its prompt:</p>
+
+<pre><code>export CLAUDE_CODE_RETRY_WATCHDOG=1
+export CLAUDE_CODE_RETRY_WATCHDOG_USAGE_LIMIT_RECHECK_MS=900000
+shell --name overnight-pytest claude "Move the tests in ./tests from unittest to pytest, run them, and fix what breaks"</code></pre>
+
+<p>The first line turns on unattended retry mode, which needs Claude Code 2.1.186 or later. The second asks for a check every 15 minutes and needs 2.1.305. The third starts Claude Code in the background inside a pseudo-terminal and prints a browser link, a ten-character password and a QR code that holds both. The prompt is invented for this example. Because it is several words in one argument, shell can bind the session to the Claude Code conversation it starts, which the summary card in Step 3 depends on.</p>
+
+<p>The 2.1.301 variable, <code>CLAUDE_CODE_RETRY_WATCHDOG_MAX_USAGE_LIMIT_WAIT_MS</code>, is described in the changelog but was not in the environment variable reference when I checked. I would read its entry there before setting it.</p>
+</section>
+
+<section>
+<h2>Step 2: Confirm the session on the machine</h2>
+
+<pre><code>shell list</code></pre>
+
+<p>The table shows each session's ID, access mode, uptime, closing rule, command, share URL, whether a password is stored, and the relay status: online, starting, reconnecting, expired or unknown. Look for <code>overnight-pytest</code> with the relay online. If you closed the terminal that printed the password, <code>shell password &lt;ID&gt;</code> prints it again from the owner-only local record. The <a href="/cli/">CLI reference</a> lists the JSON form, <code>shell list --json</code>, for scripts.</p>
+</section>
+
+<section>
+<h2>Step 3: Turn on the summary card</h2>
+
+<p>The quickest check from bed is a card you can open without entering the session password. Session summaries need a machine linked to your account, so run <code>shell auth</code> once if you have not, then switch summaries on for this one session. <code>shell auth</code> also asks, once, whether your signed-in browser may start sessions on this machine; this guide does not need that, so you can say no.</p>
+
+<pre><code>shell auth
+shell permissions &lt;ID&gt; --summaries=true</code></pre>
+
+<p>Summaries are off by default, owner-only and opt-in per session, and they cover only sessions started with a CLI that includes them, which means 0.25.0 or later. For a Claude Code session, the host reads the conversation's own transcript on your machine: the latest title and the latest assistant reply, never thinking or tool output. It encrypts the result to your account vault key, so the service stores only ciphertext. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/summaries.md">summaries document</a> covers what leaves the machine for other kinds of session.</p>
+
+<p>On the phone, open <a href="/app/">app.shell.online</a>, open your vault when the card asks for it, and press and hold the session's row for half a second. The card shows the title, the reply, a state label such as Waiting for input, and a line like From Claude Code with how long ago the summary was made.</p>
+
+<div class="callout">
+<p><strong>The card reports finished turns, not waits.</strong> The host publishes a Claude Code summary only when the last assistant message in the transcript ended its turn, or when you interrupted it. A turn that is still going, including one whose request is sitting out a usage limit, is skipped. A run started with one prompt is one long turn, so the card can say No summary yet all night and then switch to Waiting for input when Claude is done. Read it as a finish line. To see a wait, open the screen.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 4: Read the screen from your phone</h2>
+
+<p>Scan the QR code, or open the full link and type the password. The link carries a random <code>#salt=</code> fragment and the QR adds the password to that fragment, which never reaches the relay. That also makes the QR a bearer credential, so keep it off shared screens. The <a href="/e2ee/">encryption page</a> explains what the relay can and cannot see.</p>
+
+<p>You now see the same screen you would see at the desk. What Claude Code prints while the watchdog waits is up to Claude Code, and I have not seen its wording documented, so read the screen rather than relying on one message. If Claude stops to ask for permission, you can answer from the phone. The <a href="/mobile/">mobile guide</a> covers the terminal key controls for keys your keyboard lacks: Ctrl-C there interrupts the running command, and Ctrl-D needs two presses within three seconds before it sends EOF.</p>
+
+<p>Two things change while you watch. On a current host, any connected phone switches everyone to an 80 by 40 grid, which returns to 120 by 36 when the last phone leaves. Closing the tab leaves the run going. An earlier post shows the same Claude Code session <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">read as a conversation instead of a grid</a>, which suits a small screen.</p>
+</section>
+
+<section>
+<h2>Step 5: Put a deadline on the night</h2>
+
+<p>A run that waits politely is still a run you forgot to stop. Decide the latest time it may hold the machine before you start it, and keep the computer awake for that long. <a href="https://ss64.com/mac/caffeinate.html">caffeinate</a> on macOS and <a href="https://man7.org/linux/man-pages/man1/systemd-inhibit.1.html">systemd-inhibit</a> on Linux hold their lock only while the command they wrap is running. A background shell start returns as soon as the link is ready, so wrap a foreground start instead:</p>
+
+<pre><code>caffeinate -i shell --foreground --name overnight-pytest --auto-close tomorrow 08:00 claude "Move the tests in ./tests from unittest to pytest, run them, and fix what breaks"</code></pre>
+
+<p><code>--foreground</code> keeps the session attached to this terminal and returns Claude Code's exit status when it ends. <code>--auto-close tomorrow 08:00</code> closes the share when the task exits and adds an earlier deadline; the help text accepts multi-token dates like this one. On Linux, swap the first word for <code>systemd-inhibit --what=sleep</code>.</p>
+
+<p>When the deadline arrives, or when you run <code>shell kill &lt;ID&gt;</code>, shell sends SIGTERM to the process group and SIGKILL two seconds later if it is still there. I read that in the Unix code path, so it holds for macOS and Linux. Windows takes a different path. An earlier post on <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching an agent after you turn off its permission prompts</a> covers the other half of an unattended night.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>shell does not know about usage limits. It sees a process and its terminal output. It cannot tell you when a limit resets, and it does not make a waiting request go faster.</li>
+<li>Nothing here sends you a notification. The card and the screen are things you go and look at.</li>
+<li>The summary card does not describe a wait in progress, as the callout explains, and it is an automated summary that may be wrong.</li>
+<li>The recheck applies only to claude.ai subscription limits. An API key that hits a spend limit fails at once under the watchdog, by Anthropic's own description.</li>
+<li>shell does not restart Claude Code if it exits or crashes, and it does not keep a laptop awake on its own. If the host loses its network, the CLI retries, and the <a href="/reliability/">reliability guide</a> lists what survives a disconnect.</li>
+<li>A sleeping machine stops the run along with the link.</li>
+<li>It does not tell a capacity problem from your own limit. Check <a href="https://status.claude.com/">Claude's status page</a> before you blame a long wait on your plan.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is built by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the gap above is a messaging problem. Claude Code has a hook for the moment a run gives up. The <a href="https://code.claude.com/docs/en/hooks">hooks reference</a> says <code>StopFailure</code> runs instead of <code>Stop</code> when a turn ends due to an API error, and it can be filtered on error types such as <code>rate_limit</code> and <code>overloaded</code>. With the watchdog on, a turn ends that way only when the watchdog gives up, for example at a spend limit.</p>
+
+<p>A command hook on that event could run <code>pilotctl publish &lt;node&gt; claude --data "overnight-pytest stopped"</code>, and anything running <code>pilotctl subscribe &lt;node&gt; claude</code> gets the event. Pilot's <a href="https://pilotprotocol.network/docs/pubsub">pub/sub documentation</a> is clear that delivery is at most once, with no persistence or replay, so treat it as a nudge to go and look rather than a record. Keep the share link and password out of the event. For how the session itself behaves through a long night of dropped connections, the Pilot blog's piece on <a href="https://pilotprotocol.network/blog/keep-a-terminal-session-alive-after-a-disconnect-what-a-long-agent-run-on-shell">what a long agent run on shell.online survives</a> goes further than this guide. If you are running several overnight sessions, <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">the post on telling which session needs you</a> is the next read, and the <a href="https://github.com/anthropics/claude-code">Claude Code repository</a> is where to report watchdog behavior that does not match its documentation.</p>
+</section>
+
+<div class="cta">
+<h3>Start tonight's run where you can see it</h3>
+<p>Install shell, export the watchdog settings, and start Claude Code with a name and a deadline. The <a href="/platforms/">platforms page</a> lists the systems it runs on, and the <a href="/security/">security page</a> covers who can open it.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>

@@ -1,0 +1,110 @@
+<p>Anthropic released <a href="https://code.claude.com/docs/en/changelog">Claude Code 2.1.317</a> on November 3, 2026. Three lines in <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">its changelog</a> deal with the same problem, which is what happens to a conversation's identity when a second process touches it. A <code>claude -p</code> run inside a cloud or self-hosted runner session no longer shares that session's ID, which used to write into the parent's transcript and could make a restart resume the wrong conversation. The "Resume this session with" hint at exit now repeats your launch flags ahead of <code>--resume</code>. Remote Control forks now get names such as "Name (fork 2)".</p>
+<p>If you run a long agent conversation on your own computer, the same problem appears when you want to leave your desk, or when a teammate should look at where things stand. You want the history in a second place without two writers on one transcript. <a href="/docs/">shell.online</a> has a form for this. When Claude Code's Bash tool runs a bare <code>shell claude</code>, shell starts a fork of the current conversation on a browser link and leaves the original open.</p>
+<p>This guide starts that fork, keeps its link and password out of the conversation that launched it, and lists what the copy keeps and loses. The shell behavior here comes from the v0.25.0 code. The fork arguments were checked on macOS against a stub program named <code>claude</code>, so what Claude Code does with them comes from Anthropic's documentation.</p>
+
+<section>
+<h2>Three ways to reach a running conversation</h2>
+<p>Anthropic's <a href="https://code.claude.com/docs/en/sessions">session documentation</a> warns that if you resume the same session in two terminals without forking, messages from both interleave into one transcript. That rules out the plain second window.</p>
+<p><a href="https://code.claude.com/docs/en/remote-control">Remote Control</a> connects claude.ai/code or the Claude app to the session on your machine and keeps the conversation in sync across your devices. It requires a claude.ai subscription and does not support API keys, and on Team and Enterprise plans an Owner has to enable it.</p>
+<p>A shell fork gets its own session ID and diverges from the original. It uses your local <code>claude</code> sign-in. The person opening the link needs the link and the password, and <a href="https://github.com/TeoSlayer/shell.online">the project's README</a> says no account is needed to try it. Terminal payloads are <a href="/e2ee/">encrypted between your machine and each browser</a>.</p>
+</section>
+
+<section>
+<h2>Step 1: Check what the fork will inherit</h2>
+<p>The fork is a new process built from the saved transcript, so it misses some of what the original has. These rules for <code>claude --resume &lt;session-id&gt;</code> come from the <a href="https://code.claude.com/docs/en/sessions">same page</a>:</p>
+<ul>
+<li>Messages, tool calls and tool results carry over. A compacted conversation opens at a "Conversation compacted" row.</li>
+<li>Manual mode stays manual unless a <code>defaultMode</code> in a settings file applies. Auto mode returns only if your account still meets its requirements.</li>
+<li>A session in <code>bypassPermissions</code> does not get it back. Neither does plan mode under <code>--fork-session</code>. Both start in the mode a new session would use.</li>
+<li>"Allow for this session" grants stay behind. You approve those commands again in the fork.</li>
+<li><code>--mcp-config</code>, <code>--settings</code>, <code>--plugin-dir</code>, <code>--fallback-model</code> and <code>--add-dir</code> are not restored, and neither are directories added with <code>/add-dir</code>. Settings files are read again at launch.</li>
+<li>Background Bash and monitor tasks are not restored.</li>
+</ul>
+<p>If a token or a customer record went through a tool result, it travels with the fork, so read the conversation as a viewer would. Then ask Claude to run these two commands:</p>
+<pre><code>pwd
+grep -ns SessionStart .claude/settings.json .claude/settings.local.json ~/.claude/settings.json</code></pre>
+<p>The first matters because shell does not change directory: in the stub check, the forked program started in the directory the command ran from. The second lists hooks that will fire again, because <a href="https://code.claude.com/docs/en/hooks">SessionStart hooks run on a fork too</a>, with <code>source</code> set to <code>"fork"</code>. This check does not cover hooks from plugins.</p>
+<p>Straiker <a href="https://straiker.ai/blog/session-inception-spawning-a-child-claude-session-to-bypass-parent-guardrails">published a proof of concept</a> on October 8 in which a parent session ran <code>claude -p</code> through its shell inside a malicious repository, and a SessionStart hook from that repository sent environment data to an outside server. Anthropic closed the report as Informative. shell's fork is an interactive session, and Anthropic's <a href="https://code.claude.com/docs/en/permissions">permissions documentation</a> says the trust dialog appears only in interactive sessions, so that exact path does not apply here. A hook in a folder you already trusted still runs. <a href="https://cert.europa.eu/blog/beyond-the-model-backdoors-in-ai-agent-harnesses">CERT-EU's October 30 write-up</a> makes the wider point: tool permissions and approval prompts govern the model's actions, and code running beside the model is outside them.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the fork from inside the conversation</h2>
+<p>Ask Claude to run this command, and approve the Bash prompt if one appears:</p>
+<pre><code>shell --read-only --name review-fork claude</code></pre>
+<p><code>--read-only</code> makes the server block browser input, and <code>--name</code> labels the session. Both are flags for shell, so the fork still applies. The command prints a card and returns, with the fork running in the background:</p>
+<pre><code>  Name       review-fork
+  Open       https://shell.online/s/Xy7kQ2mNpA#salt=EXAMPLE
+  Password   exAmple-pw
+  Vault      not linked · run shell auth
+  Access     view only · end-to-end encrypted
+  Session    Xy7kQ2mNpA · background
+  Closes     when the task exits
+  Handoff    forked Claude conversation; the original stays open
+
+  Rejoin     shell attach Xy7kQ2mNpA
+  Stop       shell kill -- Xy7kQ2mNpA</code></pre>
+<p>shell looks for <code>CLAUDE_CODE_CHILD_SESSION=1</code> and a UUID in <code>CLAUDE_CODE_SESSION_ID</code>, which Anthropic's <a href="https://code.claude.com/docs/en/env-vars">environment variable reference</a> says Claude Code sets in Bash tool subprocesses. It then runs <code>claude --resume &lt;id&gt; --fork-session</code>, the pair the <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a> describes as creating a new session ID.</p>
+<p>It also removes five variables first: <code>CLAUDECODE</code>, <code>CLAUDE_CODE_CHILD_SESSION</code>, <code>CLAUDE_CODE_SESSION_ID</code>, <code>CLAUDE_CODE_BRIDGE_SESSION_ID</code> and <code>CLAUDE_CODE_REMOTE_SESSION_ID</code>. A child process <a href="https://man7.org/linux/man-pages/man7/environ.7.html">inherits a copy of its parent's environment</a>, so without this step the fork would carry its parent's identity. In the stub check they were gone from the fork's environment and an unrelated variable came through.</p>
+<div class="callout"><strong>No Handoff line means no fork.</strong> The rewrite applies only to a bare <code>claude</code> with nothing after it. <code>shell claude --model sonnet</code> runs exactly that, with a new conversation and no history, and in the stub check the Claude variables stayed in its environment. Anthropic documents that a nested interactive <code>claude</code> started this way is left out of <code>--resume</code>, <code>--continue</code> and <code>claude agents</code>. <code>--foreground</code> also turns the fork off, and so does running <code>shell claude</code> in your own terminal, where those variables are not set. Step 5 covers the case where you need flags.</div>
+</section>
+
+<section>
+<h2>Step 3: Keep the link and password out of the transcript</h2>
+<p>That card went to the Bash tool, so it is now a tool result. Claude read it, and <a href="https://code.claude.com/docs/en/sessions#where-transcripts-are-stored">the transcript under <code>~/.claude/projects</code></a> stores tool results. To keep it out, discard the output at the start:</p>
+<pre><code>shell --read-only --name review-fork claude &gt;/dev/null 2&gt;&amp;1</code></pre>
+<p>In the stub check this form exited 0, printed nothing and started the same fork. The trade is that you cannot see the Handoff line, so confirm the fork in the browser. Collect the details in a terminal of your own, outside Claude's Bash tool:</p>
+<pre><code>shell list
+shell list --json
+shell password Xy7kQ2mNpA</code></pre>
+<p><a href="/cli/"><code>shell list</code></a> prints one row per session and cuts the link short, so take the full link from <code>--json</code>, which also holds the password. The fork's row shows the command as <code>claude</code>, because shell records what you typed and not the rewritten arguments:</p>
+<pre><code>ID          NAME         UPTIME  RELAY   CLOSES   ACCESS          COMMAND  SHARE URL                             PASSWORD
+Xy7kQ2mNpA  review-fork  12s     online  on exit  view-only+e2ee  claude   https://shell.online/s/Xy7kQ2mNpA#s…  stored
+Long URLs and full credentials: shell list --json</code></pre>
+<p>If the card already went through the tool, rotate from your own terminal:</p>
+<pre><code>shell password rotate Xy7kQ2mNpA</code></pre>
+<p>It prints a new <code>Link:</code> and <code>Password:</code> and disconnects existing viewers, without restarting the process. The link changes because the salt lives in the <a href="https://www.rfc-editor.org/rfc/rfc3986#section-3.5">URL fragment</a>, the part a browser handles itself. Rotation does not erase output somebody already saw. An <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">earlier post on revoking a link</a> covers this command.</p>
+</section>
+
+<section>
+<h2>Step 4: Open it, and know who can answer prompts</h2>
+<p>Send the link and the password over different channels, as described in <a href="/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it/">this post on sharing a session password</a>. For a phone, see the <a href="/mobile/">mobile guide</a> and the <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">post on reading Claude Code as a conversation</a>.</p>
+<p>On a read-only link nobody in a browser can answer anything, and a fork has a few things to ask. Claude Code may show its workspace trust dialog if it does not trust the directory yet. It may show "Resume this conversation?", which Anthropic says can appear for a long conversation after a long break or on a different model. Approvals you gave "for this session" are asked for again. All of these wait for a keyboard, so step in locally:</p>
+<pre><code>shell attach Xy7kQ2mNpA</code></pre>
+<p>Local input goes to the process while the browser link stays live. Press Ctrl-X, release it, then press D to detach and leave the fork running. To drive the fork from your own phone, drop <code>--read-only</code> in Step 2, and treat the password as permission to type into a live agent.</p>
+</section>
+
+<section>
+<h2>Step 5: Pass flags by writing the fork yourself</h2>
+<p>If the session depends on <code>--add-dir</code> or <code>--mcp-config</code>, the bare form loses them. The 2.1.317 hint shows the flags you launched with, but only at exit. Get the session ID by asking Claude to run this:</p>
+<pre><code>echo "$CLAUDE_CODE_SESSION_ID"</code></pre>
+<p>Then start the fork from your own terminal, in the project directory, with the flags you need:</p>
+<pre><code>cd ~/src/example-app
+shell --read-only --name api-fork claude --resume 11111111-2222-4333-8444-555555555555 --fork-session --add-dir ../api</code></pre>
+<p>Your own terminal does not have the Claude variables, so nothing needs removing. The card has no Handoff line here, because shell passes the command along untouched and you did the forking. <code>shell list</code> records this command line, session ID included, and its table cuts long ones short. Add <code>--permission-mode</code> here to override the restored mode.</p>
+</section>
+
+<section>
+<h2>Step 6: Stop the fork</h2>
+<pre><code>shell kill -- Xy7kQ2mNpA</code></pre>
+<p><code>shell kill</code> terminates the wrapped process and takes the link offline. The original conversation is a different process and keeps running. On macOS and Linux the host starts in <a href="https://man7.org/linux/man-pages/man2/setsid.2.html">its own session through setsid</a>, so it sits outside the Bash tool's process group. I have not tested what a real Claude Code exit does to it, and I would not assume either way, so run <code>shell list</code> after you close the original.</p>
+<p>The transcript outlives the link. Forks appear as separate rows in the <code>/resume</code> picker, and the default retention is 30 days.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not move the running process. shell's help text is plain on this: the original stays open, and the two conversations diverge from that point.</li>
+<li>It does not fork your files. Both conversations work in the same checkout, and neither knows what the other changed. If both will edit, give each its own <a href="https://git-scm.com/docs/git-worktree">git worktree</a> and start a new session there.</li>
+<li>It does not limit Claude. <code>--read-only</code> blocks input from the browser. What the fork may do is still set by its permission mode and rules, and shell is not a sandbox. OWASP's entry on <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive agency</a> is a useful test for what you leave approved.</li>
+<li>It was not checked on Windows. The stub check was macOS only.</li>
+</ul>
+<p>The <a href="/security/">security page</a> lists what the relay can see while the link is open.</p>
+</section>
+
+<section>
+<h2>When the other side is an agent</h2>
+<p>A fork puts a conversation in front of a person, on the machine that holds the transcript. Anthropic's documentation says <code>--resume</code> looks for an ID in the current project and then in other projects on this machine, so it does not help an agent on another computer.</p>
+<p>That gap is what <a href="https://pilotprotocol.network/">Pilot Protocol</a>, the networking stack behind shell.online, works on. Its <a href="https://pilotprotocol.network/blog/claude-agent-teams-over-pilot">guide to Claude Code agent teams over Pilot</a> has a manager send subtasks to specialists on other machines over encrypted tunnels. A node's endpoint <a href="https://pilotprotocol.network/blog/trust-model-agents-invisible-by-default">stays hidden until a handshake is approved</a>, which fits two agents better than a link and a password. Those agents exchange tasks and results, not a forked conversation.</p>
+</section>
+
+<div class="cta"><h3>Fork your next Claude Code conversation</h3><p>Install shell, ask Claude to run a bare <code>shell --read-only claude</code>, and check for the Handoff line. The CLI guide has the other commands.</p><a href="/cli/">Read the CLI guide</a></div>

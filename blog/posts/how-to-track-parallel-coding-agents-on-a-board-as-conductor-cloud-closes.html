@@ -1,0 +1,152 @@
+<p>Meta has bought Conductor, the startup whose app runs several coding agents side by side. <a href="https://techcrunch.com/2026/11/04/meta-acquires-ai-coding-startup-conductor/">TechCrunch reported on November 4</a> that Meta confirmed the deal without giving a price. The agents in Conductor come from labs such as Anthropic and OpenAI, so what is winding down is the layer that organized them.</p>
+
+<p>The dates matter if you use it. <a href="https://www.conductor.build/announcement">Conductor's announcement</a> says new sign-ups and downloads ended on November 4, Conductor Cloud becomes read-only on Friday, November 13, and on Friday, November 20 it shuts down and deletion of Cloud user data begins. The local Mac app keeps getting new models and critical fixes until early 2027, then starts winding down too.</p>
+
+<p>The agents and the Git branches survive this. What goes away is the one place where you could see every run. This guide replaces that piece: you bring your workspaces to your own machine, start each agent under <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> with a name, and follow them on the session board in the <a href="/app/">web app</a>, from a laptop or a phone. It does not replace Conductor's review tools.</p>
+
+<section>
+<h2>Step 1: Get the workspaces onto your machine</h2>
+
+<p>Do this before November 13. The <a href="https://www.conductor.build/changelog/0.93.0-conductor-is-joining-meta">Conductor 0.93.0 changelog</a> gives two routes. Right-click a cloud workspace and choose Transfer to local to move it and its chats to your Mac, or go to Settings, then Account, then Export data to download everything. The announcement says you can still read chats and export during the read-only week. It does not say whether a transfer works that week, so I would not wait.</p>
+
+<p>Each Conductor workspace is <a href="https://www.conductor.build/docs/concepts/git-worktrees">a separate worktree on its own branch</a>, usually under <code>~/conductor/workspaces/&lt;repo name&gt;/&lt;workspace name&gt;</code>, so <a href="https://git-scm.com/docs/git-worktree">git worktree</a> can list them from your main checkout:</p>
+
+<pre><code>cd ~/code/acme-api
+git worktree list</code></pre>
+
+<p>The main worktree comes first, then each linked one with its revision and branch. These paths are invented:</p>
+
+<pre><code>/Users/you/code/acme-api                         3f2a91c [main]
+/Users/you/conductor/workspaces/acme-api/lisbon  8be04d2 [you/auth-retry]
+/Users/you/conductor/workspaces/acme-api/oslo    c17ad55 [you/billing-cleanup]</code></pre>
+
+<p>To make a new one without Conductor:</p>
+
+<pre><code>git worktree add -b you/flaky-tests ../acme-api-flaky-tests</code></pre>
+
+<p>A worktree made this way holds tracked files only. Conductor's docs say the same of its own workspaces, and that its <a href="https://www.conductor.build/docs/guides/git-worktrees/run-codex-with-git-worktrees">Files to copy setting and setup scripts</a> are what fill the gap. Neither runs outside Conductor, so copy your gitignored files and install dependencies by hand.</p>
+</section>
+
+<section>
+<h2>Step 2: Link the machine to an account</h2>
+
+<p>A link and a password work with no account at all, but the board lives in the app, so this guide needs one. Install the CLI (the <a href="/platforms/">platforms page</a> lists other methods) and link:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell auth --no-remote-start
+shell whoami</code></pre>
+
+<p><code>shell auth</code> opens a browser on an approval screen. <code>--no-remote-start</code> answers its other question in advance: your browser may list sessions from this machine but may not start processes on it, and the command says the machine is publish-only. <code>shell whoami</code> prints the linked account.</p>
+
+<p>Per <code>shell help auth</code>, linking publishes the share URL, the command name, the host name and the timing. It never publishes terminal contents or the encryption key, which sits in the URL fragment and is stripped first.</p>
+</section>
+
+<section>
+<h2>Step 3: Start one named agent in each worktree</h2>
+
+<p>shell starts the process in the directory you ran it from, so <code>cd</code> first. Put <code>--name</code> before the command:</p>
+
+<pre><code>cd ~/conductor/workspaces/acme-api/lisbon
+shell --name "api: auth retry" claude
+
+cd ../oslo
+shell --name "api: billing" codex
+
+cd ~/code/acme-api-flaky-tests
+shell --read-only --name "api: flaky tests" opencode</code></pre>
+
+<p>Each command runs the agent in the background and returns your prompt once the share is ready. It prints a card like this, with your own link and password in the two placeholder lines:</p>
+
+<pre><code>  Name       api: auth retry
+  Open       (your link)
+  Password   (ten characters)
+  Vault      saved to your account vault
+  Access     view and type · end-to-end encrypted
+  Session    a1b2c3d4e5 · background
+  Closes     when the task exits</code></pre>
+
+<p>Names can run to 120 characters, but the app cuts titles at 48, so keep them short and put the distinguishing word early. The board's search box matches a session's name or its command and nothing else, so typing <code>api</code> filters to this repository.</p>
+
+<p>These are new processes. shell does not adopt a running agent and knows nothing about Conductor's chats. If your agent can find a transferred conversation, ask for it through shell. <a href="https://code.claude.com/docs/en/common-workflows#resume-previous-conversations"><code>claude --continue</code></a> resumes the most recent session in the current directory and exits with <code>No conversation found to continue</code> if there is none. <a href="https://learn.chatgpt.com/docs/developer-commands?surface=cli"><code>codex resume --last</code></a> is also scoped to the current directory, and <a href="https://opencode.ai/docs/cli/"><code>opencode -c</code></a> continues the last session. Conductor's pages do not say whether its chats appear to those commands, so test it. The branch is what you can count on.</p>
+
+<p>A Cloud run did not need your computer. This one does. On a Mac, <a href="https://ss64.com/mac/caffeinate.html"><code>caffeinate -i</code></a> blocks idle sleep while a program runs, and on Linux <a href="https://man7.org/linux/man-pages/man1/systemd-inhibit.1.html"><code>systemd-inhibit</code></a> does the same job. Wrap a foreground session, because a background start returns and would drop the lock:</p>
+
+<pre><code>caffeinate -i shell --foreground --name "api: auth retry" claude</code></pre>
+</section>
+
+<section>
+<h2>Step 4: Switch the list to the board</h2>
+
+<p>Open <a href="https://app.shell.online/">app.shell.online</a> and sign in. Above the session list is a two-button toggle. The second button, titled Columns, shows the board, and that browser remembers the choice. At 900 pixels wide or less the columns stack, so on a phone you scroll from Write to Read to Finished.</p>
+
+<ul>
+<li><strong>Write</strong> ("Yours to drive") holds live sessions you started or are assigned to, unless they are read-only. The button says Open.</li>
+<li><strong>Read</strong> ("Available to watch") holds every other live session, including your own read-only ones. The button says Watch.</li>
+<li><strong>Finished</strong> ("Process has exited") holds ended sessions. The button says Delete.</li>
+</ul>
+
+<p>With the commands above, <code>api: auth retry</code> and <code>api: billing</code> sit in Write and <code>api: flaky tests</code> sits in Read, where the browser cannot answer its prompts; use <code>shell attach</code> on the host for that. Each card shows the agent's icon, the title, the machine, the state and how long it has been open. To read a session, open your vault or type its password.</p>
+
+<p>A card reads "No description." until the session has one. Session summaries are a separate, owner-only feature, off by default. Turn them on for one session with <code>shell permissions &lt;ID&gt; --summaries=true</code>, then hover over the card or long-press it. Per <code>shell help permissions</code>, Claude Code is summarised on your machine, and any other process sends a redacted tail of its output to an attested enclave.</p>
+</section>
+
+<section>
+<h2>Step 5: Read the columns for what they say</h2>
+
+<div class="callout"><p><strong>The columns describe access, not progress.</strong> An agent that is writing code, one that has waited an hour on a permission prompt and one that has wedged all look the same: a card in Write marked online. Finished is no better a signal. The <a href="/app/">app guide</a> calls it a known process exit and "not proof that the requested work succeeded." Open the session before you act.</p></div>
+
+<p>A machine that goes quiet stays in Write as offline, because the CLI's reconnect loop usually brings it back. After ten minutes without the host, a session that is not persistent moves to Finished and is labeled machine gone. If the host returns, the card goes back to live on the next poll.</p>
+
+<p>Pages hold 25 sessions counted across all three columns, so a long Finished column can push live work onto a second page. Delete removes one row, and Clean up removes all the finished and unavailable rows you may remove. Neither touches the machine.</p>
+</section>
+
+<section>
+<h2>Step 6: Hand a session to a teammate</h2>
+
+<p>Invite the person to your organization first. Everyone in it can see its sessions. In the source, the ability to type from the app belongs to the session's owner and its assignees, so assigning someone moves that card to their Write column. The assignee picker on the card is available to the owner and to organization owners and admins.</p>
+
+<p>When you assign someone to your own session from your own browser, the app seals the password to that person's account key if the browser holds it, and they can open the session straight away. If their key has changed since you last sealed to it, the app waits for you to confirm on the session page. An admin who assigns someone to your session cannot seal it, because only the owner holds the password; the owner is offered the choice on the session page. A teammate without it sees a button asking the owner for it. The earlier post on <a href="/blog/share-a-terminal-session-password-with-a-teammate-without-the-service-seeing-it/">sharing a session password</a> explains the sealing.</p>
+
+<p>Assignment is not a security boundary against someone who already has the credentials. The README says an interactive share lets its holder type with the process's permissions, and <code>--read-only</code> is the mode the relay enforces. Use it when someone should only watch.</p>
+</section>
+
+<section>
+<h2>Step 7: Stop the agents and remove the worktrees</h2>
+
+<p>Stop a run from the machine that hosts it:</p>
+
+<pre><code>shell list
+shell kill -- a1b2c3d4e5</code></pre>
+
+<p><code>shell list</code> prints the IDs. <code>shell kill</code> ends the process and takes the link offline. The Stop button on a card is for the owner only, and assignment does not grant it. It queues a command that the machine's agent carries out, and that agent runs only where you allowed browser starts. Having said no in Step 2, you need <code>shell auth --allow-remote-start</code> before that button does anything, which also lets anyone signed in to your account launch processes on the machine as you. I would keep it off on a laptop.</p>
+
+<p>When a branch is merged, remove its worktree:</p>
+
+<pre><code>git worktree remove ~/conductor/workspaces/acme-api/oslo</code></pre>
+
+<p>Git refuses if the worktree has untracked files or modifications. Read <code>git status</code> before you reach for <code>--force</code>, and leave alone any workspace you still open in local Conductor.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<p>It does not create workspaces, branches or pull requests. Conductor's guide to <a href="https://www.conductor.build/docs/guides/parallel-agents/run-multiple-claude-code-sessions">parallel Claude Code sessions</a> lists a Diff Viewer, a Checks tab for CI and comments, per-workspace ports and a merge-and-archive flow. shell has none of those. Review happens in Git or on your forge. Claude Code's own <a href="https://code.claude.com/docs/en/cli-reference"><code>--worktree</code> flag</a> can create the checkouts for you, and you can start it under shell like any other command.</p>
+
+<p>It does not run anything in the cloud. The process stays on your computer, and a sleeping host cannot be reached. For an agent on someone else's machine, GitHub documents <a href="https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-on-mobile">starting and following Copilot cloud agent sessions from its mobile app</a>.</p>
+
+<p>The board does not tell you who needs you, and it sends no notification. The <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">post on the session pulse</a> covers the nearest thing, which works on open tabs. It also does not remove your dependence on a hosted service. The board is <code>app.shell.online</code> and the default relay is <code>shell.online</code>. The code is <a href="https://github.com/TeoSlayer/shell.online/blob/main/LICENSE">MIT licensed</a>, you can <a href="/blog/self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste/">run the relay on one Docker host</a>, and the terminal keeps working from its link without an account. The <a href="/self-hosting/">self-hosting guide</a> notes that the standalone relay does not include the accounts app, which is a separate deployment.</p>
+
+<p>I took the board rules from the app's source on <code>main</code> and did not run them against the hosted app, and the README warns that a merged change is not proof that every hosted component has been updated. The board itself <a href="https://github.com/TeoSlayer/shell.online/blob/main/CHANGELOG.md">dates from 0.11.1</a>. The commands come from <code>shell help</code> and the <a href="/cli/">CLI reference</a>, for release v0.25.0.</p>
+</section>
+
+<section>
+<h2>When the agents need to talk to each other</h2>
+
+<p>A board is for the person watching. The agents on it do not know about each other, and worktrees keep them apart on purpose. If you want one agent to hand work to another on a different machine, that is a networking problem, and <a href="https://pilotprotocol.network/">Pilot Protocol</a>, which develops shell.online, works on it. Its post on <a href="https://pilotprotocol.network/blog/multi-agent-pipelines-openclaw-encrypted-tunnels">multi-agent pipelines</a> walks through two-agent chains and fan-out over encrypted tunnels. The <a href="https://pilotprotocol.network/self-hosting">Pilot self-hosting page</a> says what you take on by running the registry yourself: backups, upgrades and no support plan.</p>
+</section>
+
+<div class="cta">
+<h3>Put your first agent on the board</h3>
+<p>Install the CLI, run <code>shell auth</code>, then start one named agent in a worktree.</p>
+<a href="/app/">Read the app guide</a>
+</div>

@@ -1,0 +1,113 @@
+<p>Adversa AI published the <a href="https://adversa.ai/blog/top-agent-skill-security-resources-november-2026/">first edition of its agent skill security digest</a> on November 4, 2026. The item I would read first is a study posted on October 27 by Timofey Sanko and Yuan Tian. They looked at <a href="https://arxiv.org/abs/2610.37734">1.53 million English skills</a> and found that about 1 in 17, roughly 88,000, tells the agent to skip approval, bypass a check or keep going without checking in. In 70.1% of those the instruction applies unconditionally. Open-source scanners caught at most 46% of them, with precision below 0.4.</p>
+<p>The same digest points to <a href="https://www.air.security/blog-posts/render-openai">AIR Security's report</a> by Eliad Mualem and Dor Granat on the render-deploy skill in OpenAI's official repository. The fault was one wrong hostname. It described private Render services as living under <code>render-internal.com</code>, a domain Render did not own and anyone could register. Codex wrote that domain into generated code and deployment config in testing. When the researchers registered it as a sinkhole, real applications sent it requests carrying tokens. Render removed the references on August 14, and OpenAI pulled the plugin on August 26.</p>
+<p>A skill is text your agent acts on with your session's privileges, and on a long run nobody reads it at the moment it matters. This guide reads one before installing it, using the <a href="https://github.com/TeoSlayer/shell.online/blob/main/public/skill/shell-online/SKILL.md">shell.online skill</a> as the example, since it can put your terminal on a browser link. The output below comes from running these commands on macOS against the file served on November 4. The shell behavior comes from the v0.25.0 code and help text. The trial in Step 6 was not run end to end, so your agent may handle the prompt differently.</p>
+
+<section>
+<h2>Step 1: Download it and compare it with the release</h2>
+<p>Put the files in a scratch folder that no agent scans. Claude Code reads <a href="https://code.claude.com/docs/en/skills">personal skills from <code>~/.claude/skills/</code></a> and Codex reads <a href="https://learn.chatgpt.com/docs/build-skills">user skills from <code>$HOME/.agents/skills</code></a>, so a new folder is out of the way.</p>
+<pre><code>mkdir -p ~/skill-review &amp;&amp; cd ~/skill-review
+curl -fsSL https://shell.online/skill/shell-online/SKILL.md -o SKILL.md
+curl -fsSL https://shell.online/skill/shell-online/agents/openai.yaml -o openai.yaml
+curl -fsSL https://shell.online/downloads/SHA256SUMS -o SHA256SUMS
+grep ' SKILL.md$' SHA256SUMS | shasum -a 256 -c</code></pre>
+<p>The last line prints <code>SKILL.md: OK</code>. The release build adds the skill to the same manifest as the binaries, which is why it can be checked this way. That file comes from the same origin as the skill, so also compare against <a href="https://github.com/TeoSlayer/shell.online">the GitHub repository</a> at the release tag:</p>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/TeoSlayer/shell.online/v0.25.0/public/skill/shell-online/SKILL.md | diff - SKILL.md</code></pre>
+<p>No output means the two match. A later difference is a reason to read the diff, since the site can move ahead of a tag. Pilot's post on <a href="https://pilotprotocol.network/blog/verify-an-install-script-before-running-it-what-the-shell-online-installer-check">checking the shell.online installer</a> explains the limit of this kind of check: a matching hash says the file is what the publisher listed, and says nothing about whether it is clean.</p>
+<p>The manifest does not list <code>agents/openai.yaml</code>, so read it. It is four lines: a display name, a short description and a default prompt. The skill folder holds those two files and no scripts.</p>
+<p>Check that on any other skill. The <a href="https://agentskills.io/specification">Agent Skills specification</a> allows a <code>scripts/</code> folder and any other files. Clone the skill and run <code>git ls-files</code> before you read anything. Jie Liao and colleagues <a href="https://arxiv.org/abs/2610.10612">paired harmless Python source with a substituted bytecode cache</a> and reached 94 to 100% attack success across 100 skills and seven scanners, so a <code>.pyc</code> file in a skill is a stop sign.</p>
+</section>
+
+<section>
+<h2>Step 2: List every host it names</h2>
+<p>The Render mistake was a hostname in a reference file. Search for hostnames rather than URLs, because the skill also showed the bare form <code>[service-name].render-internal.com</code>.</p>
+<pre><code>grep -Eoi '([a-z0-9-]+\.)+(com|net|org|io|dev|ai|app|sh|online)\b' SKILL.md | sort -u</code></pre>
+<p>For this file it prints:</p>
+<pre><code>ghcr.io
+shell.online</code></pre>
+<p>Run against the two sample addresses from AIR's report, the same command prints <code>internal-api.render-internal.com</code> and <code>postgres.render-internal.com</code>. Check each name against the vendor's own documentation. <a href="https://render.com/docs/private-network">Render's private network page</a> uses short internal addresses such as <code>elasticsearch-2j3e:9200</code> and does not mention that domain. For the shell skill, the first name is the container registry for the project's Docker image and the second is the service itself.</p>
+</section>
+
+<section>
+<h2>Step 3: Search for instructions that loosen oversight</h2>
+<p>The digest's example of a loosening directive is <code>--no-verify</code>. Start with a search for that family, plus two features that run or approve things on their own:</p>
+<pre><code>grep -nE -- '--no-[a-z0-9-]+|--dangerously|--yolo|--force|bypass|sudo|without asking|allowed-tools|!`' SKILL.md</code></pre>
+<p>On this file it finds two lines, trimmed here:</p>
+<pre><code>36:Use `--no-e2ee` only when the operator explicitly requests the compatibility/debugging opt-out. ...
+55:`--no-e2ee`.</code></pre>
+<p>Line 36 is conditional, which is the difference the study measures. Line 55 ends a sentence forbidding that flag with file access.</p>
+<p>The two extra terms come from Anthropic's <a href="https://code.claude.com/docs/en/skills">skills documentation</a>. <code>allowed-tools</code> pre-approves tools for the turn that invokes the skill, and workspace trust does not gate it. A line of the form <code>!`git diff HEAD`</code> runs a command before Claude sees the skill. Setting <code>"disableSkillShellExecution": true</code> turns that off.</p>
+<p>A grep only finds the words you thought of, and even the best scanner in that study missed more than half. Read the prose as well.</p>
+</section>
+
+<section>
+<h2>Step 4: Separate what it asks from what shell enforces</h2>
+<p>Most of this file is requests to a model. Some have a limit behind them in the CLI or the relay, and some do not. Sorting them tells you what you are trusting the model to do.</p>
+<ul>
+<li><strong>View-only links.</strong> The skill says to "prefer" <code>--read-only</code> when you only need to monitor. Once chosen it holds: the relay answers browser input with <code>access_denied</code> and the host drops it too. Nothing makes the agent choose it, and <a href="/security/">interactive is the default</a>.</li>
+<li><strong>Files.</strong> The skill says to enable <code>--files</code> "only when the operator explicitly asks". The CLI cannot tell who asked. It does enforce the scope: parent traversal, device files and symlink escapes are rejected, and <code>--no-e2ee</code> cannot be combined with file access.</li>
+<li><strong>MCP grants.</strong> The skill says "only when the operator authorizes". <code>shell mcp grant</code> is an ordinary command that the same user can run, so an agent with Bash can run it. What holds is the design covered in <a href="/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke/">the post on scoped grants</a> and on the <a href="/agents/">agents page</a>: grants expire, and a read-only session cannot be made interactive with one.</li>
+</ul>
+<p>The skill is therefore not a permission boundary. It teaches an agent to use a program that is already on your PATH, and an agent that never loaded it can run <code>shell</code> too. OWASP's <a href="https://github.com/OWASP/www-project-agentic-skills-top-10">Agentic Skills Top 10</a> has an entry for over-privileged skills, AST03. If you want a prompt in Claude Code before the sensitive commands, add rules to <code>.claude/settings.json</code>:</p>
+<pre><code>{
+  "permissions": {
+    "ask": ["Bash(shell mcp grant *)", "Bash(shell password *)"]
+  }
+}</code></pre>
+<p>Anthropic's <a href="https://code.claude.com/docs/en/permissions">permissions page</a> says such a rule matches the command text Claude writes and "isn't a security boundary around the program".</p>
+<div class="callout"><strong>The password goes into the transcript.</strong> The skill tells the agent to read <code>share_url</code> and <code>e2ee_password</code> from the JSON event and send both "in the active conversation". For status it tells the agent to run <code>shell list --json</code>, which carries the password again. Anything the agent reads becomes part of a conversation that is stored and sent to your model provider. If the session stays open afterward, run <code>shell password rotate &lt;ID&gt;</code> in your own terminal, and do not ask the agent for that session's status again.</div>
+</section>
+
+<section>
+<h2>Step 5: Install a copy in one repository</h2>
+<p>A project copy limits the skill to sessions in that repository. For Claude Code:</p>
+<pre><code>mkdir -p .claude/skills/shell-online
+cp ~/skill-review/SKILL.md .claude/skills/shell-online/SKILL.md</code></pre>
+<p>Then add <code>disable-model-invocation: true</code> to the frontmatter of your copy, under <code>description</code>. Claude can then load the skill only when you type <code>/shell-online</code>. For Codex:</p>
+<pre><code>mkdir -p .agents/skills/shell-online/agents
+cp ~/skill-review/SKILL.md .agents/skills/shell-online/SKILL.md
+cp ~/skill-review/openai.yaml .agents/skills/shell-online/agents/openai.yaml
+printf 'policy:\n  allow_implicit_invocation: false\n' &gt;&gt; .agents/skills/shell-online/agents/openai.yaml</code></pre>
+<p>That setting defaults to true, and <a href="https://learn.chatgpt.com/docs/build-skills">Codex's documentation</a> says that with false it no longer invokes the skill from your prompt, while an explicit <code>$shell-online</code> still works. The skill's description mentions remote progress monitoring, so without this a passing request about monitoring could match it.</p>
+<p>Your copy will not update itself. Fahd Seddik traced <a href="https://arxiv.org/abs/2610.11169">about 2.19 million skill adoptions on GitHub</a> and found copies rarely change when their source does, so fixes seldom reach them. To check yours later:</p>
+<pre><code>curl -fsSL https://shell.online/skill/shell-online/SKILL.md | diff - .agents/skills/shell-online/SKILL.md</code></pre>
+<p>On Claude Code, use the <code>.claude</code> path. The diff should show only your added frontmatter line.</p>
+</section>
+
+<section>
+<h2>Step 6: Run the first trial where someone can watch</h2>
+<p>Wrap the agent itself in a view-only share, so you or a teammate can watch from a phone or a second screen:</p>
+<pre><code>shell --read-only --name skill-trial claude
+shell list
+shell attach &lt;ID&gt;</code></pre>
+<p>The first command prints a link and a password and returns. <code>shell list</code> gives you the ID. Browser input is blocked on this session, and the check that blocks it sits on browser frames only, so you answer the agent's permission prompts from the terminal you attached with. Press Ctrl-X, then D, to detach. The post on <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">read-only links for coding agents</a> covers this kind of session. Inside the agent, ask for something small:</p>
+<pre><code>/shell-online share npm test with a view-only link</code></pre>
+<p>In Codex, start the outer session with <code>codex</code> and begin the prompt with <code>$shell-online</code>. <code>npm test</code> stands in for any short command you already trust. The skill's documented form, which the post on <a href="/blog/let-a-coding-agent-share-its-own-terminal-session-in-the-browser-the-shell-onlin/">agents sharing their own session</a> walks through, is:</p>
+<pre><code>shell --read-only --json -- npm test</code></pre>
+<p>Check four things on the screen. The flags should be the ones you asked for, with no <code>--files</code> and no <code>--no-e2ee</code>. The JSON event should show <code>"read_only":true</code> and <code>"encrypted":true</code>. If your agent collapses tool output, <code>shell list</code> in another terminal shows each session's access mode. The agent should say which process the link exposes, as the skill requires. It should not run the installer, since <code>command -v shell</code> finds your copy. The inner share gets its own password, because since 0.24.1 a shared program does not inherit its session's password.</p>
+<p>The Render domain turned up in code the agent generated, so finish by looking there:</p>
+<pre><code>git status --short
+git diff | grep -Eoi '([a-z0-9-]+\.)+(com|net|org|io|dev|ai|app|sh|online)\b' | sort -u</code></pre>
+<p><code>git diff</code> skips untracked files, so read any new file that the first line lists. A share closes when its process exits. Close whatever is left, inner session first:</p>
+<pre><code>shell list
+shell mcp list &lt;ID&gt;
+shell kill -- &lt;ID&gt;</code></pre>
+<p><code>shell mcp list</code> shows any grant the agent issued. The <a href="/cli/">CLI guide</a> has the rest.</p>
+</section>
+
+<section>
+<h2>What this does not do</h2>
+<ul>
+<li>It does not prove a skill is safe. The checks catch what is written in plain text. Pandey and colleagues profiled <a href="https://arxiv.org/abs/2610.19264">6,309 marketplace listings</a> and found that 59% of those declaring permissions understate what their bundles can do.</li>
+<li>The host search misses a name built from pieces, an encoded one, or a top-level domain you left out of the list.</li>
+<li>A view-only link limits the browser. The agent keeps whatever permissions its own mode and rules give it, and shell does not <a href="/security/">sandbox the process</a>.</li>
+<li>Watching is not a control. shell does not scan skills, flag a bad command or stop a run because of what it printed.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the same questions apply there. Pilot's <a href="https://pilotprotocol.network/for/skills">skills directory</a> lists 82 <code>SKILL.md</code> files that teach an agent to use <code>pilotctl</code>, with source on GitHub. The steps above apply to those too.</p>
+<p>Pilot's limits on reaching another agent do not depend on what a skill says. In its <a href="https://pilotprotocol.network/docs/trust">trust model</a>, two agents need an approved handshake, and without trust or a shared network a private node silently rejects incoming streams. A skill can tell an agent to send a message, and the receiving node still decides. That is the split from Step 4, and I would look for it in any tool an agent can reach.</p>
+</section>
+
+<div class="cta"><h3>Read the skill before your agent does</h3><p>It is 129 lines of Markdown. Compare it with the release, list its hosts, then decide which repository gets a copy.</p><a href="https://github.com/TeoSlayer/shell.online/blob/main/public/skill/shell-online/SKILL.md">Open SKILL.md on GitHub</a></div>

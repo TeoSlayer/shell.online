@@ -1,0 +1,82 @@
+<p>OpenAI released <a href="https://github.com/openai/codex/releases/tag/rust-v0.164.0">Codex CLI 0.164.0</a> on October 23. One line in its notes says you can now "preview viewed and generated images in the fullscreen transcript on terminals supporting Kitty or Sixel graphics." The <a href="https://github.com/openai/codex/pull/54216">pull request behind it</a> describes bounded thumbnails drawn next to each generated image's saved path, with text-only entries kept for unsupported terminals, remote workspaces, missing files and oversized images.</p>
+<p>That is useful when you sit in front of Ghostty, kitty, WezTerm or a recent iTerm2. It does nothing for you when the terminal you are looking at is a browser tab on your phone, and it can do something slightly worse: if you start the shared session from one of those terminals, Codex inside the session still believes it can draw pictures, so it sends them to a viewer that throws them away.</p>
+<p>This guide shows why that happens, how to start Codex under shell so its transcript stays honest about what the browser can show, and how to open the PNGs it generates from the same link with the session's Files panel. Everything about shell below comes from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> as it stands today, whose latest release is v0.25.0, read on the macOS and Linux code path.</p>
+
+<section>
+<h2>Why the browser never sees the thumbnail</h2>
+<p>Terminal images travel as escape sequences inside the output stream. The <a href="https://sw.kovidgoyal.net/kitty/graphics-protocol/">kitty graphics protocol</a> wraps a base64 picture in an APC sequence, and its spec notes that "most terminal emulators ignore APC codes, making it safe to use." Sixel, as documented in <a href="https://vt100.net/docs/vt3xx-gp/chapter14.html">DEC's VT300 graphics manual</a>, rides in a device control string instead. Both sequence types are defined in <a href="https://ecma-international.org/publications-and-standards/standards/ecma-48/">ECMA-48</a>, the standard for terminal control functions.</p>
+<p>The shell.online viewer is built on xterm.js, and the web app loads no image support. Graphics in xterm.js come from a separate <a href="https://github.com/xtermjs/xterm.js/tree/master/addons/addon-image">image addon</a> that a page has to install and load, and shell's viewer does not load it. Without that addon, xterm.js parses an APC string and drops every byte of it. Nothing breaks, and nothing is drawn.</p>
+<p>The part that surprises people is how Codex decides to send images at all. In 0.164.0 the choice is made in <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/tui/src/pets/image_protocol.rs">image_protocol.rs</a> and the <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/terminal-detection/src/lib.rs">terminal detection crate</a>, and it reads environment variables rather than asking the terminal. <code>KITTY_WINDOW_ID</code>, <code>GHOSTTY_RESOURCES_DIR</code>, <code>WEZTERM_VERSION</code> and a <code>TERM_PROGRAM</code> naming Ghostty, kitty or WezTerm all count as proof of Kitty support, and iTerm2 3.6 or newer gets a variant that hands the terminal a local file path. If <code>TMUX</code> or a Zellij variable is set, Codex turns images off.</p>
+<p>When shell starts a program on macOS or Linux, it passes your environment through and overrides a few values, <code>TERM=xterm-256color</code> among them. It does not remove <code>TERM_PROGRAM</code> or the terminal-specific variables. So <code>shell codex</code> typed into Ghostty produces a Codex that thinks it is still in Ghostty, while its screen is actually being read by xterm.js in a browser.</p>
+</section>
+
+<section>
+<h2>Step 1: See what your terminal tells Codex</h2>
+<p>Check the Codex version first, since the previews only exist from 0.164.0 on:</p>
+<pre><code>codex --version</code></pre>
+<p>Then print the variables Codex looks at, from the terminal you would normally start the session in:</p>
+<pre><code>env | grep -E '^(TERM_PROGRAM|TERM_PROGRAM_VERSION|KITTY_WINDOW_ID|GHOSTTY_RESOURCES_DIR|WEZTERM_VERSION|WEZTERM_EXECUTABLE|ITERM_SESSION_ID|ITERM_PROFILE|TMUX)='</code></pre>
+<p>If this prints nothing, or only <code>TMUX</code>, Codex already falls back to text entries and you can skip to Step 2 without the <code>env</code> prefix. If it prints <code>TERM_PROGRAM=ghostty</code>, a <code>KITTY_WINDOW_ID</code> or similar, the session will inherit those values. <code>TERM</code> itself is not in the list because shell replaces it anyway.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Codex with the image folder opted in</h2>
+<p>Codex saves every generated image under its home directory. The <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/ext/image-generation/src/artifact.rs">artifact code</a> builds the path as <code>generated_images/&lt;session id&gt;/&lt;call id&gt;.png</code> beneath <code>CODEX_HOME</code>, which <a href="https://learn.chatgpt.com/docs/auth">OpenAI's authentication docs</a> say defaults to <code>~/.codex</code>. shell's <code>--files-root</code> flag opts one directory into the browser's Files panel, and the host opens that root when the session starts, so create it first:</p>
+<pre><code>mkdir -p "${CODEX_HOME:-$HOME/.codex}/generated_images"
+
+env -u TERM_PROGRAM -u TERM_PROGRAM_VERSION -u KITTY_WINDOW_ID \
+    -u GHOSTTY_RESOURCES_DIR -u WEZTERM_VERSION -u WEZTERM_EXECUTABLE \
+    -u ITERM_SESSION_ID -u ITERM_PROFILE \
+  shell --name posters \
+    --files-root "${CODEX_HOME:-$HOME/.codex}/generated_images" codex</code></pre>
+<p><code>env -u</code> removes each named variable before running the rest of the line, as the <a href="https://man7.org/linux/man-pages/man1/env.1.html">env manual</a> describes, and the macOS <code>env</code> accepts the same flag. shell then starts Codex in the background, prints one browser link and a ten-character password, and returns your prompt. <code>--name posters</code> is the label you will see in <code>shell list</code> and in the web app. The variables are gone only for this session; your own terminal keeps them.</p>
+<p>Codex uses the same detection for a few other terminal-specific choices, copy on select among them, so a session started this way behaves like Codex in a plain xterm. I think that is the right trade when the screen is meant to be read in a browser.</p>
+<div class="callout"><p>Do not set <code>--files-root</code> to <code>~/.codex</code> itself to save a step. That directory holds <code>config.toml</code>, session history and, when Codex uses file storage, the plaintext <code>auth.json</code> with your login. shell's Files panel lists every regular file under the root, dot files included, and anyone with the link and password can open them. Point the root at <code>generated_images</code> or at a folder of your own, never at its parent.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Open a generated image from the link</h2>
+<p>Open the link on your phone, enter the password, and ask Codex for an image. Without the terminal hints, the transcript entry stays text: a "Generated Image:" heading, the revised prompt, and a line like this one, rendered by <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/tui/src/history_cell/patches.rs">the history cell code</a> as a file URL:</p>
+<pre><code>  └ Saved to: file:///Users/you/.codex/generated_images/0000-example-session/example-call.png</code></pre>
+<p>That URL points at your computer's disk, so tapping it in a browser on another device goes nowhere. Use the Files control instead. It appears in the session view whenever the host opted files in, titled with the root's folder name, here <code>generated_images</code>. Inside it you will see one folder per Codex session. Folders sort first and names sort alphabetically, so match the session folder against the <code>Saved to</code> line rather than expecting the newest at the top.</p>
+<p>Tap the PNG and the panel asks the host for it over the session's encrypted connection, then draws it as an ordinary image using a <a href="https://developer.mozilla.org/en-US/docs/Web/API/URL/createObjectURL_static">blob URL</a> that it revokes once the picture loads. The host picks the type from the file extension with Go's <a href="https://pkg.go.dev/mime#TypeByExtension">mime.TypeByExtension</a>, so a <code>.png</code> is shown as a picture. Previews are capped at 16 MiB and downloads at 128 MiB. A Download button sits next to the file name when you want the original on the phone.</p>
+<p>Nothing is pushed to the browser. The panel fetches the folder listing when you open it and the file when you tap it, which is how <code>shell help files</code> describes the design: the relay routes request IDs and encrypted frame sizes, not paths or contents. The <a href="/security/">security page</a> covers the rest of the threat model. The <a href="/e2ee/">encryption page</a> covers what the relay can still observe.</p>
+</section>
+
+<section>
+<h2>Step 4: Narrow the folder before you show a teammate</h2>
+<p><code>generated_images</code> keeps the output of every Codex session on the machine, not only this one. That is fine for you, and probably more than you want to show someone reviewing today's work. Codex already tells the model, in the hint its image tool returns and in its sample <a href="https://github.com/openai/codex/blob/rust-v0.164.0/codex-rs/skills/src/assets/samples/imagegen/SKILL.md">image generation skill</a>, to copy an image it needs elsewhere and leave the original in place. Ask for exactly that, and share only the destination:</p>
+<pre><code>cd ~/work/poster-site
+mkdir -p review
+
+shell --read-only --name poster-review --files-root ./review codex</code></pre>
+<p>Then tell Codex to copy the images you picked into <code>review/</code>. A <code>--read-only</code> link blocks typing in the browser, and the docs say plainly that read-only access does not cancel file access you enabled, so the teammate can open everything in <code>review/</code> and nothing else. You keep the keyboard locally with <code>shell attach</code>, and press Ctrl-X, then D to leave the process running:</p>
+<pre><code>shell list
+shell attach 4f7c2a</code></pre>
+<p>Copy, do not symlink. The host builds the Files panel on Go's <a href="https://go.dev/blog/osroot">os.Root</a>, which refuses paths that escape the root through <code>..</code> or symbolic links, and the listing skips symlinks entirely. A link from <code>review/</code> back into <code>~/.codex</code> simply does not show up. The earlier post on <a href="/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel/">file access without handing over the filesystem</a> goes through those checks in more detail.</p>
+</section>
+
+<section>
+<h2>Step 5: Close it when the review is done</h2>
+<pre><code>shell kill 4f7c2a</code></pre>
+<p>This stops Codex, takes the link offline and ends file access with it, because the Files panel only exists while the host process does. If the link and password reached more people than you meant, <code>shell password rotate 4f7c2a</code> replaces the password and URL salt without restarting Codex and disconnects current viewers. Rotation cannot take back an image somebody already downloaded. The <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">read-only link post</a> covers when a view-only link is enough on its own.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not put pictures inside the browser terminal. The thumbnails Codex 0.164.0 draws stay a feature of local terminals with Kitty or Sixel support. In the browser you get the text entry and the Files panel.</li>
+<li>It does not tell you when an image appears. There is no notification and no gallery; you see the <code>Saved to</code> line on screen and open the file yourself.</li>
+<li>It does not reach files outside the root. A <code>file://</code> path printed by Codex grants nothing, and the docs say so: a filename printed in terminal output does not grant access to it.</li>
+<li>It does not cover Windows. Codex treats Windows Terminal as a Sixel terminal through <code>WT_SESSION</code>, and I only read shell's macOS and Linux code for this guide.</li>
+<li>It does not change Codex. Remote workspaces, missing files and oversized images already get text entries from Codex itself, with or without shell.</li>
+</ul>
+<p>The <a href="/cli/">CLI reference</a> lists every flag used here, and the <a href="/mobile/">mobile page</a> covers working from a phone.</p>
+</section>
+
+<section>
+<h2>When the image has to reach another agent</h2>
+<p>The Files panel is for a person looking at a picture. When the reader is another agent, say a reviewer that checks generated assets before they ship, it needs the file itself on its own machine. Pilot Protocol, which develops shell.online, is a networking stack for agents, and it has a transfer for that: <a href="https://pilotprotocol.network/docs/messaging">Pilot's messaging docs</a> show <code>pilotctl send-file</code> sending a file to a peer you have a trust link with, where it lands in <code>~/.pilot/received/</code>. The Pilot write-up on <a href="https://pilotprotocol.network/blog/peer-to-peer-file-transfer-agents">peer-to-peer file transfer between agents</a> argues for streaming files between agents over an encrypted tunnel instead of uploading to S3 and downloading again, and it notes that the receiver accepts connections only from trusted peers.</p>
+</section>
+
+<div class="cta"><h3>Watch Codex from any browser</h3><p>Install shell, run <code>shell --files-root</code> with a folder you chose, and open the printed link on your phone. No account needed.</p><a href="/docs/">Read the shell.online docs</a></div>
