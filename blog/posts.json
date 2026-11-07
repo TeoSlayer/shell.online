@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-widen-claude-codes-allow-list-from-a-phone-mid-run",
+    "title": "How to Widen Claude Code's Allow List From a Phone Mid-Run",
+    "description": "Run Claude Code 2.1.319 so it refuses instead of asking, share it read-only, and add an allow rule from your phone through a second session while it keeps going.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "permissions",
+      "read-only-sharing",
+      "mobile"
+    ],
+    "iso_date": "2026-11-07",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-widen-claude-codes-allow-list-from-a-phone-mid-run.webp"
+  },
+  {
     "slug": "how-to-review-a-codex-patch-from-a-browser-before-you-approve-it",
     "title": "How to Review a Codex Patch From a Browser Before You Approve It",
     "description": "Run Codex 0.167.0 under shell.online, open its patch details from a laptop or phone while the approval prompt waits, and decide who answers.",

@@ -1,0 +1,88 @@
+<p>Claude Code 2.1.319 came out on November 6 with a new setting, <code>permissions.denyInsteadOfPrompting</code>. The <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">Claude Code changelog</a> describes it in one line: a tool call that would wait on a permission prompt is denied and the turn continues, in terminal sessions, subagents and teammates. The <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.319">v2.1.319 release</a> on GitHub has the same notes.</p>
+
+<p>That matters most for a run nobody is sitting in front of. A Claude Code session in Manual mode stops at the first command it has no rule for and waits for a person. Share that session through a read-only <a href="/">shell.online</a> link and nobody can answer the prompt from a browser either, so the run sits there until someone comes back to the machine. Claude Code's <code>dontAsk</code> mode already refused such calls; the new key gives the same outcome as a setting, so you can keep Manual mode and turn refusal on for one session. The call is refused, Claude is told so, and it carries on with whatever else it can do.</p>
+
+<p>The refusals are now the interesting part of the run. Each one is a command you either forgot to allow or did not want run. This guide sets up a Claude Code run that refuses instead of asking, shares it read-only so a teammate or your own phone can watch it, and gives you a second, interactive session that only you hold, so you can add an allow rule from your phone while the run keeps going.</p>
+
+<section>
+<h2>What you need</h2>
+<p>You need Claude Code 2.1.319 or later, shell.online installed on the machine that will do the work (the <a href="/cli/">CLI page</a> has the installer), and a project that keeps its tests behind a command such as <code>npm run test</code>. The commands below were checked against the shell.online source at the current release, 0.25.0, and the read-only and attach behaviour described here comes from its macOS and Linux host code. The refusal text quoted later comes from a short test of Claude Code 2.1.319 on macOS.</p>
+<p>It helps to know how Claude Code decides what to ask about. The <a href="https://code.claude.com/docs/en/permissions">permissions documentation</a> lists the modes: <code>default</code> (shown as Manual) prompts on first use of each tool, <code>auto</code> hands the decision to a background classifier, and <code>dontAsk</code> denies every call that would otherwise prompt. The new setting only changes what happens when a prompt would appear, so it pairs with Manual mode. In the macOS test, the same command that was refused in Manual mode ran without a prompt in auto mode, because the classifier approved it.</p>
+</section>
+
+<section>
+<h2>Step 1: Write the allow list in your local settings file</h2>
+<p>Put the commands the run is expected to use in <code>.claude/settings.local.json</code> at the root of the project:</p>
+<pre><code>{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run test *)"
+    ]
+  }
+}</code></pre>
+<p>Bash rules match the whole command text, with <code>*</code> standing for any text. Each part of a compound command has to be allowed on its own, so <code>npm run test &amp;&amp; git push</code> still needs a rule for <code>git push</code>.</p>
+<p>The choice of file is deliberate. The <a href="https://code.claude.com/docs/en/settings">settings documentation</a> says Claude Code watches its settings files and applies most edits, including edits to <code>permissions</code>, to a running session without a restart. It also says the local file's allow rules apply without the workspace trust step, as long as git does not track the file. Check both things before you leave:</p>
+<pre><code>python3 -m json.tool .claude/settings.local.json
+git ls-files .claude/settings.local.json</code></pre>
+<p>The first command prints the file back, formatted, if it parses. Settings files are strict JSON, so a trailing comma is an error, and <a href="https://docs.python.org/3/library/json.html">Python's json command line tool</a> reports the line and column of the problem. The second command prints nothing when the file is untracked; <a href="https://git-scm.com/docs/git-ls-files">git ls-files</a> lists only files in the index.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the run read-only with the new setting</h2>
+<pre><code>shell --read-only --name nightly-tests --auto-close 3h -- \
+  claude --permission-mode default \
+  --settings '{"permissions":{"denyInsteadOfPrompting":true}}' \
+  "Run npm run test, fix the failing tests under src/, and end with a list of any commands that were refused."</code></pre>
+<p>Everything before <code>--</code> belongs to shell. <code>--read-only</code> makes a view-only link, <code>--name</code> labels the session in <code>shell list</code> and the <a href="/app/">web app</a>, and <code>--auto-close 3h</code> closes the session when Claude exits or after three hours, whichever comes first. shell's parser stops at the <code>--</code>, the same rule the <a href="https://pkg.go.dev/flag">Go flag package</a> follows and that <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html">POSIX utility syntax guideline 10</a> describes, so every flag after it goes to <code>claude</code>.</p>
+<p><code>--permission-mode default</code> pins Manual mode for this session, which matters if your own default is auto. <code>--settings</code> takes JSON inline or a path to a file, and applies for this session only, above your user, project and local files. The JSON sets no allow list of its own, so the one from Step 1 stays in effect.</p>
+<p>shell prints a browser link, a ten-character password and, in an interactive terminal, a QR code, then returns your prompt. Claude keeps running in the background. An interactive Claude Code session stays open after it finishes the task, so in practice the three-hour deadline, or <code>shell kill</code>, is what ends it.</p>
+<div class="callout"><p>The setting refuses tool calls. It does not answer the <a href="https://code.claude.com/docs/en/permissions#project-allow-rules-and-workspace-trust">workspace trust dialog</a> that Claude Code shows the first time it starts interactively in a folder you have not trusted, and that dialog appeared in the macOS test with the setting on. A read-only link cannot answer it. Before you walk away, run <code>shell list</code>, copy the session ID, run <code>shell attach &lt;ID&gt;</code> in your own terminal, answer the dialog, then press Ctrl-X, release, and press D to detach. Attaching locally types into the process even on a read-only session; only browser input is blocked.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Watch the refusals from a phone</h2>
+<p>Open the link on your phone, or send it to the teammate who should watch, with the password over a different channel. The <a href="/e2ee/">end-to-end encryption page</a> explains why the two travel apart: the link carries only a salt, and the key comes from the password. On a read-only session the relay drops browser input, and the host on your machine drops it again before it reaches the terminal, so nobody holding the link can type into Claude or approve anything.</p>
+<p>When Claude tries a command your rules do not cover, Claude Code refuses it. In the macOS test, the refused Bash call appeared under a <code>Ran 1 shell command</code> line as:</p>
+<pre><code>  ⎿  Not run · permission denied</code></pre>
+<p>Claude then reported that the command needed approval and that the session had no way to grant it, and it did not try another route. That second part is the model's choice in one short test, not a promise; the line above it is Claude Code's own.</p>
+<p>Read the screen while the run is going. In the same test Claude Code drew itself on the terminal's alternate screen, the buffer that the <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">xterm control sequences reference</a> lists as mode 1049, and stayed there. The browser shows that screen as it is now, so a refusal that has scrolled out of Claude's view is not in browser history to scroll back to. The final list you asked for in the prompt is the place to collect them.</p>
+</section>
+
+<section>
+<h2>Step 4: Open a second session that only you hold</h2>
+<p>When you see a refusal for a command you meant to allow, you want to add a rule without stopping the run. Start a plain shell in the same project, interactive this time, with its own name and deadline:</p>
+<pre><code>cd ~/projects/demo-app
+shell --name allow-list --auto-close 3h</code></pre>
+<p>With no command, shell shares a fresh shell. It prints a second link and a second password. Keep these to yourself. This link types into a shell on your machine as you, which is far more than the read-only link gives anyone, so it does not go to the teammate who is watching the agent.</p>
+<p><code>shell list</code> now shows both sessions side by side, with the ACCESS column reading <code>view-only+e2ee</code> for the agent and <code>interactive+e2ee</code> for the shell, and the CLOSES column counting down to each deadline.</p>
+</section>
+
+<section>
+<h2>Step 5: Add the rule from your phone</h2>
+<p>Open the <code>allow-list</code> link on your phone and edit the file with any terminal editor:</p>
+<pre><code>vi .claude/settings.local.json</code></pre>
+<p>Add the command that was refused, for example <code>"Bash(npx tsc --noEmit)"</code>, to the <code>allow</code> list, save, and check that the file still parses:</p>
+<pre><code>python3 -m json.tool .claude/settings.local.json</code></pre>
+<p>Claude Code picks up the change in the running session. Release 2.1.319 also fixed edits being ignored when they landed within a few seconds of Claude Code writing the same file, which is the version you need for the new setting anyway. The new rule covers the next time Claude runs that command. It does not replay the call that was already refused, and from the read-only link you cannot ask Claude to try again. If you want the step redone, attach from a terminal on the machine and say so, or leave it for the final list.</p>
+<p>When you are done editing, close the second session straight away rather than waiting for its deadline:</p>
+<pre><code>shell list
+shell kill -- &lt;allow-list ID&gt;</code></pre>
+<p>Stopping a session ends its process and takes its link offline. The agent session keeps running.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>It does not make Claude Code safe to run on anything. The allow list decides what runs without asking; read-only decides who can type. Neither is a sandbox. A command you allow can still delete files it can reach, and the <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP entry on excessive agency</a> is a good checklist for keeping that list short.</p>
+<p>It does not notify you when a refusal happens, and it keeps no browser history of Claude Code's screen. You see refusals when you look, and the final report depends on Claude following the prompt.</p>
+<p>It does not limit the second session to one file. Anyone with the <code>allow-list</code> link and its password has a shell as you, can edit any file you can, and can run <code>shell attach</code> on the agent session to type into it, read-only or not. That is why it has a deadline and why you kill it as soon as you are finished. If you want to cut off a link without stopping its process, <code>shell password rotate &lt;ID&gt;</code> does that, as covered in <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">how to revoke a shared terminal link without killing the process</a>.</p>
+<p>It does not answer prompts that are not tool calls, such as the trust dialog, and it does not change anything in auto mode, where the classifier rather than a prompt makes the call.</p>
+<p>The read-only half of this is not new. <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">Watching a coding agent after you turn off its permission prompts</a> and <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">a read-only terminal link for your coding agent</a> cover it in more depth. What 2.1.319 adds is a run that refuses rather than skips, which leaves you a list of things to decide on instead of a list of things that already happened. The <a href="/security/">security page</a> sets out what the relay can and cannot see in each case.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>The pattern here is an allow list decided in advance, a default of refusal for anything outside it, and one person who can change the list while the work goes on. <a href="https://pilotprotocol.network/">Pilot Protocol</a>, the networking stack for autonomous agents whose team develops shell.online, applies a similar idea one layer down. Its <a href="https://pilotprotocol.network/docs/enterprise-policies">network policies</a> let an owner or admin cap a network's membership and list the ports members may reach; once ports are listed, connections to any other port are dropped. The post on <a href="https://pilotprotocol.network/blog/enterprise-phase-3-rbac-policies-audit-fleet">roles, policies and the audit trail</a> shows who may change those rules and how each change is recorded, which is the part a JSON file on one laptop does not give you.</p>
+</section>
+
+<div class="cta"><h3>Share the run, keep the controls</h3><p>shell.online is open source. Read the code that drops browser input on a read-only session, or start with the docs.</p><a href="https://github.com/TeoSlayer/shell.online">shell.online on GitHub</a></div>
