@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-which-startup-hooks-a-shared-claude-code-session-will-run",
+    "title": "How to Check Which Startup Hooks a Shared Claude Code Session Will Run",
+    "description": "List the plugins and startup hooks your coding agents load, see the one hook shell.online adds to a Claude Code launch, and remove what you did not install.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "codex",
+      "agent-hooks",
+      "supply-chain"
+    ],
+    "iso_date": "2026-11-08",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-which-startup-hooks-a-shared-claude-code-session-will-run.webp"
+  },
+  {
     "slug": "how-to-widen-claude-codes-allow-list-from-a-phone-mid-run",
     "title": "How to Widen Claude Code's Allow List From a Phone Mid-Run",
     "description": "Run Claude Code 2.1.319 so it refuses instead of asking, share it read-only, and add an allow rule from your phone through a second session while it keeps going.",
