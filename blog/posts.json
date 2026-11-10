@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-read-a-long-claude-fable-5-2-reviews-findings-from-your-phone",
+    "title": "How to Read a Long Claude Fable 5.2 Review's Findings From Your Phone",
+    "description": "Run a Claude Fable 5.2 review in Claude Code behind a read-only shell.online link, share one findings folder, and read each finding on your phone as it lands.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "claude-fable",
+      "file-sharing",
+      "code-review"
+    ],
+    "iso_date": "2026-11-10",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-read-a-long-claude-fable-5-2-reviews-findings-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-keep-secrets-out-of-claude-codes-allow-list-in-a-shared-terminal",
     "title": "How to Keep Secrets Out of Claude Code's Allow List in a Shared Terminal",
     "description": "Check what Claude Code's don't ask again option has saved, pass a shared session its secret by name, and see what shell.online does not filter.",

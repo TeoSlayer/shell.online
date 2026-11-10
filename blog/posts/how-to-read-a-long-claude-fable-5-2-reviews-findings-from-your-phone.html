@@ -1,0 +1,81 @@
+<p>On November 9 Anthropic released <a href="https://www.anthropic.com/claude-fable-and-mythos-5-2">Claude Fable 5.2 and Claude Mythos 5.2</a>, two names for the same underlying model. Fable 5.2 is the one anyone can use, at $8 per million input tokens and $40 per million output tokens. Mythos 5.2 goes only to vetted organizations. The examples in the announcement are long jobs. An engineer at Uber ran a security audit for 10 to 12 hours with about 170 reviewer agents. Anthropic formalized Fermat's Last Theorem in 30 hours, and one of its engineers had the model coordinate over 1,000 subagents for eight days to build a prototype operating system.</p>
+
+<p>Claude Code shipped support the same day. The <a href="https://code.claude.com/docs/en/changelog">2.1.321 changelog</a> adds <code>claude-fable-5-2</code> with a 1M token context as the default Fable model, and the <a href="https://code.claude.com/docs/en/model-config">model configuration page</a> says Fable 5.2 needs version 2.1.321 or later. So the obvious first experiment is a long review of your own repository, left to run while you do something else.</p>
+
+<p>On a run like that, the terminal is not where the result lives. It scrolls past. The findings worth reading end up in files. This guide starts a Fable 5.2 review in Claude Code with <a href="/">shell.online</a>, tells the agent to write one file per finding into a single folder, and shares only that folder with your phone. You read the findings as they land, you answer the agent's questions from your own machine, and nobody with the link can type into the session.</p>
+
+<section>
+<h2>What you need</h2>
+<p>Claude Code 2.1.321 or newer, a plan or API account that can use Fable 5.2, and the <code>shell</code> command line tool, version 0.25.0. The <a href="/docs/">docs</a> cover installing it, and the source is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online GitHub repository</a>. You also need a phone with a browser. No shell.online account is required for any step below.</p>
+<pre><code>claude --version
+shell --version</code></pre>
+<p>The first command should print 2.1.321 or a later number. If it does not, update Claude Code before you go on, because older versions do not know the model.</p>
+</section>
+
+<section>
+<h2>Step 1: Make a findings folder and keep it out of Git</h2>
+<p>Run these from the root of the repository you want reviewed. The path and folder name are examples.</p>
+<pre><code>cd ~/src/example-api
+mkdir -p review-notes
+echo 'review-notes/' &gt;&gt; "$(git rev-parse --git-common-dir)/info/exclude"
+git check-ignore -v review-notes/001-example.md</code></pre>
+<p><code>mkdir</code> creates the folder the agent will write into. The <code>echo</code> line adds it to the repository's private exclude file. The <a href="https://git-scm.com/docs/gitignore">gitignore documentation</a> describes that file as the place for patterns specific to one user's workflow that should not be shared, which fits notes about weaknesses in your code. <code>git rev-parse --git-common-dir</code> finds the right file in a normal checkout and in a linked worktree alike. The last command prints the exclude file, the line number and the pattern that matched. If it prints nothing, the folder is not ignored yet.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the review with a read-only link and one shared folder</h2>
+<pre><code>shell --read-only --files-root ./review-notes --name fable-review -- \
+  claude --model claude-fable-5-2 \
+  --settings '{"permissions":{"allow":["Edit(review-notes/**)"]}}' \
+  "Review the code under src/ for security problems. Write each finding to review-notes/ as its own Markdown file named like 001-short-title.md, with the file and line, a CWE ID if one fits, and how you checked it. Keep review-notes/000-index.md up to date with one line per finding. Do not change any file outside review-notes/."</code></pre>
+<p>The shell half of the line does three things. <code>--read-only</code> makes a link whose browser input is blocked by the server, so the page on your phone can watch but not type. <code>--files-root ./review-notes</code> opts in that one folder for file access, which is off by default. <code>--name fable-review</code> labels the session in <code>shell list</code>. shell then starts Claude Code in the background as a new process and prints a link, a password and a QR code. The QR code holds both, so keep it out of screenshots.</p>
+<p>The Claude Code half picks the model by its full name from the <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a>, passes an inline settings object, and gives the opening prompt. The settings object holds one allow rule. According to the <a href="https://code.claude.com/docs/en/permissions">permissions documentation</a>, <code>Edit</code> rules cover every built-in tool that edits files, including the one that creates new files, and an allow rule written as <code>Edit(review-notes/**)</code> matches only that folder under the working directory. Writing a finding therefore needs no approval. In the default permission mode, editing anything else still asks.</p>
+<p>The prompt asks for a <a href="https://cwe.mitre.org/about/index.html">CWE</a> ID on each finding because it gives you a fixed name to search and sort by. The zero padded numbers matter for a reason that shows up in step 3.</p>
+<div class="callout"><p>Create the folder before you run shell. shell opens the files root once, when the session starts. If the folder does not exist, shell reports an error containing <code>open shared files root</code> and starts nothing. The root also cannot be moved during the run. Folders the agent creates inside it later do show up in the list, but anything it writes elsewhere stays out of reach of the link.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Read the findings on your phone</h2>
+<p>Scan the QR code, or open the link and type the password. The terminal appears live. Because the session has a files root, a Files control appears, in both the default xterm.js view and the optional Refstream view. The <a href="/mobile/">mobile guide</a> shows where the controls sit on a small screen.</p>
+<p>Open Files and the panel is titled with the folder name, <code>review-notes</code>. Folders come first, then files sorted by name with case ignored, each with its size. That sort is why the prompt asks for <code>001-</code>, <code>002-</code> and so on: the list reads in the order the agent found things, and <code>000-index.md</code> stays at the top.</p>
+<p>Tap a file to read it. Markdown, logs, JSON, YAML, source files and anything served as text open as plain text in a scrolling block. Markdown is not rendered, so you see the headings and asterisks as written. Images open as images. Anything else shows its size and a Download button.</p>
+<p>The list does not refresh by itself. The browser asks the host for a listing only when you open the panel or tap a folder, so to see findings written since you last looked, tap <code>← Folder</code> and the host lists the folder again. Opening a file reads it again from disk. If the agent rewrites a file while your phone is fetching it, the host stops the transfer with "The file changed during transfer." Open it again a moment later.</p>
+<p>Read-only does not hide these files. A <a href="/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone/">read-only link</a> can still read files that were deliberately opted in. It cannot type into the process.</p>
+</section>
+
+<section>
+<h2>Step 4: Answer the agent's questions from your own machine</h2>
+<p>Claude Code will still ask before some actions, such as a shell command outside its built-in read-only set. The phone cannot answer, by design. To answer, use a terminal on the computer running the session, in person or over SSH:</p>
+<pre><code>shell list
+shell attach 3f9a2c</code></pre>
+<p><code>shell list</code> prints the active sessions with their IDs and names, and <code>fable-review</code> is the one you want. <code>shell attach</code> takes that ID, or its first six or more characters, and puts the session in your terminal. Local input works normally and is mirrored to the browser. Answer the prompt, then press Ctrl-X, release it, and press D. That detaches you and leaves Claude Code running. The browser link stays live throughout.</p>
+<p>Attaching is also where you can change course. If Fable 5.2 is spending more of your usage than the review is worth, type <code>/model sonnet</code> while attached. The model page says <code>/model</code> with a name switches at once and saves that model as your default. Open the picker with a bare <code>/model</code> and press <code>s</code> on a row to switch for this session only.</p>
+</section>
+
+<section>
+<h2>Step 5: Let a teammate read along, then close it</h2>
+<p>Send the link and the password to a teammate over two different channels. They get what you get: the live terminal and the <code>review-notes</code> folder, with no way to type. The <a href="/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel/">post on file access in shell.online</a> explains why nothing outside the root is visible.</p>
+<p>When the teammate no longer needs it:</p>
+<pre><code>shell password rotate 3f9a2c</code></pre>
+<p>This generates a fresh password and URL salt without restarting the process, and the relay disconnects the browsers that were watching. Rotation cannot take back what they already read. The <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">guide to revoking a shared link</a> walks through what a viewer sees.</p>
+<p>An interactive Claude Code session does not exit when the review is done. It waits at its prompt. Once you have what you need:</p>
+<pre><code>shell kill -- 3f9a2c</code></pre>
+<p>This stops Claude Code and takes the link offline. The <code>--</code> keeps an ID that starts with a dash from being read as a flag. The findings stay on disk in <code>review-notes/</code>, ignored by Git, for you to triage at a desk.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>It does not confine the agent. <code>--files-root</code> limits what the browser can read. It says nothing about what Claude Code can read or write on your machine. The allow rule removes the prompt for one folder and nothing more, and the permissions page is explicit that rules are enforced by Claude Code, not by the model. Anthropic's own sandbox-escape test found Mythos 5.2 using credentials or files from outside its sandbox in 3.1% of scenarios, against 3.3% for Opus 5.5. If the review must not touch the network or your home directory, that is a job for a sandbox or a container, and <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP's entry on excessive agency</a> is a good list of what to take away first. shell.online's <a href="/security/">security page</a> sets out its own limits.</p>
+<p>It does not follow links out of the folder. The host opens the root with Go's <a href="https://go.dev/blog/osroot">os.Root</a>, which refuses paths that climb out with <code>..</code> or through a <a href="https://man7.org/linux/man-pages/man7/symlink.7.html">symbolic link</a>. The folder listing goes further and leaves symlinks out entirely, along with device files and anything else that is not a regular file or a folder.</p>
+<p>It does not keep versions. When the agent rewrites <code>000-index.md</code>, the old text is gone. The relay routes request IDs and encrypted frame sizes, not paths or contents, and does not keep the files. The <a href="/e2ee/">encryption page</a> covers what it does see.</p>
+<p>It has size limits. A folder lists at most 256 entries, previews stop at 16 MiB, and downloads stop at 128 MiB. A review that produces hundreds of findings should sort them into subfolders by severity.</p>
+<p>It does not render Markdown. The <a href="https://www.rfc-editor.org/rfc/rfc7763.html">text/markdown media type</a> is plain text by definition, and the panel shows it that way.</p>
+<p>It does not let you approve anything from the phone, and it does not track what the run costs. Both are deliberate trade-offs of a read-only link, and both send you back to the machine.</p>
+</section>
+
+<section>
+<h2>When the next reader is an agent</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and this guide's shape comes up there too: one agent produces files, and someone else needs them. On a phone the reader is you. In a pipeline it is often another agent, such as a triage agent that turns findings into tickets. Pilot's <a href="https://pilotprotocol.network/docs/services">built-in data exchange service</a> runs on port 1001 and handles <code>pilotctl send-file</code>, and received files persist until the recipient reads or clears them. The post on <a href="https://pilotprotocol.network/blog/peer-to-peer-file-transfer-agents">peer-to-peer file transfer between agents</a> explains how a transfer keyed by the file's SHA-256 picks up where it stopped. For a human reading findings on the train, the Files panel is enough. For two agents on different networks, that is the layer to look at.</p>
+</section>
+
+<div class="cta"><h3>Give your next long review a findings folder</h3><p>Add <code>--read-only --files-root ./review-notes</code> to the command you already run, ask the agent to write there, and read the results from any browser while the run continues.</p><a href="/cli/">Read the shell command reference</a></div>
