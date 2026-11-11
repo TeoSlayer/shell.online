@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-a-claude-code-login-will-outlast-a-long-shared-run",
+    "title": "How to Check a Claude Code Login Will Outlast a Long Shared Run",
+    "description": "Read the login end date Claude Code 2.1.318 reports, renew before a long run, and watch the run from your phone through a read-only shell.online link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "authentication",
+      "read-only",
+      "remote-monitoring"
+    ],
+    "iso_date": "2026-11-11",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-a-claude-code-login-will-outlast-a-long-shared-run.webp"
+  },
+  {
     "slug": "how-to-read-a-long-claude-fable-5-2-reviews-findings-from-your-phone",
     "title": "How to Read a Long Claude Fable 5.2 Review's Findings From Your Phone",
     "description": "Run a Claude Fable 5.2 review in Claude Code behind a read-only shell.online link, share one findings folder, and read each finding on your phone as it lands.",
