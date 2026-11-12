@@ -18,7 +18,13 @@ import { Transcript, plainLine } from "../transcript";
 const read = (adapter: ClaudeCodeAdapter, frame: readonly string[]) =>
   adapter.read(frame.map(plainLine));
 
-const shape = (utterances: ReturnType<ClaudeCodeAdapter["read"]>) =>
+const settled = (adapter: ClaudeCodeAdapter, frame: readonly string[]) => {
+  const transcript = new Transcript();
+  for (const utterance of [...read(adapter, frame), ...adapter.flush()]) transcript.fromAgent(utterance, 1);
+  return [...transcript.messages];
+};
+
+const shape = (utterances: readonly { kind: string; open?: boolean; text: string; lines: readonly { text: string }[] }[]) =>
   utterances.map((u) => `${u.kind}${u.open ? "(open)" : ""}:${u.text || u.lines.map((l) => l.text).join(" / ")}`);
 
 describe("recognising the program", () => {
@@ -147,7 +153,7 @@ describe("reading a real exchange", () => {
    * pipes, the sockets. It is one thing the agent said and it arrives as one.
    */
   it("gives the prompt and the whole of what the agent said, as one message", () => {
-    const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE));
+    const shaped = shape(settled(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE));
     expect(shaped[0]).toBe("sent:list the files in this directory, then say done");
     expect(shaped[1]).toContain("received");
     expect(shaped[1]).toContain("Here's what's in /private/tmp:");
@@ -197,7 +203,7 @@ describe("reading a real exchange", () => {
       "❯",
       "────────────────────────────────────────",
     ];
-    const said = shape(read(adapter, frame)).join("\n");
+    const said = shape(settled(adapter, frame)).join("\n");
     expect(said).toContain("Working on it.");
     for (const noise of ["Flowing", "Cooked for", "medium", "Tip:", "Update installed", "auto mode on"]) {
       expect(said).not.toContain(noise);
@@ -221,14 +227,14 @@ describe("reading a real exchange", () => {
       "❯",
       "────────────────────────────────────────",
     ];
-    const said = shape(read(adapter, frame)).join("\n");
+    const said = shape(settled(adapter, frame)).join("\n");
     expect(said).toContain("answered");
     expect(said).not.toContain("Update installed");
     expect(said).not.toContain("Tip:");
   });
 
   it("says nothing for a status line", () => {
-    const shaped = shape(read(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
+    const shaped = shape(settled(new ClaudeCodeAdapter(), CLAUDE_EXCHANGE)).join("\n");
     expect(shaped).not.toContain("Cooked for");
   });
 
@@ -313,6 +319,102 @@ describe("reading a real exchange", () => {
   });
 });
 
+/*
+ * Captured from Claude Code v2.1.285 through a pty: a prompt sent while the
+ * agent was already working, and the tool result that came back under it.
+ */
+/*
+ * A heading that counts up while its work runs. The words never change; the
+ * clock on the end of them does, and the reader compares rows.
+ */
+/*
+ * A heading that counts up while its work runs: `Running the canary` becomes
+ * `Running the canary · 3s`, and the words never changed. The reader compares
+ * rows, so a row that ticks is a row it cannot match -- which is the thing
+ * this module's own notes say breaks the join between one frame and the next
+ * and hands content over twice. Taking the clock off makes the row hold still.
+ */
+describe("a line with a clock running on the end of it", () => {
+  /* The text of the message the frames below leave open. */
+  const body = (rows: string[][]) => {
+    const adapter = new ClaudeCodeAdapter();
+    let last = "";
+    for (const rowSet of rows) {
+      for (const utterance of read(adapter, rowSet)) last = utterance.lines.map((l) => l.text).join("\n");
+    }
+    return last;
+  };
+
+  it("holds the heading still while the clock runs", () => {
+    const said = body([
+      ["⏺ answer one", "", "⏺ Running the canary", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 1s", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 2s", "next row", "cursor"],
+      ["⏺ answer one", "", "⏺ Running the canary · 12s", "next row", "tail", "cursor"],
+    ]);
+    expect(said).toContain("Running the canary");
+    expect((said.match(/Running the canary/g) ?? []).length).toBe(1);
+    /* Not `Running the canary · 2s`: a clock stopped at a moment that has
+     * passed is worse than no clock, and it is what made the row change. */
+    expect(said).not.toMatch(/·\s*\d+s/u);
+  });
+
+  /* The other shape a captured session writes: `(… · 0s)`, `(4s · ↓ 60 tokens)`. */
+  it("holds it still for a bracketed counter too", () => {
+    const said = body([
+      ["⏺ answer one", "", "⏺ Bash(npm test) (running hook · 0s)", "cursor"],
+      ["⏺ answer one", "", "⏺ Bash(npm test) (running hook · 3s)", "next row", "cursor"],
+      ["⏺ answer one", "", "⏺ Bash(npm test) (4s · ↓ 60 tokens)", "next row", "tail", "cursor"],
+    ]);
+    expect((said.match(/Bash\(npm test\)/g) ?? []).length).toBe(1);
+    expect(said).not.toContain("tokens");
+    expect(said).not.toContain("running hook");
+  });
+
+  /*
+   * A bracket with no middot in it is somebody's sentence, and the words
+   * inside it are theirs. Only a clock is taken off.
+   */
+  it("leaves a sentence that merely ends in a number alone", () => {
+    expect(body([["⏺ We cut the build (from 30s)", "", "cursor"]]))
+      .toContain("We cut the build (from 30s)");
+  });
+});
+
+describe("a prompt sent while the agent is busy", () => {
+  it("does not read the tool result under it as part of what was sent", () => {
+    const frame = [
+      "⏺ say exactly: banana",
+      "❯ run the probe as well",
+      "  ⎿  $ go run ./probe",
+      "  ⎿  claude-code  3 events",
+      "⏺ Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    const sent = shaped.filter((line) => line.startsWith("sent:"));
+    expect(sent).toEqual(["sent:run the probe as well"]);
+    expect(sent.join("")).not.toContain("go run ./probe");
+  });
+
+  /*
+   * The same row, as another terminal draws it. A marker is a glyph in a
+   * font; which glyph arrives is not ours to decide, and a session reported
+   * from a real machine showed this one.
+   */
+  it("reads the same prompt when the marker arrives as a greater-than", () => {
+    const frame = [
+      "⏺ earlier answer",
+      "> run the probe as well",
+      "  ⎿  $ go run ./probe",
+      "⏺ Done.",
+      "cursor",
+    ];
+    const shaped = shape(read(new ClaudeCodeAdapter(), frame));
+    expect(shaped.filter((line) => line.startsWith("sent:"))).toEqual(["sent:run the probe as well"]);
+  });
+});
+
 describe("the interface's own indent and wrapping", () => {
   it("comes off the paragraph", () => {
     expect(dedent(["  one", "  two"])).toEqual(["one", "two"]);
@@ -376,6 +478,16 @@ describe("a prompt the terminal had to wrap", () => {
 });
 
 describe('streaming parser boundaries', () => {
+  it('preserves indented check results while removing the right-aligned effort control', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const messages = settled(adapter, ['❯ checks', '', '⏺ Results:', '  ✓ unit tests passed', '  ✗ integration check failed',
+      '                          ◐ medium · /effort', '────────────────────', '❯', '────────────────────']);
+    const text = messages.flatMap(message => message.lines.map(line => line.text)).join('\n');
+    expect(text).toContain('✓ unit tests passed');
+    expect(text).toContain('✗ integration check failed');
+    expect(text).not.toContain('/effort');
+  });
+
   it('does not consume an answer marker as part of an adjacent prompt', () => {
     const adapter = new ClaudeCodeAdapter();
     const said = [...read(adapter, ['❯ hello', '⏺ answer', '  more', '✻ Done']), ...adapter.flush()];
@@ -391,6 +503,16 @@ describe('streaming parser boundaries', () => {
 });
 
 describe('quiet-time previews through the transcript', () => {
+  it('previews an answer paused on the cursor row without committing its partial text', () => {
+    const adapter = new ClaudeCodeAdapter();
+    const transcript = new Transcript();
+    for (const answer of ['Partial', 'Partial answer completed']) {
+      const frame = ['❯ ask', '', `⏺ ${answer}`, '✳ Working…', '────────────────────', '❯', '────────────────────'];
+      for (const utterance of [...adapter.read(frame.map(plainLine), 2), ...adapter.settle()]) transcript.fromAgent(utterance, 1);
+      expect(transcript.messages.filter(m => m.kind === 'received').map(m => m.lines.map(l => l.text).join('\n'))).toEqual([answer]);
+    }
+  });
+
   it('keeps one growing message through repeated idle pauses and repaints', () => {
     const adapter = new ClaudeCodeAdapter();
     const transcript = new Transcript();
@@ -465,4 +587,16 @@ describe("fragmented repaint", () => {
       expect(JSON.stringify(transcript.messages)).toBe(before);
     }
   });
+});
+
+
+it("does not commit a partial answer just because a spinner is drawn below it", () => {
+  const adapter = new ClaudeCodeAdapter();
+  const transcript = new Transcript();
+  const frame = (answer: string) => ['❯ ask', '', `⏺ ${answer}`, '✳ Working…', 'Tip: use /help', '────────────────────', '❯', '────────────────────'];
+  for (const answer of ['Partial', 'Partial answer', 'Partial answer completed']) {
+    for (const utterance of [...read(adapter, frame(answer)), ...adapter.settle()]) transcript.fromAgent(utterance, 1);
+  }
+  for (const utterance of adapter.flush()) transcript.fromAgent(utterance, 2);
+  expect(transcript.messages.filter(m => m.kind === "received").map(m => m.lines.map(l => l.text).join("\n"))).toEqual(['Partial answer completed']);
 });

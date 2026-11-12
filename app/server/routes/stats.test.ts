@@ -7,8 +7,10 @@ const monday = Date.UTC(2026, 8, 7);
 const now = monday + 2 * WEEK_MS + 3 * DAY_MS + 9 * 60 * 60_000;
 const today = Math.floor(now / DAY_MS) * DAY_MS;
 
-const customer = (account: Omit<AccountActivity, "internal">): AccountActivity => ({ ...account, internal: false });
-const ours = (account: Omit<AccountActivity, "internal">): AccountActivity => ({ ...account, internal: true });
+type Fixture = Pick<AccountActivity, "joinedAt" | "days"> & Partial<AccountActivity>;
+const progress = { machineLinked: false, sessionStarted: false, teammateInvited: false };
+const customer = (account: Fixture): AccountActivity => ({ ...progress, ...account, internal: false });
+const ours = (account: Fixture): AccountActivity => ({ ...progress, ...account, internal: true });
 
 describe("accountStats events", () => {
   it("passes what accounts did through as counts by kind, and an empty object when nothing was counted", () => {
@@ -128,6 +130,53 @@ describe("accountStats leaves our own accounts out", () => {
     const stats = accountStats(outside, "7d", now);
     expect(stats.excluded).toBe(0);
     expect(stats.total).toBe(3);
+  });
+});
+
+describe("accountStats activation", () => {
+  const accounts = [
+    /* signed up in the week, linked a machine, ran a session, came back */
+    customer({ joinedAt: now - 3 * DAY_MS, days: [today - 3 * DAY_MS, today], machineLinked: true, sessionStarted: true }),
+    /* signed up in the week, ran a teammate's session and invited someone, one day only */
+    customer({ joinedAt: now - DAY_MS, days: [today - DAY_MS], sessionStarted: true, teammateInvited: true }),
+    /* signed up in the week, did nothing else */
+    customer({ joinedAt: now - 2 * 60 * 60_000, days: [] }),
+    /* signed up before the week: in the all-time funnel only */
+    customer({ joinedAt: monday, days: [monday, today], machineLinked: true }),
+    /* ours: in no funnel */
+    ours({ joinedAt: now - DAY_MS, days: [today - DAY_MS, today], machineLinked: true, sessionStarted: true }),
+  ];
+
+  it("counts how far the range's sign-ups got, each step over the same sign-ups", () => {
+    expect(accountStats(accounts, "7d", now).activation).toEqual({
+      base: 3, machineLinked: 1, sessionStarted: 2, teammateInvited: 1, cameBack: 1,
+    });
+  });
+
+  it("covers every account over all time and none of ours", () => {
+    expect(accountStats(accounts, "all", now).activation).toEqual({
+      base: 4, machineLinked: 2, sessionStarted: 2, teammateInvited: 1, cameBack: 2,
+    });
+  });
+
+  it("counts a sign-up at the very start of the range in it, and one a moment before out of it", () => {
+    const start = now - 7 * DAY_MS;
+    const edge = [
+      customer({ joinedAt: start, days: [], machineLinked: true }),
+      customer({ joinedAt: start - 1, days: [], machineLinked: true }),
+    ];
+    expect(accountStats(edge, "7d", now).activation).toMatchObject({ base: 1, machineLinked: 1 });
+  });
+
+  it("says nothing about which accounts they were", () => {
+    expect(Object.keys(accountStats(accounts, "7d", now).activation).sort())
+      .toEqual(["base", "cameBack", "machineLinked", "sessionStarted", "teammateInvited"]);
+  });
+
+  it("is all zeros for an empty range rather than missing", () => {
+    expect(accountStats([], "24h", now).activation).toEqual({
+      base: 0, machineLinked: 0, sessionStarted: 0, teammateInvited: 0, cameBack: 0,
+    });
   });
 });
 

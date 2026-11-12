@@ -1,0 +1,125 @@
+<p>On October 7, 2026, Kaspersky used the AI Everything Global expo in Abu Dhabi to publish <a href="https://www.kaspersky.com/about/press-releases/kaspersky-issues-guidelines-on-securing-ai-agents-with-cyber-immunity-approach">guidelines for securing AI agents</a>, built on what the company calls its Cyber Immunity approach. The report, <a href="https://lp.kaspersky.com/global/ai-agent-cyber-immunity">AI agent security through the lens of Cyber Immunity</a>, starts from two assumptions: the language model and any outside data are untrusted, and irreversible actions need a person to confirm them. From there it asks for a small trusted computing base, isolated components (sandboxes and virtual machines, with trusted and untrusted contexts kept apart), and default-deny rules for tool calls and network traffic. Vladislav Tushkanov, who heads Kaspersky's AI Technology Research Center, said the principles map directly onto LLM-based systems.</p>
+
+<p>None of that is new to anyone who has read the <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP entry on excessive agency</a>, which tells you to limit what an agent's extensions can reach to the minimum it needs. What is new is how many people now run a coding agent on the same laptop that holds their SSH keys, cloud credentials and browser sessions. Putting the agent in a container is the cheapest form of isolation most developers already have installed. The usual objection is that a container is awkward to watch: you lose the terminal the moment you close the window that ran <code>docker exec</code>.</p>
+
+<p>This guide runs OpenAI's Codex CLI inside the Docker image that ships with <a href="https://github.com/TeoSlayer/shell.online">shell.online</a>, so the agent works in a container while its terminal is a browser link you can open from a laptop or a phone. It covers starting the container, getting the link out of it, putting Codex inside without root, signing in, and what a restart keeps. It also says plainly where this setup falls short of Kaspersky's list. The shell.online details come from the repository's Dockerfile, Compose file, entrypoint script and help text. I have not run this exact sequence on every Docker host, so check each step's output as you go.</p>
+
+<section>
+<h2>Step 1: Build and start the container</h2>
+
+<p>The <a href="/docker/">Docker guide</a> starts from a clone of the repository. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/docker-compose.yml">Compose file</a> in its root defines one service, <code>shell-online</code>, with two named volumes: <code>shell-online-state</code> for the session identity and <code>shell-online-workspace</code> for your files. It builds the image from the clone and restarts the container unless you stop it.</p>
+
+<pre><code>git clone https://github.com/TeoSlayer/shell.online.git
+cd shell.online
+export SHELL_ONLINE_E2EE_PASSWORD='example-only-pick-your-own-long-phrase'
+docker compose up --build -d</code></pre>
+
+<p>The <code>export</code> line is optional and only matters on the first launch. Without it, the entrypoint generates a short random password and saves it. With it, the container uses your longer password instead, which the <a href="/e2ee/">encryption guide</a> recommends for sessions that live a long time. A container running an agent for days is that kind of session.</p>
+
+<p>The <a href="https://github.com/TeoSlayer/shell.online/blob/main/Dockerfile">Dockerfile</a> is short enough to read in a minute. It builds the <code>shell</code> binary, copies it into an Alpine image with bash, CA certificates and tini, creates a user called <code>shellonline</code>, and switches to that user. Nothing in the container runs as root after start. The working directory is <code>/workspace</code> and the default command is an interactive bash login shell.</p>
+</section>
+
+<section>
+<h2>Step 2: Read the link and open it</h2>
+
+<p>The <a href="https://github.com/TeoSlayer/shell.online/blob/main/scripts/docker-entrypoint.sh">entrypoint script</a> prints the password to the container's log, then runs <code>shell --foreground --persistent /var/lib/shell-online/session.json</code> around bash. The session card with the browser link follows it in the same log.</p>
+
+<pre><code>docker compose logs shell-online</code></pre>
+
+<p>You will see a line starting <code>Docker password:</code>, a note that the browser asks for it and that it is never sent to shell.online, and the session card. Its <code>Open</code> line holds the link, which ends in a <code>#salt=</code> fragment, and its <code>Session</code> line ends in <code>persistent</code>. Open the link on your laptop or phone and type the password. You get a bash prompt in <code>/workspace</code>, running as <code>shellonline</code> inside the container.</p>
+
+<p>The <code>#salt=</code> fragment never reaches the relay. The browser and the container derive the key from the salt and the password, so the relay carries ciphertext; the <a href="/security/">security page</a> lists the metadata it still sees.</p>
+
+<p>Because the container's process is wrapped with <code>--foreground</code> under a persistent state file, you can also ask the CLI inside the container about it. <code>docker compose exec</code> runs as the same user, so it finds the same local session record:</p>
+
+<pre><code>docker compose exec shell-online shell list</code></pre>
+
+<p>This prints a table with the session ID, access mode, uptime, command, share URL and whether the relay is online. The image's health check runs <code>shell list --json</code> for the same reason: if no session is listed, Docker marks the container unhealthy.</p>
+</section>
+
+<section>
+<h2>Step 3: Put Codex in the workspace without root</h2>
+
+<p>The image has no Node.js, no package manager you can use as <code>shellonline</code>, and no git. The simplest way in is the prebuilt binary. The <a href="https://github.com/openai/codex/blob/main/README.md">Codex README</a> lists a statically linked musl build for Linux on each GitHub release, <code>codex-x86_64-unknown-linux-musl.tar.gz</code> for x86_64 and <code>codex-aarch64-unknown-linux-musl.tar.gz</code> for arm64, and says each archive holds a single file with the platform in its name. First check which one the container needs:</p>
+
+<pre><code>docker compose exec shell-online uname -m</code></pre>
+
+<p>On an Apple Silicon Mac this prints <code>aarch64</code>; on most Linux servers it prints <code>x86_64</code>. Download the matching archive on the host. GitHub serves the newest asset at a stable address, as its page on <a href="https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases">linking to releases</a> describes.</p>
+
+<pre><code>curl -fsSLO https://github.com/openai/codex/releases/latest/download/codex-x86_64-unknown-linux-musl.tar.gz
+tar -xzf codex-x86_64-unknown-linux-musl.tar.gz
+docker compose cp codex-x86_64-unknown-linux-musl shell-online:/workspace/codex</code></pre>
+
+<p>For an <code>aarch64</code> container, replace <code>x86_64</code> with <code>aarch64</code> in all three lines.</p>
+
+<p><a href="https://docs.docker.com/reference/cli/docker/compose/cp/">docker compose cp</a> copies a file between the host and a service's container. Per the <a href="https://docs.docker.com/reference/cli/docker/container/cp/">docker cp reference</a>, a file copied into a container belongs to root but keeps its permissions where possible, so the executable bit survives and <code>shellonline</code> can run it. Copy your project into the workspace the same way, since there is no git inside to clone it with:</p>
+
+<pre><code>docker compose cp ./example-app shell-online:/workspace/example-app</code></pre>
+
+<p>Files copied this way are owned by root inside the container. If the agent needs to edit them, change ownership with <code>docker compose exec -u root shell-online chown -R shellonline /workspace/example-app</code>. That is the one step here that runs as root, and it runs from the host, not from the shared terminal.</p>
+</section>
+
+<section>
+<h2>Step 4: Sign in from the browser terminal</h2>
+
+<p>Codex normally signs in by opening a browser on the same machine, which a container does not have. The <a href="https://learn.chatgpt.com/docs/auth">Codex authentication guide</a> recommends device code sign-in for headless machines, marked as beta. Type this in the shared terminal you opened in Step 2:</p>
+
+<pre><code>cd /workspace
+./codex login --device-auth</code></pre>
+
+<p>Codex prints a link and a one-time code. Open the link on your phone, sign in, and enter the code. The same guide offers an API key as the alternative, piped in with <code>printenv OPENAI_API_KEY | ./codex login --with-api-key</code> after you set the variable in that terminal.</p>
+
+<p>Either way Codex writes its credentials to <code>~/.codex/auth.json</code>, which here is <code>/home/shellonline/.codex/auth.json</code>. The guide says to treat that file like a password. Note where it lives: the home directory is in the container's own writable layer, not in a named volume. It survives <code>docker compose restart</code>. It does not survive removing the container, which <code>docker compose down</code> does, so you sign in again after that.</p>
+</section>
+
+<section>
+<h2>Step 5: Run Codex and watch it from anywhere</h2>
+
+<pre><code>cd /workspace/example-app
+/workspace/codex</code></pre>
+
+<p>Expect a startup warning about the sandbox. On Linux, Codex's own sandbox uses bubblewrap, and the <a href="https://learn.chatgpt.com/codex/sandboxing">Codex sandboxing page</a> says Codex warns when <code>bwrap</code> is missing or cannot create the user namespace it needs. The shell.online image does not install bubblewrap. In this setup the container is the isolation boundary, and Codex's approval settings are what stands between the agent and an action you would want to confirm. Choose them on purpose from that page rather than turning everything off to make the warning go away.</p>
+
+<p>From here the session behaves like any other share. Close the laptop tab and the agent keeps working, because the process belongs to the container, not to the browser. Open the same link on your phone to check on it; the <a href="/mobile/">mobile guide</a> covers the phone view. If someone else needs to follow along, the earlier post on <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">a read-only terminal link for your coding agent</a> explains why a separate view-only share beats handing over this one.</p>
+</section>
+
+<section>
+<h2>Step 6: Know what a restart keeps</h2>
+
+<pre><code>docker compose restart shell-online
+docker compose logs shell-online</code></pre>
+
+<p>After a restart the log shows the same link and the same password. The entrypoint reads the saved password from the state volume, and <code>--persistent</code> reuses the saved session identity, so a bookmark on your phone keeps working. What it does not keep is the process. The Docker guide is explicit that the container starts a new terminal process and does not restore an agent's in-memory conversation or a running job. Codex is gone after a restart, and you start it again from the shared terminal.</p>
+
+<div class="callout">
+<p><strong>The agent can read the share's credentials.</strong> The entrypoint keeps the password in <code>/var/lib/shell-online/password</code> and the session identity and key in <code>session.json</code> beside it, both owner-only. The owner is <code>shellonline</code>, and so is Codex, because it runs in the same shell as the same user. Anything the agent executes, including a command planted by a prompt injection, can read both files. Treat the link and password as known to the agent. The same goes for the container log: it prints the password, so keep <code>docker compose logs</code> output out of issues and chat. The earlier post on <a href="/blog/end-to-end-encrypted-terminal-sharing-has-a-second-secret-on-the-host-shell-onli/">the second secret on the host</a> covers the same trade on an ordinary machine.</p>
+</div>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<p>Compared with Kaspersky's list, this is partial isolation, and it is worth being exact about which part.</p>
+
+<ul>
+<li>It is a container, not a virtual machine. A container shares the host's kernel. The <a href="https://docs.docker.com/engine/security/">Docker Engine security page</a> describes the namespaces that keep a container's processes apart from others and recommends running as a non-root user, which this image does. NIST's <a href="https://csrc.nist.gov/pubs/sp/800/190/final">Application Container Security Guide</a> is the longer reference.</li>
+<li>It does not deny network traffic by default. The Compose file declares no network rules, so the container gets the project's default Compose network with ordinary outbound access. shell.online needs outbound HTTPS to its relay and Codex needs to reach OpenAI. Anything else the agent tries to reach is also allowed unless you add your own rules.</li>
+<li>It does not keep the agent away from the share credentials, as the callout above says.</li>
+<li>It does not run your own relay. The image is a client of the hosted service. To run the relay yourself, follow <a href="/self-hosting/">self-hosting</a> or the earlier post on <a href="/blog/self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste/">running the relay on one Docker host</a>.</li>
+<li>It does not confirm irreversible actions for you. Watching a terminal is not approving one. Codex's approval mode does that, inside the session.</li>
+</ul>
+
+<p>It does keep the agent off your host's home directory, your SSH keys and your shell history, unless you copy them in. For a lot of agent work that is the part that matters most, and it costs one Compose file.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>The piece of Kaspersky's list this guide leaves open is network control, and that is where agent networking gets awkward. Lock a container's egress down to outbound port 443 and most peer-to-peer tools stop working. <a href="https://pilotprotocol.network/">Pilot Protocol</a>, the agent networking stack behind shell.online, has a compat mode for that case: as its <a href="https://pilotprotocol.network/docs/firewalls">firewall documentation</a> describes, the daemon makes only outbound TCP connections on port 443 and relays traffic over WebSocket Secure. The write-up on <a href="https://pilotprotocol.network/blog/pilot-protocol-from-a-locked-down-agent-sandbox">getting a Pilot node online from a locked-down agent VM</a> goes further, through an authenticating egress proxy, blackholed DNS and blocked UDP. If you tighten this container's network after reading Kaspersky's report, those two pages show what an agent can still do with only HTTPS out.</p>
+</section>
+
+<div class="cta">
+<h3>Put the agent in a box you can still see into</h3>
+<p>Clone the repository, run <code>docker compose up --build -d</code>, and open the link from the log. The full command list is in the <a href="/cli/">CLI reference</a>.</p>
+<a href="https://github.com/TeoSlayer/shell.online">shell.online on GitHub</a>
+</div>

@@ -101,6 +101,7 @@ func runSharedProcess(
 	onPasswordRotated func(string, string),
 	fileService *sharedFileService,
 	flowSink mcpFlowSink,
+	outputTap func([]byte),
 ) (int, error) {
 	// Keep the relay alive after the task context is cancelled so the final
 	// terminal state and exit event can still reach the browser.
@@ -293,15 +294,6 @@ func runSharedProcess(
 
 	outputKicks := make(chan struct{}, 64)
 	outputEmitter := newOutputEmitter(connection, outputRing, frameCipher)
-	/*
-	 * The conversation an agent records, alongside the screen it draws.
-	 *
-	 * Sealed by the same emitter and therefore by the same cipher as output,
-	 * so the relay forwards it without being able to read it. It finds
-	 * nothing until an agent is actually running here, which for a session
-	 * that stays a shell is for ever; see cmd/shell/agent_tap.go.
-	 */
-	go followAgentRecord(relayContext, workingDirectory(), outputEmitter.sendFrame)
 	batchDone := make(chan struct{})
 	go batchOutput(relayContext, outputKicks, outputEmitter, batchDone)
 
@@ -314,6 +306,9 @@ func runSharedProcess(
 			if count > 0 {
 				chunk := append([]byte(nil), buffer[:count]...)
 				_, _ = stdout.Write(chunk)
+				if outputTap != nil {
+					outputTap(chunk)
+				}
 				if control != nil {
 					control.PublishOutput(chunk)
 				} else {
@@ -985,6 +980,19 @@ func terminalEnvironment(environment []string) []string {
 		backgroundReadyToken,
 		backgroundParentEnvironment,
 		terminalGridEnvironment,
+		/*
+		 * What a browser-started launch hands to this one wrapper. Left in
+		 * place, every `shell` run inside the shared program read them as
+		 * its own: a nested share published the parent's command, name and
+		 * origin, and quietly reused the parent's browser password, so
+		 * `shell password rotate` from inside rotated to the same one.
+		 */
+		sessionNameEnvironment,
+		sessionOriginEnvironment,
+		sessionCommandEnvironment,
+		passwordEnvironment,
+		/* A nested shell would wait for a password on the terminal. */
+		passwordOnStdinEnvironment,
 	)
 	environment = setEnvironmentValue(environment, "TERM", "xterm-256color")
 	environment = setEnvironmentValue(environment, "COLORTERM", "truecolor")

@@ -15,13 +15,13 @@
 // SHELL_BROWSER=safari runs the same probes through safaridriver.
 // SHELL_SCROLL_PART=app|standalone|both selects a single viewer (default both).
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { launchChromeTransport, launchSafariTransport } from './lib/browser-transport.mjs';
+import { launchChromeTransport, launchSafariTransport, removeProfile } from './lib/browser-transport.mjs';
 
 const browser = process.env.SHELL_BROWSER === 'safari' ? 'safari' : 'chrome';
 const newProfile = () => (browser === 'chrome' ? mkdtemp(join(tmpdir(), 'shell-scroll-')) : Promise.resolve(null));
@@ -387,7 +387,7 @@ if (part === 'both' || part === 'app') {
   } finally {
     await transport?.close();
     await server.close();
-    if (browser === 'chrome') await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    if (browser === 'chrome') await removeProfile(profile);
   }
 }
 
@@ -532,7 +532,7 @@ if (part === 'both' || part === 'standalone') {
   } finally {
     await transport?.close();
     await server.close();
-    if (browser === 'chrome') await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    if (browser === 'chrome') await removeProfile(profile);
   }
 }
 

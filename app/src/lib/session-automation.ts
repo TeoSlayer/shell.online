@@ -12,5 +12,6 @@ export function automationConsent(session: Partial<SessionAutomationConsent>): S
     mcpTeamAccess: session.mcpTeamAccess === true,
     dailyBriefingEnabled: session.dailyBriefingEnabled === true,
     dailyBriefingTeamAccess: session.dailyBriefingTeamAccess === true,
+    summariesEnabled: session.summariesEnabled === true,
   };
 }

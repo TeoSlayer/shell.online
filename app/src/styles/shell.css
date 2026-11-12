@@ -632,14 +632,17 @@
   }
 
   /*
-   * And it sits where the window is, not where the document starts. See
-   * `--viewport-top` in lib/app-height.ts: a browser that scrolls the visual
-   * viewport to lift a field above the keyboard leaves the shell hanging off
-   * the top of the screen by exactly this much.
+   * Anchor the shell to the layout viewport, independently of document scroll.
+   * Mobile browsers can scroll the document to reveal a focused field even
+   * with overflow hidden. A relative shell then moves upward and leaves that
+   * same distance empty below the navigation. The visual viewport can also
+   * pan inside the layout viewport; --viewport-top follows that separate offset.
    */
   .shell {
-    position: relative;
+    position: fixed;
     top: var(--viewport-top, 0px);
+    right: 0;
+    left: 0;
   }
 
   :root[data-pane="open"] .shell-content {

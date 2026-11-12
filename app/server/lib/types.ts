@@ -229,6 +229,41 @@ export interface AccountActivity {
    * outside the store being handed an identifier.
    */
   internal: boolean;
+  /*
+   * How far the account got past signing up, each answered while the store
+   * still has the uid and handed back as a yes or no: the dashboard's
+   * activation funnel is built from these and never learns whose they are.
+   */
+  /** Ran `shell login` on at least one machine, whether or not it is still linked. */
+  machineLinked: boolean;
+  /**
+   * Has at least one session on record. Removing a session deletes its row,
+   * so an account that removed every session it ran reads as never having run one.
+   */
+  sessionStarted: boolean;
+  /** Created at least one invite, accepted or not. */
+  teammateInvited: boolean;
+}
+
+/**
+ * One account as the statistics dashboard lists it: who, when, and how far
+ * they got. Unlike AccountActivity this names the person, so it is served
+ * only to the dashboard's token and never folded into the public counts.
+ */
+export interface AccountDirectoryEntry {
+  email: string;
+  name: string;
+  team: string;
+  teamSize: number;
+  joinedAt: number;
+  lastSeenAt: number | null;
+  /** Machines ever linked, unlinked ones included. */
+  machines: number;
+  /** Sessions still on record. */
+  sessions: number;
+  activeDays: number;
+  invitesSent: number;
+  internal: boolean;
 }
 
 /**
@@ -291,13 +326,16 @@ export interface SessionRecord {
   mcpTeamAccess?: boolean;
   dailyBriefingEnabled?: boolean;
   dailyBriefingTeamAccess?: boolean;
+  summariesEnabled?: boolean;
 }
 
-/** The three independent automation switches a session owner may set. */
+/** The independent automation switches a session owner may set. */
 export interface SessionAutomationConsent {
   mcpTeamAccess: boolean;
   dailyBriefingEnabled: boolean;
   dailyBriefingTeamAccess: boolean;
+  /** Sanitized terminal output may go to the attested summarizer; results are owner-only. */
+  summariesEnabled: boolean;
 }
 
 /**

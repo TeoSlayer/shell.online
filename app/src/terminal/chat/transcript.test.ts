@@ -198,17 +198,17 @@ describe("a full-screen program", () => {
 });
 
 describe("a reconnect", () => {
-  it("rebuilds the conversation instead of replaying it a message at a time", () => {
+  it("keeps this visit's conversation while a reconnect fills in the screen", () => {
     const transcript = new Transcript();
     transcript.submitted("one", 1000);
     transcript.beginReplay();
-    expect(transcript.messages).toHaveLength(0);
+    expect(texts(transcript)).toEqual(["one"]);
     expect(transcript.isReplaying).toBe(true);
 
     transcript.output([plainLine("restored")], 2000);
     transcript.endReplay();
     expect(transcript.isReplaying).toBe(false);
-    expect(texts(transcript)).toEqual(["restored"]);
+    expect(texts(transcript)).toEqual(["one", "restored"]);
   });
 });
 
@@ -564,6 +564,62 @@ describe("a reload, which is a connection, which is a replay", () => {
     expect(texts(now)).toEqual(["from before the reload", "the screen, replayed"]);
   });
 
+  /*
+   * What the screenshot showed: an answer, then a later question, then the
+   * same answer again underneath it. The screen replayed on connection holds
+   * the end of the conversation, and the end of the conversation is exactly
+   * what this device remembered, so both were drawn.
+   */
+  it("does not draw again what it already remembered", () => {
+    const earlier = new Transcript();
+    earlier.submitted("move the permissions", 1000);
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("Moved and live.")], open: false }, 1100);
+    earlier.submitted("is the json used?", 1200);
+    earlier.close(1300);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    /* The screen still shows the answer and the question under it. */
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Moved and live.")], open: false }, 2000);
+    now.fromAgent({ kind: "sent", text: "is the json used?", lines: [], open: false }, 2001);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["move the permissions", "Moved and live.", "is the json used?"]);
+  });
+
+  it("keeps what the session said after the snapshot", () => {
+    const earlier = new Transcript();
+    earlier.submitted("asked", 1000);
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("answered")], open: false }, 1100);
+    earlier.close(1200);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("answered")], open: false }, 2000);
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("and then this")], open: false }, 2100);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["asked", "answered", "and then this"]);
+  });
+
+  /* An agent does say the same short thing twice, and both were real. */
+  it("keeps a genuine repeat the remembered thread has no second copy of", () => {
+    const earlier = new Transcript();
+    earlier.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 1000);
+    earlier.close(1100);
+
+    const now = new Transcript();
+    now.restore(earlier.messages);
+    now.beginReplay();
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 2000);
+    now.fromAgent({ kind: "received", text: "", lines: [plainLine("Done.")], open: false }, 2100);
+    now.endReplay();
+
+    expect(texts(now)).toEqual(["Done.", "Done."]);
+  });
+
   it("keeps it through more than one reconnection", () => {
     const earlier = new Transcript();
     earlier.submitted("remembered", 1000);
@@ -605,40 +661,96 @@ describe("a reload, which is a connection, which is a replay", () => {
   });
 });
 
-describe("the agent's own record", () => {
-  const recorded = (seq: number, text: string, kind: "sent" | "received" = "received") => ({
-    seq,
-    message: { kind, at: 1000 + seq, text: kind === "sent" ? text : "", lines: kind === "sent" ? [] : [plainLine(text)], open: false },
-  });
 
-  it("becomes the conversation", () => {
+describe("fenced output from normal terminal sessions", () => {
+  it("keeps indentation, blank rows and fence-like content across chunks", () => {
     const transcript = new Transcript();
-    expect(transcript.fromRecord([recorded(1, "npm test", "sent"), recorded(2, "all passed")])).toBe(true);
-    expect(texts(transcript)).toEqual(["npm test", "all passed"]);
-    expect(transcript.isRecorded).toBe(true);
+    const code = ['````python', 'if __name__ == "__main__":', '    print("**literal**")', '', '```', 'print("done")', '````'];
+    for (const line of code) transcript.output([plainLine(line)], 1000);
+    transcript.close(2000);
+    expect(texts(transcript)).toEqual([code.join("\n")]);
+    expect(transcript.messages[0].preformatted).toBe(true);
   });
 
-  /*
-   * Events carry their position, so a batch that arrives twice -- a reconnect,
-   * a replay, a host that resent -- changes nothing.
-   */
-  it("says the same thing once however many times it arrives", () => {
+  it("retains output from this visit across successive reconnects", () => {
     const transcript = new Transcript();
-    transcript.fromRecord([recorded(1, "one"), recorded(2, "two")]);
-    expect(transcript.fromRecord([recorded(1, "one"), recorded(2, "two")])).toBe(false);
-    expect(transcript.fromRecord([recorded(2, "two"), recorded(3, "three")])).toBe(true);
-    expect(texts(transcript)).toEqual(["one", "two", "three"]);
+    transcript.output([plainLine("off screen"), plainLine("")], 1000);
+    transcript.output([plainLine("visible answer"), plainLine("")], 2000);
+    for (let n = 0; n < 2; n++) {
+      transcript.beginReplay();
+      transcript.output([plainLine("visible answer"), plainLine("")], 3000 + n);
+      transcript.endReplay();
+      expect(texts(transcript)).toEqual(["off screen", "visible answer"]);
+    }
   });
+});
 
-  it("is forgotten when the conversation is cleared", () => {
+
+it("reopens the remembered message when a replayed answer is still growing", () => {
+  const transcript = new Transcript();
+  const first = transcript.fromAgent({kind: "received", text: "", lines: [plainLine("Partial")], open: false}, 1)!;
+  transcript.beginReplay();
+  transcript.fromAgent({kind: "received", text: "", lines: [plainLine("Partial")], open: true}, 2);
+  transcript.endReplay();
+  expect(transcript.messages[0].open).toBe(false);
+  transcript.fromAgent({kind: "received", text: "", lines: [plainLine("Partial answer")], open: false}, 3);
+  expect(texts(transcript)).toEqual(["Partial answer"]);
+  expect(transcript.messages[0].id).toBe(first.id);
+});
+
+it("does not cut a fenced block in half when output pauses", () => {
+  const transcript = new Transcript();
+  transcript.output(['```python', 'print(1)'].map(plainLine), 1);
+  expect(transcript.settle(10_000)).toBe(false);
+  transcript.output(['', 'print(2)', '```'].map(plainLine), 11_000);
+  expect(transcript.settle(20_000)).toBe(true);
+  expect(texts(transcript)).toEqual(['```python\nprint(1)\n\nprint(2)\n```']);
+});
+
+describe("snapshots clipped by the terminal viewport", () => {
+  it("does not use a renderer notice as the chronological anchor of a snapshot", () => {
     const transcript = new Transcript();
-    transcript.fromRecord([recorded(1, "one")]);
-    transcript.clear();
-    expect(transcript.isRecorded).toBe(false);
-    expect(transcript.fromRecord([recorded(1, "one")])).toBe(true);
+    transcript.submitted("cached question", 1);
+    transcript.output(["cached answer", ""].map(plainLine), 2);
+    // The notice is added when chat first reads an already cached screen.
+    transcript.noticed("Reading Claude Code as messages.", 3);
+    transcript.output(["new live answer", ""].map(plainLine), 4);
+    transcript.beginReplay();
+    transcript.noticed("Reading Claude Code as messages.", 5);
+    transcript.fromAgent({kind: "sent", text: "cached question", lines: [], open: false}, 6);
+    transcript.fromAgent({kind: "received", text: "", lines: [plainLine("cached answer")], open: false}, 7);
+    transcript.endReplay();
+    expect(texts(transcript)).toEqual(["cached question", "cached answer", "Reading Claude Code as messages.", "new live answer"]);
   });
 
-  it("knows it has not heard from a record yet", () => {
-    expect(new Transcript().isRecorded).toBe(false);
+  it("keeps the complete cached answer when replay starts at its last rows", () => {
+    const transcript = new Transcript();
+    transcript.output(["first row", "second row", "third row", ""].map(plainLine), 1);
+    const id = transcript.messages[0].id;
+    transcript.beginReplay();
+    transcript.output(["second row", "third row"].map(plainLine), 2);
+    transcript.endReplay();
+    transcript.output([plainLine("fourth row")], 3);
+    expect(texts(transcript)).toEqual(["first row\nsecond row\nthird row\nfourth row"]);
+    expect(transcript.messages[0].id).toBe(id);
+  });
+
+  it("does not erase a repeated answer after a new prompt in the snapshot", () => {
+    const transcript = new Transcript();
+    transcript.output(["first row", "second row", ""].map(plainLine), 1);
+    transcript.beginReplay();
+    transcript.submitted("run it again", 2);
+    transcript.output(["first row", "second row", ""].map(plainLine), 3);
+    transcript.endReplay();
+    expect(texts(transcript)).toEqual(["first row\nsecond row", "run it again", "first row\nsecond row"]);
+  });
+
+  it("deduplicates replay when history is already at its message limit", () => {
+    const transcript = new Transcript();
+    for (let n = 0; n < MAX_MESSAGES; n++) transcript.output([plainLine(`answer ${n}`), plainLine("")], n);
+    transcript.beginReplay();
+    transcript.output([plainLine(`answer ${MAX_MESSAGES - 1}`), plainLine("")], 1000);
+    transcript.endReplay();
+    expect(texts(transcript).filter(text => text === `answer ${MAX_MESSAGES - 1}`)).toHaveLength(1);
   });
 });

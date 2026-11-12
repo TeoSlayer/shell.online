@@ -1,0 +1,139 @@
+<p>OpenAI released <a href="https://github.com/openai/codex/releases/tag/rust-v0.162.0">Codex CLI 0.162.0 on October 8</a>. The headline item in its notes is a set of tools for creating and listing managed Git worktrees from trusted local projects, available when the worktrees feature is enabled. The same release lets you pin a task in the agent Command Center with the <code>p</code> key, and a <a href="https://github.com/openai/codex/releases">0.162.1 patch followed the next day</a> with two crash and startup fixes. OpenAI's own <a href="https://learn.chatgpt.com/docs/environments/git-worktrees">worktrees page</a> states the reason in one line: worktrees let Codex run multiple independent chats in the same project without interfering with each other.</p>
+
+<p>That is the direction every coding agent is going. Claude Code has a <a href="https://code.claude.com/docs/en/common-workflows#run-parallel-sessions-with-worktrees"><code>--worktree</code> flag for parallel sessions</a>, and the Codex desktop app creates managed worktrees under <code>$CODEX_HOME/worktrees</code>. Once you have three agents working in three checkouts of the same repository, the hard part stops being the agents. It is knowing which terminal is which when you are away from the desk and one of them stops to ask a question.</p>
+
+<p>This guide does it with plain <a href="https://git-scm.com/docs/git-worktree">git worktree</a> commands and shell.online, so it works with the Codex CLI you already have and does not depend on the new feature flag. You will create one worktree per task, start Codex in each one with a session name, find them again with <code>shell list</code> and <code>shell ls</code>, open the right one from a phone, and clean up when each task is done.</p>
+
+<section>
+<h2>Step 1: Install shell and link the machine</h2>
+
+<p>Install the CLI on the computer that holds the repository. The installer checks release checksums, and the <a href="/platforms/">platforms page</a> lists Homebrew and the other options.</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell auth</code></pre>
+
+<p><code>shell auth</code> is optional for sharing a single session, but this guide needs it. It links the machine to your account, which is what makes <code>shell ls</code> and the session list in the web app work. It opens a browser on an approval screen; on a machine with no browser, <code>shell auth --no-browser</code> prints the URL instead. What gets published to the account is the share URL, the command name, the host name and the timing. Terminal contents and the encryption key are not, as the <a href="/security/">security page</a> explains.</p>
+
+<p>Codex itself installs from OpenAI's <a href="https://learn.chatgpt.com/docs/codex/cli">Codex CLI quickstart</a>, which tells you to open a project directory and run <code>codex</code>. That matters here: the directory you start Codex from is the checkout it edits.</p>
+</section>
+
+<section>
+<h2>Step 2: Create one worktree per task</h2>
+
+<p>From your main checkout, make a linked worktree for each piece of work, each on a new branch. The repository here is called <code>shop</code>, and the three tasks are invented.</p>
+
+<pre><code>cd ~/code/shop
+git worktree add -b fix-login ../shop-fix-login
+git worktree add -b csv-export ../shop-csv-export
+git worktree add -b flaky-tests ../shop-flaky-tests
+git worktree list</code></pre>
+
+<p>Each <code>add</code> creates a directory next to the main checkout and checks the new branch out into it. <code>git worktree list</code> prints the main worktree first and then each linked one, with the commit and branch it has checked out. The git manual describes a linked worktree as sharing everything with the repository except per-worktree files such as <code>HEAD</code> and the index, so the three agents get separate files on disk but one shared history.</p>
+
+<p>Two git rules will save you a confused agent later. Git refuses to create a worktree for a branch that is already checked out in another worktree, so two agents cannot quietly share a branch. And a worktree is a fresh checkout, so files your <a href="https://git-scm.com/docs/gitignore">.gitignore</a> excludes, such as <code>.env</code>, are not there. Both OpenAI and Anthropic handle that with a <code>.worktreeinclude</code> file for the worktrees their own tools create. Plain <code>git worktree add</code> does not read that file, so copy what the task needs by hand.</p>
+</section>
+
+<section>
+<h2>Step 3: Start Codex in each worktree with a name</h2>
+
+<p>Without a name, every row in <code>shell list</code> and <code>shell ls</code> shows the same command, <code>codex</code>, and that is the whole problem. <code>--name</code> fixes it. Put it before the command:</p>
+
+<pre><code>cd ../shop-fix-login
+shell --name "shop: fix-login" codex
+
+cd ../shop-csv-export
+shell --name "shop: csv-export" codex
+
+cd ../shop-flaky-tests
+shell --name "shop: flaky-tests" codex</code></pre>
+
+<p>Each command starts Codex in the background and returns your prompt once the share is ready. I read the macOS and Linux start path in the source: the background process is started without changing directory, so Codex begins in the worktree you were in. Each start prints a card like this, with your own link and password in place of the placeholders:</p>
+
+<pre><code>  Name       shop: fix-login
+  Open       (your link)
+  Password   (ten characters)
+  Vault      saved to your account vault
+  Access     view and type · end-to-end encrypted
+  Session    a1b2c3d4e5 · background
+  Closes     when the task exits</code></pre>
+
+<p>The name is a label of up to 120 characters on a single line. The CLI rejects control characters and the Unicode direction overrides that can make text print backwards, so a name cannot be made to read as something else in a list.</p>
+
+<p>Each session is a separate share with its own link and password, which is what you want: you can hand a teammate the <code>csv-export</code> session without giving them the other two. If someone should only watch, start that one with <code>shell --read-only --name "shop: csv-export" codex</code> instead, and the relay rejects browser input for it.</p>
+</section>
+
+<section>
+<h2>Step 4: Find the sessions from a terminal</h2>
+
+<p>On the same machine, <code>shell list</code> shows what is running locally:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>In a terminal at least 132 columns wide it prints a table with ID, NAME, UPTIME, RELAY, CLOSES, ACCESS, COMMAND, SHARE URL and PASSWORD columns. The NAME column is cut at 24 characters, which is why short names work better. In a narrower window it prints one block per session instead, headed by the ID and the name, with the command, closing rule and link underneath. The PASSWORD column only says whether one is stored; <code>shell password &lt;ID&gt;</code> prints it when you mean to.</p>
+
+<p>For a script, use the JSON form and pick the fields you need with <a href="https://jqlang.org/manual/">jq</a>:</p>
+
+<pre><code>shell list --json | jq -r '.[] | "\(.id[0:10])  \(.name)  \(.relay_status)"'</code></pre>
+
+<p>That prints the short ID, the name and the relay status for each session, one per line. <code>relay_status</code> holds the raw value, such as <code>connected</code>, <code>waiting</code> or <code>disconnected</code>.</p>
+
+<div class="callout">
+<p><strong>shell list --json includes the passwords.</strong> Each record carries an <code>e2ee_password</code> field next to the share URL, because it is the interface agents use to hand a session to an operator. Pipe it through a filter like the one above, and do not paste the raw output into a chat, an issue or a log. <code>shell ls --json</code> is different: it never prints a password.</p>
+</div>
+
+<p>From any linked machine, <code>shell ls</code> lists the sessions in your account instead:</p>
+
+<pre><code>shell ls
+shell ls --all --json | jq -r '.[] | "\(.name)  \(.status)  \(.exit_code // "-")"'</code></pre>
+
+<p>The table has ID, NAME, STATUS, UPTIME, MACHINE and COMMAND columns, with the name cut at 32 characters. Status uses the same words as the web app: online, starting, offline, finished, unavailable, unknown, or machine gone for a session whose host has been disconnected for ten minutes without reporting an exit (persistent sessions excepted). Ended sessions are hidden and counted on the last line; <code>--all</code> brings them back. The JSON records include <code>exit_code</code> once an exit has been recorded and <code>started_at</code> as an <a href="https://www.rfc-editor.org/rfc/rfc3339">RFC 3339</a> timestamp, so the second command tells you which sessions have ended and with what exit code. An <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">earlier post on --name and shell ls</a> covers the cross-machine side in more detail.</p>
+</section>
+
+<section>
+<h2>Step 5: Open the right one from your phone</h2>
+
+<p>Open <a href="https://app.shell.online/">app.shell.online</a> on the phone and sign in with the same account. The session list shows each session by its name rather than its command, so the three Codex runs read as three different branches. Tap one, open it with the password from its card, and you are in the live terminal, where you can read what Codex is doing and answer it. The <a href="/mobile/">mobile guide</a> covers the controls on a small screen, and the <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">post on the activity pulse</a> covers telling a busy session from one that is waiting.</p>
+
+<p>If a name turns out to be wrong, say because you moved a task to a different worktree, rename it on the session page with the pencil next to the title. The name is saved as typed, up to 120 characters, and a blank name clears it so the session falls back to its default title. The rename is stored on the account, so <code>shell ls</code> shows it too. The app lets the person who started the session, anyone it is assigned to, and the team's owners and admins rename it, since naming is housekeeping and not control over the machine.</p>
+</section>
+
+<section>
+<h2>Step 6: Step in, then clean up</h2>
+
+<p>Back at the desk, you can take one session into your own terminal without stopping it:</p>
+
+<pre><code>shell attach a1b2c3</code></pre>
+
+<p>An ID prefix works if it is at least six characters and matches only one session. Press Ctrl-X, release it, then press D to detach. The browser link stays live the whole time. When you quit Codex, the process exits and its share closes on its own. To stop one from outside:</p>
+
+<pre><code>shell kill a1b2c3</code></pre>
+
+<p>Then review the branch the way you would review anyone's, for example by <a href="https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request">opening a pull request</a> from it, and remove the worktree from the main checkout:</p>
+
+<pre><code>cd ~/code/shop
+git worktree remove ../shop-fix-login</code></pre>
+
+<p>Git only removes a clean worktree, one with no untracked files and no changes to tracked files. If it refuses, look at what is left before reaching for <code>--force</code>, because that is uncommitted work from the agent.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<p>shell does not create, track or remove worktrees. Its session lists do not show which directory a session started in, so the name you give it is the only link between a session and its worktree. Names are not unique and not locks: two sessions can carry the same name, and nothing stops you from starting a second agent in a worktree that already has one.</p>
+
+<p>A worktree is not a sandbox. All three agents run as your user, with your files and credentials, and they share one <code>.git</code> directory, so a branch deleted or rewritten from one worktree is deleted or rewritten for all of them. Keep Codex's own sandbox and approval settings in place; the <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP entry on excessive agency</a> is a good list of what to keep from an agent that does not need it. shell gives you a way to watch and answer each run, not a boundary around it.</p>
+
+<p>This also does not reach the managed worktrees that the Codex desktop app creates. Those chats live inside the app. shell shares terminal processes that you start through it, and it does not attach to a process that is already running. Finally, the host has to stay awake and online for the links to work.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>Three agents in three worktrees cannot see each other's terminals, and sometimes one has found exactly what another needs. shell.online is built by Pilot Protocol, whose network is for that kind of agent to agent traffic. The guide to <a href="https://pilotprotocol.network/blog/connect-codex-cli-to-pilot-protocol">connecting Codex CLI to Pilot Protocol</a> adds Pilot's hosted MCP server with <code>codex mcp add</code>, which gives Codex its own Pilot node with messaging tools such as <code>pilot_send</code> and <code>pilot_inbox</code>. Pilot's <a href="https://pilotprotocol.network/blog/multi-agent-system-networking-guide-ai-developers">networking guide for multi-agent systems</a> covers the addressing, trust and encrypted tunnels underneath. I would keep that optional: worktrees and session names are enough to run parallel tasks, and a message channel between agents is one more thing to review. The source for shell is on <a href="https://github.com/TeoSlayer/shell.online">GitHub</a>, and the full command list is on the <a href="/cli/">CLI reference</a>.</p>
+</section>
+
+<div class="cta">
+<h3>Name your next parallel run</h3>
+<p>Install shell, start each Codex task with --name in its own worktree, and open the one that needs you from your phone.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>

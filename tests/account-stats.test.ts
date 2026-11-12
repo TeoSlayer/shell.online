@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { completeAccountStats, fetchAccountStats } from "../worker/account-stats";
+import { completeAccountStats, fetchAccountList, fetchAccountStats } from "../worker/account-stats";
 
 /* What the accounts app answers today. */
 const complete = {
@@ -15,6 +15,7 @@ const complete = {
   activeSince: 86_400_000,
   excluded: 21,
   cohorts: [{ weekStart: 1, size: 2, active: [1] }],
+  activation: { base: 3, machineLinked: 2, sessionStarted: 1, teammateInvited: 0, cameBack: 1 },
   events: { machine_linked: 4 },
 };
 
@@ -77,6 +78,7 @@ describe("completeAccountStats", () => {
       engagementBase: 0,
       activeSince: null,
       excluded: 0,
+      activation: null,
       events: {},
     });
   });
@@ -88,10 +90,54 @@ describe("completeAccountStats", () => {
       previous: { total: 1 },
       engagement: [{ label: "one_day", value: 1 }, { label: 3, value: 1 }],
       events: { machine_linked: "many" },
+      activation: { base: 3, machineLinked: "two" },
     });
     expect(filled.newByDay).toEqual([{ day: 1, count: 2 }]);
     expect(filled.previous).toBeNull();
     expect(filled.engagement).toEqual([{ label: "one_day", value: 1 }]);
     expect(filled.events).toEqual({});
+    expect(filled.activation).toBeNull();
+  });
+});
+
+describe("fetchAccountList", () => {
+  const account = {
+    email: "ana@example.com", name: "Ana", team: "Ana's team", teamSize: 2, joinedAt: 5, lastSeenAt: null,
+    machines: 1, sessions: 0, activeDays: 3, invitesSent: 1, internal: false,
+  };
+
+  it("is nothing when the dashboard is not linked, and nothing when the app is too old to list", async () => {
+    expect(await fetchAccountList(undefined, "token", answering({ accounts: [account] }))).toBeNull();
+    expect(await fetchAccountList("https://app.example", "token", answering({ error: "not found" }, 404))).toBeNull();
+  });
+
+  it("asks the app's list route with the token, and passes the accounts through", async () => {
+    let asked = "";
+    let authorization = "";
+    const capture = (async (url: string, init: RequestInit) => {
+      asked = url;
+      authorization = new Headers(init.headers).get("authorization") ?? "";
+      return new Response(JSON.stringify({ accounts: [account] }));
+    }) as unknown as typeof fetch;
+    expect(await fetchAccountList("https://app.example/", "token", capture)).toEqual({ accounts: [account] });
+    expect(asked).toBe("https://app.example/api/stats/accounts/list");
+    expect(authorization).toBe("Bearer token");
+  });
+
+  it("drops a malformed account rather than drawing a row from it", async () => {
+    const answer = await fetchAccountList("https://app.example", "token", answering({
+      accounts: [account, { ...account, email: 7 }, { ...account, lastSeenAt: "yesterday" }, null],
+    }));
+    expect(answer).toEqual({ accounts: [account] });
+  });
+
+  it("names the failure rather than showing an empty list", async () => {
+    expect(await fetchAccountList("https://app.example", "token", answering({}, 401)))
+      .toEqual({ error: "accounts app answered 401" });
+    expect(await fetchAccountList("https://app.example", "token", answering({ accounts: "all of them" })))
+      .toEqual({ error: "accounts app answered in an unexpected shape" });
+    const throwing = (() => Promise.reject(new Error("no route to host"))) as unknown as typeof fetch;
+    expect(await fetchAccountList("https://app.example", "token", throwing))
+      .toEqual({ error: "accounts app did not answer" });
   });
 });

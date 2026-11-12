@@ -46,7 +46,7 @@ both can access the session, so give them only to intended recipients.
 
 ## Automation and lifecycle
 
-To build the CLI yourself, install Git and Go 1.26.8, then follow
+To build the CLI yourself, install Git and Go 1.26.9, then follow
 [Build from source](https://shell.online/platforms/#section-4). Use the release
 tag and verify the resulting binary with --version. Node.js is not needed
 unless you are also developing the website. Windows uses shell.exe.

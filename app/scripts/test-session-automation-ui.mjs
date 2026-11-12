@@ -1,13 +1,13 @@
 // Local browser interaction canary. Uses synthetic props only; no login, relay, or deploy.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { chromeStartup } from '../../scripts/lib/browser-transport.mjs';
+import { chromeStartup, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const profile = await mkdtemp(join(tmpdir(), 'shell-automation-ui-'));
 const TEST_ENTRY_ID = 'virtual:session-automation-test-entry';
@@ -102,15 +102,15 @@ try {
     test.render('owner');
   })()`);
   const boxes = `document.querySelectorAll('#automation-test input[type="checkbox"]')`;
-  await waitFor(() => evaluate(`${boxes}.length === 3`), 'owner controls');
-  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [false, false, false]);
+  await waitFor(() => evaluate(`${boxes}.length === 4`), 'owner controls');
+  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [false, false, false, false]);
   await evaluate(`automationTest.hold = true; ${boxes}[0].click()`);
   await waitFor(() => evaluate('automationTest.calls.length === 1'), 'save started');
   assert.equal(await evaluate(`${boxes}[1].matches(':disabled')`), true);
   await evaluate('automationTest.hold = false; automationTest.release()');
   await waitFor(() => evaluate(`${boxes}[0].checked && !${boxes}[0].matches(':disabled')`), 'save finished');
   assert.deepEqual(await evaluate('automationTest.calls[0]'), { mcpTeamAccess: true });
-  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [true, false, false]);
+  assert.deepEqual(await evaluate(`Array.from(${boxes}, el => el.checked)`), [true, false, false, false]);
   await evaluate(`automationTest.fail = true; ${boxes}[0].click()`);
   await waitFor(() => evaluate(`!!document.querySelector('#automation-test [role="alert"]')`), 'safe failure state');
   assert.equal(await evaluate(`${boxes}[0].checked`), true);
@@ -131,5 +131,5 @@ try {
     if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await exited; }
   }
   await server.close();
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

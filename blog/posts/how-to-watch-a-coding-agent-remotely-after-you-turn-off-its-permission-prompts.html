@@ -1,0 +1,88 @@
+<p>Claude Code 2.1.259 added a flag for runs where nobody is at the keyboard. The <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">changelog entry</a> describes <strong>--permission-prompts none</strong> as being "for unattended headless hosts: anything that would prompt is denied automatically while the active permission mode (including auto mode) keeps deciding". That is the correct default for a scheduled job. It also means the run makes every decision on its own, and the only record of what it did is the terminal it ran in. This post is about how to watch a coding agent remotely once you have taken the human out of its permission loop, using a read-only browser link from <span class="brand-shell">shell.online</span>.</p>
+
+<p><span class="brand-shell">shell.online</span> is the terminal-sharing tool we build at <a href="https://pilotprotocol.network">Pilot Protocol</a>. The <a href="/blog/shell-online-live-terminal-browser-link/">introduction post</a> covers what a browser link to a terminal is. This one goes into the unattended case specifically: the exact command, what a phone shows, who can see it, and what happens when the network drops or the job ends.</p>
+
+<section>
+<h2>What the new flag changes about an unattended run</h2>
+
+<p>The <a href="https://code.claude.com/docs/en/headless">headless documentation</a> is precise about the behaviour. With the flag set, "anything that would prompt is denied unless a PermissionRequest hook allows it, Claude is told that nobody can approve the request and not to retry it, and the run continues." Tools that need a person to answer, such as AskUserQuestion, are removed from the session entirely. Denials show up as permission_denied system messages in the stream-json output, and the final result message lists them under permission_denials.</p>
+
+<p>So the run never blocks. That is the point, and it is also the problem. A job that used to hang on a prompt now records a denial and moves on. If it spends forty minutes working around a denied command, the transcript is where that shows, and the transcript lives in a PTY on the machine that ran it.</p>
+
+<p>The same direction is visible elsewhere. VS Code 1.136, released on September 2, previews Agent Merge, which has agents "address review feedback, fix failed checks and merge conflicts, and rerun workflows" until a pull request is ready, per the <a href="https://code.visualstudio.com/updates/v1_136">release notes</a>. Long loops with no human step are becoming the normal shape of agent work.</p>
+</section>
+
+<section>
+<h2>Where Remote Control stops</h2>
+
+<p>Anthropic's own answer is Remote Control, which connects claude.ai/code or the Claude mobile app to a Claude Code session on your machine. The <a href="https://code.claude.com/docs/en/remote-control">documentation</a> says Claude "keeps running locally the entire time". The constraints it lists matter for an unattended job:</p>
+
+<ul>
+<li>It needs a Pro, Max, Team, or Enterprise sign-in. API keys are not supported.</li>
+<li>It is not available when the session runs through Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry, or a custom ANTHROPIC_BASE_URL such as an LLM gateway.</li>
+<li>Organizations with Zero Data Retention requirements cannot enable it, and traffic passes through Anthropic servers.</li>
+<li>The docs describe it as a feature of interactive sessions and of the claude remote-control server mode, and it only covers Claude Code.</li>
+</ul>
+
+<p>A Codex run, a custom agent on any SDK, or the npm build the agent kicked off gets none of that. <span class="brand-shell">shell.online</span> works one level down. It wraps the process in a local PTY and shares the terminal itself, so it does not care which agent is inside or which API it talks to.</p>
+</section>
+
+<section>
+<h2>Watch a coding agent remotely with a read-only link</h2>
+
+<p>Install the CLI, then start the unattended run behind a read-only share. The two dashes separate the share flags from the flags that belong to claude:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+
+shell --read-only -- claude -p "Update the dependency pins and run the tests" \\
+  --permission-mode auto --permission-prompts none \\
+  --output-format stream-json --verbose</code></pre>
+
+<p>The command comes from the headless documentation's own unattended example, with two output flags added. In the default text mode a headless run prints only its final result, so the terminal would sit empty until the end. With stream-json and verbose, each event lands as one line as it happens, including the permission denials.</p>
+
+<p>The share prints a URL and an eight-character password only after a short startup handshake. If claude exits immediately, for example because the API key is missing in a cron environment, <span class="brand-shell">shell.online</span> reports the exit status and prints no dead link. Otherwise the process keeps running in the background.</p>
+
+<p>Open the link on a phone and enter the password. The <a href="https://shell.online/mobile/">mobile guide</a> explains that a session uses a 120 by 36 grid until a phone connects, then switches everyone to an 80 by 24 grid that fits a phone screen. Read-only phones count too, so a desktop viewer sees the same reflow.</p>
+
+<p>Read-only is enforced by the relay, not the page. The <a href="https://shell.online/security/">security model</a> states that with the flag set, "ordinary browser input and confirmed EOF are rejected by the Worker", and that developer tools or handcrafted WebSocket frames cannot turn the link into an interactive one.</p>
+</section>
+
+<section>
+<h2>Who can open it and what the relay can read</h2>
+
+<p>The URL and the password together are a bearer credential. Anyone holding both can see the terminal, and on an interactive share they can type with the permissions of the wrapped process. Read-only removes the typing but not the viewing, which is why the password should travel separately from the URL when the run touches anything sensitive.</p>
+
+<div class="callout"><p>An unattended agent's transcript is a good place to leak things. Environment dumps, tokens echoed by a failing script, and file contents the agent decided to print all end up on that screen. Treat the share like a log file that anyone with the link can read, because that is what it is.</p></div>
+
+<p>The <a href="https://shell.online/e2ee/">end-to-end encryption guide</a> covers what the relay sees. The generated eight-character password gives 48 bits of entropy, which the guide describes as suited to convenient task-bound sharing. For a long-lived or sensitive run, set a longer password with SHELL_ONLINE_E2EE_PASSWORD. The URL carries only a random salt fragment, and the CLI and browser each derive the same AES-256-GCM key with PBKDF2-HMAC-SHA256 at 600,000 iterations. The relay receives neither the password nor the plaintext.</p>
+
+<p>The guide is equally direct about limits: encryption "cannot hide traffic shape or prevent the relay from dropping, delaying, or replaying a valid encrypted frame". Cloudflare does not persist terminal contents. The CLI holds a bounded in-memory replay buffer while the process is alive, and ordinary task exit deletes the session state and closes every socket.</p>
+</section>
+
+<section>
+<h2>Network loss, reconnects, and the end of the job</h2>
+
+<p>Unattended runs are long, and phones drop off networks. The <a href="https://shell.online/reliability/">reliability page</a> describes how the CLI and browser reconnect with bounded backoff, that a temporary network failure does not stop the process, and that the same ordinary share link stays recoverable for 12 hours after its host disconnects. A returning viewer is restored from the local ring buffer. If output outruns the network or the rendering, stale display work is dropped and one authoritative screen snapshot is sent instead.</p>
+
+<p>The share always closes when the wrapped task exits. If you want it gone earlier, --auto-close only adds an earlier deadline:</p>
+
+<pre><code>shell --read-only --auto-close 2h -- claude -p "..." --permission-mode auto --permission-prompts none
+shell list
+shell kill &lt;session-id&gt;</code></pre>
+
+<p>shell list shows local process uptime alongside the relay's own view, which is one of online, starting, reconnecting, expired, or unknown. Unknown means the check was inconclusive, not that the link died. The owner-only record keeps the generated password, so you can hand the link to a second person without restarting the job. shell kill stops the process and the share together.</p>
+
+<p>If a supervisor restarts the job, --persistent with an owner-only state file restores the same URL and password on the next start. That file holds the host identity, password, and E2EE material, and the CLI reference lists --no-e2ee as conflicting with persistence.</p>
+</section>
+
+<section>
+<h2>Letting the agent hand out its own link</h2>
+
+<p>An agent that spawns its own subtasks can create the share itself. shell --json emits the new-session event as one JSON line on stderr, including the password when the share is encrypted, so the wrapped process keeps stdout. The agent passes that to its operator over whatever channel it already uses. An installable skill at shell.online/skill covers this.</p>
+
+<p>The <a href="https://github.com/TeoSlayer/shell.online">source</a> is MIT licensed. The Go CLI owns the local PTY, a Cloudflare Worker creates sessions and serves the site, one Durable Object coordinates each terminal's host and viewers, and the browser uses xterm.js. Release binaries are static and checksummed for macOS, Windows using ConPTY, and Linux across x86, ARM, MIPS, PPC64, RISC-V, s390x, and LoongArch, with each Linux artifact exercised under QEMU. The <a href="https://shell.online/platforms/">platform guide</a> has the full matrix.</p>
+
+<p>Turning off permission prompts is the right call for a scheduled agent. Keeping a live, read-only view of what it did with that freedom is the other half of the decision, and it is one prefix on the command you already run.</p>
+</section>
+
+<div class="cta"><h3>Watch the next unattended run from your phone</h3><p>One command wraps the agent, prints a link and a password, and keeps the process on your machine with the terminal encrypted end to end.</p><a href="https://shell.online/">Try shell.online</a></div>

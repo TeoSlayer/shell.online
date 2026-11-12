@@ -48,8 +48,28 @@ import type { AgentAdapter, AgentUtterance } from "./types";
 /** A full-width rule. Two of them bound the box that is typed into. */
 const RULE = /^[─━]{8,}\s*$/u;
 
-/** A prompt somebody typed. */
-const PROMPT = /^❯\s?(.*)$/u;
+/**
+ * A prompt somebody typed.
+ *
+ * Two markers. `❯` is what a captured frame of this program shows, at the
+ * caret and again beside the prompt once it has been sent. `>` is the same
+ * row as somebody else's terminal draws it, reported from a real session; a
+ * marker is a glyph in a font, and which glyph arrives is not ours to decide.
+ * Column zero either way, so a quote or a redirect inside what an agent says
+ * -- always indented under its own marker -- is not mistaken for one.
+ */
+const PROMPT = /^(?:❯|>)\s?(.*)$/u;
+
+/**
+ * A tool's result, which is the agent working and never what anybody typed.
+ *
+ * It is drawn indented, directly under the row that started it, and an
+ * indented row under an open prompt used to be read as the rest of the
+ * prompt. Send something while the agent is busy and its next tool result
+ * arrived in the thread as part of the message you had just sent.
+ */
+const TOOL = /^\s*⎿/u;
+const TIP = /^\s*⎿\s*Tip:/u;
 
 /** The agent speaking. */
 const SPOKE = /^⏺\s+(.*)$/u;
@@ -105,6 +125,8 @@ const SPINNER = /^\s*[^\p{L}\p{N}\s]\s+\p{L}[\p{L}\u2019']*…/u;
  * row that starts with something else and ends in an update is still status.
  */
 const STATUS_TAIL = /(?:✓|✔)\s*Update installed|Restart to update/u;
+/** The captured right-aligned control above the composer, not answer text. */
+const EFFORT = /^\s+[◐◑◒◓]\s+\S+\s+·\s+\/effort\s*$/u;
 
 /** Anything indented under the marker above it. */
 const INDENTED = /^\s+\S/u;
@@ -225,14 +247,23 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return this.spinning;
   }
 
-  read(frame: readonly TranscriptLine[]): AgentUtterance[] {
+  read(frame: readonly TranscriptLine[], cursorRow?: number): AgentUtterance[] {
     /*
      * Read from the whole screen rather than from the conversation, because
      * the spinner is drawn under the conversation, next to the box -- which
      * is the part `strip` takes off before any of this is read.
      */
     this.spinning = frame.some((line) => SPINNER.test(line.text));
-    const utterances = this.classify(this.reader.read(normalize(strip(frame.map((line) => line.text)))));
+    let conversation = strip(frame.map((line) => line.text));
+    // The actual PTY recording can stop a transport chunk in the middle of
+    // the prompt row while older composer/furniture remains below it. That
+    // lower content does not make the cursor row complete. Keep that row as
+    // the reader's pending tail so idle previews can still show it. A cursor
+    // parked on an empty row or a spinner is not writing conversation text.
+    if (cursorRow !== undefined && cursorRow < conversation.length && conversation[cursorRow]?.trim() && !furniture(conversation[cursorRow])) {
+      conversation = conversation.slice(0, cursorRow + 1);
+    }
+    const utterances = this.classify(this.reader.read(normalize(conversation)));
     if (this.previewing) {
       const preview = this.settle();
       if (preview.length) {
@@ -245,16 +276,21 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   settle(): AgentUtterance[] {
     this.previewing = true;
-    // A 400ms pause can occur mid-token. Preview it, but leave both the reader
+    // An idle pause can occur mid-token. Preview it, but leave both the reader
     // and classifier at their committed boundary so a later repaint replaces
     // the preview rather than appending a second copy. Prompts and tools are
     // not published until their boundary arrives.
+    const pending = this.reader.preview();
+    const closed: AgentUtterance[] = [];
+    // A new marker completes the preceding paragraph even if its own text
+    // is still arriving. Commit that boundary, but keep the new row reversible.
+    if (!this.fence && pending[0] && (SPOKE.test(pending[0]) || PROMPT.test(pending[0]))) this.close(closed);
     const state = { open: [...this.open], prompting: this.prompting && [...this.prompting],
-      started: this.started, spoken: this.spoken, fence: this.fence };
-    const preview = this.classify(this.reader.preview());
+      started: this.started, spoken: this.spoken, fence: this.fence, lastSent: this.lastSent };
+    const preview = this.classify(pending);
     Object.assign(this, state);
     return preview.length === 1 && preview[0].kind === "received"
-      ? [{ ...preview[0], open: true }] : [];
+      ? [...closed, { ...preview[0], open: true }] : closed;
   }
 
   flush(): AgentUtterance[] {
@@ -297,7 +333,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
        * marker of its own is the rest of what was typed.
        */
       if (this.prompting) {
-        if (INDENTED.test(line) && !SPOKE.test(line) && !STATUS.test(line.trimStart()) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
+        if (INDENTED.test(line) && !SPOKE.test(line) && !TOOL.test(line) && !STATUS.test(line.trimStart()) && !STATUS_TAIL.test(line) && !RULE.test(line)) {
           this.prompting.push(line.trim());
           continue;
         }
@@ -547,20 +583,66 @@ function composerAt(frame: readonly string[]): number {
 
 /** Anything the program says about itself rather than about the work. */
 function furniture(line: string): boolean {
-  return STATUS.test(line) || STATUS_TAIL.test(line) || SPINNER.test(line);
+  return STATUS.test(line) || EFFORT.test(line) || STATUS_TAIL.test(line) || SPINNER.test(line);
+}
+
+/**
+ * A counter ticking on the end of a line that is otherwise finished.
+ *
+ * `Running the chat renderer canary` becomes `Running the chat renderer
+ * canary · 3s` and then `· 4s`, and the words never changed. To the repaint
+ * reader that is a different row, so the row it had already given out is
+ * given out again -- the same heading twice in one message, once per second
+ * it ran for.
+ *
+ * Two shapes, both taken from a captured session, and both tight on purpose.
+ * A bare duration after a middot; and a trailing bracket that holds both a
+ * middot and a duration, which is how this program writes `(3s · ↓ 60
+ * tokens)` and `(running UserPromptSubmit hook · 0s)`. Requiring the middot
+ * inside the bracket is what keeps a sentence that happens to end in
+ * something like "(from 30s)" intact: that is somebody's words, not a clock.
+ */
+const TIMER_TAIL = /\s+·\s+\d+(?:\.\d+)?(?:ms|s|m|h)(?:\s+\d+(?:\.\d+)?s)?\s*(…)?\s*$/u;
+const TIMER_BRACKET = /\s*\((?=[^()]*·)[^()]*\b\d+(?:\.\d+)?(?:ms|s|m|h)\b[^()]*\)\s*$/u;
+
+/** The same line with whatever clock was running on the end of it taken off. */
+function untimed(line: string): string {
+  let text = line.replace(TIMER_BRACKET, "");
+  text = text.replace(TIMER_TAIL, "$1");
+  return text === line ? line : text.trimEnd();
 }
 
 /** Ignore changing chrome before comparing frames, not after deduplication. */
 function normalize(frame: readonly string[]): string[] {
   let fence: string | null = null;
-  return frame.map(line => {
+  let tip = false;
+  let end = 0;
+  const normalized = frame.map((line, index) => {
     if (fence) {
       if (closesFence(line, fence)) fence = null;
+      end = index + 1;
       return line;
     }
     fence = fenceAt(SPOKE.exec(line)?.[1] ?? line);
-    return !fence && furniture(line) ? "✻" : line;
+    if (fence) { end = index + 1; return line; }
+    // Captured footer tips use the tool-result marker and can wrap. They do
+    // not complete the partial answer above the spinner.
+    if (TIP.test(line)) { tip = true; return "✻"; }
+    if (tip && /^\s{4,}\S/u.test(line)) return "✻";
+    tip = false;
+    /* Inside a fence a clock is the program's output, not its chrome. */
+    if (furniture(line)) return "✻";
+    if (line.trim()) end = index + 1;
+    // A real tool heading blinks between `⏺ Heading` and `  Heading`.
+    // Its following result marker identifies it without treating ordinary
+    // indented prose (or fenced code) as another assistant message.
+    const heading = /^  \S/u.test(line) && TOOL.test(frame[index + 1] ?? "")
+      ? `⏺ ${line.slice(2)}` : line;
+    return untimed(heading);
   });
+  // A spinner below an answer does not make the answer's last row complete.
+  // Leave that row pending so another frame can replace a partial token.
+  return normalized.slice(0, end);
 }
 
 function fenceAt(line: string): string | null {

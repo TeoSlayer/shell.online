@@ -1,0 +1,82 @@
+<p>On October 1, Anthropic <a href="https://claude.com/blog/claude-code-mods">introduced mods for Claude Code</a>: small TypeScript functions that hook into the agent and change what it does. A mod can rewrite a prompt before it reaches the model, block or retry a tool call, redact secrets from tool output, and approve or deny a permission request. One of Anthropic's own examples is a production safeguard that asks for confirmation before a risky step. <a href="https://gigazine.net/news/20261002-claude-code-customize-mod/">GIGAZINE covered the launch</a> the next day. Anthropic is plain about the risk: mods "run with the same access to your machine as Claude Code itself. They aren't sandboxed."</p>
+<p>Mods make it easy to add more questions to a run. A question only protects you if the right person answers it. Claude Code's <a href="https://code.claude.com/docs/en/permissions">permission prompt</a> offers Yes, "Yes, and don't ask again", sometimes "Yes, and switch to auto mode", and No. Whoever can type into that terminal can pick any of them. Once the terminal is shared in a browser, that is no longer only you at your desk.</p>
+<p>This guide shows how to decide who can answer Claude Code's prompts when it runs under shell.online: only you from your phone, only you at the machine while others watch, or several people with a clear rule for who gets the keyboard. Every behavior below comes from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> at v0.25.0.</p>
+
+<section>
+<h2>Step 1: Decide before you start, because the mode is fixed</h2>
+<p>A shell session is either interactive or read-only, and you choose when you start it. Interactive is the default. The <a href="/security/">security page</a> puts it directly: anyone with the complete link and password can view and type with the wrapped process's operating system permissions. A read-only session rejects browser input in both the relay and the CLI, and it cannot be switched to interactive later. An MCP control grant does not change that either.</p>
+<p>There is no per-viewer role inside one session. You cannot give one person a typing link and another a watching link to the same process. That leaves three setups, and the rest of this guide walks through each:</p>
+<ul>
+<li>You alone answer, from anywhere: an interactive session whose password nobody else has.</li>
+<li>Others watch, you answer at the machine: a read-only session plus <code>shell attach</code>.</li>
+<li>Several people can type: an interactive session shared on purpose, with the typing rule from Step 4.</li>
+</ul>
+<p>This is the <a href="https://csrc.nist.gov/glossary/term/least_privilege">least privilege principle</a> from NIST applied to a terminal: give each person the minimum access their part of the job needs.</p>
+</section>
+
+<section>
+<h2>Step 2: Answer prompts yourself from your phone</h2>
+<p>Install the CLI from the <a href="/platforms/">platforms page</a>, go to the project and put <code>shell</code> in front of the agent:</p>
+<pre><code>shell --name "billing-mod-trial" claude</code></pre>
+<p>shell starts Claude Code in a new <a href="https://man7.org/linux/man-pages/man7/pty.7.html">pseudoterminal</a> on your computer, runs it in the background, and prints a browser link, a ten-character password and a QR code, as the <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/help.go">CLI help text</a> describes. The name shows up in <code>shell list</code>, <code>shell ls</code> and the <a href="/app/">web app</a>. Scan the QR code with your phone. It carries the password too, so one scan opens the terminal.</p>
+<p>When a prompt appears, tap the terminal to open the keyboard. The <a href="/mobile/">mobile guide</a> covers the terminal key controls for keys a phone keyboard lacks. Choose an option and press Enter, as you would at the desk. Ctrl-C in the browser interrupts the running command; it does not copy.</p>
+<p>In this setup the password is the whole access model. Do not paste the link into a team channel, and do not post a screenshot of the QR code. If you need the password again later, print it on the host:</p>
+<pre><code>shell list
+shell password &lt;ID&gt;</code></pre>
+<p><code>shell list</code> shows active shares with their IDs and uptime. <code>shell password</code> prints the active session's password from its owner-only local record.</p>
+</section>
+
+<section>
+<h2>Step 3: Let others watch while you answer at the machine</h2>
+<p>If teammates should see the run, or a mod that asks before touching production, start it read-only:</p>
+<pre><code>shell --read-only --name "billing-mod-trial" claude</code></pre>
+<p>Send the link and password to the people who need to watch. Their browsers show the session, and nothing they type reaches Claude Code. To answer prompts yourself, attach from a terminal on the host:</p>
+<pre><code>shell attach &lt;ID&gt;</code></pre>
+<p>Use the ID from <code>shell list</code>, or its first six or more characters. You are now in the same terminal the viewers see. Answer the prompt, then press Ctrl-X followed by D to detach. Claude Code keeps running and the read-only link stays live. The <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">guide to watching an agent after you turn off its prompts</a> covers the same read-only link for runs that have no prompts at all.</p>
+<p>The cost is that only someone at the host machine can answer. If you will be away, use Step 2 instead and keep the audience out.</p>
+</section>
+
+<section>
+<h2>Step 4: Know what happens when two people can type</h2>
+<p>Sometimes you do want a second person on the keyboard, such as a teammate who knows the production system better than you. shell does not merge their keystrokes with yours. Each browser reaches the relay over its own <a href="https://www.rfc-editor.org/rfc/rfc6455">WebSocket</a> connection, and the relay gives input to one typist at a time. In <a href="https://github.com/TeoSlayer/shell.online/blob/main/worker/index.ts">the relay code</a>, a viewer who types claims a lease of 1,800 milliseconds. While that lease is live, input from any other viewer is dropped, not queued. The other browsers show "Guest 2 is typing…" and, in <a href="https://github.com/TeoSlayer/shell.online/blob/main/web/main.ts">the shared terminal page</a>, disable their own input until the lease runs out.</p>
+<p>Typing at the host comes first. When you type through <code>shell attach</code>, the CLI tells the relay, browsers show "Local owner is typing…", and browser input waits. An MCP controller comes last. The relay code states the order as local host, then browser human, then one MCP writer, and an MCP send made while a human is typing is rejected as busy rather than held for later.</p>
+<p>The lease decides whose keystrokes land, not who is allowed to decide. If two people both read "Do you want to proceed?" and one presses 1 a moment before the other presses 4, the first answer wins and the second keystroke goes nowhere. Agree on one person per run who answers prompts. Viewers appear as Guest 1, Guest 2 and so on, so the screen will not tell you which person typed.</p>
+<p>A session holds up to 16 viewers. A seventeenth browser waits and joins when a slot opens.</p>
+</section>
+
+<div class="callout"><p><strong>"Yes, and don't ask again" outlives the session.</strong> According to Anthropic's permissions documentation, choosing it for a Bash command or a web domain saves a rule to <code>.claude/settings.local.json</code> at the root of the repository, and that rule applies to future sessions anywhere in the repository. Anyone who can type into the shared terminal can create that rule from a phone. Rotating the password later does not remove it. Check the file after any run where someone else had input.</p></div>
+
+<section>
+<h2>Step 5: Let a second agent watch for prompts</h2>
+<p>If nobody can keep a browser open, another agent can watch the session over MCP and tell you when Claude Code is waiting. Give it an observe grant, which can read but not type:</p>
+<pre><code>shell mcp grant &lt;ID&gt; "prompt watcher" observe 900</code></pre>
+<p>The CLI prints a bearer once. It is valid for up to 900 seconds, within the service's own caps. Put it in your MCP client's secret store, not in a command line or a repository. The client sends it to <code>https://shell.online/mcp</code> in an <code>Authorization: Bearer</code> header, the form the <a href="https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization">MCP authorization specification</a> uses for access tokens. The watcher can then call <code>shell_screen</code> for the current screen and <code>shell_wait</code> to wait up to 45 seconds for new output or a pattern such as the prompt text.</p>
+<p>The <a href="/agents/">agents page</a> lists the control grant that adds <code>shell_send</code>. I would not give one to a watcher whose job is to notice a question. Answering prompts is the human-in-the-loop step that <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP's guidance on excessive agency</a> recommends for high-impact actions, and handing it to a second model moves the decision without making it safer. The docs also say Claude-backed controller behavior is unverified. An observe grant has one trade-off to know: it lets the server decrypt terminal output in memory for the grant's lifetime, which the browser link alone never does. <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/MCP.md">docs/MCP.md</a> describes that boundary, and the <a href="/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke/">earlier post on scoped MCP grants</a> walks through the grant lifecycle.</p>
+</section>
+
+<section>
+<h2>Step 6: Take input back without stopping the run</h2>
+<p>If you gave someone the interactive link and their part is done, rotate the password:</p>
+<pre><code>shell password rotate &lt;ID&gt;</code></pre>
+<p>This changes the password and the salt in the link, disconnects every current viewer and revokes the session's MCP grants. Claude Code keeps running. You get a fresh password, and only the people you send it to can come back. To end only the MCP access, use:</p>
+<pre><code>shell mcp revoke-all &lt;ID&gt;</code></pre>
+<p>The <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">post on revoking a shared link</a> covers rotation in more detail. Neither command undoes an answer already given or deletes a permission rule already saved.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>shell does not read prompts. It carries keystrokes to a terminal and cannot tell a permission prompt from any other input. It will not stop someone from choosing "Yes, and don't ask again".</li>
+<li>It has no per-person roles within a session and no record of which viewer typed what. The typing lease orders input; it does not attribute it.</li>
+<li>It does not sandbox Claude Code or its mods. A mod runs with Claude Code's access to your machine whether or not the terminal is shared, so install mods only from sources you trust, as Anthropic says.</li>
+<li>Read-only blocks typing, not reading. Everyone with the link sees whatever the agent prints, including secrets that reach the screen. The <a href="/e2ee/">encryption page</a> explains what the relay can and cannot see.</li>
+<li>The input-priority behavior described here comes from the hosted relay and the macOS and Linux host code. I did not check the Windows host path.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by the team behind Pilot Protocol, a networking stack for autonomous agents, and the same rule runs through both: decide who can reach an agent before it needs anything. In Pilot, a private agent rejects traffic from peers it has no trust with. Another agent asks for trust with a handshake that carries a justification, the owner approves or rejects it, and trust can be withdrawn later. The <a href="https://pilotprotocol.network/docs/trust">trust and handshake docs</a> describe the commands. The <a href="https://pilotprotocol.network/blog/claude-agent-teams-over-pilot">post on Claude Code agent teams over Pilot</a> applies it to several Claude Code workers, where specialists accept tasks only from the manager they trust. A shared terminal is a smaller version of the same question: whose input does this agent accept.</p>
+</section>
+
+<div class="cta"><h3>Pick who answers before the first prompt</h3><p>Put <code>shell</code> in front of <code>claude</code>, choose interactive or read-only at the start, and keep the password with the person who decides.</p><a href="/docs/">Read the shell.online docs</a></div>

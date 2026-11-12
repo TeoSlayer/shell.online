@@ -95,6 +95,9 @@ async function cacheKey(secret: string): Promise<CryptoKey> {
 }
 
 export class ChatHistory {
+  // Renderers are replaced on a toggle. Their writes still belong to the same
+  // session, so a new reader must wait for the outgoing renderer's save.
+  private static readonly writes = new Map<string, Promise<void>>();
   private readonly sessionId: string;
   private readonly secret: string | null;
   private key: Promise<CryptoKey> | null = null;
@@ -122,6 +125,7 @@ export class ChatHistory {
   async load(): Promise<Message[] | null> {
     if (!ChatHistory.available()) return null;
     try {
+      await ChatHistory.writes.get(this.sessionId);
       const db = await database();
       const transaction = db.transaction(STORE, "readonly");
       const store = transaction.objectStore(STORE);
@@ -131,7 +135,7 @@ export class ChatHistory {
       const json = row.plain ?? (await this.unseal(row));
       if (!json) return null;
       const messages = JSON.parse(json) as Message[];
-      return Array.isArray(messages) ? messages : null;
+      return Array.isArray(messages) && messages.every(validMessage) ? messages : null;
     } catch {
       /* A cache that cannot be read is a cache that was not there. */
       return null;
@@ -153,7 +157,7 @@ export class ChatHistory {
       this.timer = null;
       const held = this.pending;
       this.pending = null;
-      if (held) void this.write(held);
+      if (held) void this.enqueue(held);
     }, SETTLE_MS);
   }
 
@@ -165,7 +169,8 @@ export class ChatHistory {
     }
     const held = this.pending;
     this.pending = null;
-    if (held) await this.write(held);
+    if (held) await this.enqueue(held);
+    else await ChatHistory.writes.get(this.sessionId);
   }
 
   dispose(): void {
@@ -174,11 +179,21 @@ export class ChatHistory {
     this.timer = null;
   }
 
-  private async write(messages: readonly Message[]): Promise<void> {
+  private enqueue(messages: readonly Message[]): Promise<void> {
+    // Capture before awaiting encryption/storage, while this is still the
+    // snapshot being saved. Later changes must not mutate a queued save.
+    const json = JSON.stringify(messages.filter(message => !message.open).slice(-KEPT));
+    const previous = ChatHistory.writes.get(this.sessionId) ?? Promise.resolve();
+    const writing = previous.then(() => this.write(json));
+    ChatHistory.writes.set(this.sessionId, writing);
+    void writing.finally(() => {
+      if (ChatHistory.writes.get(this.sessionId) === writing) ChatHistory.writes.delete(this.sessionId);
+    });
+    return writing;
+  }
+
+  private async write(json: string): Promise<void> {
     try {
-      /* Closed messages only: one still being written is not history yet. */
-      const kept = messages.filter((message) => !message.open).slice(-KEPT);
-      const json = JSON.stringify(kept);
       const row: Stored = { sessionId: this.sessionId, savedAt: Date.now() };
       if (this.key) {
         const iv = crypto.getRandomValues(new Uint8Array(12)) as Uint8Array<ArrayBuffer>;
@@ -194,8 +209,15 @@ export class ChatHistory {
       const db = await database();
       const transaction = db.transaction(STORE, "readwrite");
       const store = transaction.objectStore(STORE);
-      await run(store, store.put(row) as unknown as IDBRequest<IDBValidKey>);
-      db.close();
+      // Request success precedes transaction commit. A following load must
+      // wait for the commit, not merely for put() to have been accepted.
+      const committed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+        transaction.onerror = () => reject(transaction.error);
+      });
+      store.put(row);
+      try { await committed; } finally { db.close(); }
     } catch {
       /* Out of quota, private window, disabled storage: the session goes on. */
     }
@@ -211,4 +233,17 @@ export class ChatHistory {
       return null;
     }
   }
+}
+
+
+/** Old or damaged device data must not prevent live output from starting. */
+function validMessage(value: unknown): value is Message {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Partial<Message>;
+  return Number.isSafeInteger(message.id) && typeof message.at === "number" && Number.isFinite(message.at)
+    && ["sent", "received", "tool", "notice"].includes(message.kind ?? "")
+    && typeof message.text === "string" && typeof message.open === "boolean"
+    && typeof message.revision === "number" && Number.isFinite(message.revision)
+    && Array.isArray(message.lines) && message.lines.every(line => line && typeof line.text === "string"
+      && Array.isArray(line.runs) && line.runs.every(run => run && typeof run.text === "string"));
 }

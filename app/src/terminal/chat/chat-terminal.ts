@@ -27,7 +27,6 @@ import { ScreenReader, paletteFromTheme, type ReaderTerminal } from "./screen-re
 import { Transcript, type TranscriptLine } from "./transcript";
 import { adapterFor, type AgentAdapter } from "./agents";
 import { ChatHistory } from "./chat-history";
-import { messageFor as recordMessage, readBatch } from "./agent-record";
 
 type TerminalOptions = ITerminalOptions & ITerminalInitOnlyOptions;
 
@@ -50,6 +49,28 @@ const PARSE_SCROLLBACK = 1000;
  * it has actually stopped.
  */
 const AGENT_QUIET_MS = 400;
+
+/**
+ * How long a screen has to hold still before its last row is committed.
+ *
+ * The reader holds back the row an agent looks to be part-way through
+ * writing, because in one frame that row and the row it finished on are the
+ * same thing; only another frame tells them apart. A preview at 400ms shows
+ * it without committing it, which is right while the agent is mid-token.
+ *
+ * But a preview is all it ever was. A screen that has gone quiet for good --
+ * an agent that has finished, or a replayed snapshot of one, which is what
+ * the pane hands a renderer that has just been reopened -- never sent the
+ * frame that would commit it, so the last thing said stayed uncommitted and
+ * the next thing said committed the one before it. From the outside the chat
+ * had stopped: the wheel kept turning, nothing new arrived, and sending a
+ * prompt by hand was what unstuck it, because a prompt is a frame.
+ *
+ * Once the screen has been still this long the preview closes for display
+ * and caching, including when the last frame held a spinner. The parser's
+ * tail stays reversible in case output resumes after the pause.
+ */
+const AGENT_SETTLED_MS = 1200;
 
 /**
  * How long after a line the Return that submits it is sent.
@@ -104,15 +125,8 @@ export class ChatTerminal {
   /** Whether this screen has already been reported as unreadable; see `painted`. */
   private unreadable = false;
 
-  /**
-   * Whether the agent's own record is speaking.
-   *
-   * Once it is, the screen is not read for the conversation any more. See
-   * `fromRecord`: a record is the conversation, a screen is a picture of part
-   * of one, and reading both draws every turn twice.
-   */
-  private recorded = false;
   private agentQuiet: ReturnType<typeof setTimeout> | null = null;
+  private agentSettled: ReturnType<typeof setTimeout> | null = null;
   /** Lines and Returns waiting to go out as separate events; see `enter`. */
   private outbox: string[] = [];
   private sending: ReturnType<typeof setTimeout> | null = null;
@@ -126,6 +140,7 @@ export class ChatTerminal {
    * xterm's options and a session's identity is not one of them.
    */
   private history: ChatHistory | null = null;
+  private historyLoading: Promise<void> | null = null;
 
   /**
    * Messages about this viewing rather than about the session.
@@ -142,6 +157,8 @@ export class ChatTerminal {
       scrollback: PARSE_SCROLLBACK,
       allowProposedApi: true,
     });
+    window.addEventListener("pagehide", this.persist);
+    document.addEventListener("visibilitychange", this.onVisibility);
     this.reader = new ScreenReader(paletteFromTheme(options.theme as Record<string, string> | undefined));
     this.options = new ChatOptions(this);
 
@@ -182,7 +199,6 @@ export class ChatTerminal {
     this.view = new ChatView(element, {
       onSubmit: (text) => this.submit(text),
       onKeys: (bytes) => this.type(bytes),
-      onChoose: (index, label) => this.choose(index, label),
     });
     this.view.setDisabled(this.options.disableStdin ? "Watching. You cannot type in this session." : null);
     this.schedule();
@@ -192,16 +208,13 @@ export class ChatTerminal {
    * Keeps this session's conversation on this device, and puts back what is
    * already there.
    *
-   * Called once, by whoever knows which session this is. The load races the
-   * first bytes off the socket and is allowed to: `restore` refuses a
-   * transcript that already has something in it, so a session that starts
-   * talking before the cache comes back keeps what it is saying and drops
-   * what it remembered, which is the right way round.
+   * Incoming snapshots wait for this read. Otherwise a fast connection can
+   * populate the transcript first, making restore discard the device history.
    */
   rememberAs(sessionId: string, secret: string | null): void {
     if (this.history || !ChatHistory.available()) return;
     this.history = new ChatHistory(sessionId, secret);
-    void this.history.load().then((messages) => {
+    this.historyLoading = this.history.load().then((messages) => {
       if (this.disposed) return;
       if (messages && messages.length > 0) {
         this.transcript.restore(messages);
@@ -214,42 +227,29 @@ export class ChatTerminal {
         this.unkept.add(said.id);
       }
       this.schedule();
-    });
+    }).finally(() => { this.historyLoading = null; });
   }
 
-  /**
-   * The conversation the agent itself recorded, from the host.
-   *
-   * Once one of these arrives the screen stops being read: a record is the
-   * conversation and a screen is a picture of part of one, and where both
-   * exist there is nothing to gain by drawing both. The terminal keeps
-   * running underneath -- this only changes what the chat is built from.
-   */
-  fromRecord(payload: Uint8Array): void {
-    if (this.disposed) return;
-    const batch = readBatch(payload);
-    if (!batch) return;
-    const changed = this.transcript.fromRecord(
-      batch.events.map((event) => ({ seq: event.seq, message: recordMessage(event) })),
-    );
-    if (!this.recorded) {
-      this.recorded = true;
-      /*
-       * Whatever was read off the screen before the record arrived is a worse
-       * account of the same conversation, and keeping both shows every turn
-       * twice.
-       */
-      this.agent?.reset();
-      this.agent = null;
-      this.view?.setThinking(false);
-    }
-    if (changed) this.schedule();
-  }
 
   write(data: string | Uint8Array, callback?: () => void): void {
+    if (this.disposed) return;
+    if (this.historyLoading) {
+      const held = typeof data === "string" ? data : data.slice();
+      void this.historyLoading.then(() => this.write(held, callback));
+      return;
+    }
     this.inner.write(data, () => {
       this.drain();
       if (this.replaying) {
+        // Alternate-screen parsing normally waits for animationFrame. A replay
+        // must parse its snapshot before comparing it with history.
+        if (this.onScreen) {
+          this.screenDirty = false;
+          const now = Date.now();
+          this.painted(this.reader.snapshot(this.inner as unknown as ReaderTerminal), now);
+          const tail = this.agent?.settle();
+          for (const utterance of tail ?? []) this.transcript.fromAgent(utterance, now);
+        }
         this.replaying = false;
         this.transcript.endReplay();
         this.schedule();
@@ -260,6 +260,11 @@ export class ChatTerminal {
 
   /** The relay is about to replay the session from the top. */
   reset(): void {
+    if (this.disposed) return;
+    if (this.historyLoading) {
+      void this.historyLoading.then(() => this.reset());
+      return;
+    }
     /*
      * Every timer as well as every buffer. A quiet timer armed before a
      * replay fires afterwards and closes whatever is open by then, which
@@ -269,6 +274,8 @@ export class ChatTerminal {
     this.quiet = null;
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
     this.agentQuiet = null;
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = null;
     this.agent?.reset();
     this.agent = null;
     this.unreadable = false;
@@ -288,6 +295,7 @@ export class ChatTerminal {
     this.lastCommand = "";
     this.inner.reset();
     this.view?.setDirect(false);
+    this.view?.setThinking(false);
   }
 
   resize(cols: number, rows: number): void {
@@ -304,7 +312,11 @@ export class ChatTerminal {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.persist();
     this.disposed = true;
+    window.removeEventListener("pagehide", this.persist);
+    document.removeEventListener("visibilitychange", this.onVisibility);
     /*
      * The last thing said is written before the tab goes. Everything else is
      * written on a timer, and a tab closing is exactly the moment that timer
@@ -314,6 +326,7 @@ export class ChatTerminal {
     if (this.frame) cancelAnimationFrame(this.frame);
     if (this.quiet) clearTimeout(this.quiet);
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    if (this.agentSettled) clearTimeout(this.agentSettled);
     if (this.sending) clearTimeout(this.sending);
     this.outbox = [];
     this.listeners.clear();
@@ -348,27 +361,13 @@ export class ChatTerminal {
    * echo back off the grid, which is guesswork the moment a program stops
    * echoing, as every password prompt does.
    */
-  /**
-   * Answers a question the agent is waiting on.
-   *
-   * A choice prompt is drawn as a numbered menu and a bare digit picks from
-   * it -- watched happening, not inferred. The digit is sent as a keystroke
-   * rather than as a line: the menu is not waiting for a Return, and sending
-   * one would answer the *next* question too.
-   *
-   * What was chosen is said out loud in the conversation, because a button
-   * that empties itself and leaves no trace is a session where nobody can
-   * tell what was answered.
-   */
-  private choose(index: number, label: string): void {
-    if (this.options.disableStdin || index < 0 || index > 8) return;
-    this.transcript.submitted(label, Date.now());
-    this.type(String.fromCharCode("1".charCodeAt(0) + index));
-    this.schedule();
-  }
 
   private submit(text: string): void {
-    if (this.options.disableStdin) return;
+    if (this.disposed || this.options.disableStdin) return;
+    if (this.historyLoading) {
+      void this.historyLoading.then(() => this.submit(text));
+      return;
+    }
     /*
      * A bare Return is a real thing to send -- it is how a prompt waiting on
      * one is answered -- but it is not an utterance, so it goes over the wire
@@ -527,8 +526,6 @@ export class ChatTerminal {
    * it, is more use than a picture of it nobody can read.
    */
   private painted(lines: TranscriptLine[], now: number): void {
-    /* The record is the conversation; the screen is a picture of part of one. */
-    if (this.recorded) return;
     if (!this.agent) {
       /*
        * Asked again on every frame until something answers, rather than once
@@ -561,7 +558,7 @@ export class ChatTerminal {
 
     if (!this.agent) return;
 
-    for (const utterance of this.agent.read(lines)) this.transcript.fromAgent(utterance, now);
+    for (const utterance of this.agent.read(lines, this.inner.buffer.active.cursorY)) this.transcript.fromAgent(utterance, now);
     this.view?.setThinking(this.agent.working === true);
     this.armAgentQuiet();
   }
@@ -574,6 +571,8 @@ export class ChatTerminal {
    */
   private armAgentQuiet(): void {
     if (this.agentQuiet) clearTimeout(this.agentQuiet);
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = null;
     this.agentQuiet = setTimeout(() => {
       this.agentQuiet = null;
       if (!this.agent) return;
@@ -584,7 +583,38 @@ export class ChatTerminal {
         changed = true;
       }
       if (changed) this.schedule();
+      this.armAgentSettled();
     }, AGENT_QUIET_MS);
+  }
+
+  /** The screen has stopped for good; see AGENT_SETTLED_MS. */
+  private armAgentSettled(): void {
+    if (this.agentSettled) clearTimeout(this.agentSettled);
+    this.agentSettled = setTimeout(() => {
+      this.agentSettled = null;
+      if (!this.agent) return;
+      /*
+       * The spinner is not consulted here, and that is the point.
+       *
+       * `working` is only recomputed when a frame arrives, so the spinner on
+       * the last frame of a turn leaves it true for ever -- and a commit that
+       * waits for it to go false then waits for ever too. A spinner animates:
+       * a screen nobody has repainted for over a second is a screen whose
+       * spinner has stopped, whatever the last frame happened to catch. So
+       * stillness is taken as the answer, and the wheel is put out with it.
+       */
+      const now = Date.now();
+      let changed = false;
+      // An idle screen can resume after a network/model pause. Finish the
+      // displayed preview, but only commit parser rows on a real boundary.
+      for (const utterance of this.agent.settle()) {
+        this.transcript.fromAgent(utterance, now);
+        changed = true;
+      }
+      changed = this.transcript.closeAgentPreview(now) || changed;
+      this.view?.setThinking(false);
+      if (changed) this.schedule();
+    }, AGENT_SETTLED_MS - AGENT_QUIET_MS);
   }
 
   /**
@@ -634,6 +664,21 @@ export class ChatTerminal {
     }, Math.max(0, deadline - Date.now()));
   }
 
+  private readonly onVisibility = (): void => {
+    if (document.visibilityState === "hidden") this.persist();
+  };
+
+  private saveHistory(): void {
+    if (this.historyLoading || this.transcript.isReplaying) return;
+    this.history?.save(this.transcript.messages.filter(message => !this.unkept.has(message.id)));
+  }
+
+  private readonly persist = (): void => {
+    // Do not depend on a pending animation frame: those stop in hidden tabs.
+    this.saveHistory();
+    void this.history?.flush();
+  };
+
   /** One redraw per frame, however many chunks landed in it. */
   private schedule(): void {
     if (this.disposed || this.frame || this.transcript.isReplaying) return;
@@ -647,11 +692,7 @@ export class ChatTerminal {
       }
       this.view?.render(this.transcript.messages, this.transcript.revision);
       /* Kept once the burst it belongs to is over; see chat-history.ts. */
-      this.history?.save(
-        this.unkept.size === 0
-          ? this.transcript.messages
-          : this.transcript.messages.filter((message) => !this.unkept.has(message.id)),
-      );
+      this.saveHistory();
     });
   }
 }

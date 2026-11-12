@@ -5,13 +5,13 @@
 // gamepad pause/confirm edges, and native settings controls.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
-import { launchChromeTransport } from "./lib/browser-transport.mjs";
+import { launchChromeTransport, removeProfile } from "./lib/browser-transport.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixture = `
@@ -237,5 +237,5 @@ try {
   keyboardSocket?.close();
   await browser?.close();
   await new Promise((done) => server.close(done));
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

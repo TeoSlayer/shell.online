@@ -7,13 +7,13 @@
 // horizontal overflow.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createServer } from 'vite';
-import { chromeStartup } from '../../scripts/lib/browser-transport.mjs';
+import { chromeStartup, removeProfile } from '../../scripts/lib/browser-transport.mjs';
 
 const profile = await mkdtemp(join(tmpdir(), 'shell-title-ui-'));
 const TEST_ENTRY_ID = 'virtual:session-title-test-entry';
@@ -187,5 +187,5 @@ try {
     if (chrome.exitCode === null) { chrome.kill('SIGKILL'); await exited; }
   }
   await server.close();
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

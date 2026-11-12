@@ -187,6 +187,7 @@ export interface SessionAutomationConsent {
   mcpTeamAccess: boolean;
   dailyBriefingEnabled: boolean;
   dailyBriefingTeamAccess: boolean;
+  summariesEnabled: boolean;
 }
 
 /** Send only the changed switches so a stale page cannot overwrite another tab. */
@@ -353,6 +354,7 @@ export interface SessionRecord {
   mcpTeamAccess?: boolean;
   dailyBriefingEnabled?: boolean;
   dailyBriefingTeamAccess?: boolean;
+  summariesEnabled?: boolean;
 }
 
 class ApiError extends Error {}

@@ -1,0 +1,19 @@
+{
+  "recipientPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE",
+  "senderPrivateKey": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI",
+  "nonce": "AAECAwQFBgcICQoL",
+  "recipientPublicKey": "BGsX0fLhLEJH-Lzm5WOkQPJ3A32BLeszoPShOUXYmMKWT-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+  "sessionId": "synthetic\u003c\u0026\u003e session\u2028",
+  "recipientUid": "synthetic-owner",
+  "generation": "synthetic-generation-1",
+  "summary": {
+    "version": 1,
+    "title": "Synthetic café build 🔒",
+    "summary": "Tests ran.\nTwo failed in parser.cc and main.go.",
+    "state": "error",
+    "source": "claude-code",
+    "observedAt": 1800000000123
+  },
+  "senderPublicKey": "BHzyexiNA09-ilI4AwS1GsPAiWnid_IbNaYLSPxHZpl4B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+  "sealed": "ss1.AAECAwQFBgcICQoLXwqsYh1iWSNWL8tpsartLgyrqknfhCZoRMqiENwIHVIS5Bs_zmZVUS8aTXH2mJ6JYnUihlJbTFEL08VS7HS34o1f3UN1qt7mvODb41QSfEle2C05cNwTCaKqgz_nchshl4ylIhKKOjLYcebXPQJd35D3DpncflstTmEuuFMrCcXJCbRSaJgymF_aNPNpZrLIaZBNc1pcaMF980VtVq8T7D7oK3Ny18T2JeAmlTR0iyyRYJ0vkhy8xDs7-HQWolOyuw"
+}

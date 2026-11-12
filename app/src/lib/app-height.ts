@@ -65,14 +65,9 @@ const KEYBOARD_MINIMUM = 120;
  * Normally zero, and on a phone with a keyboard coming up, often not. iOS
  * scrolls the *visual* viewport to bring the focused field above the keyboard,
  * which moves the window onto the page without the page itself scrolling: the
- * top of the document is now above the top of what can be seen. The shell is
- * sized to the visible height and anchored at the top of the document, so
- * every one of those pixels is the shell hanging off the top of the screen and
- * an equal strip of bare page showing under its bottom edge.
- *
- * That is the jump, and it is intermittent for the reason it is hard to
- * reproduce: whether the browser needs to scroll at all depends on where the
- * caret is when the keyboard arrives.
+ * visible viewport no longer starts at the layout viewport's top. The mobile
+ * shell is fixed to the layout viewport and follows this offset once. Document
+ * scrolling is separate and must not affect either its position or its height.
  */
 const TOP = "--viewport-top";
 
@@ -122,11 +117,11 @@ export function watchAppHeight(): () => void {
        * hold even for a page that opened with a keyboard already up.
        */
       /*
-       * Written back so the shell can sit where the window actually is. What
-       * the document has scrolled is already taken off, because that part of
-       * the offset the shell gets for free by being in the document.
+       * The mobile shell is fixed to the layout viewport. offsetTop is already
+       * relative to that viewport, so document scroll must not be subtracted:
+       * doing so loses the visual offset after a browser scrolls to a field.
        */
-      const above = Math.max(0, Math.round((viewport.offsetTop - window.scrollY) / zoom));
+      const above = Math.max(0, Math.round(viewport.offsetTop / zoom));
       if (above !== published.top) {
         published.top = above;
         root.style.setProperty(TOP, `${above}px`);

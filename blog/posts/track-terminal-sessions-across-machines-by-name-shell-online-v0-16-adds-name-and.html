@@ -1,0 +1,53 @@
+<p>Two announcements this month move coding agents further from the keyboard you sit at. Coder now runs <a href="https://www.globenewswire.com/news-release/2026/09/15/3362210/0/en/coder-brings-claude-code-to-agent-relay-unlocking-agentic-development-for-the-world-s-most-regulated-enterprises.html">Claude Code inside its Agent Relay workspaces</a>, and OpenAI's Agents API puts the Codex harness behind a managed service with hosted, self-hosted, and partner sandboxes. Both mean more sessions on more machines you never log into directly. <span class="brand-shell">shell.online</span> v0.16.0, tagged this week, adds the two pieces that make terminal sessions across machines manageable from one place: a name you give a session when it starts, and a single command that lists every session your account owns on every linked machine.</p>
+
+<section>
+<h2>Why sessions are spreading across machines this month</h2>
+<p>Coder's September 15 announcement describes Claude Code running in Coder workspaces on the customer's cloud, VPC, or on-premises environment, with workspaces that are "sandboxed, ephemeral, and scoped to a single Claude Code session" and an audit record for every run. The <a href="https://coder.com/blog/introducing-agent-relay-cloud-hosted-agents-self-hosted-execution">Agent Relay launch post</a> from earlier in the month spells out the split: the agent's reasoning loop still runs at the vendor, execution happens in a workspace the enterprise controls, and the workspace is destroyed the moment the session ends.</p>
+<p>OpenAI's <a href="https://community.openai.com/t/introducing-the-agents-api-and-hosted-sandboxes/1396481">Agents API public beta</a>, announced September 10, does the same thing from the other direction. OpenAI runs orchestration, long-running sessions, and context management. You pick where the code executes: an OpenAI-hosted sandbox, your own, or one of nine named partners including Cloudflare Dev, Daytona, E2B, Modal, and Vercel.</p>
+<p>The common thread is that the process doing the work has a terminal on a box somewhere else. With five of those, the question stops being "can I see it" and becomes "which one is this."</p>
+</section>
+
+<section>
+<h2>Give the session a name before it starts</h2>
+<p>The v0.16.0 changelog in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> adds a start option that labels a session as it is created. It takes one line of up to 120 characters and shows up on the start card, in the local session list, and in the web app:</p>
+<pre><code>shell --name "issue-4821 claude" claude
+shell --name "web app" npm run dev
+shell --name "nightly eval" --read-only python train.py</code></pre>
+<p>Everything else about the share is unchanged. The command keeps running on your machine, the CLI owns the PTY, and it prints a URL plus a generated ten-character password that together open the same terminal from a phone or desktop browser.</p>
+<p>Three details from the help text and changelog matter in practice. A persistent session that restarts without a name keeps the one it had, including a name someone gave it in the web app. A session can be renamed from its own page in the app by the owner, an assignee, or a team admin, and a blank name falls back to the command. And the name is one of the few things published to an account at all, alongside the share URL, command, host name, and timing; the <a href="https://shell.online/cli/">CLI reference</a> lists every start option and what each one changes.</p>
+</section>
+
+<section>
+<h2>List terminal sessions across machines with shell ls</h2>
+<p>Until this release, the CLI could only tell you about processes on the machine you were typing on. The existing local command still does that:</p>
+<pre><code>shell list</code></pre>
+<p>The new one asks your account instead:</p>
+<pre><code>shell ls
+shell ls --all
+shell ls --json</code></pre>
+<p>It lists the sessions you started on any machine linked to your account, newest first, with each one's name, status, uptime, machine, and command. Sessions that have ended are hidden and counted rather than shown; the footer reads something like "1 ended session hidden · shell ls --all", and the flag includes them. The JSON form prints the complete records, including the share URL and the raw relay status, for scripts that decide which session to open.</p>
+<p>One thing it never does is print a password. The help text says so directly: passwords stay on the machine that started the session and, if you opted into the personal vault, in your vault. The listing gives you the URL and the name; the password still has to come from the owner. A list that included passwords would be a list of bearer credentials sitting in scrollback.</p>
+<p>The command requires a linked machine. Linking is optional and uses the OAuth 2.0 authorization code flow with PKCE and a loopback redirect, so the CLI ends up with a scoped token that can only publish sessions and is revocable per machine. On an unlinked machine it tells you to sign in or use the local list. For teams with their own identity provider, v0.16.0 also adds optional OpenID Connect sign-in for the accounts app, using authorization code with PKCE and provider discovery.</p>
+</section>
+
+<section>
+<h2>What the account sees, and what it cannot</h2>
+<p>What the account layer can read has not changed in this release. Terminal frames are encrypted by the CLI before they reach the relay and decrypted in the browser; the <a href="https://shell.online/e2ee/">end-to-end encryption page</a> describes the key derivation from the password and what the relay still observes, which is connection metadata, encrypted frame sizes, timing, labels, and lifecycle events. The account layer gets the share URL, the command name, the host name, timing, and now the name you chose. It does not get terminal contents and it does not get the password.</p>
+<div class="callout"><p>The URL and the password together are a bearer credential. Anyone holding both can open the session and, unless it was started with --read-only, type with the permissions of the wrapped process. A named session is easier to find in a list, so treat the name as public within your organization and the password as the thing you actually guard.</p></div>
+<p>For agent sessions, a read-only share is usually the right default. Watching a run from a phone does not require typing into it, and a read-only link cannot be upgraded to an interactive one after creation.</p>
+</section>
+
+<section>
+<h2>When the machine behind a session goes away</h2>
+<p>A related change merged to main on September 16 fixes what a viewer sees when the session exists but its machine does not. The <a href="https://github.com/TeoSlayer/shell.online/pull/168">pull request</a> describes the bug plainly: a machine rebooted, the relay reported the session as existing but disconnected, and the browser showed a grey "Offline" dot above a blank white rectangle with no explanation. With workspaces that are destroyed when a session ends, this state will be common.</p>
+<p>The fix does two things. Both the standalone share page and the app now say whether they are waiting for a machine that has never connected or looking at one that is temporarily offline, with the time it was last seen. And the relay keeps the last full screen the host sent and replays it, dimmed so it cannot be mistaken for live output, to a viewer who arrives while the machine is away. For an encrypted session those stored bytes are ciphertext the relay cannot read; the frame is stored and replayed untouched. The relay asks the host for a fresh screen every five minutes so the kept copy is never older than that, and it is deleted with the session.</p>
+<p>The retention consequence is worth stating. The relay now holds one encrypted screen per session for as long as that session exists, which the <a href="https://shell.online/reliability/">reliability page</a> puts at 12 hours after a host disconnects for an ordinary share and 30 days for a persistent identity. If you started the session with --no-e2ee, that kept screen is plaintext, which is the same tradeoff the flag already makes for frames in flight. The notice clears itself when the machine comes back, and a restarted persistent session goes live again on the same URL.</p>
+</section>
+
+<section>
+<h2>Handing one of them to a colleague</h2>
+<p>Once sessions have names and one list, handoff is a filter and a click. In the web app, sessions from every linked machine appear in one searchable list or board, reconciled with the relay's current online, starting, offline, finished, or unavailable state. Each session has an owner and can have several assignees, and the owner can transfer it without changing the public bearer link. The app documentation is explicit that offline and unavailable never imply the process is reachable, and that finished records a known task exit; the <a href="https://shell.online/app/">web app guide</a> covers the states and the cleanup rules.</p>
+<p>The earlier post on this blog about <a href="/blog/shell-online-live-terminal-browser-link/">a live browser link for any terminal</a> covered the single-session case: one command, one URL, one password. This release is for the moment that stops being enough. If your agents run in a Coder workspace, an OpenAI-hosted sandbox, and a laptop under your desk, a session called "issue-4821 claude" on a machine called "build-3" is easier to find than a bare session ID, and the command that finds it is the same everywhere. The install is one line from <a href="https://shell.online">shell.online</a> on macOS, Linux, BSD, and Windows, and everything described here is in the MIT-licensed source.</p>
+</section>
+
+<div class="cta"><h3>Name it, list it, hand it over</h3><p>Start a session with a name, see every session your account owns with one command, and give a teammate the link without ever sending the terminal contents through the service.</p><a href="https://shell.online/">Try shell.online</a></div>

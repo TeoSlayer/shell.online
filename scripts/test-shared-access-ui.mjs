@@ -1,11 +1,11 @@
 // Actual viewer and encryption form, with a synthetic relay. No real session.
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer } from 'vite';
 import { setTimeout as delay } from 'node:timers/promises';
-import { launchChromeTransport } from './lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from './lib/browser-transport.mjs';
 
 const profile = await mkdtemp(join(tmpdir(), 'shell-access-test-'));
 const shots = await mkdtemp(join(tmpdir(), 'shell-access-preview-'));
@@ -53,4 +53,4 @@ try {
     console.log(`PASS ${width}: password recovery, real key derivation, connection status, report destination`);
   }
   console.log(`Preview screenshots: ${shots}`);
-} finally { await browser?.close(); await server.close(); await rm(profile, { recursive: true, force: true }); }
+} finally { await browser?.close(); await server.close(); await removeProfile(profile); }

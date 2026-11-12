@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="A Read-Only Terminal Link for a Training Run You Check From Your Phone">
+  <rect width="1200" height="630" fill="#0b0b0a"/>
+  <g stroke="#1d1d1b" stroke-width="1"><line x1="0" y1="158" x2="1200" y2="158"/><line x1="0" y1="472" x2="1200" y2="472"/></g>
+  <text x="80" y="120" font-family="ui-monospace,Menlo,monospace" font-size="26" letter-spacing="6" fill="#aaff00">GUIDE / SEP 11 2026</text>
+  <text x="80" y="260" font-family="Inter,Segoe UI,sans-serif" font-size="66" font-weight="700" fill="#eceae3">A Read-Only Terminal Link</text><text x="80" y="338" font-family="Inter,Segoe UI,sans-serif" font-size="66" font-weight="700" fill="#eceae3">for a Training Run You Check</text><text x="80" y="416" font-family="Inter,Segoe UI,sans-serif" font-size="66" font-weight="700" fill="#eceae3">From Your Phone</text>
+  <text x="80" y="535" font-family="ui-monospace,Menlo,monospace" font-size="26" fill="#b9b6ad">Share a training run with a read-only terminal...</text>
+  <text x="1120" y="590" text-anchor="end" font-family="ui-monospace,Menlo,monospace" font-size="24" letter-spacing="3" fill="#aaff00">pilotprotocol.network</text>
+</svg>

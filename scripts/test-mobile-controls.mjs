@@ -176,7 +176,8 @@ if (!/dataset\.keyboard === "open"\) return;/.test(pane)) {
 }
 
 /*
- * The chat renderer has no accent of its own.
+ * Conversation text stays neutral. Informational notices use the app's blue,
+ * as requested, and that exception must not spread to message bubbles.
  *
  * It used the app's blue for what the viewer sent and its acid green for a
  * program reading keys, and next to a conversation those read as two more
@@ -184,8 +185,9 @@ if (!/dataset\.keyboard === "open"\) return;/.test(pane)) {
  * stays, because a command that failed is a fact about the session rather
  * than decoration, and so do the colours a process writes its own output in.
  */
+const neutralChatStylesheet = appChatStylesheet.replace(/\.chat-msg\[data-tone="info"\] \.chat-chip\s*\{[^}]*\}/gu, "");
 for (const accent of ["--blue", "--blue-deep", "--blue-wash", "--acid"]) {
-  if (appChatStylesheet.split("\n").some((line) => !line.trim().startsWith("*") && line.includes(`var(${accent})`))) {
+  if (neutralChatStylesheet.split("\n").some((line) => !line.trim().startsWith("*") && line.includes(`var(${accent})`))) {
     throw new Error(`The chat renderer must not reach for ${accent}; it takes the app's own neutrals`);
   }
 }

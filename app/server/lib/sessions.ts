@@ -143,6 +143,22 @@ export async function registerSession(
     return { ok: false, reason: "invalid command" };
   }
 
+  /*
+   * A browser command id is claimed once. The browser that asked for a
+   * session opens -- and shares, with the password and colleagues it chose --
+   * the first one to arrive under that id, so a second session registering
+   * the same id would be taken for the one that was asked for. The CLI no
+   * longer lets a nested share inherit it, but this service should not rely
+   * on every client. Registering the same session again keeps its id.
+   */
+  let origin = input.origin;
+  if (origin) {
+    const claimed = (await store.listSessions(uid)).some(
+      (existing) => existing.id !== input.id && sessionSource(existing).origin === origin,
+    );
+    if (claimed) origin = undefined;
+  }
+
   const session: SessionRecord = {
     id: input.id,
     uid,
@@ -155,7 +171,7 @@ export async function registerSession(
     command: input.command.slice(0, 300),
     name: sessionName(input.name),
     /* Reuse the existing source column so this upgrade needs no schema race. */
-    origin: packSource(input.origin, input.deviceId),
+    origin: packSource(origin, input.deviceId),
     readOnly: Boolean(input.readOnly),
     encrypted: Boolean(input.encrypted),
     persistent: Boolean(input.persistent),

@@ -13,7 +13,7 @@
  * the language -- headings, emphasis, code, lists, quotes, links -- which is
  * far less than a parser costs to carry.
  *
- * What is deliberately absent: raw HTML, images, reference links, tables.
+ * What is deliberately absent: raw HTML, images and reference links.
  * Anything unrecognised stays exactly as it was typed, which is the right
  * answer for a renderer reading somebody else's output: show it, do not eat
  * it.
@@ -41,11 +41,61 @@ const DRAWN = /[\u2500-\u259F\u2800-\u28FF]/u;
 /** A table still written as Markdown: `| one | two |`. */
 const PIPE_ROW = /^\s*\|.*\|\s*$/u;
 
-/** The row under a pipe table's heading: `|---|:--:|`. */
-const PIPE_RULE = /^\s*\|[\s:|-]+\|\s*$/u;
+/** Cells separated by pipes, with optional outer pipes and literal code/escaped pipes. */
+function tableCells(row: string): string[] | null {
+  const text = row.trim();
+  const cells: string[] = [];
+  let cell = "";
+  let ticks = 0;
+  let separators = 0;
+  for (let at = 0; at < text.length; at += 1) {
+    const char = text[at];
+    if (char === "\\" && at + 1 < text.length) {
+      const next = text[++at];
+      cell += next === "|" ? next : `\\${next}`;
+    } else if (char === "`") {
+      let end = at + 1;
+      while (text[end] === "`") end += 1;
+      const length = end - at;
+      if (!ticks) ticks = length;
+      else if (ticks === length) ticks = 0;
+      cell += text.slice(at, end);
+      at = end - 1;
+    } else if (char === "|" && !ticks) {
+      cells.push(cell.trim());
+      cell = "";
+      separators += 1;
+    } else cell += char;
+  }
+  if (!separators) return null;
+  cells.push(cell.trim());
+  if (text.startsWith("|")) cells.shift();
+  if (cells.at(-1) === "" && /(?<!\\)\|$/u.test(text)) cells.pop();
+  return cells.length ? cells : null;
+}
+
+export function isMarkdownTableRow(text: string): boolean {
+  return tableCells(text) !== null;
+}
+
+function tableHeader(lines: readonly string[], at: number): boolean {
+  const head = tableCells(lines[at]);
+  const rule = at + 1 < lines.length ? tableCells(lines[at + 1]) : null;
+  return !!head && !!rule && head.length === rule.length && rule.every(cell => /^:?-+:?$/u.test(cell));
+}
+
+export function hasMarkdownTable(text: string): boolean {
+  const lines = text.split("\n");
+  return lines.some((_, at) => tableHeader(lines, at));
+}
 
 /** Whether this text has anything in it worth rendering as Markdown. */
+export function hasCodeFence(text: string): boolean {
+  return text.split("\n").some(line => FENCE.test(line));
+}
+
 export function looksMarkdown(text: string): boolean {
+  if (hasCodeFence(text) || hasMarkdownTable(text)) return true;
   return /(^|\n)\s*(#{1,6}\s|[-*+]\s|\d+[.)]\s|>\s|`{3,})|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:/u.test(text);
 }
 
@@ -54,11 +104,11 @@ export function looksMarkdown(text: string): boolean {
  *
  * The host is emptied with `replaceChildren`, never with `innerHTML`.
  */
-export function renderMarkdown(host: HTMLElement, text: string): void {
-  host.replaceChildren(...blocks(text.split("\n")));
+export function renderMarkdown(host: HTMLElement, text: string, preformatted = false): void {
+  host.replaceChildren(...blocks(text.split("\n"), preformatted));
 }
 
-function blocks(lines: readonly string[]): Node[] {
+function blocks(lines: readonly string[], preformatted: boolean): Node[] {
   const out: Node[] = [];
   let at = 0;
   while (at < lines.length) {
@@ -71,7 +121,7 @@ function blocks(lines: readonly string[]): Node[] {
       at += 1;
       while (at < lines.length) {
         const close = FENCE.exec(lines[at]);
-        if (close && close[1][0] === ticks[0] && close[1].length >= ticks.length) {
+        if (close && close[1][0] === ticks[0] && close[1].length >= ticks.length && !close[2]) {
           at += 1;
           break;
         }
@@ -79,6 +129,23 @@ function blocks(lines: readonly string[]): Node[] {
         at += 1;
       }
       out.push(codeBlock(body.join("\n"), language));
+      continue;
+    }
+
+    if (tableHeader(lines, at)) {
+      const rows = [lines[at], lines[at + 1]];
+      at += 2;
+      while (at < lines.length && tableCells(lines[at])) rows.push(lines[at++]);
+      out.push(pipeTable(rows));
+      continue;
+    }
+
+    // Outside explicit fences or tables, a preformatted message is terminal text.
+    // Its indentation and identifiers must never be reinterpreted as prose.
+    if (preformatted) {
+      const rows: string[] = [];
+      while (at < lines.length && !FENCE.test(lines[at]) && !tableHeader(lines, at)) rows.push(lines[at++]);
+      out.push(drawnBlock(rows.join("\n")));
       continue;
     }
 
@@ -107,7 +174,7 @@ function blocks(lines: readonly string[]): Node[] {
         item.append(...inline(bullet ? bullet[2] : numbered![3]));
         at += 1;
         /* Rows under an item that are indented past it continue it. */
-        while (at < lines.length && /^\s{2,}\S/u.test(lines[at]) && !BULLET.test(lines[at]) && !NUMBERED.test(lines[at])) {
+        while (at < lines.length && /^\s{2,}\S/u.test(lines[at]) && !BULLET.test(lines[at]) && !NUMBERED.test(lines[at]) && !FENCE.test(lines[at]) && !tableHeader(lines, at)) {
           item.append(document.createTextNode(" "), ...inline(lines[at].trim()));
           at += 1;
         }
@@ -152,14 +219,11 @@ function blocks(lines: readonly string[]): Node[] {
       continue;
     }
 
-    /* A table still in Markdown, which an agent writing to a file produces. */
-    if (PIPE_ROW.test(line) && at + 1 < lines.length && PIPE_RULE.test(lines[at + 1])) {
-      const rows: string[] = [];
-      while (at < lines.length && PIPE_ROW.test(lines[at])) {
-        rows.push(lines[at]);
-        at += 1;
-      }
-      out.push(pipeTable(rows));
+    // A pipe row without a header rule is text. Consume it here so the
+    // paragraph boundary below cannot leave the parser stuck on the same row.
+    if (PIPE_ROW.test(line)) {
+      out.push(drawnBlock(line));
+      at += 1;
       continue;
     }
 
@@ -170,7 +234,7 @@ function blocks(lines: readonly string[]): Node[] {
 
     /* A paragraph: every row until a blank one or something that starts a block. */
     const held: string[] = [];
-    while (at < lines.length && lines[at].trim() !== "" && !starts(lines[at])) {
+    while (at < lines.length && lines[at].trim() !== "" && !starts(lines[at]) && !tableHeader(lines, at)) {
       held.push(lines[at].trim());
       at += 1;
     }
@@ -210,14 +274,15 @@ function drawnBlock(source: string): HTMLElement {
  * short one gets fewer cells, which is what it says.
  */
 function pipeTable(rows: readonly string[]): HTMLElement {
-  const cellsOf = (row: string) =>
-    row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+  const cellsOf = (row: string) => tableCells(row) ?? [row];
+  const alignment = cellsOf(rows[1]).map(cell => cell.startsWith(":") ? (cell.endsWith(":") ? "center" : "left") : (cell.endsWith(":") ? "right" : ""));
   const table = document.createElement("table");
   table.className = "md-table";
   const head = document.createElement("thead");
   const headRow = document.createElement("tr");
-  for (const cell of cellsOf(rows[0])) {
+  for (const [index, cell] of cellsOf(rows[0]).entries()) {
     const th = document.createElement("th");
+    th.style.textAlign = alignment[index] ?? "";
     th.append(...inline(cell));
     headRow.append(th);
   }
@@ -226,8 +291,9 @@ function pipeTable(rows: readonly string[]): HTMLElement {
   const body = document.createElement("tbody");
   for (const row of rows.slice(2)) {
     const tr = document.createElement("tr");
-    for (const cell of cellsOf(row)) {
+    for (const [index, cell] of cellsOf(row).entries()) {
       const td = document.createElement("td");
+      td.style.textAlign = alignment[index] ?? "";
       td.append(...inline(cell));
       tr.append(td);
     }

@@ -1,0 +1,108 @@
+<p>On October 8, 2026, Google Cloud CEO Thomas Kurian introduced the <a href="https://cloud.google.com/blog/products/ai-machine-learning/welcome-to-gemini-at-work-2026">Gemini agent at Gemini at Work 2026</a>, a single agent for work that answers questions, does knowledge work and writes and runs code. Its pitch rests on where it runs. In Kurian's words, "Work that takes hours or days keeps running after you close your laptop, and it is still there when you come back." It can split a job across temporary sub-agents and route work to Gemini or to Claude models from Anthropic. <a href="https://www.cbsnews.com/news/google-gemini-ai-workplace-agent/">CBS News covered the keynote</a> the same day and quoted Kurian saying you never have to wonder which machine you told it to do something on.</p>
+
+<p>A coding agent you run on your own computer makes the opposite trade. Claude Code, Codex or OpenCode in your terminal has your checkout, your credentials and your tools, and none of it leaves the machine. The cost is that the run lives and dies with that machine. Close the lid of a laptop and, in the usual configuration, the operating system suspends it. A suspended process does no work, and anyone watching it from a phone sees the session go quiet.</p>
+
+<p>This guide shows how to run a local agent through <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> so it stays reachable for as long as it can: keep the machine awake for exactly the length of the run, read what the link is telling you when it goes offline, know what comes back on its own after a sleep, and restart cleanly after a reboot. Commands and behavior come from the shell 0.25.0 help text and source. The sleep commands are the standard macOS and Linux tools, and I describe them from their manual pages rather than from testing every laptop.</p>
+
+<section>
+<h2>Step 1: Hold the machine awake for the length of the run</h2>
+
+<p>The shell help puts the requirement on its first screen: keep this computer awake and online, and closing the browser does not stop the task. Closing the browser is free. Sleeping the host is not. The simplest fix is to tie a sleep inhibitor to the agent process, so the machine stays awake while the agent runs and goes back to its normal power rules the moment it exits.</p>
+
+<p>On macOS, <a href="https://ss64.com/mac/caffeinate.html">caffeinate</a> does this. Given a command, it runs it as a child and holds an assertion against idle sleep until the child exits. <code>-i</code> prevents idle sleep. <code>-s</code> prevents system sleep, but only while the Mac is on AC power.</p>
+
+<pre><code>cd ~/src/example-app
+caffeinate -i shell --foreground --name "overnight refactor" claude</code></pre>
+
+<p>On Linux with systemd, <a href="https://man.archlinux.org/man/systemd-inhibit.1">systemd-inhibit</a> does the same job. It takes the lock before the command starts, releases it afterwards, and returns the command's exit status.</p>
+
+<pre><code>cd ~/src/example-app
+systemd-inhibit --what=idle:sleep --why="agent run" \
+  shell --foreground --name "overnight refactor" claude</code></pre>
+
+<p>In both cases <code>shell --foreground</code> starts Claude Code in a pseudo-terminal, prints the session card with the browser link and the ten-character password, and keeps the process attached to the terminal you launched it from. <code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app. With <code>--foreground</code>, shell returns the wrapped process's own exit status when it finishes, so the inhibitor sees the agent end and releases its lock at that moment.</p>
+
+<div class="callout">
+<p><strong>Do not drop <code>--foreground</code> here.</strong> By default shell runs the command in the background and returns as soon as the share is ready. Written as <code>caffeinate -i shell claude</code>, caffeinate would wait for the launcher, which exits within seconds, and release the assertion while the agent keeps running unprotected. The same is true of <code>systemd-inhibit</code>. The inhibitor has to wrap a process that lives as long as the run.</p>
+</div>
+
+<p>The lid deserves its own sentence. On Linux, <a href="https://man.archlinux.org/man/logind.conf.5">logind.conf</a> sets <code>HandleLidSwitch</code> to suspend by default and <code>LidSwitchIgnoreInhibited</code> to yes by default, which means an ordinary sleep lock is ignored when you close the lid. Only the low-level <code>handle-lid-switch</code> lock stops logind from acting on the lid, and you can add it to <code>--what</code> if your system's policy lets your user take it. On a Mac, caffeinate's assertions are about idle and system sleep, so I would not count on any of them to survive a closed lid. If the run has to continue while the laptop is shut, put it on a machine that stays open.</p>
+</section>
+
+<section>
+<h2>Step 2: Open the link somewhere else and leave it open</h2>
+
+<p>Open the printed link on a phone or a second computer and enter the password. The <a href="/mobile/">mobile guide</a> covers the phone view. The session card also says when the share closes: with no deadline, it closes when the task exits. That is the rule this whole setup relies on. A wake lock that ends with the agent and a link that ends with the agent describe the same moment.</p>
+
+<p>If you want the watcher to be someone else, the <a href="/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone/">read-only training run guide</a> walks through a view-only link. For this run, leave the browser tab open on your phone. A closed tab costs you nothing, since the browser is only a viewer.</p>
+</section>
+
+<section>
+<h2>Step 3: Read the status when the link goes quiet</h2>
+
+<p>Suppose the inhibitor was not enough and the laptop slept anyway. The <a href="/reliability/">reliability guide</a> starts from what you can see. In the browser, the page says the session is offline. Before restarting anything, check the host.</p>
+
+<p>On the host computer, once it is awake:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>The table shows each local session's ID, access mode, uptime, closing rule, command, share URL and relay status. The relay column uses five words: <code>online</code>, <code>starting</code>, <code>reconnecting</code>, <code>expired</code> and <code>unknown</code>. <code>reconnecting</code> after a wake is normal. <code>shell list --json</code> gives the raw values instead (<code>connected</code>, <code>waiting</code>, <code>disconnected</code>, <code>expired</code>, <code>unknown</code>), which is the form to hand to a script.</p>
+
+<p>From a different machine linked to the same account, run:</p>
+
+<pre><code>shell ls
+shell ls --all</code></pre>
+
+<p><code>shell ls</code> lists the sessions in your account across machines with their name, status, uptime and machine. A sleeping laptop's session shows as <code>offline</code> at first. After ten minutes without the host, the code in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/account_sessions.go">account_sessions.go</a> treats the machine as gone: the status becomes <code>machine gone</code>, the uptime stops at the moment the host was last seen, and the row counts as ended. Ended sessions are hidden unless you pass <code>--all</code>. So a session missing from <code>shell ls</code> is not proof that the agent died. It may be asleep with its laptop.</p>
+</section>
+
+<section>
+<h2>Step 4: Let it come back on its own after a wake</h2>
+
+<p>When the laptop wakes, you do not need to do anything for the link to return. The host side of shell keeps one WebSocket to the relay. In <a href="https://github.com/TeoSlayer/shell.online/blob/main/internal/relay/relay.go">relay.go</a>, it sends a ping every 30 seconds and gives each ping 10 seconds; a ping is the frame <a href="https://www.rfc-editor.org/rfc/rfc6455#section-5.5.2">RFC 6455</a> describes as a keepalive or a check that the other end still answers. A failed ping or write drops the socket, and the host dials again after half a second, doubling the wait after each failed attempt up to 10 seconds. That pattern is the capped exponential backoff described in Amazon's Builders' Library article on <a href="https://builder.aws.com/content/3EumjoZascWd1oZiEgL8ORlv3qE/timeouts-retries-and-backoff-with-jitter">timeouts, retries and backoff</a>.</p>
+
+<p>Once the host is back, the browser reconnects too. Current hosts keep a bounded copy of the screen and send it when viewers return, so the phone shows the agent's current screen instead of a blank terminal. It is the screen, not a full transcript of everything that scrolled past while you were away.</p>
+
+<p>How long the relay waits is set in <a href="https://github.com/TeoSlayer/shell.online/blob/main/shared/session-lifetime.ts">session-lifetime.ts</a>. An ordinary session that loses its host stays recoverable for 12 hours. The relay runs on <a href="https://developers.cloudflare.com/durable-objects/api/alarms/">Durable Object alarms</a>, which wake the session at a set time, and when the 12 hours pass without the host, the session expires. A laptop that sleeps through a meeting or a night is well inside that window. One that sleeps over a weekend is not.</p>
+</section>
+
+<section>
+<h2>Step 5: Start again cleanly after a restart</h2>
+
+<p>A reboot is different from a sleep. The agent process is gone, and so is its in-memory state. The local session list omits a process that ended without reporting, and its account row may linger until the relay expires it. Do not go looking for the old link. Start a new one and let the agent pick up its own history.</p>
+
+<p>Claude Code keeps conversations on disk, and its <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a> documents <code>claude --continue</code> as loading the most recent conversation in the current directory. Run it from the same directory, under the same inhibitor:</p>
+
+<pre><code>cd ~/src/example-app
+caffeinate -i shell --foreground --name "overnight refactor" claude --continue</code></pre>
+
+<p>Everything after <code>claude</code> belongs to Claude Code, so <code>--continue</code> reaches it unchanged. This prints a new link and a new password. If the people watching need the same link every time, the <a href="/cli/">CLI reference</a> documents <code>--persistent &lt;state-file&gt;</code>, which reuses a saved identity, password and URL. The docs are direct about its limit: it does not restore process memory. The conversation still comes back through Claude Code, not through shell.</p>
+
+<p>If you started the run in the background instead and want to look at it from the host, <code>shell attach &lt;ID&gt;</code> rejoins it locally, and Ctrl-X then D detaches without stopping it. <code>shell kill -- &lt;ID&gt;</code> stops it and closes the link.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<p>It does not make a local run behave like the Gemini agent. Nothing here runs while the machine is asleep or off. shell moves the terminal's input and output to a browser; the work itself stays on your computer, which is the point of running locally and also its limit.</p>
+
+<p>The inhibitor commands control idle and system sleep within the rules of the operating system. They do not help against a battery that runs out or a power policy set by whoever manages the machine, and I would not rely on them against a closed lid on a Mac. On Linux, the lid needs the low-level lock described above, and policy may refuse it.</p>
+
+<p>The 12-hour window covers a host that went away and came back. It does not keep a session alive after a reboot, because the process that owned it is gone. The screen you see after a reconnect is a bounded snapshot. If you need a record of what the agent did while you were away, read the agent's own transcript or the git history it left.</p>
+
+<p>Finally, staying reachable is not the same as staying safe. An agent you can watch from a phone can still run commands you did not expect. The <a href="/security/">security page</a> covers read-only links and what the service can see, the <a href="/e2ee/">encryption page</a> covers password rotation, and the <a href="/docs/">getting started guide</a> covers the basics.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell is developed by Pilot Protocol, which works on the same problem one layer down: agents on machines that sleep, roam between networks and sit behind NAT. Pilot's post on <a href="https://pilotprotocol.network/blog/move-beyond-rest-persistent-connections-for-agents">persistent connections for agents</a> explains its tunnels, which send a keepalive probe every 25 seconds to hold the NAT mapping open and re-establish themselves when a probe fails. When a peer still will not answer, the <a href="https://pilotprotocol.network/docs/troubleshooting">Pilot troubleshooting guide</a> gives the same advice as the shell reliability guide: check whether the other end is reachable before restarting anything. If your agents need to reach each other rather than a person on a phone, <a href="https://pilotprotocol.network/">Pilot Protocol</a> is the place to start.</p>
+
+<p>For a related setup in the other direction, starting a session from the browser on a machine nobody is sitting at, see <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">the post on a Mac that sat idle for days</a>.</p>
+</section>
+
+<div class="cta">
+<h3>Keep your next long run in reach</h3>
+<p>Install the CLI on the machine doing the work, wrap the agent in a sleep inhibitor with --foreground, and open the link on your phone.</p>
+<a href="/platforms/">Install shell.online</a>
+</div>

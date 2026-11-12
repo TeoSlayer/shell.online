@@ -11,6 +11,8 @@ import type { Member, SessionRecord } from "../lib/api";
 import { SessionClipboard } from "./SessionClipboard";
 import { SessionLock } from "./SessionLock";
 import { shouldOpenSurface } from "../lib/surface-navigation";
+import type { SessionSummary } from "../lib/session-summary-crypto";
+import { SessionSummaryHover } from "./SessionSummaryHover";
 import { sessionEnded, sessionEndedAt, sessionStateLabel } from "../lib/session-liveness";
 
 /**
@@ -32,6 +34,7 @@ type Column = {
 
 function Card({
   session,
+  summary,
   now,
   members,
   you,
@@ -42,6 +45,7 @@ function Card({
   stopping,
 }: {
   session: SessionRecord;
+  summary: SessionSummary | undefined;
   now: number;
   members: Member[];
   you: Member | null;
@@ -57,7 +61,10 @@ function Card({
   const title = sessionTitle(session);
 
   return (
+    <SessionSummaryHover session={session} summary={summary} now={now}>
+    {(hover) => (
     <li
+      {...hover}
       className="board-card"
       onClick={(event) => {
         if (shouldOpenSurface(event.target, event.defaultPrevented)) onOpen(session);
@@ -137,6 +144,8 @@ function Card({
         </div>
       </div>
     </li>
+    )}
+    </SessionSummaryHover>
   );
 }
 
@@ -144,6 +153,7 @@ export function SessionBoard({
   liveWrite,
   liveRead,
   finished,
+  summaries,
   now,
   members,
   you,
@@ -157,6 +167,7 @@ export function SessionBoard({
   liveWrite: SessionRecord[];
   liveRead: SessionRecord[];
   finished: SessionRecord[];
+  summaries: Record<string, SessionSummary>;
   now: number;
   members: Member[];
   you: Member | null;
@@ -206,6 +217,7 @@ export function SessionBoard({
                 <Card
                   key={session.id}
                   session={session}
+                  summary={summaries[session.id]}
                   now={now}
                   members={members}
                   you={you}

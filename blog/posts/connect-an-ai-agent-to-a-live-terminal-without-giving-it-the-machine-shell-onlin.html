@@ -1,0 +1,57 @@
+<p>OpenAI opened its Agents API to public beta on September 10. The pitch is a managed Codex harness: you supply files, install packages, and add skills, in the announcement's words, "while we provision and manage the sandbox", with partner sandboxes from Cloudflare, E2B, Modal, and others if you would rather pick the container yourself. That is one answer to the question of where an agent should do its work. Today's <span class="brand-shell">shell.online</span> release, v0.15.0, is built for the opposite arrangement. The terminal stays on your machine, with your files and your permissions, and you connect an AI agent to a live terminal through a single-use invitation that you can revoke at any moment without stopping the process.</p>
+
+<section>
+<h2>What v0.15.0 and v0.15.1 changed</h2>
+<p><span class="brand-shell">shell.online</span> has always been one command that prints a URL and a password for a running process. The browser view of that process defaults to xterm.js. Since v0.14.0 there has been an optional second renderer, Refstream, which is still labelled an unstable alpha and which changes only the browser view, never the PTY, the relay permissions, or the encryption. Refstream is where the Connect agent button lives.</p>
+<p>The <a href="https://github.com/TeoSlayer/shell.online/blob/main/CHANGELOG.md">v0.15.0 changelog</a> lists two additions. First, reusable agent connections: a connected agent keeps its handle for follow-up requests, and task IDs, progress, and collected answers survive panel changes and reconnects. The README now says the agent connects once and follows up without pairing again. Second, tab-local session recovery for page reloads. The snapshot expires after four hours, disappears when the tab closes, and never goes to the relay. Recovery also still requires the local process to be alive, because a snapshot restores parser state and task records, not a shell.</p>
+<p>v0.15.1, released the same morning, bumps the vendored renderer to Refstream v0.1.0-alpha.5 and fixes a real bug in that recovery path: a restored snapshot could answer historical terminal capability queries into the live process, which could corrupt tmux input. The README now states the rule directly: a restored browser snapshot cannot answer historical terminal queries into the live process.</p>
+</section>
+
+<section>
+<h2>How to connect an AI agent to a live terminal, step by step</h2>
+<p>Start with any process you would normally share. A coding agent is the obvious case, but a dev server or a plain shell works the same way.</p>
+<pre><code>shell claude
+# or
+shell npm run dev</code></pre>
+<p>The CLI prints the share URL, the password, and a QR code. Open the link in a browser, open Terminal controls, and switch the renderer to Refstream (unstable alpha). The choice is saved in that browser only. Then choose Connect agent and pick one of two grants, both documented in the <a href="https://shell.online/cli/">CLI reference</a>: Read terminal, which lets the agent read current output, search retained rows, inspect command boundaries, and wait for changes; or Read and control, which additionally lets it type, execute a command against a recent terminal sequence, and send key combinations such as Ctrl-C.</p>
+<p>What you copy is not a password. It is a private invitation plus a standalone Node.js 22 or newer connector URL with a pinned SHA-256 checksum. The invitation is single-use and expires after five minutes. The agent verifies that file against the checksum, then you pass the invitation through its ordinary command tool, and the <a href="https://github.com/TeoSlayer/refstream.js/blob/v0.1.0-alpha.5/docs/agents.md">agent handoff protocol</a> is explicit that it must arrive on stdin or through the connector's hidden prompt, never in command arguments, URLs, or logs.</p>
+<pre><code>node shell-agent.mjs connect
+# invitation pasted on stdin; returns a sessionId
+
+node shell-agent.mjs request SESSION_ID
+{"method":"ask","args":{"kind":"command","prompt":"pwd","taskId":"workdir-1","expectedSequence":12}}
+
+node shell-agent.mjs request SESSION_ID
+{"method":"wait_task","args":{"taskId":"workdir-1","afterRevision":1,"timeoutMs":15000}}
+
+node shell-agent.mjs request SESSION_ID
+{"method":"collect_task","args":{"taskId":"workdir-1"}}</code></pre>
+<p>The sessionId returned by connect is the handle the agent reuses for every request, for status, and for stop. Each handoff carries a stable task ID chosen by the agent. Retrying the same ID and prompt retrieves the existing task instead of running the command twice, and a new handoff is blocked until the previous answer is collected or explicitly cancelled. Collecting an answer leaves the connection open, which is the whole point of the v0.15.0 change.</p>
+</section>
+
+<section>
+<h2>Completion is evidence, not silence</h2>
+<p>The part of the protocol most worth reading is how a task becomes done. The statuses are waiting, needs_attention, completed, collected, and cancelled, and the protocol states plainly that "a sent receipt, output, silence, a redraw, and a background-job acknowledgement do not establish completion." Every final result records where its completion claim came from, and there are only three sources.</p>
+<ul>
+<li><strong>shell:</strong> an explicit OSC 133 command boundary for that command. OSC 133 is the semantic prompt convention, originally proposed in the <a href="https://gitlab.freedesktop.org/Per_Bothner/specifications/-/blob/master/proposals/semantic-prompts.md">semantic-prompts specification</a> and implemented by terminals such as iTerm2 and <a href="https://learn.microsoft.com/en-us/windows/terminal/tutorials/shell-integration">Windows Terminal</a>, where the 133;D sequence carries the exit code. Refstream retains that exit code, and completion does not imply it was zero.</li>
+<li><strong>host:</strong> the embedding application called a completion callback after an actual application event.</li>
+<li><strong>agent_observed:</strong> the visiting agent read the final answer on screen and reported it. The record says so, because that is an observation, not independent confirmation.</li>
+</ul>
+<p>This matters when the wrapped process is an interactive TUI such as Claude Code rather than a shell that emits markers. A generic TUI cannot be treated as a structured conversation API. If the agent collects before there is completion evidence, the protocol stores an unconfirmed, truncated screen excerpt and leaves the task pending. If the shell emits no OSC 133 markers at all, the Commands view stays empty rather than guessing where a command ended.</p>
+</section>
+
+<section>
+<h2>What stops the agent from typing over you</h2>
+<p>A control grant is not a free keyboard. Every remote write requires an expectedSequence taken from a recent read, so a stale view of the screen is rejected. Local keystrokes are tracked before PTY echo, including IME composition, and any intervening human input removes the agent's ownership of a draft. Pressing Enter requires an agent-owned draft. No draft is ever cleared automatically. For an application whose composer state cannot be read from terminal cells, the agent must either wait, or the owner can inspect the input themselves and click the button labelled "I've checked: input is empty", which is a one-time acknowledgement that further input or output invalidates. Colors and cursor placement are display evidence, never permission to type.</p>
+<p>Two boundaries hold regardless of the grant. Revoking access is immediate and does not send Ctrl-C or stop the shared process, so a runaway agent loses the terminal but your job keeps running. And the invitation grants terminal access only. Files stay unavailable unless the host separately started the share with the --files or --files-root flag, the opt-in described in the <a href="https://shell.online/security/">security model</a>, and even then access is rooted, traversal and symlink escapes are rejected, and printing a filename never reads the disk.</p>
+</section>
+
+<section>
+<h2>Who can see what</h2>
+<p>The access rules underneath are unchanged. The share URL and password together are a bearer credential: anyone holding both can open the terminal, and unless the share was started with the read-only flag, can type with the permissions of the wrapped process. The agent invitation sits on top of that share, is scoped to this one live terminal, and cannot be replayed once used. The hosted grant lasts up to four hours.</p>
+<p>The relay sees encrypted payloads, connection metadata, frame sizes, and timing, as it does for every <span class="brand-shell">shell.online</span> session. Connector state on the agent's disk contains only its protected local IPC credentials, never terminal contents, answers, or the private invitation. Task history is bounded to the last 32 records with answers capped at 32,768 characters, and expired task IDs stay reserved across snapshots so an old retry cannot resubmit a command.</p>
+<div class="callout"><p>Refstream is an unstable alpha and is labelled that way in the renderer menu. It is not binary-compatible with the xterm.js addon ecosystem, and some private xterm behaviours are not implemented yet. If a TUI renders or handles input incorrectly, switch the renderer back to xterm.js. The process, relay connection, and permissions do not change when you switch.</p></div>
+<p>The contrast with a hosted sandbox is not about which is safer in the abstract. It is about who holds the process. In a managed harness the provider runs the container and you get files, packages, and artifacts back. With a <a href="https://shell.online">browser link to a terminal that never leaves your machine</a>, you hold the process, the agent gets a scoped and revocable seat at it, and every claim of "done" carries a label saying how it was established. Both <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> and the Refstream renderer are MIT licensed, so the grant model described here can be checked against the code rather than taken on trust. If you have not used the basic share before, the <a href="/blog/shell-online-live-terminal-browser-link/">introduction to the live terminal link</a> covers the one-command flow this builds on.</p>
+</section>
+
+<div class="cta"><h3>Give an agent a seat at your terminal, not your machine</h3><p>One command shares the process. One invitation lets an agent in. One click revokes it, and the job keeps running.</p><a href="https://shell.online/">Try shell.online</a></div>

@@ -1,4 +1,4 @@
-import type { StatsAccountStats, StatsSnapshot } from "./stats";
+import type { StatsAccountActivation, StatsAccountListEntry, StatsAccountStats, StatsSnapshot } from "./stats";
 import { DAY_MS } from "./stats-snapshot";
 
 /*
@@ -95,6 +95,8 @@ export function humanize(value: string): string {
     docs_e2ee: "Docs · E2EE",
     docs_docker: "Docs · Docker",
     docs_self_hosting: "Docs · Self-hosting",
+    blog: "Blog",
+    blog_post: "Blog · Post",
     session: "Shared terminal",
     installer_download: "Installer fetched",
     binary_download: "Binary downloaded",
@@ -259,6 +261,68 @@ export function accountsInsight(accounts: StatsAccountStats, rangeLabel: string)
     parts.push(`The period before brought ${integerFormatter.format(previous.newAccounts)}; this one brought none.`);
   }
   return `${parts.join(" ")}${ours}`;
+}
+
+/**
+ * The activation panel's rows, in the order a new account usually goes, each
+ * a share of the same sign-ups. A range with no sign-ups gives no rows: every
+ * share would be 0 of 0, which says nothing.
+ */
+export function activationRows(funnel: StatsAccountActivation): { label: string; value: number; share: number }[] {
+  if (funnel.base === 0) return [];
+  return [
+    { label: "Linked a machine", value: funnel.machineLinked },
+    { label: "Ran a session", value: funnel.sessionStarted },
+    { label: "Invited a teammate", value: funnel.teammateInvited },
+    { label: "Came back another day", value: funnel.cameBack },
+  ].map((row) => ({ ...row, share: ratio(row.value, funnel.base) }));
+}
+
+/**
+ * How far one account got, the furthest step only: a session outranks a
+ * machine, since a session can be run from a teammate's machine.
+ */
+export function accountStage(entry: StatsAccountListEntry): "session" | "machine" | "signed_up" {
+  if (entry.sessions > 0) return "session";
+  if (entry.machines > 0) return "machine";
+  return "signed_up";
+}
+
+const ACCOUNT_GROUPS = [
+  { key: "session", label: "Ran a session" },
+  { key: "machine", label: "Linked a machine" },
+  { key: "signed_up", label: "Signed up only" },
+] as const;
+
+export type AccountGroupKey = (typeof ACCOUNT_GROUPS)[number]["key"];
+
+/**
+ * The account list in groups, furthest along first, newest sign-up first
+ * within each. Our own accounts are left out, as they are out of every other
+ * figure; the app no longer sends them, and an older one that does is ignored.
+ * Empty groups are left out.
+ */
+export function groupAccounts(
+  entries: StatsAccountListEntry[],
+): { key: AccountGroupKey; label: string; accounts: StatsAccountListEntry[] }[] {
+  return ACCOUNT_GROUPS
+    .map(({ key, label }) => ({
+      key,
+      label,
+      accounts: entries
+        .filter((entry) => !entry.internal && accountStage(entry) === key)
+        .sort((left, right) => right.joinedAt - left.joinedAt || left.email.localeCompare(right.email)),
+    }))
+    .filter((group) => group.accounts.length > 0);
+}
+
+/** When an account was last in the app, in UTC days: today, yesterday, or how many days ago. */
+export function formatAgo(at: number | null, now: number): string {
+  if (at === null) return "never";
+  const days = Math.floor(now / DAY_MS) - Math.floor(at / DAY_MS);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${integerFormatter.format(days)}d ago`;
 }
 
 export interface DeltaChip {

@@ -2,12 +2,12 @@
 // No live account, session, model, or analytics traffic. Screenshots stay outside source.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, writeFile, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { build } from "esbuild";
-import { launchChromeTransport, launchSafariTransport } from "./lib/browser-transport.mjs";
+import { launchChromeTransport, launchSafariTransport, removeProfile } from "./lib/browser-transport.mjs";
 import { auditTextLayout } from "./lib/text-layout-audit.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -120,6 +120,8 @@ try {
     : await launchChromeTransport({ profile: join(temp, "profile") });
   const origin = `http://127.0.0.1:${server.address().port}/sessions`;
   await browser.navigate(origin);
+  // CDP navigation returns before the new document has necessarily been parsed.
+  await until(`location.href === ${JSON.stringify(origin)} && document.readyState !== 'loading' && !!document.body`, "fixture document ready");
   // Prove the geometry oracle rejects overflow, accepts intentional name
   // ellipsis, and still rejects clipping a required status/permission badge.
   await browser.evaluate(`(()=>{const p=document.createElement('div');p.id='text-audit-fixture';p.style.cssText='position:fixed;top:0;left:0;width:20px';const e=document.createElement('span');e.className='text-audit-label';e.style.cssText='display:block;width:20px;white-space:nowrap';e.textContent='W'.repeat(64);p.append(e);document.body.append(p);})()`);
@@ -129,6 +131,48 @@ try {
   assert((await browser.call(auditTextLayout,{selectors:['.text-audit-label'],complete:['.text-audit-label']})).includes('.text-audit-label: required badge text clipped'),'Required badge cannot hide behind ellipsis');
   await browser.evaluate(`document.getElementById('text-audit-fixture').remove()`);
   await until("!!document.querySelector('.xterm-screen') && document.fonts.status==='loaded'", "real terminal mounted");
+  if (browser.name === 'chrome') {
+    await browser.setViewport({ width: 390, height: 844, dpr: 1, mobile: true });
+    await delay(150);
+    // A mobile browser can scroll the layout viewport to reveal a focused
+    // field even while the app owns scrolling. Give this fixture scroll room
+    // so the native document scroll and viewport coordinates can diverge.
+    await browser.call(() => {
+      document.documentElement.style.minHeight = '1100px';
+      window.scrollTo(0, 80);
+    });
+    await delay(150);
+    const position = await browser.call(() => ({
+      scroll: scrollY, offset: visualViewport.offsetTop,
+      visible: visualViewport.height,
+      railBottom: document.querySelector('.rail').getBoundingClientRect().bottom,
+      shellTop: document.querySelector('.shell').getBoundingClientRect().top,
+    }));
+    console.log('MOBILE DOCUMENT SCROLL', JSON.stringify(position));
+    assert(position.scroll >= 79, 'The fixture really scrolled the document');
+    assert(Math.abs(position.railBottom - position.offset - position.visible) <= 2,
+      'Navigation stays on the visible bottom after document scroll: ' + JSON.stringify(position));
+    await browser.call(() => {
+      Object.defineProperty(visualViewport, 'offsetTop', { configurable: true, value: 30 });
+      Object.defineProperty(visualViewport, 'height', { configurable: true, value: 814 });
+      visualViewport.dispatchEvent(new Event('scroll'));
+    });
+    await delay(100);
+    const panned = await browser.call(() => ({
+      top: document.querySelector('.shell').getBoundingClientRect().top,
+      bottom: document.querySelector('.rail').getBoundingClientRect().bottom,
+    }));
+    assert(Math.abs(panned.top - 30) <= 2 && Math.abs(panned.bottom - 844) <= 2,
+      'Visual viewport panning is independent of document scroll: ' + JSON.stringify(panned));
+    await browser.call(() => {
+      delete visualViewport.offsetTop;
+      delete visualViewport.height;
+      document.documentElement.style.removeProperty('min-height');
+      window.scrollTo(0, 0);
+      visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await delay(100);
+  }
   // Resize one mounted app across both sides of each breakpoint, including returning.
   for (const theme of process.env.APP_LAYOUT_GATE_ONLY ? [] : ['light','dark']) {
   await browser.evaluate(`window.layoutTheme('${theme}')`);
@@ -441,5 +485,5 @@ try {
   await new Promise(r => server.close(r));
   // Linux Chrome helpers can finish profile writes just after the main process
   // exits. Retry only this fixture-owned tree; persistent cleanup failure fails.
-  await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  await removeProfile(temp);
 }

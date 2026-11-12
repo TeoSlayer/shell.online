@@ -857,3 +857,66 @@
   font: inherit;
 }
 .account-appearance select:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+/* ---- Session summary hover card ----
+ * Plain text only. Hovering anywhere on a session row or board card opens it;
+ * on touch a long press does. It floats in a portal, fixed to the viewport, so
+ * table and column scrolling never clip it; its place is set inline. */
+[data-summary-hover] {
+  -webkit-touch-callout: none;
+}
+.summary-card {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  box-shadow: 0 8px 24px var(--shadow-ink);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+.summary-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.summary-card-title {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.summary-card-state {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--radius-chip);
+  background: var(--line);
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+.summary-card-state[data-state="error"] { color: var(--white); background: #b42318; }
+.summary-card-state[data-state="waiting_for_input"] { color: var(--white); background: var(--blue); }
+.summary-card-body {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.summary-card-meta,
+.summary-card-empty {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.summary-card-caption {
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 11px;
+}

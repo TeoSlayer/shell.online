@@ -16,6 +16,9 @@ import {
 } from "../lib/session-view";
 import { sessionSummary, sessionTitle } from "../lib/session-title";
 import {useSessionContents, withSessionContent} from "../lib/use-session-contents";
+import {useSessionSummaries} from "../lib/use-session-summaries";
+import {SessionSummaryHover} from "../components/SessionSummaryHover";
+import type {SessionSummary} from "../lib/session-summary-crypto";
 import {SessionSummaryText} from "../components/SessionSummaryText";
 import { NewSessionModal } from "../components/NewSessionModal";
 import { SessionStartGuide } from "../components/SessionStartGuide";
@@ -181,6 +184,8 @@ export function Workspace() {
   const [rawSessions, setSessions] = useState<SessionRecord[] | null>(null);
   const sessionContents = useSessionContents(rawSessions);
   const sessions = rawSessions?.map(session => withSessionContent(session, sessionContents[session.id])) ?? null;
+  /* Decrypted in this page's memory only; the hover card reads, never requests. */
+  const sessionSummaries = useSessionSummaries(rawSessions);
   const [devices, setDevices] = useState<Device[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -232,12 +237,6 @@ export function Workspace() {
   const pasteActions = useRef(new Map<string, () => void>());
   /* Requests whose session should be offered as soon as it exists: origin -> name. */
   const awaitingOpen = useRef(new Map<string, string>());
-  /*
-   * Sessions this browser started, not yet opened here. A session started from
-   * the browser has no terminal of its own to take a size from, so the pane
-   * that first opens it asks for its own, once.
-   */
-  const fitOnFirstOpen = useRef(new Set<string>());
   /* Passwords waiting for their session to appear so they can be shared. */
   const pendingShares = useRef(new Map<string, string>());
   /* Who each session has already been shared with, so polling is not chatty. */
@@ -278,7 +277,6 @@ export function Workspace() {
       );
       if (arrived?.origin) {
         awaitingOpen.current.delete(arrived.origin);
-        fitOnFirstOpen.current.add(arrived.id);
         setLaunching("");
         setNotice("");
         dispatch({
@@ -877,8 +875,6 @@ export function Workspace() {
                 host={current?.host}
                 canType={current ? canEdit(current, you) : tab.canType}
                 canResize={!!current && !!you && current.ownerUid === you.uid}
-                fitOnOpen={fitOnFirstOpen.current.has(tab.id)}
-                onFitted={() => fitOnFirstOpen.current.delete(tab.id)}
                 renderer={terminalRenderer}
                 onPasteReady={(open) => { if (open) pasteActions.current.set(tab.id, open); else pasteActions.current.delete(tab.id); }}
                 pulseAllowed={!!current}
@@ -1038,6 +1034,7 @@ export function Workspace() {
                 liveWrite={liveWrite}
                 liveRead={liveRead}
                 finished={finished}
+                summaries={sessionSummaries}
                 now={now}
                 members={members}
                 you={you}
@@ -1064,6 +1061,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
                 {liveRead.length > 0 && (
@@ -1080,6 +1078,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
                 {finished.length > 0 && (
@@ -1096,6 +1095,7 @@ export function Workspace() {
                     onKill={handleKill}
                     onRemove={handleRemove}
                     onAssign={handleAssign}
+                    summaries={sessionSummaries}
                   />
                 )}
               </>
@@ -1159,6 +1159,7 @@ function SessionGroup({
   onKill,
   onRemove,
   onAssign,
+  summaries,
 }: {
   heading: string;
   sessions: SessionRecord[];
@@ -1172,6 +1173,7 @@ function SessionGroup({
   onKill: (session: SessionRecord) => void;
   onRemove: (session: SessionRecord) => void;
   onAssign: (session: SessionRecord, uids: string[]) => void;
+  summaries: Record<string, SessionSummary>;
 }) {
   /*
    * Which commands are shown in full. Collapsed by default: an agent command
@@ -1213,8 +1215,10 @@ function SessionGroup({
              */
             const title = sessionTitle(session);
             return (
+              <SessionSummaryHover key={session.id} session={session} summary={summaries[session.id]} now={now}>
+              {(hover) => (
               <tr
-                key={session.id}
+                {...hover}
                 data-live={online}
                 className="table-row-linked"
                 onClick={(event) => {
@@ -1336,6 +1340,8 @@ function SessionGroup({
                   </div>
                 </td>
               </tr>
+              )}
+              </SessionSummaryHover>
             );
           })}
         </tbody>

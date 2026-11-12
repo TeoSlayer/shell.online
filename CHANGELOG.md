@@ -6,6 +6,12 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Added
 
+- A blog at shell.online/blog/, listing every shell.online post published so
+  far (23 posts, first published on pilotprotocol.network, which stays their
+  canonical home). Posts are listed in `blog/posts.json` with their bodies in
+  `blog/posts/`, and the build renders the index, each post, an RSS feed and a
+  sitemap as static pages. See blog/README.md.
+- `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
 - A one-screen landing page at `/start/` for paid traffic, to test against
   the home page. It says what shell does in one line and gives the three
   setup steps: install, start your agent (`shell claude`, or tap Codex,
@@ -22,6 +28,26 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ### Fixed
 
+- Build with Go 1.26.9, which fixes two `net/http` vulnerabilities
+  (GO-2026-6613, GO-2026-6617) reported by govulncheck.
+- Existing terminal sessions now automatically run “Fit to my screen” once
+  when their owner opens them, restoring the grid density on laptops and
+  desktops. Sizing overlaps password lookup and unlock, reusing the connection
+  for a fresh encrypted screen once the key is ready. Manual fitting stays available. Hidden panes, read-only viewers,
+  reconnects and renderer changes do not cause repeated resize requests.
+  `?terminalAutoFit=0` opts out for one page; `VITE_TERMINAL_AUTO_FIT=0`
+  disables automatic fitting for an app build.
+- Mobile bottom navigation stays at the visible bottom after the browser scrolls
+  the document to a focused field, instead of leaving an empty strip below it.
+- Chat preserves code indentation, literal identifiers and fenced blank lines,
+  renders Markdown tables, and continues past isolated pipe rows.
+- Device chat history survives refresh, reconnect and renderer changes without
+  replaying cached messages twice or overwriting history with early live output.
+- Claude Code chat no longer publishes incomplete prompts or repeats tool
+  headings when their markers blink or elapsed-time counters change.
+- Answers that resume after an idle pause continue in the same chat message.
+- Blue “Reading … as messages” notices are restored. Summary permission switches
+  reflect a successful save immediately instead of waiting for the next poll.
 - `npm run deploy:production` refuses a config that does not set
   `POSTHOG_ENABLED` to `"0"` or `"1"`. Since 0.23.1 the relay has been
   deployed with a config that left the flag out, and because Wrangler replaces
@@ -42,6 +68,145 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   the new release's daemon replaces the running one (`shell service install`,
   a restart, or signing in again).
 
+## [0.25.0] — 2026-10-02
+
+### Added
+
+- Session summaries. Hover a session in app.shell.online (List or Board view;
+  long-press on touch) to see what it is doing. Off by default, owner-only and
+  opt-in per session with `shell permissions <id> --summaries=true` or the
+  Summaries switch. A session is summarised once each time it goes idle, and
+  again only after new output.
+- Claude Code sessions are summarised on your machine from their own
+  transcript and encrypted to your vault key; the binding follows `/clear`,
+  `/resume` and handoff forks through a SessionStart hook.
+- Other terminal sessions send redacted output, encrypted, to the attested
+  shell.online summarizer (Intel TDX Confidential Space) only after this
+  host verifies its attestation and signed image allowlist; the summary is
+  encrypted to your vault key inside the enclave. See docs/summaries.md.
+
+## [0.24.1] — 2026-09-30
+
+### Removed
+
+- The agent-record transcript added in 0.24.0 is withdrawn. It found a
+  record by the directory the session started in, and a launcher starts
+  every session in the same directory: six Claude transcripts on one machine
+  all stated `/`, so several sessions resolved to the same file and a chat
+  could have shown another session's conversation. The chat reads the screen,
+  which is what it was doing in practice — no host ever shipped a record that
+  a viewer drew. The opcode stays reserved and the relay accepts and drops it,
+  so hosts already released with the tap keep their connection.
+
+### Fixed
+
+- The blank rows in a message are collapsed across frames, not only within
+  one. A screen gains an empty row one frame at a time, so each call handed a
+  single blank over and neither could see the other's — the pairs survived
+  the first fix. Measured by replaying a session captured through a pty: one
+  message held nine rows and four were empty; the same bytes now render seven
+  rows with two, 144px where it was 180px.
+
+- A turn whose last frame still showed a spinner is no longer stuck. Whether
+  the agent is working is recomputed only when a frame arrives, so the
+  spinner that frame happened to catch left it working for ever, and the
+  commit waiting on it waited too. A spinner animates: a screen nobody has
+  repainted for over a second has one that has stopped. Stillness is now the
+  answer, and the wheel goes out with it.
+
+- A message no longer arrives with a screenful of blank space in it. While a
+  command runs, the screen holds still except for a status line counting the
+  seconds, so every repaint handed over the empty gap above that line again:
+  four seconds of work arrived as eighty blank rows inside one message, and
+  reaching the end of the conversation meant scrolling past them.
+
+- New output arrives again after leaving the chat renderer and coming back.
+  The reader holds back the row an agent looks to be part-way through
+  writing, and only another frame could commit it — so a screen that had gone
+  quiet for good, which is exactly what a replayed snapshot is, never
+  committed its last message. The wheel kept turning and nothing new
+  appeared until a prompt was sent by hand, because a prompt is a frame. A
+  screen still for more than a second, with no spinner on it, now commits.
+
+- A conversation is no longer drawn twice when a device that remembers the
+  session reconnects. The replayed screen is a picture of the end of the
+  conversation and the end is what the device already had, so both were
+  shown: an answer appeared again underneath a later question.
+
+- A heading with a clock running on the end of it holds still. `Running the
+  canary` became `Running the canary · 3s` a second later, and the words had
+  not changed — but the reader compares rows, so a row that ticks is a row it
+  cannot match against the frame before, which is what hands content over
+  twice and leaves a stale clock frozen in the thread. The clock is taken off
+  before frames are compared, in both the shapes a captured session writes:
+  `· 3s`, and a bracket holding a middot and a duration. A bracket without a
+  middot is somebody's sentence and is left alone.
+
+- A tool's result is no longer read as part of the prompt above it. Sending
+  something while the agent was busy put its next tool result in the thread
+  as part of the message just sent. The prompt marker is also recognised as
+  `>`, which is what some terminals draw where a captured frame showed `❯`.
+
+- `shell ls` no longer shows a session whose machine is gone as still
+  running. Its uptime kept growing; it now stops when the machine was last
+  seen, as in the web app.
+
+### Security
+
+- A session's browser password no longer sits in any process's environment.
+  The machine daemon handed a browser-started session its password in
+  `SHELL_ONLINE_E2EE_PASSWORD`, and every background session kept it there for
+  its whole life, where any program running as the same user could read it
+  (`ps -E`, `/proc/<pid>/environ`). It now travels between shell's own
+  processes over a pipe. Setting `SHELL_ONLINE_E2EE_PASSWORD` yourself still
+  works as before.
+- The program a session shares no longer inherits that session's password,
+  name, command or browser request. A `shell` run inside a browser-started
+  session silently reused the parent's browser password, published the
+  parent's command and name as its own, and carried the request id the
+  browser uses to recognise the session it asked for; `shell password rotate`
+  run from inside rotated to the same password. The accounts service now also
+  lets only one session claim a browser request.
+
+## [0.24.0] — 2026-09-30
+
+### Added
+
+- The chat renderer reads a coding agent's own record of the conversation
+  instead of the screen it draws. A full-screen agent repaints a grid, so what
+  a viewer held was one screenful of a projection: history was gone, the
+  contents changed with the terminal's scroll position, and whether the agent
+  was working had to be inferred from a spinner that never says it has
+  stopped. Claude Code and OpenClaw both keep a machine-readable record of the
+  same conversation on the host, written per message and per tool step while a
+  turn is still running, and the CLI now follows that and sends it as its own
+  frame — sealed with the session's cipher, so the relay forwards it without
+  being able to read it. Once a record is speaking the screen is no longer
+  read for the conversation.
+
+  What travels is narrow: what was said, the *name* of a tool, and the
+  questions an agent is waiting on. Thinking, tool inputs and attachments stay
+  on the machine. A session that never runs an agent sends nothing.
+
+- Questions an agent asks are answered in the chat. They arrive with their
+  options, are drawn as buttons, and pressing one answers the program's own
+  menu. What was chosen is said out loud in the conversation.
+
+- The accounts section of the stats dashboard shows how far new accounts get:
+  linked a machine, ran a session, invited a teammate, came back another day.
+  The store answers each step while it still has the uid, so the dashboard
+  receives counts only.
+
+### Changed
+
+- Shell Keep: a larger field, a new HUD, training at the Forge, and touch
+  controls.
+
+### Fixed
+
+- Shell Keep's "Gather now" answered "internal error". The database only
+  allowed a command to be a start or a kill, while the rest of the system
+  already accepted the gathering's probe.
 ## [0.23.3] — 2026-09-25
 
 ### Fixed

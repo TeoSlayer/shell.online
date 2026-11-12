@@ -43,7 +43,7 @@ func openBackgroundReadyFile() (backgroundReadyWriter, error) {
 	return &authenticatedReadyWriter{connection}, nil
 }
 
-func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr io.Writer) int {
+func launchBackgroundProcess(arguments []string, password string, jsonOutput bool, stdout, stderr io.Writer) int {
 	_ = stdout
 	executable, err := os.Executable()
 	if err != nil {
@@ -70,14 +70,14 @@ func launchBackgroundProcess(arguments []string, jsonOutput bool, stdout, stderr
 	}
 	defer null.Close()
 	command := exec.Command(executable, arguments...)
-	command.Env = setEnvironmentValue(os.Environ(), backgroundChildEnvironment, "1")
+	command.Env = setEnvironmentValue(passwordHandoffEnvironment(os.Environ(), password), backgroundChildEnvironment, "1")
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyAddress, listener.Addr().String())
 	command.Env = setEnvironmentValue(command.Env, backgroundReadyToken, token)
 	command.Env = setEnvironmentValue(command.Env, backgroundParentEnvironment, fmt.Sprint(os.Getpid()))
 	command.Env = withLaunchingTerminalGrid(command.Env)
 	command.Stdin, command.Stdout, command.Stderr = null, null, null
 	command.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS}
-	if err := command.Start(); err != nil {
+	if err := startWithPassword(command, password); err != nil {
 		fmt.Fprintf(stderr, "shell: start in background: %v\n", err)
 		return 1
 	}

@@ -18,7 +18,7 @@ const permissionsTimeout = 15 * time.Second
 // permissionsNotActiveNote is printed after a saved change. The switches are
 // consent, stored on the account's session record, and this build does not
 // act on them yet, so the output should not imply it does.
-const permissionsNotActiveNote = "Permission saved; passive briefings require an updated compatible host and your vault. Team MCP access and team briefing delivery are not enabled by these switches yet."
+const permissionsNotActiveNote = "Permission saved; passive briefings and summaries require an updated compatible host and your vault. Team MCP access and team briefing delivery are not enabled by these switches yet."
 
 // The switch flags, in the order they are shown.
 var permissionFlags = []struct {
@@ -29,12 +29,14 @@ var permissionFlags = []struct {
 	{"mcp-team-access", account.AutomationMcpTeamAccess, "MCP team access"},
 	{"daily-briefing", account.AutomationDailyBriefing, "Daily briefing"},
 	{"briefing-team-access", account.AutomationBriefingTeamAccess, "Briefing team access"},
+	{"summaries", account.AutomationSummaries, "Session summaries"},
 }
 
 func permissionsUsage(writer io.Writer) {
 	fmt.Fprintln(writer, "Usage: shell permissions <session-id> [flags]")
 	fmt.Fprintln(writer, "       shell permissions <session-id> --mcp-team-access=true|false")
 	fmt.Fprintln(writer, "              [--daily-briefing=true|false] [--briefing-team-access=true|false]")
+	fmt.Fprintln(writer, "              [--summaries=true|false]")
 	fmt.Fprintln(writer, "Reads a session's automation permissions, or updates the ones named.")
 	fmt.Fprintln(writer, "A switch that is not named is left exactly as it is.")
 }

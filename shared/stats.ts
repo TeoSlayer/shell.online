@@ -223,6 +223,15 @@ export interface StatsAccountEngagement {
   value: number;
 }
 
+/** How far the accounts that signed up in the range got, each step a count of those accounts. */
+export interface StatsAccountActivation {
+  base: number;
+  machineLinked: number;
+  sessionStarted: number;
+  teammateInvited: number;
+  cameBack: number;
+}
+
 /**
  * Aggregates the accounts app answers with, when the dashboard is linked to
  * it. Our own accounts are left out of every figure here before it is sent;
@@ -248,11 +257,33 @@ export interface StatsAccountStats {
   /** Accounts left out of every figure here because they are ours. */
   excluded: number;
   cohorts: StatsRetentionCohort[];
+  /** Null from an app too old to send it. */
+  activation: StatsAccountActivation | null;
   /** Things done in the app in the range, by kind: machines linked, commands sent. Counts of things, not of accounts. */
   events: Record<string, number>;
 }
 
 export type StatsAccounts = StatsAccountStats | { error: string } | null;
+
+/**
+ * One account by name, for the dashboard's account list. Sent by the accounts
+ * app on its own route, behind the same token as the counts.
+ */
+export interface StatsAccountListEntry {
+  email: string;
+  name: string;
+  team: string;
+  teamSize: number;
+  joinedAt: number;
+  lastSeenAt: number | null;
+  machines: number;
+  sessions: number;
+  activeDays: number;
+  invitesSent: number;
+  internal: boolean;
+}
+
+export type StatsAccountList = { accounts: StatsAccountListEntry[] } | { error: string } | null;
 
 export interface StatsSnapshot {
   version: 2;
@@ -324,6 +355,8 @@ export interface StatsSnapshot {
   uniques: StatsUniques;
   retention: StatsRetention;
   accounts: StatsAccounts;
+  /** Absent from a snapshot built without the accounts app, and from an older Worker. */
+  accountList?: StatsAccountList;
   trend: StatsSeriesPoint[];
   breakdowns: {
     devices: StatsBreakdownItem[];

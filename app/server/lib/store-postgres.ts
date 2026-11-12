@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { CONTENT_INTERVAL_MS, contentPublisher, type SessionContent, type SessionContentPolicy, type ContentWriteResult } from "./session-content";
+import { SUMMARY_INTERVAL_MS, SUMMARY_TICKET_INTERVAL_MS, type SessionSummary, type SessionSummaryPolicy, type SummaryTicketClaim, type SummaryWriteResult } from "./session-summary";
 import {
   MCP_FLOW_GLOBAL_LIMIT,
   MCP_FLOW_LIMIT,
@@ -42,6 +43,7 @@ import {
 } from "./store";
 import type {
   AccountActivity,
+  AccountDirectoryEntry,
   AppEvent,
   AppEventCount,
   AccountKey,
@@ -247,6 +249,7 @@ function toSession(row: Row, shares: SessionKeyShare[]): SessionRecord {
     mcpTeamAccess: row.mcp_team_access,
     dailyBriefingEnabled: row.daily_briefing_enabled,
     dailyBriefingTeamAccess: row.daily_briefing_team_access,
+    summariesEnabled: row.summaries_enabled,
   }) as unknown as SessionRecord;
   /*
    * An empty list and an absent one mean different things to the browser: the
@@ -828,8 +831,13 @@ export class PostgresStore implements Store {
 
   /* ---- Sessions ---- */
 
-  /** Returns true when this session had not been seen before. */
-  private async withContentSession<T>(orgId: string, sessionId: string, ownerUid: string, deviceId: string, missing: T, action: (client: pg.PoolClient, session: SessionRecord, state: Row) => Promise<T>): Promise<T> {
+  /**
+   * Runs a publisher write for one session: locks the session row first (the
+   * same order as the invalidation triggers), checks the publisher, and
+   * creates the per-session row in `table` on demand inside that transaction.
+   * `table` comes from a closed set, never from input.
+   */
+  private async withPublisherSession<T>(table: "session_content" | "session_summary", orgId: string, sessionId: string, ownerUid: string, deviceId: string, missing: T, action: (client: pg.PoolClient, session: SessionRecord, state: Row) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -839,8 +847,8 @@ export class PostgresStore implements Store {
         await client.query("ROLLBACK");
         return missing;
       }
-      await client.query("INSERT INTO session_content (session_uid, session_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [session.uid, sessionId]);
-      const state = await client.query<Row>("SELECT * FROM session_content WHERE session_uid = $1 AND session_id = $2", [session.uid, sessionId]);
+      await client.query(`INSERT INTO ${table} (session_uid, session_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [session.uid, sessionId]);
+      const state = await client.query<Row>(`SELECT * FROM ${table} WHERE session_uid = $1 AND session_id = $2`, [session.uid, sessionId]);
       const result = await action(client, session, state.rows[0]);
       await client.query("COMMIT");
       return result;
@@ -851,14 +859,14 @@ export class PostgresStore implements Store {
   }
 
   async sessionContentPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionContentPolicy | null> {
-    return this.withContentSession<SessionContentPolicy | null>(orgId, sessionId, ownerUid, deviceId, null, async (_client, session, state) => ({
+    return this.withPublisherSession<SessionContentPolicy | null>("session_content", orgId, sessionId, ownerUid, deviceId, null, async (_client, session, state) => ({
       enabled: session.dailyBriefingEnabled === true, ownerUid, generation: state.generation as string,
       nextPublishAt: state.published_at === null ? 0 : Number(state.published_at) + CONTENT_INTERVAL_MS,
     }));
   }
 
   async putSessionContent(orgId: string, sessionId: string, ownerUid: string, deviceId: string, content: SessionContent, now = Date.now()): Promise<ContentWriteResult> {
-    return this.withContentSession<ContentWriteResult>(orgId, sessionId, ownerUid, deviceId, "missing", async (client, session, state) => {
+    return this.withPublisherSession<ContentWriteResult>("session_content", orgId, sessionId, ownerUid, deviceId, "missing", async (client, session, state) => {
       if (!session.dailyBriefingEnabled) return "disabled";
       if (content.generation !== state.generation) return "stale";
       if (state.observed_at === content.observedAt && state.sender_public_key === content.senderPublicKey && state.sealed === content.sealed) return "stored";
@@ -872,6 +880,39 @@ export class PostgresStore implements Store {
     const row = await this.row(`SELECT c.* FROM session_content c JOIN sessions s ON s.uid=c.session_uid AND s.id=c.session_id
       WHERE s.org_id=$1 AND s.id=$2 AND COALESCE(s.owner_uid,s.uid)=$3 AND s.daily_briefing_enabled=true AND c.sealed IS NOT NULL`, [orgId, sessionId, ownerUid]);
     return row ? { generation: row.generation as string, observedAt: row.observed_at as number, senderPublicKey: row.sender_public_key as string, sealed: row.sealed as string } : null;
+  }
+
+  async sessionSummaryPolicy(orgId: string, sessionId: string, ownerUid: string, deviceId: string): Promise<SessionSummaryPolicy | null> {
+    return this.withPublisherSession<SessionSummaryPolicy | null>("session_summary", orgId, sessionId, ownerUid, deviceId, null, async (_client, session, state) => ({
+      enabled: session.summariesEnabled === true, ownerUid, generation: state.generation as string,
+      nextPublishAt: state.published_at === null ? 0 : Number(state.published_at) + SUMMARY_INTERVAL_MS,
+    }));
+  }
+
+  async putSessionSummary(orgId: string, sessionId: string, ownerUid: string, deviceId: string, summary: SessionSummary, now = Date.now()): Promise<SummaryWriteResult> {
+    return this.withPublisherSession<SummaryWriteResult>("session_summary", orgId, sessionId, ownerUid, deviceId, "missing", async (client, session, state) => {
+      if (!session.summariesEnabled) return "disabled";
+      if (summary.generation !== state.generation) return "stale";
+      if (state.observed_at !== null && Number(state.observed_at) === summary.observedAt && state.sender_public_key === summary.senderPublicKey && state.sealed === summary.sealed) return "stored";
+      if (state.published_at !== null && now < Number(state.published_at) + SUMMARY_INTERVAL_MS) return "limited";
+      await client.query("UPDATE session_summary SET observed_at=$3, sender_public_key=$4, sealed=$5, published_at=$6 WHERE session_uid=$1 AND session_id=$2", [session.uid, sessionId, summary.observedAt, summary.senderPublicKey, summary.sealed, now]);
+      return "stored";
+    });
+  }
+
+  async getSessionSummary(orgId: string, sessionId: string, ownerUid: string): Promise<SessionSummary | null> {
+    const row = await this.row(`SELECT m.* FROM session_summary m JOIN sessions s ON s.uid=m.session_uid AND s.id=m.session_id
+      WHERE s.org_id=$1 AND s.id=$2 AND COALESCE(s.owner_uid,s.uid)=$3 AND s.summaries_enabled=true AND m.sealed IS NOT NULL`, [orgId, sessionId, ownerUid]);
+    return row ? { generation: row.generation as string, observedAt: Number(row.observed_at), senderPublicKey: row.sender_public_key as string, sealed: row.sealed as string } : null;
+  }
+
+  async claimSummaryTicket(orgId: string, sessionId: string, ownerUid: string, deviceId: string, now = Date.now()): Promise<SummaryTicketClaim> {
+    return this.withPublisherSession<SummaryTicketClaim>("session_summary", orgId, sessionId, ownerUid, deviceId, { result: "missing" }, async (client, session, state) => {
+      if (!session.summariesEnabled) return { result: "disabled" };
+      if (state.ticket_issued_at !== null && now < Number(state.ticket_issued_at) + SUMMARY_TICKET_INTERVAL_MS) return { result: "limited" };
+      await client.query("UPDATE session_summary SET ticket_issued_at=$3 WHERE session_uid=$1 AND session_id=$2", [session.uid, sessionId, now]);
+      return { result: "issued", generation: state.generation as string, ownerUid };
+    });
   }
 
   /* ---- MCP flow feed ---- */
@@ -2025,9 +2066,10 @@ export class PostgresStore implements Store {
         `UPDATE sessions
          SET mcp_team_access = COALESCE($4::boolean, mcp_team_access),
              daily_briefing_enabled = COALESCE($5::boolean, daily_briefing_enabled),
-             daily_briefing_team_access = COALESCE($6::boolean, daily_briefing_team_access)
+             daily_briefing_team_access = COALESCE($6::boolean, daily_briefing_team_access),
+             summaries_enabled = COALESCE($7::boolean, summaries_enabled)
          WHERE org_id = $1 AND id = $2 AND COALESCE(owner_uid, uid) = $3 RETURNING *`,
-        [orgId, sessionId, ownerUid, consent.mcpTeamAccess, consent.dailyBriefingEnabled, consent.dailyBriefingTeamAccess],
+        [orgId, sessionId, ownerUid, consent.mcpTeamAccess, consent.dailyBriefingEnabled, consent.dailyBriefingTeamAccess, consent.summariesEnabled],
       );
       row = updated.rows[0];
       if (row && consent.mcpTeamAccess === false) {
@@ -3021,7 +3063,13 @@ export class PostgresStore implements Store {
   }
 
   async accountActivity(isInternal: (email: string) => boolean = () => false): Promise<AccountActivity[]> {
-    const members = await this.rows("SELECT uid, email, joined_at FROM memberships");
+    const members = await this.rows(
+      `SELECT m.uid, m.email, m.joined_at,
+         EXISTS (SELECT 1 FROM cli_tokens t WHERE t.uid = m.uid) AS machine_linked,
+         EXISTS (SELECT 1 FROM sessions s WHERE s.uid = m.uid) AS session_started,
+         EXISTS (SELECT 1 FROM invites i WHERE i.created_by = m.uid) AS teammate_invited
+       FROM memberships m`,
+    );
     const days = await this.rows("SELECT uid, day FROM account_activity ORDER BY day");
     const byUid = new Map<string, number[]>();
     for (const row of days) {
@@ -3032,6 +3080,35 @@ export class PostgresStore implements Store {
     return members.map((row) => ({
       joinedAt: row.joined_at as number,
       days: byUid.get(row.uid as string) ?? [],
+      internal: isInternal((row.email as string | null) ?? ""),
+      machineLinked: row.machine_linked === true,
+      sessionStarted: row.session_started === true,
+      teammateInvited: row.teammate_invited === true,
+    }));
+  }
+
+  async accountDirectory(isInternal: (email: string) => boolean = () => false): Promise<AccountDirectoryEntry[]> {
+    const rows = await this.rows(
+      `SELECT m.email, m.name, o.name AS team, m.joined_at, m.last_seen_at,
+         (SELECT count(*) FROM memberships t WHERE t.org_id = m.org_id) AS team_size,
+         (SELECT count(*) FROM cli_tokens c WHERE c.uid = m.uid) AS machines,
+         (SELECT count(*) FROM sessions s WHERE s.uid = m.uid) AS sessions,
+         (SELECT count(*) FROM account_activity a WHERE a.uid = m.uid) AS active_days,
+         (SELECT count(*) FROM invites i WHERE i.created_by = m.uid) AS invites_sent
+       FROM memberships m JOIN organizations o ON o.id = m.org_id
+       ORDER BY m.joined_at DESC, m.email`,
+    );
+    return rows.map((row) => ({
+      email: row.email as string,
+      name: row.name as string,
+      team: row.team as string,
+      teamSize: Number(row.team_size),
+      joinedAt: Number(row.joined_at),
+      lastSeenAt: row.last_seen_at == null ? null : Number(row.last_seen_at),
+      machines: Number(row.machines),
+      sessions: Number(row.sessions),
+      activeDays: Number(row.active_days),
+      invitesSent: Number(row.invites_sent),
       internal: isInternal((row.email as string | null) ?? ""),
     }));
   }

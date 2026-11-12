@@ -7,6 +7,7 @@ COPY start ./start
 COPY web ./web
 COPY shared ./shared
 COPY docs ./docs
+COPY blog ./blog
 COPY public ./public
 COPY standalone/server.ts ./standalone/server.ts
 RUN npm run build:standalone

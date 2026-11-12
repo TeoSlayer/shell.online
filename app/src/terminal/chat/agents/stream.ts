@@ -42,6 +42,18 @@ const REMEMBERED = 400;
 
 export class RepaintReader {
   private given: string[] = [];
+  /*
+   * Whether the last row handed downstream was blank.
+   *
+   * The collapse below has to hold across calls, not only inside one. A
+   * screen that gains a blank row this frame and another the next hands one
+   * blank over each time, and neither call can see the other's -- which is
+   * how a message ends up holding the pairs of empty rows that a reader has
+   * to scroll past. Measured on a captured session: nine rows in a message,
+   * four of them empty.
+   */
+  private endedBlank = false;
+  private fence: string | null = null;
   /** The last frame seen in full, including the row that was held back. */
   private pending: readonly string[] = [];
 
@@ -85,20 +97,30 @@ export class RepaintReader {
   reset(): void {
     this.given = [];
     this.pending = [];
+    this.endedBlank = false;
+    this.fence = null;
   }
 
   /** Uncommitted rows, for a reversible quiet-time preview. */
   preview(): string[] {
-    return this.pending.slice(this.overlap(this.pending));
+    return flatten(this.pending.slice(this.overlap(this.pending)), this.endedBlank, this.fence).lines;
   }
 
   private give(lines: readonly string[], end = lines.length): string[] {
     const fresh = lines.slice(this.overlap(lines), end);
     if (fresh.length === 0) return [];
+    /*
+     * What is given out is remembered exactly as the frame had it, because
+     * that is what the next frame will be compared against. What is handed
+     * downstream has its blank runs collapsed; see `flatten`.
+     */
     this.given.push(...fresh);
     const remembered = Math.max(REMEMBERED, lines.length);
     if (this.given.length > remembered) this.given.splice(0, this.given.length - remembered);
-    return fresh;
+    const out = flatten(fresh, this.endedBlank, this.fence);
+    this.endedBlank = out.blank;
+    this.fence = out.fence;
+    return out.lines;
   }
 
   /**
@@ -177,10 +199,10 @@ function distinct(line: string): boolean {
   return text !== "" && text !== "\u273B";
 }
 
-/** Whether a run of given-out lines holds anything but blank rows. */
+/** A status placeholder, like a blank row, cannot anchor a conversation. */
 function said(given: readonly string[], from: number, length: number): boolean {
   for (let index = 0; index < length; index += 1) {
-    if (given[from + index].trim() !== "") return true;
+    if (distinct(given[from + index])) return true;
   }
   return false;
 }
@@ -190,6 +212,36 @@ function matches(given: readonly string[], from: number, frame: readonly string[
     if (given[from + index] !== frame[index]) return false;
   }
   return true;
+}
+
+/**
+ * One blank line where a frame had many.
+ *
+ * The empty middle of a screen is not content. A screen with a status line
+ * under a tall empty gap -- a command running, counting the seconds -- hands
+ * that gap over on every repaint, because the line above it changed and the
+ * rows below it are therefore new. Four seconds of `go run` arrived as eighty
+ * blank rows inside one message, and a reader had to scroll a blank screen to
+ * reach the end of the conversation.
+ *
+ * One is kept rather than none because downstream a blank line is what cuts a
+ * paragraph. Twenty do nothing that one does not.
+ */
+function flatten(lines: readonly string[], blank: boolean, fence: string | null): { lines: string[]; blank: boolean; fence: string | null } {
+  const out: string[] = [];
+  for (const line of lines) {
+    const empty = line.trim() === "";
+    // Blank rows inside code are content, including consecutive blank rows.
+    if (empty && blank && !fence) continue;
+    const marker = /^\s*(?:⏺\s+)?(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/u.exec(line);
+    if (marker) {
+      if (!fence) fence = marker[1];
+      else if (!marker[2] && marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+    }
+    blank = empty;
+    out.push(line);
+  }
+  return { lines: out, blank, fence };
 }
 
 function trimTrailingBlanks(lines: readonly string[]): readonly string[] {

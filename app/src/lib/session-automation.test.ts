@@ -3,8 +3,8 @@ import { automationConsent, canManageAutomation } from "./session-automation";
 
 describe("session automation consent", () => {
   it("defaults every independent switch off", () => {
-    expect(automationConsent({})).toEqual({ mcpTeamAccess: false, dailyBriefingEnabled: false, dailyBriefingTeamAccess: false });
-    expect(automationConsent({ mcpTeamAccess: true })).toEqual({ mcpTeamAccess: true, dailyBriefingEnabled: false, dailyBriefingTeamAccess: false });
+    expect(automationConsent({})).toEqual({ mcpTeamAccess: false, dailyBriefingEnabled: false, dailyBriefingTeamAccess: false, summariesEnabled: false });
+    expect(automationConsent({ mcpTeamAccess: true })).toEqual({ mcpTeamAccess: true, dailyBriefingEnabled: false, dailyBriefingTeamAccess: false, summariesEnabled: false });
   });
   it("never coerces a truthy value to permission", () => {
     expect(automationConsent({ mcpTeamAccess: "true" } as never).mcpTeamAccess).toBe(false);

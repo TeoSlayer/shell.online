@@ -473,12 +473,6 @@ function wait(ms: number): Promise<void> {
  */
 (window as unknown as { session: unknown }).session = {
   write: (data: string) => terminal.write(data),
-  /*
-   * The conversation an agent recorded, as the host would send it. The chat
-   * renderer takes this instead of reading the screen; see agent-record.ts.
-   */
-  record: (batch: unknown) =>
-    terminal.fromRecord?.(new TextEncoder().encode(JSON.stringify(batch))),
   /* What a chosen option actually sent to the program. */
   typed: () => sent,
   /* The renderer itself, so its state can be inspected while a case is open. */

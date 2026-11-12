@@ -14,7 +14,7 @@
  */
 
 import type { Message, StyleRun, TranscriptLine } from "./transcript";
-import { looksMarkdown, renderMarkdown } from "./markdown";
+import { hasCodeFence, hasMarkdownTable, looksMarkdown, renderMarkdown } from "./markdown";
 import { boxTableAt, buildBoxTable, hasBoxTable } from "./boxed";
 
 export interface ChatViewOptions {
@@ -28,7 +28,6 @@ export interface ChatViewOptions {
    * The index is what the program's menu is numbered by; the label is only
    * for saying out loud what was chosen.
    */
-  onChoose(index: number, label: string): void;
 }
 
 /*
@@ -71,11 +70,10 @@ interface Rendered {
   revision: number;
   lines: number;
   /** Whether this has been re-read as Markdown, which happens once. */
-  rich?: boolean;
+  rich?: string;
   /** The drawing this was last built from, so an unchanged one is not rebuilt. */
   boxed?: string;
   /** Whether this message's options have been drawn; they are drawn once. */
-  choices?: boolean;
 }
 
 export class ChatView {
@@ -619,6 +617,7 @@ export class ChatView {
      * and showing all of it preformatted is what made a long sentence run off
      * the side of a phone while a table had nothing to align against.
      */
+    const source = text(message);
     body.dataset.shape = message.preformatted ? "pre" : "prose";
     node.el.dataset.shape = body.dataset.shape;
     /*
@@ -648,7 +647,8 @@ export class ChatView {
        * only honest unit -- there are no stable rows in a table that gained a
        * column.
        */
-      if (hasBoxTable(message.lines)) {
+      if (!hasCodeFence(source) && hasBoxTable(message.lines)) {
+        node.rich = undefined;
         const signature = message.lines.map((line) => line.text).join("\n");
         if (node.boxed !== signature) {
           node.boxed = signature;
@@ -659,7 +659,6 @@ export class ChatView {
         this.stamp(node, message);
         return;
       }
-      node.boxed = undefined;
     }
     /*
      * Copy belongs on the things worth copying. Now that an answer arrives as
@@ -681,11 +680,15 @@ export class ChatView {
      * flickering, and a message that is still being written is not finished
      * enough to re-read as blocks anyway.
      */
-    if (!message.open && !node.rich && looksMarkdown(text(message))) {
-      node.rich = true;
+    if (!message.open && (!message.preformatted || hasCodeFence(source) || hasMarkdownTable(source)) && looksMarkdown(source)) {
       body.dataset.shape = "rich";
       node.el.dataset.shape = "rich";
-      renderMarkdown(body, text(message));
+      const signature = `${Boolean(message.preformatted)}\0${source}`;
+      if (node.rich !== signature) {
+        renderMarkdown(body, source, message.preformatted);
+        node.rich = signature;
+        node.boxed = undefined;
+      }
       this.fold(node, message);
       this.stamp(node, message);
       return;
@@ -703,6 +706,11 @@ export class ChatView {
      * page and put back. Rows that kept their content now keep their nodes,
      * so the only thing that moves is the row that changed.
      */
+    if (node.rich !== undefined || node.boxed !== undefined) {
+      body.replaceChildren();
+      node.rich = undefined;
+      node.boxed = undefined;
+    }
     const rows = body.childNodes;
     for (let index = 0; index < message.lines.length; index += 1) {
       const line = message.lines[index];
@@ -724,46 +732,10 @@ export class ChatView {
     while (rows.length > message.lines.length) body.removeChild(rows[rows.length - 1]);
     node.lines = message.lines.length;
 
-    this.choices(node, message);
     this.fold(node, message);
     this.stamp(node, message);
   }
 
-  /**
-   * The options an agent is waiting on, as buttons.
-   *
-   * Only ever drawn from the agent's own record, which states the question and
-   * every option it offered. A menu read off a screen is a menu somebody has
-   * guessed at, and guessing wrong here presses a button nobody chose.
-   *
-   * The buttons are built once. They do not change while the question stands,
-   * and rebuilding them under a finger is how a tap lands on the wrong one.
-   */
-  private choices(node: Rendered, message: Message): void {
-    const offered = message.choice;
-    if (!offered || node.choices) return;
-    node.choices = true;
-    const group = el("div", "chat-choices");
-    group.setAttribute("role", "group");
-    group.setAttribute("aria-label", offered.header || "Choose an answer");
-    offered.options.forEach((option, index) => {
-      const button = el("button", "chat-choice") as HTMLButtonElement;
-      button.type = "button";
-      button.textContent = option;
-      /* The digit the program's own menu is drawn with; see agentlog. */
-      button.dataset.index = String(index);
-      ChatView.keepsFocus(button);
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        if (this.disabled) return;
-        group.dataset.answered = option;
-        for (const other of group.querySelectorAll("button")) (other as HTMLButtonElement).disabled = true;
-        this.options.onChoose(index, option);
-      });
-      group.append(button);
-    });
-    node.el.querySelector(".chat-bubble")?.append(group);
-  }
 
   /**
    * Folds an answer too long to read at once.

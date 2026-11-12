@@ -92,7 +92,7 @@ export interface AgentAdapter {
    * The utterances this frame added. Stateful: it is given every frame and
    * decides what is new, so it must be `reset` when the program exits.
    */
-  read(frame: readonly TranscriptLine[]): AgentUtterance[];
+  read(frame: readonly TranscriptLine[], cursorRow?: number): AgentUtterance[];
 
   /**
    * What is left once the screen has gone quiet.

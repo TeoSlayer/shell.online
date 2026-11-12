@@ -1,0 +1,53 @@
+<p>On August 31, someone who was not Coder spent about fourteen hours answering requests for Coder's module registry. <a href="https://github.com/coder/coder/security/advisories/GHSA-vx42-ghc9-gw65">Coder's security advisory</a> says an unidentified actor "gained access to Coder's Cloudflare infrastructure and added unauthorized IP addresses" to the pool behind the registry. Between 07:35 and 21:45 UTC, some requests were routed to the attacker's servers, which handed back Terraform modules that collected provisioner secrets, OIDC tokens, SSH keys and database passwords and sent them to a lookalike domain registered three days earlier. <a href="https://www.bleepingcomputer.com/news/security/coders-registry-infrastructure-compromised-to-push-malicious-modules/">BleepingComputer's report</a> has the timeline and the patched versions.</p>
+
+<p>What the advisory describes is a change to Coder's own edge configuration: extra addresses in a pool. For most of a day, the middle of the connection belonged to somebody else. Any tool that routes developer traffic through a hosted edge should be designed for that day, and it is the threat model behind end-to-end encrypted terminal sharing in <span class="brand-shell">shell.online</span>. Version 0.16.1, released on September 17, tightened that model in three places. This post walks through what the relay can see, what it cannot, and what changed.</p>
+
+<section>
+<h2>Where the key comes from</h2>
+<p>The workflow is one command. Wrap whatever you want to share:</p>
+<pre><code>shell claude</code></pre>
+<p>The process and its PTY stay on your machine. <a href="https://shell.online">The CLI prints a browser link for that terminal process</a>, a ten-character password, and a QR code. The password is ten base64url characters, each an independent six-bit symbol, so 60 random bits. The URL ends in a random <strong>#salt=</strong> fragment. Fragments are resolved by the client and are not part of the request a browser sends (<a href="https://www.rfc-editor.org/rfc/rfc3986#section-3.5">RFC 3986, section 3.5</a>), so the salt never reaches the relay, and the password is not in the printed URL at all. The QR code is the exception by design: it adds the password to the fragment so a phone can open the session in one scan, which makes a photo of that QR the whole credential.</p>
+<p>Both ends derive the same 32-byte key locally with PBKDF2-HMAC-SHA256 over a 16-byte salt at 600,000 iterations, which is the figure the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html">OWASP password storage cheat sheet</a> recommends for that construction. Frames are sealed with AES-256-GCM before they leave the machine and opened in the browser. The Go side is about 280 lines in <a href="https://github.com/TeoSlayer/shell.online/blob/main/internal/e2ee/e2ee.go">internal/e2ee/e2ee.go in the shell.online repository</a>, and the browser half is web/e2ee.ts. Sixty bits is sized for task-bound sharing: derivation is slow on purpose, sessions expire, and the online endpoints are rate-limited. For anything sensitive or long-lived, set your own longer password and send it over a different channel than the URL:</p>
+<pre><code>SHELL_ONLINE_E2EE_PASSWORD='use-a-long-unique-password' shell python train.py</code></pre>
+</section>
+
+<section>
+<h2>What end-to-end encrypted terminal sharing still shows the relay</h2>
+<p>Encryption of the payload is not invisibility. Terminal input, output, snapshots and latency probes are authenticated ciphertext. The <a href="https://shell.online/e2ee/">end-to-end encryption page in our docs</a> lists what the Cloudflare relay can still observe:</p>
+<ul>
+<li>connection IP addresses and timing</li>
+<li>encrypted frame sizes and frame opcodes</li>
+<li>the access mode (interactive or read-only), the command label, and lifecycle events</li>
+<li>terminal grid dimensions, which travel in plaintext terminal_size control messages because the relay picks one shared grid so a phone and a desktop render the same PTY size</li>
+</ul>
+<p>Traffic shape leaks something. A burst of small viewer-to-host frames followed by a large host-to-viewer frame looks like someone typing a command and getting output, whatever the bytes are. If that matters for your work, the payload cipher will not help, and you should know it before you share the link.</p>
+</section>
+
+<section>
+<h2>A relay that cannot read keystrokes could still repeat them</h2>
+<p>AES-GCM authenticates each frame. It says nothing about when a frame was sent, or how many times it should arrive. An intermediary that cannot forge a keystroke can still record a valid encrypted input frame and deliver it again later. In a log viewer that is a nuisance. In a session wrapping a coding agent, the recorded frame might be "y" and Enter at a permission prompt, and a replay is an approval nobody gave.</p>
+<p>Envelope v2 closes that. After the opcode byte, every sealed frame now carries a version byte, a direction byte, an 8-byte random stream ID chosen when the sender creates its cipher, an 8-byte big-endian sequence number that starts at 1, and the 12-byte nonce. With the 16-byte GCM tag that is 46 bytes of overhead per frame. The opcode, version, direction, stream and sequence are all fed to GCM as additional authenticated data, so changing any of them fails authentication.</p>
+<p>The receiver does three things in order. It derives the expected direction from the opcode and rejects a mismatch. It opens the frame. Then it checks the sequence against a 64-frame sliding window kept per stream: a higher number moves the window forward, a number inside the window is accepted once, and anything older or already seen is dropped as "replayed or stale". This is the same anti-replay construction IPsec uses, and <a href="https://www.rfc-editor.org/rfc/rfc4303#section-3.4.3">RFC 4303 section 3.4.3</a> names 64 as the preferred default window for ESP. The window exists at all because concurrent output and snapshot writers can legitimately reorder a few frames.</p>
+<p>Sessions started by an older CLI stay viewable, and they pick up replay protection when that CLI is updated.</p>
+</section>
+
+<section>
+<h2>Two other things the middle no longer gets to decide</h2>
+<p>The first is whether your link is encrypted. When a browser connects, the relay sends a control message that includes an encrypted flag. The browser now treats the URL fragment as the viewer's intent: if the link carries E2EE material and the relay reports the session as plaintext, the page shows that the connection was blocked and closes the socket with code 4003, "encryption downgrade blocked". A relay under someone else's control cannot talk the browser into sending readable frames.</p>
+<p>The second is read-only. A link made with the read-only flag is the right thing to hand out when people should watch a build or a training run and nothing else:</p>
+<pre><code>shell --read-only npm run build</code></pre>
+<p>The relay rejects browser input on such a link, but a relay check alone would be worth nothing on the day the relay is not yours. So the CLI rejects input and confirmed EOF a second time, on the machine, before anything reaches the PTY. The <a href="https://shell.online/security/">security model page</a> states the consequence: DevTools, a modified browser, or handcrafted WebSocket frames cannot turn a read-only link into an interactive one.</p>
+</section>
+
+<section>
+<h2>What encryption does not fix</h2>
+<p>A relay can still drop or delay ciphertext. If it does, the view degrades and the process does not: the CLI and browser reconnect with bounded backoff, and an ordinary link stays recoverable for 12 hours after its host disconnects.</p>
+<p>The hosted web application is trusted while it is open, because it is the code that derives the session key in your browser. The Coder incident is the uncomfortable version of this point: the attacker there was answering on the vendor's own hostname. Our security policy says so directly. E2EE protects frames from passive relay inspection and does not make hosted application code trustless. The same policy admits that the installer checks binaries against a SHA256SUMS file that comes down the same distribution path, which catches corruption and not a compromised publisher, and it tells you to build tagged source when publisher independence matters. If the hosted boundary is wrong for your environment, the repo also documents a standalone relay you can run on your own Docker host behind Caddy.</p>
+<div class="callout"><p>The URL and the password together are a bearer credential. Anyone holding both can view the session and, unless it was started read-only, type with the operating-system permissions of the wrapped process. End-to-end encryption protects the contents from the relay. It does nothing about a password pasted into the wrong channel.</p></div>
+<p>When that happens, you do not have to kill the job:</p>
+<pre><code>shell password rotate &lt;id&gt;</code></pre>
+<p>Rotation generates a new password and URL salt, invalidates the old cipher generation, disconnects current viewers, and leaves the process running. It changes future access only, so it cannot erase output a viewer already received. The same applies to teams: removing a member deletes the copies sealed to them, but it cannot make them forget a password they already read, so rotate active sessions after an offboarding. For short jobs, add an earlier deadline with the auto-close flag (for example, shell --auto-close 5m followed by the command). Ordinary shares and their server state disappear when the task exits anyway.</p>
+<p>The <a href="/blog/shell-online-live-terminal-browser-link/">introduction to shell.online on this blog</a> covers the basic workflow if you have not used it yet.</p>
+</section>
+
+<div class="cta"><h3>Share a terminal the relay cannot read</h3><p>One command prints a link and a ten-character password. The process stays on your machine, frames are encrypted before they leave it, and the code that does it is MIT-licensed and short enough to read.</p><a href="https://shell.online/">Try shell.online</a></div>

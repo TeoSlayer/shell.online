@@ -44,6 +44,35 @@ describe("registerSession", () => {
     expect(sessionForApi(result.session)).toMatchObject({ origin: "cmd_1", deviceId: "dev_1" });
   });
 
+  it("lets only one session claim a browser command", async () => {
+    const first = await registerSession(store, "uid-1", { ...valid, origin: "cmd_1" });
+    const nested = await registerSession(store, "uid-1", {
+      ...valid,
+      id: "Zz9nested0000000000000000000000",
+      shareUrl: "https://shell.online/s/Zz9nested0000000000000000000000",
+      origin: "cmd_1",
+    });
+    if (!first.ok || !nested.ok) throw new Error("expected ok");
+    expect(sessionForApi(first.session).origin).toBe("cmd_1");
+    /* Still registered, and still its machine's, but not the one asked for. */
+    expect(sessionForApi(nested.session)).toMatchObject({ origin: undefined, deviceId: "dev_1" });
+
+    /* The session that claimed it keeps it when it registers again. */
+    const again = await registerSession(store, "uid-1", { ...valid, origin: "cmd_1" });
+    if (!again.ok) throw new Error("expected ok");
+    expect(sessionForApi(again.session).origin).toBe("cmd_1");
+
+    /* Another account's command ids are its own. */
+    const other = await registerSession(store, "uid-2", {
+      ...valid,
+      id: "Yy8other00000000000000000000000",
+      shareUrl: "https://shell.online/s/Yy8other00000000000000000000000",
+      origin: "cmd_1",
+    });
+    if (!other.ok) throw new Error("expected ok");
+    expect(sessionForApi(other.session).origin).toBe("cmd_1");
+  });
+
   it("is idempotent, so a re-register updates rather than duplicates", async () => {
     await registerSession(store, "uid-1", valid);
     await registerSession(store, "uid-1", { ...valid, command: "codex" });

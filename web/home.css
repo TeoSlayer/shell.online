@@ -642,7 +642,8 @@ html.home-root #app {
     gap: 14px;
   }
   .home-nav nav > a[href="#how"],
-  .home-nav nav > a[href="/docs/"] {
+  .home-nav nav > a[href="/docs/"],
+  .home-nav nav > a[href="/blog/"] {
     display: none;
   }
   .home-nav .button {

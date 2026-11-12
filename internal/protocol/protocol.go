@@ -23,11 +23,15 @@ const (
 	// dispatch token verbatim, and a result code. It is only sent after the complete
 	// operation has been written.
 	SendAck byte = 0x0d
-	// AgentEvent is a host->viewer frame carrying the conversation an agent has
-	// recorded, as JSON. It travels sealed with the same frame cipher as Output,
-	// so a relay forwards it without being able to read it. See internal/agentlog:
-	// a full-screen agent's conversation cannot be recovered from its screen, and
-	// every agent keeps a machine-readable record of it on the host instead.
+	// AgentEvent carried an agent's own record of its conversation, read off the
+	// host and drawn instead of the screen. It is withdrawn: a record was found
+	// by the directory the session started in, and several sessions started in
+	// one directory -- which is how a launcher starts them -- resolved to the
+	// same file, so a chat could have shown another session's conversation.
+	//
+	// The number stays reserved and must not be reused. Hosts released with it
+	// are still running and still send these; the relay accepts and drops them
+	// rather than closing a connection over an opcode it once forwarded.
 	AgentEvent byte = 0x0e
 )
 

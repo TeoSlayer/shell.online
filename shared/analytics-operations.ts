@@ -56,6 +56,7 @@ export const API_OPERATIONS = [
   ["comment_create", "POST", /^\/api\/sessions\/[^/]+\/comments$/],
   ["feedback_submit", "POST", /^\/api\/feedback$/],
   ["account_stats", "GET", /^\/api\/stats\/accounts$/],
+  ["account_list", "GET", /^\/api\/stats\/accounts\/list$/],
   ["inbox_read", "GET", /^\/api\/notifications$/],
   ["inbox_mark", "POST", /^\/api\/notifications\/read$/],
 ] as const;

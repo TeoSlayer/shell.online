@@ -39,10 +39,11 @@ import {
   type DeviceClass,
 } from "./analytics";
 import { isStatsRange, type StatsRange } from "../shared/stats";
-import { fetchAccountStats } from "./account-stats";
+import { fetchAccountList, fetchAccountStats } from "./account-stats";
 import { checkTeamAuthorization, type TeamAuthorizationResult } from "./team-authorization";
 import { RELEASE_VERSION } from "../shared/release";
 import { downloadAssetIsSpaFallback } from "../shared/download-assets";
+import { blogAliasRedirect, blogAssetIsSpaFallback, resolveBlogRoute } from "../shared/blog";
 import { viewerFrameAction } from "../shared/session-access";
 import {
   MAX_SESSION_VIEWERS,
@@ -137,7 +138,6 @@ const MAX_LIVE_FRAME_BYTES = 64 * 1024;
  * different shape of mistake, and the number should say what is expected
  * rather than what happened to be nearby.
  */
-const MAX_AGENT_EVENT_BYTES = 256 * 1024;
 const MAX_INPUT_FRAME_BYTES = 16 * 1024 + 1;
 const MAX_SNAPSHOT_BYTES = 512 * 1024;
 const LEGACY_ENCRYPTION_OVERHEAD_BYTES = 29;
@@ -456,6 +456,14 @@ const relayHandler = {
       return json({ error: "not found" }, 404);
     }
 
+    const blogAlias = blogAliasRedirect(url.pathname);
+    if (blogAlias !== null && (request.method === "GET" || request.method === "HEAD")) {
+      return new Response(null, {
+        status: 301,
+        headers: { Location: `${blogAlias}${url.search}`, "Cache-Control": "public, max-age=3600" },
+      });
+    }
+
     const assetRequest = (request.method === "GET" || request.method === "HEAD") &&
       isVersionedDocumentationPath(url.pathname)
       ? new Request(new URL(documentationAssetPath(url.pathname, RELEASE_VERSION), url), request)
@@ -467,6 +475,15 @@ const relayHandler = {
         headers: {
           "Cache-Control": "no-store",
           "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
+    if (blogAssetIsSpaFallback(url.pathname, assetResponse.headers.get("Content-Type"))) {
+      assetResponse = new Response(BLOG_NOT_FOUND_PAGE, {
+        status: 404,
+        headers: {
+          "Cache-Control": "no-store",
+          "Content-Type": "text/html; charset=utf-8",
         },
       });
     }
@@ -680,13 +697,14 @@ async function handleStatsRequest(request: Request, env: Env, url: URL): Promise
     }
     const requestedRange = url.searchParams.get("range");
     const range: StatsRange = isStatsRange(requestedRange) ? requestedRange : "7d";
-    const [snapshotResponse, accounts] = await Promise.all([
+    const [snapshotResponse, accounts, accountList] = await Promise.all([
       fetchStatsSnapshot(env.STATS, range, hasVisitorSalt(env.STATS_VISITOR_SALT)),
       fetchAccountStats(env.APP_STATS_URL, env.APP_STATS_TOKEN, range),
+      fetchAccountList(env.APP_STATS_URL, env.APP_STATS_TOKEN),
     ]);
     if (!snapshotResponse.ok) return secureStatsResponse(snapshotResponse);
     const snapshot = await snapshotResponse.json<Record<string, unknown>>();
-    return secureStatsResponse(json({ ...snapshot, accounts }));
+    return secureStatsResponse(json({ ...snapshot, accounts, accountList }));
   }
 
   return secureStatsResponse(json({ error: "not found" }, 404));
@@ -3393,20 +3411,12 @@ export class TerminalSession extends DurableObject<Env> {
         return;
 
       /*
-       * The conversation an agent recorded, on its way to every viewer.
-       *
-       * Forwarded exactly as Output is and for the same reason: it is sealed
-       * with the session's frame cipher before it reaches here, so this
-       * cannot read it and does not try. It is capped on its own rather than
-       * borrowing the output cap, because it is JSON and a different shape of
-       * mistake would be a different size.
+       * Withdrawn, and accepted anyway. Hosts released with the agent-record
+       * tap are still running and still send these; the default below closes
+       * a connection over an opcode it does not know, and closing every one of
+       * those hosts is a worse answer than dropping a frame nothing reads.
        */
       case Opcode.AgentEvent:
-        if (frame.byteLength > MAX_AGENT_EVENT_BYTES + 1 + (this.isEncrypted() ? MAX_ENCRYPTION_OVERHEAD_BYTES : 0)) {
-          safeClose(socket, 4009, "agent event frame too large");
-          return;
-        }
-        this.broadcastBinary(frame, "viewer");
         return;
 
       case Opcode.Snapshot: {
@@ -4219,6 +4229,8 @@ function isStatsRequestHost(request: Request, url: URL): boolean {
     (connectingIp === "127.0.0.1" || connectingIp === "::1");
 }
 
+const BLOG_NOT_FOUND_PAGE = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Post not found | shell.online</title><body style="max-width:560px;margin:15vh auto;padding:0 24px;font:16px/1.6 system-ui,sans-serif;color:#1c251f;background:#f7f8f2"><h1>That post isn’t here.</h1><p><a href="/blog/">Browse the blog</a> or go back to <a href="/">shell.online</a>.</p>`;
+
 function isPublicAnalyticsPath(pathname: string): boolean {
   if (isLandingPath(pathname)) return true;
   return resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
@@ -4275,6 +4287,7 @@ export function secureAssetResponse(response: Response, pathname: string, hostna
 
 function isPublicDocumentPath(pathname: string): boolean {
   if (pathname === "/") return true;
+  if (resolveBlogRoute(pathname)) return true;
   return !isVersionedDocumentationPath(pathname) && resolveDocumentationRoute(pathname, RELEASE_VERSION) !== null;
 }
 

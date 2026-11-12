@@ -130,3 +130,23 @@ The full relay and app setup is documented in [the self-hosting guide](../docs/s
 
 `npm run check:protocol` verifies that the app's terminal protocol files match
 the relay implementation.
+
+### Automatic terminal fitting
+
+The Adaptive renderer runs **Fit to my screen** once when the session owner
+opens an existing or newly created session. It waits for an active, measurable
+pane, write permission, and a host that accepts grid requests. This changes the
+shared PTY grid exactly as the manual button does; the host's local terminal
+limit still applies. Reconnects and renderer changes do not repeat the request.
+Sizing runs in parallel with saved-password lookup and key derivation. The
+owner's pane prepares a control connection while locked, then reuses it and
+requests a fresh encrypted snapshot after the key is ready. No terminal input
+is sent before a key exists, and partial output is held until that snapshot.
+Manual fitting remains available after resizing the window or changing screens.
+Chat, Fixed grid, and Refstream retain their existing sizing behavior.
+
+For troubleshooting, append `?terminalAutoFit=0` to the workspace URL to disable
+automatic fitting on that page. Set `VITE_TERMINAL_AUTO_FIT=0` (or `false`) at
+build time to disable it for an app deployment. Both switches keep manual fit
+available. GitHub deployments read the `VITE_TERMINAL_AUTO_FIT` repository
+variable (unset means enabled). No CLI update or new relay opcode is required.

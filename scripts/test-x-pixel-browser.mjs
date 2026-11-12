@@ -2,11 +2,11 @@
 // X_PIXEL_LIVE=1 uses deployed first-party assets. No synthetic events are sent.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep, extname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { launchChromeTransport } from './lib/browser-transport.mjs';
+import { launchChromeTransport, removeProfile } from './lib/browser-transport.mjs';
 
 const live = process.env.X_PIXEL_LIVE === '1';
 const root = resolve(import.meta.dirname, '..');
@@ -163,5 +163,5 @@ try {
   assert(!blocked.some(b => /twitter|ads-twitter|ads-api\.x/.test(b.host)), 'unexpected X destination');
   console.log(JSON.stringify({ mode:live ? 'live' : 'candidate', pixel:'rfilf', passed:['real base request', 'one visit', 'click attribution', 'no form/raw-URL/referrer capture', 'no automatic or timed events', 'GA4/PostHog/first-party compatibility', 'docs/private exclusions', 'GPC/DNT/opt-out', 'blocked tag leaves page usable'], syntheticEventsSent:0 }, null, 2));
 } finally {
-  socket?.close(); await browser?.close(); await rm(profile, { recursive:true, force:true });
+  socket?.close(); await browser?.close(); await removeProfile(profile);
 }

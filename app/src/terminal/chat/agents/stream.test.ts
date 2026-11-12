@@ -30,6 +30,50 @@ describe("reading a repainted screen as a log", () => {
   });
 
   /*
+   * A command running under a conversation: the screen holds still, the empty
+   * middle holds still, and a status line at the foot counts the seconds. The
+   * rows below the change are new every time, so the gap was handed over
+   * again on every repaint -- eighty blank rows for four seconds of work,
+   * inside one message, which a reader then had to scroll past.
+   */
+  it("gives out one blank line where a frame had a gap", () => {
+    const reader = new RepaintReader();
+    const gap = ["", "", "", "", "", "", "", ""];
+    const frame = (seconds: number) => ["said", ...gap, `working - ${seconds}s`, "cursor"];
+    expect(reader.read(frame(1))).toEqual(["said", "", "working - 1s"]);
+    expect(reader.read(frame(2))).toEqual(["", "working - 2s"]);
+    expect(reader.read(frame(3))).toEqual(["", "working - 3s"]);
+  });
+
+  /*
+   * Measured on a session captured through a pty: one message held nine rows
+   * and four of them were empty, in pairs. Each frame contributed a single
+   * blank, so collapsing within a frame could not see the pair -- the rule
+   * has to hold across calls.
+   */
+  it("gives out one blank line where two frames each gave one", () => {
+    const reader = new RepaintReader();
+    expect(reader.read(["Running 1 shell command…", "", "cursor"]))
+      .toEqual(["Running 1 shell command…", ""]);
+    expect(reader.read(["Running 1 shell command…", "", "", "cursor"])).toEqual([]);
+    expect(reader.read(["Running 1 shell command…", "", "", "Reading 1 file…", "cursor"]))
+      .toEqual(["Reading 1 file…"]);
+  });
+
+  it("forgets that it ended blank when the screen is forgotten", () => {
+    const reader = new RepaintReader();
+    reader.read(["said", "", "cursor"]);
+    reader.reset();
+    expect(reader.read(["", "after the reset", "cursor"])).toEqual(["", "after the reset"]);
+  });
+
+  it("still cuts paragraphs, which is what one blank line is for", () => {
+    const reader = new RepaintReader();
+    expect(reader.read(["one", "", "two", "", "three", "cursor"]))
+      .toEqual(["one", "", "two", "", "three"]);
+  });
+
+  /*
    * The case the whole module exists for. The conversation scrolls up through
    * the grid, so a line that was given out three frames ago is now nowhere on
    * the screen, and the frame starts partway through what is already known.
@@ -112,6 +156,12 @@ describe("the line a program finished on", () => {
 });
 
 describe('repaint boundaries', () => {
+  it('does not match a vanished footer spinner against a header status placeholder', () => {
+    const reader = new RepaintReader();
+    reader.read(['✻', 'heading', 'tool result', '✻', 'cursor']);
+    expect(reader.read(['✻', 'heading', 'tool result'])).toEqual([]);
+  });
+
   it('does not replay a flushed frame when painting resumes', () => {
     const reader = new RepaintReader();
     reader.read(['one', 'two', 'three']);
@@ -143,4 +193,26 @@ it("remembers at least one full frame when the terminal is taller than the histo
   expect(reader.read(frame)).toEqual([]);
   expect(reader.flush()).toEqual(["row 449"]);
   expect(reader.read(frame)).toEqual([]);
+});
+
+it("keeps consecutive blank code rows across frames, but collapses prose gaps", () => {
+  const reader = new RepaintReader();
+  const code = ['⏺ ```python', '  first = 1', '', '', '  second = 2', '  ```', '', '', '⏺ next'];
+  const out: string[] = [];
+  for (let length = 1; length <= code.length; length++) out.push(...reader.read(code.slice(0, length)));
+  out.push(...reader.flush());
+  expect(out).toEqual(['⏺ ```python', '  first = 1', '', '', '  second = 2', '  ```', '', '⏺ next']);
+});
+
+it("previews collapsed gaps without consuming them or changing fence state", () => {
+  const reader = new RepaintReader();
+  reader.read(['⏺ first', '', '', '⏺ second']);
+  expect(reader.preview()).toEqual(['⏺ second']);
+  expect(reader.preview()).toEqual(reader.flush());
+  reader.reset();
+  reader.read(['~~~python', '', '', 'print(1)']);
+  expect(reader.preview()).toEqual(['print(1)']);
+  expect(reader.flush()).toEqual(['print(1)']);
+  reader.reset();
+  expect([...reader.read(['first', '', '', 'second']), ...reader.flush()]).toEqual(['first', '', 'second']);
 });

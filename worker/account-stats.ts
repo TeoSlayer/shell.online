@@ -1,4 +1,12 @@
-import type { StatsAccountPeriod, StatsAccounts, StatsAccountStats, StatsRange } from "../shared/stats";
+import type {
+  StatsAccountActivation,
+  StatsAccountList,
+  StatsAccountListEntry,
+  StatsAccountPeriod,
+  StatsAccounts,
+  StatsAccountStats,
+  StatsRange,
+} from "../shared/stats";
 
 /*
  * The accounts app keeps the only exact count of people: accounts. It answers
@@ -38,6 +46,47 @@ export async function fetchAccountStats(
 }
 
 /*
+ * The accounts by name, for the dashboard's list. Asked for on its own route
+ * so the counts never carry an address. The same three answers as the counts:
+ * nothing when unlinked, an error when linked and silent, the list otherwise.
+ * An app too old to have the route answers 404, and the list is then left out
+ * rather than shown as broken.
+ */
+export async function fetchAccountList(
+  base: string | undefined,
+  token: string | undefined,
+  fetchImplementation: typeof fetch = fetch,
+): Promise<StatsAccountList> {
+  const origin = base?.trim();
+  const secret = token?.trim();
+  if (!origin || !secret) return null;
+  try {
+    const response = await fetchImplementation(`${origin.replace(/\/+$/, "")}/api/stats/accounts/list`, {
+      headers: { Authorization: `Bearer ${secret}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) return { error: `accounts app answered ${response.status}` };
+    const body = await response.json();
+    if (!isObject(body) || !Array.isArray(body.accounts)) {
+      return { error: "accounts app answered in an unexpected shape" };
+    }
+    return { accounts: body.accounts.filter(isAccountListEntry) };
+  } catch {
+    return { error: "accounts app did not answer" };
+  }
+}
+
+function isAccountListEntry(value: unknown): value is StatsAccountListEntry {
+  if (!isObject(value)) return false;
+  return ["email", "name", "team"].every((key) => typeof value[key] === "string") &&
+    ["teamSize", "joinedAt", "machines", "sessions", "activeDays", "invitesSent"]
+      .every((key) => typeof value[key] === "number") &&
+    (value.lastSeenAt === null || typeof value.lastSeenAt === "number") &&
+    typeof value.internal === "boolean";
+}
+
+/*
  * The counts the dashboard cannot do without. Everything else it asks for is
  * filled in below when an older app has not got it yet, so a Worker deployed
  * ahead of the app shows the figures it can rather than an error.
@@ -71,6 +120,7 @@ export function completeAccountStats(body: Record<string, unknown>): StatsAccoun
     cohorts: (body.cohorts as StatsAccountStats["cohorts"]).filter((cohort) =>
       isObject(cohort) && typeof cohort.weekStart === "number" && typeof cohort.size === "number" &&
       Array.isArray(cohort.active)),
+    activation: isActivation(body.activation) ? body.activation : null,
     /* An older app answers without events; the dashboard then shows none rather than nothing. */
     events: isCountRecord(body.events) ? body.events : {},
   };
@@ -85,6 +135,12 @@ function dayCounts(value: unknown): { day: number; count: number }[] {
 function isAccountPeriod(value: unknown): value is StatsAccountPeriod {
   return isObject(value) && typeof value.total === "number" && typeof value.newAccounts === "number" &&
     typeof value.active === "number" && typeof value.returning === "number";
+}
+
+function isActivation(value: unknown): value is StatsAccountActivation {
+  return isObject(value) &&
+    ["base", "machineLinked", "sessionStarted", "teammateInvited", "cameBack"]
+      .every((key) => typeof value[key] === "number");
 }
 
 function isCountRecord(value: unknown): value is Record<string, number> {

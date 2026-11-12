@@ -1,0 +1,68 @@
+<p>A terminal has always been stuck on one screen, on one machine, in front of one person. Start a build, a training run, or a coding agent, walk away, and whatever it is doing becomes invisible until you come back to that desk.</p>
+
+  <p><a class="brand-shell" href="https://shell.online/" target="_blank" rel="noopener">shell.online</a> removes that constraint. Prefix any command with <code>shell</code> and it prints a URL:</p>
+
+  <pre><code>$ shell npm run build
+https://shell.online/s/&lt;share-id&gt;</code></pre>
+
+  <p>Open that URL on a phone, a tablet, or someone else's laptop, and you are looking at the live terminal. Not a video of it, not a screenshot, but the real session, rendering as it runs. The process itself never moves. It keeps running on the machine that started it, with the same files and the same permissions it always had.</p>
+
+  <section>
+  <h2>Watch, or type</h2>
+
+  <p>Links are interactive by default: whoever opens one can send keystrokes to the session. Add <code>--read-only</code> and the link becomes view-only, and that decision is fixed when the session is created:</p>
+
+  <pre><code>$ shell --read-only python train.py</code></pre>
+
+  <p>Read-only is enforced by the server, not by hiding a text box in the page. Browser developer tools or handcrafted WebSocket frames cannot promote a view-only link into a typing one.</p>
+
+  <p>Sessions run in the background, so your terminal stays free. <code>shell list</code> shows what is live, including whether the public link is still online independently of whether the local process is. <code>shell attach</code> takes a session over locally without cutting off browser viewers, and <code>shell kill</code> ends it. A share also closes on its own when its task exits.</p>
+  </section>
+
+  <section>
+  <h2>Why this matters for agents</h2>
+
+  <p>Coding agents changed the shape of this problem. An agent can now work unattended for hours, and the only way to know what it is doing is to be sitting at the machine it runs on.</p>
+
+  <p>Inside a Claude Code session, <code>shell claude</code> starts a shareable fork of that conversation and its workspace, so you can follow the work from a phone and step in when it needs a decision. Any command-line tool behaves the same way, whether that is <a href="https://pilotprotocol.network/blog/claude-agent-teams-over-pilot">a Claude agent team</a> or <a href="https://pilotprotocol.network/blog/openclaw-meets-pilot-agent-networking-one-command">an OpenClaw fleet</a>. For agents driving the CLI themselves, <code>shell --json</code> emits a single structured line containing the share URL, session ID, and access mode, which the agent can hand to its operator through whatever channel it already uses. There is a ready-made skill at <code>shell.online/skill</code> for exactly that, in the same spirit as <a href="https://pilotprotocol.network/blog/building-custom-pilot-skills-openclaw">the skills Pilot ships for agent tooling</a>.</p>
+
+  <p>This is the same problem Pilot Protocol works on from the other side. Pilot gives agents addresses, encrypted tunnels, and a trust model so they can reach each other without a platform in the middle, which we cover in detail in <a href="https://pilotprotocol.network/blog/overlay-network-ai-agents">the overlay network architecture post</a> and in the <a href="https://pilotprotocol.network/docs/">documentation</a>. <span class="brand-shell">shell.online</span> covers the moment a person needs to see what one of them is actually doing.</p>
+  </section>
+
+  <section>
+  <h2>The link is the key</h2>
+
+  <div class="callout">
+    <p><strong>Worth being blunt about,</strong> because it is the first question anyone sensible asks: the share URL is a bearer credential. Anyone holding an interactive one can type into that session with the same operating-system permissions as the process it wraps. That is why view-only links exist, why sessions can be killed on command, and why the documentation says so in plain language rather than burying it. The same posture runs through <a href="https://pilotprotocol.network/trust">our own trust model</a>.</p>
+  </div>
+
+  <p>For work where the relay should not be able to read the screen at all, <code>--e2ee</code> encrypts terminal frames with AES-256-GCM before they leave your machine. The key travels in the URL fragment, which browsers never send to a server, or is derived in the browser from a password you share separately. What encryption does not hide is equally explicit: connection IPs, timing, frame sizes, and session lifecycle metadata stay visible to the relay.</p>
+
+  <p>Terminal contents are never stored server-side in either mode. The machine keeps a bounded 512 KiB replay buffer in memory so a viewer arriving late sees the current screen. When the task exits, the session state is deleted and the link stops working.</p>
+  </section>
+
+  <section>
+  <h2>What is underneath</h2>
+
+  <p>A Go binary owns the local terminal and mirrors its input and output. A Cloudflare Worker handles session creation, rate limiting, and static assets, and one coordinator object per terminal connects the machine to its viewers and enforces that session's access mode. In the browser, xterm.js renders the real thing: ANSI colour, alternate screens, mouse sequences, and a terminal continuously refitted to the actual viewport rather than a CSS box.</p>
+
+  <p>That last detail matters more than it sounds. A phone is not a small desktop. The browser tracks the visual viewport through keyboard, rotation, and browser-chrome changes and resizes the actual PTY, one viewer owns sizing at a time so the display does not jump when several people watch, and paste is chunked into 16 KiB frames with backpressure so one large paste cannot flood the session.</p>
+
+  <p>Network failures are treated as display failures, never as permission to kill local work. The CLI and browser reconnect on their own, and a disconnected session keeps a 15-minute grace window.</p>
+  </section>
+
+  <section>
+  <h2>Install</h2>
+
+  <pre><code>curl -fsSL https://shell.online/install | sh</code></pre>
+
+  <p>macOS and Linux, on arm64 and amd64. The installer verifies the binary's checksum before writing it, never invokes <code>sudo</code>, and never silently edits your shell configuration. There is also a Homebrew tap and a Docker image that keeps one stable encrypted link and workspace across container restarts. No accounts, and nothing for the person opening your link to install.</p>
+
+  <p><span class="brand-shell">shell.online</span> is MIT licensed and open source at <a href="https://github.com/TeoSlayer/shell.online" target="_blank" rel="noopener">github.com/TeoSlayer/shell.online</a>. If you want your own tool reachable by agents the same way, see <a href="https://pilotprotocol.network/app-store">the agent app store</a> and <a href="https://pilotprotocol.network/blog/build-agent-app-turn-api-into-tool">how to turn an API into an agent app</a>.</p>
+  </section>
+
+  <div class="cta">
+    <h3>Share your first terminal</h3>
+    <p>One command turns a running process into a link you can open anywhere. Interactive or read-only, encrypted if you want it.</p>
+    <a href="https://shell.online/">Try shell.online</a>
+  </div>

@@ -14,16 +14,21 @@ const render = (uid: string, role: Member["role"] = "member", changes: Partial<S
 };
 
 describe("session automation controls", () => {
-  it("renders three unchecked permissions and honest readiness copy", () => {
+  it("renders four unchecked permissions and honest readiness copy", () => {
     const { html, onChange } = render("owner");
-    expect(html.match(/type="checkbox"/g)).toHaveLength(3);
+    expect(html.match(/type="checkbox"/g)).toHaveLength(4);
     expect(html).not.toContain("checked=");
     expect(html).toContain("No extra prompt or model call");
     expect(html).toContain("visible only to you");
     expect(html).toContain("supported, updated host");
     expect(html).toContain("not available yet");
     expect(html).toContain("does not start an agent or an MCP connection");
+    expect(html).toContain("attested summarizer enclave");
+    expect(html).toContain("Only you can read the result");
     expect(onChange).not.toHaveBeenCalled();
+  });
+  it("does not turn briefing consent into summary consent", () => {
+    expect(render("owner", "member", { dailyBriefingEnabled: true }).html.match(/checked=""/g)).toHaveLength(1);
   });
   it("does not turn team MCP permission into briefing permission", () => {
     expect(render("owner", "member", { mcpTeamAccess: true }).html.match(/checked=""/g)).toHaveLength(1);

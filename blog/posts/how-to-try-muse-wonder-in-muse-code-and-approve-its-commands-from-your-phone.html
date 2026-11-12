@@ -1,0 +1,105 @@
+<p>On October 12, Meta's Superintelligence Labs released <a href="https://about.fb.com/news/2026/10/introducing-muse-wonder-models/">Muse Wonder and Muse Wonder Full</a>, which TechCrunch calls Meta's first frontier model. Meta's <a href="https://research.meta.ai/blog/muse-wonder">research post</a> says both were trained on long-running tasks with repeated cycles of testing and revision, and that Muse Wonder is available through the Meta Model API and through Muse Code, Meta's terminal coding agent. Muse Wonder Full is limited to Muse Code subscribers. <a href="https://techcrunch.com/2026/10/12/meta-releases-its-first-frontier-model-muse-wonder/">TechCrunch's report</a> gives API pricing of $4 per million input tokens and $20 per million output tokens, and notes that the benchmark comparisons with Fable 5.1 and GPT-6 Astra come from Meta's own testing.</p>
+
+<p>A model sold on long tasks invites long runs, and a long run of a coding agent stops for you. Muse Code's <a href="https://dev.meta.ai/docs/muse-code/permissions">permissions page</a> describes shell commands that hold for review, with three answers: Allow once, Always allow in this workspace, or Reject. If you have walked away from the desk, the run waits until you come back.</p>
+
+<p>This guide starts Muse Code with Muse Wonder through shell.online on your own computer, so the approval prompts reach a browser on your phone. It covers how to pass Muse Code's flags through shell, how to make sure the prompts are yours to answer, how to put a time limit on a run of a model priced per token, and what this setup leaves out.</p>
+
+<section>
+<h2>Step 1: Install both tools on the computer doing the work</h2>
+
+<p>shell runs on the computer that holds the code. The <a href="/platforms/">platforms page</a> lists every build; on macOS or Linux the installer is one line. Muse Code's <a href="https://dev.meta.ai/docs/overview">developer overview</a> gives its own installer:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+curl -fsSL https://dev.meta.ai/install.sh | sh</code></pre>
+
+<p>The first command installs the <code>shell</code> CLI and checks release checksums. The second installs the <code>muse</code> binary. Both tools also have PowerShell installers for Windows.</p>
+
+<p>The first time Muse Code runs, it asks you to sign in through a browser or paste an API key, and the first time it opens a workspace it asks whether to trust it. Do that first run while you are sitting at the computer. Both questions are easier to answer there, and an API key is a secret you would rather not paste into a phone.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Muse Code on Muse Wonder through shell</h2>
+
+<p>Muse Code's default model is <code>muse-spark-1.2</code>, according to its <a href="https://dev.meta.ai/docs/muse-code/configuration">configuration page</a>, and the <code>--model</code> flag picks another one for a single run. The model id for Wonder is <code>muse-wonder-1.0</code>. From the project directory:</p>
+
+<pre><code>cd ~/src/demo-app
+shell --name wonder-trial muse --model muse-wonder-1.0 --approval-judge off</code></pre>
+
+<p>Everything before <code>muse</code> belongs to shell and everything after it belongs to Muse Code. shell parses its options with Go's <a href="https://pkg.go.dev/flag">flag package</a>, which stops at the first argument that is not a flag, so <code>--model</code> and <code>--approval-judge</code> are handed to <code>muse</code> untouched. <code>--name wonder-trial</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app. If you prefer the boundary written out, <code>shell --name wonder-trial -- muse --model muse-wonder-1.0</code> does the same thing.</p>
+
+<p>shell starts Muse Code in the background and prints a link, a ten-character password and a QR code. The QR code carries both, so treat it like the password. The session is end-to-end encrypted by default: the link holds a random salt, and the password never reaches the relay.</p>
+
+<p>Once Muse Code is up, type <code>/models</code> in it and check which model is active. The Rundown's <a href="https://app.therundown.ai/guides/muse-wonder-guide">guide to Muse Wonder</a> makes the same point: a response that calls itself Wonder is not enough to go on, and changing reasoning effort does not change the model. The same guide lists <code>muse-wonder-full-1.0</code> as the id for Wonder Full on eligible Muse Code plans.</p>
+</section>
+
+<section>
+<h2>Step 3: Make sure the approvals come to you</h2>
+
+<p>The <code>--approval-judge off</code> flag in Step 2 matters more than the model flag. Muse Code reviews many approval requests itself, and the default for a new session is a profile called Auto-review, in which a built-in judge decides eligible requests and only asks you when the reviewer is unavailable. That is a reasonable default at a desk. For this guide the point is that you decide, and the permissions page says <code>--approval-judge off</code> sends every review decision to you.</p>
+
+<p>Muse Code also has an approval mode, set with <code>--approval-mode</code>. The default, <code>on-request</code>, lets recognized, non-dangerous commands run inside the sandbox and stops dangerous or external-execution patterns for review. <code>untrusted</code> stops any shell command that has no matching allow rule, which means more prompts and more reasons to have a phone nearby:</p>
+
+<pre><code>shell --name wonder-strict muse --model muse-wonder-1.0 --approval-judge off --approval-mode untrusted</code></pre>
+
+<div class="callout"><p>The prompts only reach your phone if Muse Code asks a person. With the default Auto-review profile the judge answers most of them before you see anything. With <code>--approval-mode never</code>, <code>--disable-approval</code> or <code>--yolo</code>, nothing stops for approval at all, and the last one also turns off the sandbox. Muse Code's own documentation says to keep <code>--yolo</code> for isolated environments such as a disposable CI container. If you want a different setup for watching an agent that never asks, see <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">the earlier post on watching an agent after you turn off its prompts</a>.</p></div>
+</section>
+
+<section>
+<h2>Step 4: Answer a prompt from your phone</h2>
+
+<p>Scan the QR code with the phone, or open the link and type the password. The <a href="/mobile/">mobile guide</a> covers the details. Tap the terminal to bring up the keyboard, and use shell's terminal key controls for keys a phone keyboard does not have. When a phone connects, everyone sees a shared grid of 80 columns by 40 rows on a current host, so the Muse Code screen reflows to fit a portrait screen. It returns to desktop size when the last phone leaves.</p>
+
+<p>When a command holds for review, the prompt is drawn on the terminal like any other output, with the three choices from the permissions page. Muse Code's documentation does not list the keystrokes for each choice, so read what the prompt shows and answer it the way you would at the desk. The keys you press on the phone travel to the process as the same bytes a keyboard would send. Reject denies the whole command, not only the part that held. Always allow in this workspace saves a prefix rule scoped to that workspace, so choose it on a phone only for a command you would allow on the desktop as well.</p>
+
+<p>Two other keys are worth knowing. Muse Code's <a href="https://dev.meta.ai/docs/muse-code/interactive">interactive guide</a> says <code>Esc</code> stops the current turn and nothing else, and <code>Ctrl+C</code> interrupts only from an empty composer. In shell, Ctrl-C from the phone is sent to the program as an interrupt, not treated as a copy shortcut.</p>
+</section>
+
+<section>
+<h2>Step 5: Put a time limit on the run</h2>
+
+<p>Wonder costs more per token than Spark. The Rundown guide lists Muse Spark 1.3 at $1.25 per million input tokens and $4.25 per million output tokens, against Wonder's $4 and $20, and it notes that Muse Code subscription terms are separate from API rates. Either way, a run you forgot about is the expensive kind. shell's <code>--auto-close</code> option sets a deadline:</p>
+
+<pre><code>shell --name wonder-trial --auto-close 90m muse --model muse-wonder-1.0 --approval-judge off</code></pre>
+
+<p>The session still closes when Muse Code exits on its own. If it is still running after 90 minutes, shell ends it. On macOS and Linux the code sends <a href="https://man7.org/linux/man-pages/man7/signal.7.html">SIGTERM</a> to the process group, waits two seconds, and then sends SIGKILL, which a program cannot catch. <code>--auto-close</code> also accepts a time such as <code>tomorrow 09:00</code>.</p>
+
+<p>A forced stop does not lose the history. The interactive guide says Muse Code records every run as an append-only event log of model calls, tool calls, results and approval decisions, so <code>/resume --last</code> picks up the most recent session in the workspace. The same page asks you to check any destructive step a resumed run replays before letting it go again.</p>
+</section>
+
+<section>
+<h2>Step 6: Check, rejoin and stop from the desk</h2>
+
+<p>Back at the computer, list what is running:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>The table shows each session's ID, access mode, uptime, closing rule, command, link, whether a password is stored and whether the relay is online. To bring Muse Code into your local terminal while the phone link stays live:</p>
+
+<pre><code>shell attach &lt;ID&gt;</code></pre>
+
+<p>Press Ctrl-X and then D to detach and leave it running. To end it early, <code>shell kill -- &lt;ID&gt;</code> stops the process and takes the link offline. If you showed the QR code to someone who should not keep it, <code>shell password rotate &lt;ID&gt;</code> makes a fresh password without restarting Muse Code and disconnects browsers that used the old one. <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">An earlier post on revoking a link</a> goes through rotation in detail.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>shell does not read Muse Code's approval prompts as approvals. It relays a terminal. Muse Code's event log records the decision; shell does not tell Muse Code which viewer pressed the key.</li>
+<li>Anyone who has the link and the password can answer a prompt, not only you. If you share the session with a teammate, they can press Allow too. Start with <code>--read-only</code> if a viewer should only watch, and remember that a read-only session also blocks your own browser input.</li>
+<li>It does not change Muse Code's sandbox. Seatbelt on macOS, the bundled <a href="https://github.com/containers/bubblewrap">bubblewrap</a> helper on Linux and the Windows sandbox are Muse Code's, and so are the network rules.</li>
+<li>It does not make Wonder Full available to you. That depends on your Muse Code plan.</li>
+<li>It does not keep the computer awake. A sleeping laptop holds the run and the prompt until it wakes, and closing the browser on the phone does not stop anything.</li>
+</ul>
+
+<p>Approving each command by hand is the human-in-the-loop control <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP lists against excessive agency</a>: a person approves high-impact actions before they are taken. A phone makes that control easier to keep on during a long run. It does not make your answers better, so read the command before you tap.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, which builds networking for autonomous agents. The approval prompt in this guide is a person deciding what an agent may do on one machine. Pilot applies a similar default between agents: as <a href="https://pilotprotocol.network/blog/how-pilot-protocol-works">its architecture post</a> explains, an agent stays invisible until a mutual, signed handshake approves the connection, and revoking trust tears down the tunnel. If you want an agent of your own on that network, <a href="https://pilotprotocol.network/docs/getting-started">the getting started guide</a> installs the daemon and walks through the first handshake.</p>
+
+<p>The code for everything shell does above is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>, MIT licensed, and the <a href="/cli/">CLI reference</a> lists every option.</p>
+</section>
+
+<div class="cta"><h3>Run Muse Wonder where you can answer it</h3><p>Install shell, start Muse Code with shell muse and the flags you want, and its approval prompts will be on your phone when it stops to ask.</p><a href="/docs/">Read the docs</a></div>

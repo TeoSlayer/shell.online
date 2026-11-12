@@ -2,7 +2,7 @@ module shell.online
 
 // Go 1.27 has a MIPS64 epoll alignment regression (go.dev/issue/80978).
 // Keep release builds on the supported 1.26 line until the runtime fix ships.
-go 1.26.8
+go 1.26.9
 
 // Local portability patch: upstream's 2^32-1 line bound overflows int on
 // supported 32-bit release targets. See third_party/xterm-go/SHELL_PATCHES.md.

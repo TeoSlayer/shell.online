@@ -1,11 +1,11 @@
 // Local-only visual/interaction gate. Start Vite first; no production traffic,
 // accounts, model calls, or analytics events are involved.
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { launchChromeTransport } from "./lib/browser-transport.mjs";
+import { launchChromeTransport, removeProfile } from "./lib/browser-transport.mjs";
 
 const url = new URL(process.env.LANDING_TEST_URL ?? "http://127.0.0.1:5178/");
 assert(
@@ -295,5 +295,5 @@ try {
 } finally {
   await browser?.close();
   // This is the exact temporary profile created above, never a user profile.
-  await rm(profile, { recursive: true, force: true });
+  await removeProfile(profile);
 }

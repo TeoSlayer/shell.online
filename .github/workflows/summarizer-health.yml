@@ -1,0 +1,27 @@
+name: Summarizer health
+
+# Verifies the hosted summarizer the way shell hosts do, daily. A failure
+# means hosts would refuse the enclave now or within 30 days (an expiring
+# allowlist or a retired Confidential Space image), so it fails loudly.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify the summarizer as hosts do
+        run: go run ./cmd/summarizer-check
