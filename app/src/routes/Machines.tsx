@@ -9,6 +9,7 @@ import { machineOnline } from "../lib/agent";
 import { usePageTitle } from "../lib/page-title";
 import { ago } from "../lib/time";
 import { SearchSelect } from "../components/SearchSelect";
+import { SETUP_COMMAND } from "../lib/setup-command";
 
 const MACHINE_STATUS = [
   { value: "all", label: "All machines", detail: "Online and offline machines" },
@@ -171,14 +172,11 @@ export function Machines() {
           <p>No machines linked yet.</p>
           <ol>
             <li>
-              Install shell on the machine you want to share from.
-              <code className="empty-command">
-                curl -fsSL https://shell.online/install | sh
-              </code>
+              On the computer you want to link, paste this into a terminal.
+              <code className="empty-command">{SETUP_COMMAND}</code>
             </li>
             <li>
-              Sign that machine in, then approve the request in this browser.
-              <code className="empty-command">shell auth</code>
+              Sign in in the browser tab it opens and press <b>Link terminal</b>.
             </li>
             <li>The machine appears in this list.</li>
           </ol>

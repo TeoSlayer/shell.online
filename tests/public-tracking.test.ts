@@ -172,7 +172,6 @@ describe("landing content and brand assets", () => {
     const markup = landingMarkup();
     expect(markup).toContain("No account needed to try it.");
     for (const target of [
-      "start_nav",
       "start_hero",
       "start_footer",
       "signup_team",

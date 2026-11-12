@@ -1,0 +1,131 @@
+<p>Anthropic published Claude Code 2.1.316 on October 31. One line in its <a href="https://code.claude.com/docs/en/changelog">changelog</a> reads: "Fixed shell commands being left running on macOS and Linux when Claude Code exits by itself, for example when credentials are refused or a cloud session is archived." A day earlier, 2.1.314 changed what Claude is told after you stop a command with Esc or Stop in a cloud session or the IDE: it now also hears that the command may have run. Both entries are in the <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">CHANGELOG.md in Anthropic's claude-code repository</a>.</p>
+
+<p>The two fixes point at the same gap. Stopping an agent is one event. Stopping everything the agent started is another. A coding agent runs test watchers, dev servers and build daemons from its shell tool, and any of them can outlive it, keep a port bound, and keep writing to a local database after you think the run is over. If you share the agent's terminal through shell.online, you also want to know what <code>shell kill</code>, an <code>--auto-close</code> deadline and the Stop button in the web app actually reach.</p>
+
+<p>This guide starts an agent under shell, lists the processes its session owns, stops it, and checks what is still running afterwards. It also covers the case where the agent exits on its own, and how to give a long-lived server its own session and its own stop. I read shell's process code at the current commit and checked the Unix behavior on macOS 15.5 with a small Go program that starts and stops a process the same way shell does. Linux follows the same POSIX rules, but I did not run these tests there. Windows takes a different path, which I describe from the code only.</p>
+
+<section>
+<h2>What shell sends when a session stops</h2>
+
+<p>On macOS and Linux, shell starts the wrapped command on a new pseudo-terminal with <a href="https://github.com/creack/pty">creack/pty</a>. That library starts the child with <code>Setsid</code> and <code>Setctty</code>, so the command becomes the leader of a new session and of a new process group whose ID is its own PID, as the <a href="https://man7.org/linux/man-pages/man2/setsid.2.html">setsid(2) man page</a> describes. Anything the agent starts inherits that group unless it moves itself out.</p>
+
+<p>When you run <code>shell kill</code>, when an <code>--auto-close</code> deadline passes, or when the owner presses Stop in the web app (the machine agent runs <code>shell kill</code> for it), the host cancels the session and sends SIGTERM to the whole group. It does that with a negative PID, which <a href="https://man7.org/linux/man-pages/man2/kill.2.html">kill(2)</a> defines as "every process in the process group whose ID is -pid." If the wrapped process is still running two seconds later, shell sends SIGKILL to the group. You can read both steps in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/process_unix.go">process_unix.go</a>.</p>
+
+<p>Two consequences follow. A child that left the group gets neither signal. And the SIGKILL depends on the wrapped process alone: if the agent exits within two seconds but one of its children handles SIGTERM and carries on, shell sends nothing more.</p>
+</section>
+
+<section>
+<h2>Step 1: Start the agent and find its process group</h2>
+
+<p>Start the agent with a name you will recognize:</p>
+
+<pre><code>shell --name api-work claude</code></pre>
+
+<p>This runs Claude Code in the background on a new terminal and prints a browser link and a password, as the <a href="/cli/">CLI reference</a> describes. The name shows in <code>shell list</code>, <code>shell ls</code> and the web app.</p>
+
+<p>The <code>pid</code> that <code>shell list --json</code> reports is the shell host process, not the agent. The agent is that process's child. Ask for the host's children with <a href="https://man7.org/linux/man-pages/man1/pgrep.1.html">pgrep</a>, using <a href="https://jqlang.org/manual/">jq</a> to pick the session by name:</p>
+
+<pre><code>host=$(shell list --json | jq -r '.[] | select(.name == "api-work") | .pid')
+ps -o pid,pgid,tty,command -p "$(pgrep -d, -P "$host")"</code></pre>
+
+<p>The row with a terminal in the TTY column is the agent. Its PID and PGID are the same number. Keep both values for the next steps (these are invented):</p>
+
+<pre><code>lead=48213
+tty=ttys004</code></pre>
+
+<p>On Linux the terminal looks like <code>pts/3</code> instead. Use a name that no other session has, or the jq filter returns more than one PID.</p>
+</section>
+
+<section>
+<h2>Step 2: List what the session owns before you stop it</h2>
+
+<p>Once the agent has started a server or a watcher, look at two lists:</p>
+
+<pre><code>ps -o pid,pgid,tty,stat,command -p "$(pgrep -d, -g "$lead")"
+ps -o pid,pgid,stat,command -t "$tty"</code></pre>
+
+<p>The first prints every process in the agent's group. Those are the processes the stop signals reach. The second prints every process attached to the session's terminal, including jobs that run in a group of their own. A process that appears in the second list and not in the first will not be signalled by shell.</p>
+
+<p>Some processes appear in neither list. A program that calls <code>setsid</code> has no controlling terminal and its own group, and a container started with <code>docker compose up -d</code> is run by the Docker daemon rather than by anything in the session. For those, list the listening ports as well, so you have something to compare against later:</p>
+
+<pre><code>lsof -nP -iTCP -sTCP:LISTEN</code></pre>
+</section>
+
+<section>
+<h2>Step 3: Stop the session</h2>
+
+<p>Look up the session ID by the same name and stop it:</p>
+
+<pre><code>id=$(shell list --json | jq -r '.[] | select(.name == "api-work") | .id')
+shell kill "$id"</code></pre>
+
+<p><code>shell kill</code> takes a full ID or a prefix of at least six characters, not a name. It prints <code>Stopping</code>, the short ID and the command, then returns. The host sends SIGTERM to the group, waits up to two seconds for the agent to exit, and sends SIGKILL if it has not. The browser link goes offline when the process ends. If what you want is to cut off viewers and keep the agent running, that is a different command, covered in <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">how to revoke a shared terminal link without killing the process behind it</a>.</p>
+</section>
+
+<section>
+<h2>Step 4: Check what is still running</h2>
+
+<p>Run the same checks again straight after the stop:</p>
+
+<pre><code>pgrep -l -g "$lead"
+ps -o pid,pgid,stat,command -t "$tty"
+lsof -nP -iTCP -sTCP:LISTEN</code></pre>
+
+<p>A process group keeps its number while any member is alive, so <code>pgrep -g</code> still finds a child that survived its leader. Compare the port list with the one from Step 2. Do this right away, because terminal names and process IDs are reused once they are free, and a later check could match something unrelated. Stop what is left with <code>kill</code> and the PID, or with <code>pkill -g "$lead"</code> for the whole group.</p>
+
+<p>In my macOS test, a background child in the agent's group was gone after the stop. A child that had called <code>setsid</code> was still running, which is what you would expect from a process that is no longer in the group.</p>
+</section>
+
+<section>
+<h2>Step 5: Check again when the agent exits on its own</h2>
+
+<p>The Claude Code fix is about this case: the agent quits because its credentials were refused or its cloud session was archived. On macOS and Linux, shell sends no signal when the wrapped process exits by itself. It reports the exit status and closes the link.</p>
+
+<p>The operating system does send one. When a controlling process exits, POSIX <a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/_exit.html">_exit()</a> says "the SIGHUP signal shall be sent to each process in the foreground process group of the controlling terminal." In my macOS test, a plain background child in the agent's group was gone once its parent exited. A child started under <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/nohup.html">nohup</a>, which sets SIGHUP to be ignored, was still running, and so was a background job started from an interactive shell.</p>
+
+<p>So run the Step 4 checks whenever an agent session ends without you stopping it. For Claude Code, <code>claude --version</code> tells you whether you have 2.1.316 or later, the release that carries this fix.</p>
+
+<div class="callout">
+<p><strong>A plain shell session behaves differently.</strong> Running <code>shell</code> with no command starts your <code>$SHELL</code> interactively on the shared terminal. The <a href="https://www.gnu.org/software/bash/manual/html_node/Signals.html">Bash manual</a> says an interactive Bash "ignores SIGTERM", and in my test zsh did not exit on it either, so <code>shell kill</code> ends the shell with SIGKILL two seconds later. Every background job you started there with <code>&amp;</code> runs in its own process group, so neither signal reaches it. On a normal exit, zsh sends its running jobs a SIGHUP when its HUP option is set, as the <a href="https://zsh.sourceforge.io/Doc/Release/Jobs-_0026-Signals.html">zsh jobs documentation</a> describes, but a shell killed with SIGKILL gets no chance to. A <code>sleep</code> started as a background job in Bash and in zsh was still running after the stop in both cases. Run <code>jobs -l</code> and end those jobs before you stop the session.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 6: Give a long-lived server its own session</h2>
+
+<p>The cleanest leftover is the one that never belonged to the agent. If the agent needs a dev server, start it yourself as a second session:</p>
+
+<pre><code>shell --name dev-server --auto-close 4h -- npm run dev</code></pre>
+
+<p>The server gets its own process group, its own link, its own row in <code>shell list</code>, and a deadline: <code>--auto-close 4h</code> stops it after four hours if you forget, through the same SIGTERM and SIGKILL path. Tell the agent in your prompt that the server is already running and on which port. When you stop the agent, the server stays up on purpose. When you are done with it, <code>shell kill</code> on its own ID stops it. If you run the agent with its permission prompts off, as in <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">how to watch a coding agent remotely after you turn off its permission prompts</a>, this matters more, because nobody approved the commands that started those processes. If a session's view is blank or offline, start with <a href="/reliability/">the reliability page</a>.</p>
+</section>
+
+<section>
+<h2>Windows takes a different path</h2>
+
+<p>On Windows, shell assigns the wrapped process to a job object with <code>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</code>, as <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/process_windows.go">process_windows.go</a> shows. <code>shell kill</code> terminates the root process, and when the session finishes shell closes the job handle. Microsoft's <a href="https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects">job objects documentation</a> says closing the last handle of such a job "terminates all associated processes", and that children created with <code>CreateProcess</code> join the job by default, while those created through <code>Win32_Process.Create</code> do not. Because the handle is closed when the session finishes either way, this should also cover an agent that exits by itself. A comment in the code notes that a very short command can exit before Windows allows the assignment. I have not tested any of this on Windows. The <a href="/platforms/">platforms page</a> has the PowerShell install command.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>shell does not track processes that leave the group. A daemon that calls <code>setsid</code>, a container run by Docker, or a service registered with launchd or systemd keeps running after any stop.</li>
+<li>On Unix, nothing is sent when the agent exits by itself. Whatever survives the kernel's SIGHUP keeps running.</li>
+<li>The SIGKILL goes out only if the wrapped process outlives SIGTERM by two seconds. A child that handles SIGTERM survives a parent that exits promptly.</li>
+<li><code>shell list</code> and the web app show sessions, not processes. Neither tells you that something was left behind. The checks in Step 4 are yours to run.</li>
+<li>Stopping does not undo anything. As the Claude Code 2.1.314 entry puts it, a command you stopped may still have run.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>Pilot Protocol, the networking stack from the team that builds shell.online, published a post on <a href="https://pilotprotocol.network/blog/a-terminal-sharing-link-that-expires-at-a-set-time-what-shell-online-auto-close">what shell's --auto-close actually stops</a>, which covers the same group signal from the deadline side. If the agents you run talk to each other over Pilot, a helper that outlived its agent can still hold a connection to a peer. The <a href="https://pilotprotocol.network/docs/diagnostics">Pilot diagnostics commands</a> show that side: <code>pilotctl connections</code> lists the active connections and <code>pilotctl disconnect</code> closes one by ID. It is the network version of Step 4. For more on running agents with shell, see the <a href="/agents/">agents guide</a> and the <a href="/docs/">docs</a>.</p>
+</section>
+
+<div class="cta">
+<h3>Stop the next agent run and look for what is left</h3>
+<p>Install the CLI, start your agent with a name, and run the checks from Step 4 the next time it stops or exits.</p>
+<a href="https://github.com/TeoSlayer/shell.online">Get shell.online on GitHub</a>
+</div>
