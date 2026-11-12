@@ -1,0 +1,80 @@
+<p>Claude Code 2.1.318, released on November 4, added the date a stored claude.ai sign-in ends to <code>claude auth status</code>, as a field called <code>loginExpiresAt</code>, and to the JSON result of <code>claude -p</code>, as <code>credential_expires_at</code>. The same release prints a one-line warning on standard error in <code>claude -p</code> text output, starting 10 days before that date. Both entries are in the <a href="https://code.claude.com/docs/en/changelog">Claude Code changelog</a>. Until then, a script usually learned about a stale login from the request that failed.</p>
+
+<p>The date matters most for long runs. Anthropic's <a href="https://code.claude.com/docs/en/authentication">authentication page</a> says renewing early matters most for sessions that run unattended, because a session that outlives its login stops making progress and cannot recover until you sign in again. The <a href="https://code.claude.com/docs/en/errors">error reference</a> describes the moment it happens. Claude Code tries to renew the login, the OAuth service rejects the stored refresh token (the credential that, in <a href="https://www.rfc-editor.org/rfc/rfc6749#section-1.5">the OAuth 2.0 specification</a>, gets a new access token when the current one expires), Claude Code clears the saved credentials, and every model request after that stops locally with <code>Login expired · Please run /login</code>. If you started a six hour refactor before dinner and are checking it from your phone, that line is all you will see.</p>
+
+<p>This guide adds the check to a long Claude Code run that you watch through <a href="/">shell.online</a>. You read the date before you start, renew at the desk if the run would cross it, start the run behind a read-only link for your phone, and sign in again from the machine if the line appears anyway. The last step does the same for a <code>claude -p</code> job.</p>
+
+<section>
+<h2>What you need</h2>
+<p>Claude Code 2.1.318 or later, signed in with a claude.ai account. The expiry warnings apply only when a claude.ai login is the active credential. A session that runs on <code>ANTHROPIC_API_KEY</code>, <code>ANTHROPIC_AUTH_TOKEN</code> or a cloud provider gets none of them, and the authentication page lists the order in which Claude Code picks among its credentials. You also need the <code>shell</code> command line tool, version 0.25.0, which the <a href="/docs/">docs</a> explain how to install, and a phone with a browser. The source is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online GitHub repository</a>. No shell.online account is needed for any step.</p>
+<pre><code>claude --version
+shell --version</code></pre>
+<p>The first command should print 2.1.318 or a higher number. Older versions do not report the date.</p>
+</section>
+
+<section>
+<h2>Step 1: Read the date your login ends</h2>
+<pre><code>claude auth status
+claude auth status --text</code></pre>
+<p>The <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a> says <code>claude auth status</code> prints the authentication status as JSON, that <code>--text</code> prints a version meant for people, and that the command exits with 0 when you are logged in and 1 when you are not. The JSON has an <code>authMethod</code> field whose value is one of <code>none</code>, <code>claude.ai</code>, <code>oauth_token</code>, <code>api_key</code>, <code>api_key_helper</code> or <code>third_party</code>. To pull out the two fields this guide cares about:</p>
+<pre><code>claude auth status | grep -oE '"(authMethod|loginExpiresAt)": *"[^"]*"'</code></pre>
+<p>The pattern matches whether the JSON is printed on one line or across many. You want <code>authMethod</code> to read <code>claude.ai</code>. If it reads anything else, the date does not apply to the credential your run will use, and the rest of this step does not either. Compare <code>loginExpiresAt</code> with the time you expect the run to end, and leave a margin for a run that goes long.</p>
+</section>
+
+<section>
+<h2>Step 2: Renew at the desk if the run would cross the date</h2>
+<pre><code>claude auth login
+claude auth status | grep -oE '"loginExpiresAt": *"[^"]*"'</code></pre>
+<p><code>claude auth login</code> signs you in to your Anthropic account. It opens the sign-in in a browser on this computer, which is why this step belongs before you leave. Typing <code>/login</code> inside a Claude Code session does the same from there. The second line reads the date again so you can see that it moved.</p>
+<p>Claude Code also warns on its own, later. The authentication page says that within three days of the end it shows <code>Your login expires in 3 days · run /login to renew</code> at startup, and that the warning never blocks a request. A run that started four days before the end sees no warning at all, which is why the explicit check is worth the ten seconds.</p>
+</section>
+
+<section>
+<h2>Step 3: Start the run behind a read-only link</h2>
+<pre><code>cd ~/src/example-app
+shell --read-only --name overnight-refactor --auto-close tomorrow 07:00 -- \
+  claude "Refactor the billing module to use the new tax table, run the tests after each change"</code></pre>
+<p><code>claude "query"</code> starts an interactive session with a first prompt, so the agent has its task before you walk away. <code>--read-only</code> makes a view-only link: the relay rejects input from every browser that opens it. <code>--name</code> labels the session in <code>shell list</code> and in the web app. <code>--auto-close tomorrow 07:00</code> adds a deadline. The share always closes when the task exits, and the deadline is an earlier stop in case it does not. The help text lists the forms the flag accepts: durations such as <code>6h</code> or <code>1h30m</code>, <a href="https://www.rfc-editor.org/rfc/rfc3339">RFC 3339</a> timestamps, <code>YYYY-MM-DD HH:MM</code>, a bare <code>HH:MM</code>, and <code>today</code> or <code>tomorrow</code> with an optional time. At the deadline shell stops the process and closes the link.</p>
+<p>The command returns once the share is ready and prints a link, a password and a QR code. Scan the QR code with your phone. It carries the password as well as the link, so the session opens without typing anything. Or open the link and type the password. The <a href="/mobile/">phone guide</a> covers what the screen looks like there, and the post on <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">watching Claude Code from your phone as a conversation</a> covers the chat view that is easier to read on a small screen.</p>
+<p>A read-only link cannot answer Claude Code's permission prompts or the folder trust dialog on a first run in a new directory. Settle those before you leave, or read the guide to <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching an agent after you turn off its permission prompts</a> first. The computer also has to stay awake and online for the whole run. On macOS <a href="https://ss64.com/mac/caffeinate.html">caffeinate</a> holds off idle sleep, and on Linux <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd-inhibit.html">systemd-inhibit</a> does the same job.</p>
+</section>
+
+<section>
+<h2>Step 4: Know what an expired login looks like from the phone</h2>
+<p>When the login runs out mid-run, nothing on the shell side changes. The session stays online, the link still opens, and the process is still running. What changes is the agent's output. Each time Claude Code tries a model request, it prints <code>Login expired · Please run /login</code> and does not send the request. On the phone that looks like a run that stopped working and started repeating one line.</p>
+<p>The error reference also gives a way to see the state before a request fails: <code>/status</code> inside the session shows a Login row that says the saved login has expired, along with the organization and email it belonged to. You cannot type <code>/status</code> through a read-only link, but you can from the machine, which is the next step.</p>
+</section>
+
+<section>
+<h2>Step 5: Sign in again from the machine with shell attach</h2>
+<pre><code>shell list
+shell attach 3f9c2a</code></pre>
+<p><code>shell list</code> prints the sessions running on this computer with their ID, name, uptime, relay status, closing rule and access mode. Copy the ID of <code>overnight-refactor</code>, or six or more of its first characters, and pass it to <code>shell attach</code>. The ID above is an invented example. Attaching puts the running Claude Code session in your terminal, with the screen it had. The read-only flag blocks browser input only, so you can type here.</p>
+<p>Type <code>/login</code> and complete the sign-in in the browser it opens on this computer. If no browser opens, the authentication page says to press <code>c</code> to copy the login URL. When the sign-in is done, tell the agent to continue where it stopped. Then press Ctrl-X, release it, and press D. That detaches your terminal and leaves the process and the phone link running.</p>
+<div class="callout"><p><strong>Do not plan to renew from the phone.</strong> A read-only link cannot type <code>/login</code> at all. An interactive link could, but the sign-in then tries to open a browser on the computer running the agent, which is the one you are not sitting at. Renewing before the run, as in Step 2, avoids the problem. If it happens anyway, the fix needs the machine.</p></div>
+</section>
+
+<section>
+<h2>Step 6: Do the same check for a claude -p job</h2>
+<pre><code>shell --read-only --name nightly-audit -- \
+  claude -p "List the TODO comments in src/ and group them by file"</code></pre>
+<p>A <code>claude -p</code> run in text mode prints the new warning on standard error, starting 10 days before the login ends. On macOS and Linux, shell runs the command in a <a href="https://man7.org/linux/man-pages/man7/pty.7.html">pseudoterminal</a>, and the command's standard output and standard error both go to that terminal unless you redirect them. So the warning line shows in the browser next to the rest of the output. If you add <code>2&gt;/dev/null</code> or send standard error to a file, it will not.</p>
+<pre><code>shell --read-only --name nightly-audit -- \
+  claude -p --output-format json "List the TODO comments in src/ and group them by file"</code></pre>
+<p>With JSON output, the warning is replaced by a field. The result carries <code>credential_expires_at</code>, so the date is on the phone screen when the job ends and in whatever file a script saves the result to. If the login has already run out, the error reference gives the non-interactive message as <code>Failed to authenticate: OAuth session expired and could not be refreshed</code>, with the error code <code>authentication_failed</code>, which a script can test for.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>shell does not know about Claude Code's login. It does not read <code>loginExpiresAt</code>, does not renew anything, and does not alert you when the agent starts printing <code>Login expired</code>. The phone shows the line when you look. The <code>--auto-close</code> deadline is a time you choose, not one taken from the login.</p>
+<p>The checks above cover the claude.ai login only. Codex keeps its own cached login, which OpenAI's <a href="https://learn.chatgpt.com/docs/auth">authentication page</a> says sits in <code>~/.codex/auth.json</code> or in the operating system's credential store, and nothing here tells you when that one ends. A token from <code>claude setup-token</code> lasts a year, and the authentication page says that command does not save it anywhere, so it is not the stored sign-in that 2.1.318 reports on.</p>
+<p>A read-only link limits who can type from a browser. It does not limit what the agent can do on your computer, and it does not keep anybody who has the link and password from reading the output. If a password reaches the wrong person, <code>shell password rotate</code> replaces it without stopping the run, as the guide to <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared terminal link</a> explains. The <a href="/security/">security page</a> lists what the relay can and cannot see.</p>
+<p>Logins that end are deliberate. The <a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html">OWASP session management cheat sheet</a> recommends an absolute timeout for every session regardless of activity, because it limits how long a stolen session stays useful. The aim here is to stop the end date from surprising an unattended run, not to push it back.</p>
+</section>
+
+<section>
+<h2>Credentials with an end date, between agents</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the same question of when a credential runs out comes up there between machines. Pilot's <a href="https://pilotprotocol.network/docs/enterprise-identity">enterprise identity documentation</a> describes a registry that validates identity tokens against their expiry and not-before claims, with 60 seconds of clock skew allowed, and a <code>get_key_info</code> command that reports a key's <code>expires_at</code> and its age in days for anyone auditing rotation. The post on <a href="https://pilotprotocol.network/blog/self-hosted-registry-identity-directory-sync-audit-export">identity, directory sync and audit export in the open source rendezvous</a> shows how that fits into a self-hosted deployment. If your agents talk to each other rather than to you, that is where to read their expiry dates.</p>
+</section>
+
+<div class="cta"><h3>Read the date before the next long run</h3><p>Run <code>claude auth status</code>, renew if the run would cross <code>loginExpiresAt</code>, and start the agent behind <code>shell --read-only</code> so you can see from your phone whether it is still working.</p><a href="/cli/">Read the shell command reference</a></div>

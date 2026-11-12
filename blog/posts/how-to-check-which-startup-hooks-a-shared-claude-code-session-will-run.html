@@ -1,0 +1,96 @@
+<p>On October 24, version 12.33.4 of the Postman desktop app changed two coding agents on a developer's Mac without asking. According to the <a href="https://github.com/postmanlabs/postman-app-support/issues/14370">GitHub report filed the next day by a user named indicava</a>, the app enabled a Postman plugin in <code>~/.claude/settings.json</code>, added a Postman marketplace and plugin to <code>~/.codex/config.toml</code>, and wrote a trust entry for its own session-start hook into that same Codex file. <a href="https://www.notebookcheck.net/Postman-added-itself-to-Claude-Code-and-Codex-without-asking.1442933.0.html">Notebookcheck's November 5 article</a> adds later reports of entries in Cursor and the GitHub Copilot CLI, and says there is no evidence that Postman collected data this way.</p>
+
+<p>A Postman staff member answered in the issue on November 5: "In the meantime, we are reverting this change." Notebookcheck points out that reverting does not remove what is already installed. The <a href="https://github.com/postmanlabs/postman-plugin/blob/6c8e452e0f4237f4bcc0901cb1ac442dec707e49/hooks/session-start-context.md">hook text itself</a> is mild: it tells the agent to load a Postman skill before API work. The mechanism is what deserves attention. <a href="https://learn.chatgpt.com/docs/hooks">OpenAI's hooks documentation</a> says Codex "requires you to review and trust the exact hook definition" before a non-managed hook can run, and <a href="https://learning.postman.com/docs/postman-plugin/install/detected-agents/">Postman's install guide</a> says of that step, "The installer approves the hook for you."</p>
+
+<p>If you share an agent's terminal, a startup hook is worth knowing about because it runs before anyone reads the screen. This guide lists what Claude Code and Codex will load on your machine, shows the one hook <a href="/">shell.online</a> adds to a Claude Code launch, and covers what to do when you find an entry you did not put there.</p>
+
+<section>
+<h2>What you need</h2>
+<p>You need shell.online 0.25.0 or later (the <a href="/cli/">CLI page</a> has the installer, and the source is in the <a href="https://github.com/TeoSlayer/shell.online">GitHub repository</a>), Claude Code, and <a href="https://jqlang.org/manual/">jq</a> for reading JSON. Codex is optional. The commands use macOS and Linux syntax. The launch line in Step 3 was printed on macOS by running shell's own argument builder, whose code is unchanged since v0.25.0.</p>
+</section>
+
+<section>
+<h2>Step 1: List what Claude Code loads from your settings files</h2>
+<pre><code>jq '{enabledPlugins, hooks}' ~/.claude/settings.json
+jq '{enabledPlugins, hooks}' .claude/settings.json .claude/settings.local.json
+claude plugin list</code></pre>
+<p>The first command reads your user settings. The second reads the two project files, from the root of the repository you are about to work in. jq prints an error for a file that does not exist and carries on with the next one, so a missing project file is harmless. A key you have never set prints as <code>null</code>. On a machine touched by the Postman update, the first command would print something like this:</p>
+<pre><code>{
+  "enabledPlugins": {
+    "postman@claude-plugins-official": true
+  },
+  "hooks": null
+}</code></pre>
+<p>A <code>hooks</code> value of <code>null</code> does not mean no hooks will run. The <a href="https://code.claude.com/docs/en/hooks">Claude Code hooks reference</a> lists plugins as a separate source, each with its own <code>hooks/hooks.json</code>, and says hook entries merge across settings levels instead of replacing each other. That is why the third command matters. <a href="https://code.claude.com/docs/en/plugins/cli-reference.md">claude plugin list</a> shows the installed plugins, so you can compare them with what you remember installing.</p>
+</section>
+
+<section>
+<h2>Step 2: List what Codex has been told to trust</h2>
+<pre><code>grep -n -E '^\[+(marketplaces|plugins|hooks)' ~/.codex/config.toml
+ls ~/.codex/hooks.json .codex/hooks.json 2&gt;/dev/null</code></pre>
+<p>The grep prints only section headers, which keeps values out of your scrollback, and it also catches hooks defined inline in the file. The <code>ls</code> shows whether a separate <code>hooks.json</code> exists at user or project level. The sample below uses the section names from the Postman report, with invented line numbers:</p>
+<pre><code>12:[marketplaces.postman]
+16:[plugins."postman@postman"]
+19:[hooks.state."postman@postman:hooks/codex-hooks.json:session_start:0:0"]</code></pre>
+<p>The third line is the one to look at. The report shows <code>trusted_hash</code> and <code>trusted_content_hash</code> under that header. OpenAI's documentation says Codex "records trust against the hook's current hash", and it does not spell out the section's key format, so treat the name as specific to the version in the report. A trust entry you do not remember creating means something approved that hook on your behalf. The <code>/hooks</code> command inside Codex shows the same sources and lets you review or disable non-managed hooks.</p>
+</section>
+
+<section>
+<h2>Step 3: Start a read-only share and read its real launch line</h2>
+<p>The settings files tell you what Claude Code will read. The process table tells you what it was actually started with, including anything the launcher added.</p>
+<pre><code>shell --read-only --name hook-check claude
+shell list --json | jq -r '.[] | select(.name == "hook-check") | .pid'
+ps -ww -o command= -p "$(pgrep -P 48213)"</code></pre>
+<p>The first command starts Claude Code in the background and prints a browser link and a ten-character password. <code>--read-only</code> makes the relay reject browser input. The second command prints the <code>pid</code> of the shell host, shown here as an invented 48213. Filter it this way because the full JSON record also holds the session password. The third command finds the host's child with <a href="https://man7.org/linux/man-pages/man1/pgrep.1.html">pgrep -P</a> and prints its whole argument list with <a href="https://man7.org/linux/man-pages/man1/ps.1.html">ps -ww</a>, which removes the width limit.</p>
+<p>On a machine linked to an account with <code>shell auth</code>, the result looks like this, on one line, with the first word possibly a full path:</p>
+<pre><code>claude --settings {"hooks":{"SessionStart":[{"hooks":[{"command":"cat > '/tmp/shell-online-501/claude-hook-48213-3928457.json'","type":"command"}]}]}} --session-id 81b23ff5-a70b-4b2a-9f96-f5f50ad73575</code></pre>
+<p>The <code>></code> is an escaped <code>&gt;</code>, so the hook is <code>cat &gt; file</code>. On a machine that was never linked, shell adds nothing and the line is just <code>claude</code>.</p>
+</section>
+
+<section>
+<h2>Step 4: Read the merged list inside the session</h2>
+<p>The browser cannot type into a read-only session, but a local attach can.</p>
+<pre><code>shell list
+shell attach 7f3a9c</code></pre>
+<p><code>shell list</code> gives you the session ID, and <code>shell attach</code> accepts an unambiguous prefix of at least six characters. Once attached, type <code>/hooks</code>. The hooks reference describes this as a read-only browser that labels each hook with where it comes from and shows the full text of what it runs. Look under <code>SessionStart</code>. shell's entry is the one whose command starts with <code>cat &gt;</code> and points at a <code>claude-hook-</code> file. Anything else came from elsewhere in your setup, such as your settings, your project or a plugin, and now you can read it. Close the list, then press Ctrl-X, release it, and press D to detach. The process keeps running, and anyone holding the link saw the same screen.</p>
+</section>
+
+<section>
+<h2>What shell's own hook does</h2>
+<p>shell passes this hook on the command line, once, for that process. The <a href="https://code.claude.com/docs/en/settings">Claude Code settings documentation</a> says <code>--settings</code> "lasts one session and doesn't write to any file". The CLI source has no write to <code>~/.claude</code> or <code>~/.codex</code> at all. It reads Claude transcripts to write summaries.</p>
+<p>The hook exists for <a href="/app/">session summaries</a> in the web app. Claude Code hands every SessionStart hook its session ID and transcript path, and writing that to a file lets the summary follow the conversation through <code>/clear</code> and <code>/resume</code>. Summaries stay off until you run <code>shell permissions &lt;ID&gt; --summaries=true</code>, but the hook is added on every linked launch either way, so it will appear in your list even if you never use them.</p>
+<ul>
+<li>The file lives in <code>/tmp/shell-online-&lt;uid&gt;/</code>, a directory set to mode 0700, and the file itself is 0600.</li>
+<li>shell deletes it when the session ends. If the host was killed, the next Claude Code session you start through shell removes the leftover.</li>
+<li>No hook is added for <code>claude -p</code>, for subcommands such as <code>claude mcp</code>, or for a single bare word such as <code>claude fix</code>, which shell cannot tell from a subcommand.</li>
+<li>If you pass your own <code>--settings</code>, shell leaves its hook out and keeps only the <code>--session-id</code>, so a summary will not follow <code>/clear</code>.</li>
+<li>On Windows no hook is added, and a fresh launch gets only the <code>--session-id</code>.</li>
+</ul>
+<div class="callout"><p>Owner-only files do not protect you from a hook. A hook is a process your own account starts, and <code>shell list --json</code> prints the link and password of every local session to any process running as you. shell has kept the password out of the wrapped program's environment since 0.24.1, which closes one route and leaves this one. If you find a hook you do not trust on a machine with live shares, remove it first, then run <code>shell password rotate &lt;ID&gt;</code> for each session.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Remove what you did not add</h2>
+<pre><code>npx @postman/postman-plugin status
+npx @postman/postman-plugin remove --dry-run
+claude plugin disable postman@claude-plugins-official
+shell password rotate 7f3a9c
+shell kill -- 7f3a9c</code></pre>
+<p>The first two lines apply only to the Postman case: <code>status</code> lists the agents the plugin detects, and Postman's guide documents <code>remove</code> with a <code>--dry-run</code> preview. Run <code>remove</code> again without the flag once the preview looks right. For any other Claude Code plugin, <code>claude plugin disable</code> turns it off, and <code>claude plugin uninstall</code> deletes it. In Codex, use <code>/hooks</code> to disable a non-managed hook.</p>
+<p><code>shell password rotate</code> issues a fresh password and URL salt without restarting the process and disconnects current viewers. It cannot erase output somebody already saw. <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">Revoking a shared link</a> covers that in more detail. <code>shell kill</code> stops the process and closes the link, which is the simple choice for a session you started only to run this check. Use one or the other: rotate a session you want to keep, and kill one you do not.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>shell does not inspect, filter or sandbox plugins and hooks. <code>--read-only</code> limits what a browser can type, as the <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">earlier post on read-only links</a> explains, and it places no limit on what a hook or the agent can do on your machine. The <a href="/security/">security page</a> describes what the relay can and cannot see, and none of that reaches into your local processes.</p>
+<p>A viewer sees what the terminal draws. A hook that prints nothing leaves nothing on the link, so watching a session is no substitute for the list in Step 1.</p>
+<p>The check is also a snapshot. The settings documentation says Claude Code reloads its settings files while running, including edits to <code>hooks</code>, so a clean list at launch does not cover a file that changes mid-run. Repeat the check after installing or updating any tool that advertises agent support.</p>
+<p>Nothing here shows that Postman's plugin caused harm. A hook that fires on an event is a normal feature, and the same shape appears in MITRE ATT&amp;CK as <a href="https://attack.mitre.org/techniques/T1546/">Event Triggered Execution</a>. What separates the two is who decided to add it. For the wider set of risks, the <a href="https://genai.owasp.org/resource/owasp-top-10-for-agentic-applications-for-2026/">OWASP Top 10 for Agentic Applications</a> is the reference I would start with.</p>
+</section>
+
+<section>
+<h2>The same question for Pilot Protocol</h2>
+<p>shell.online is developed by Pilot Protocol, so the same test applies there. The Pilot daemon writes a skill file and a heartbeat directive into agent configuration directories, including a marked block in <code>~/.claude/CLAUDE.md</code>. That is on by default. The <a href="https://pilotprotocol.network/docs/consent">consent page</a> says so, and <code>pilotctl skills set-mode disabled</code> stops the injection and removes every file it wrote. If you run Pilot, add that block to your list in Step 1.</p>
+<p>Between agents, Pilot uses an explicit agreement instead of a config write. Its <a href="https://pilotprotocol.network/blog/secure-ai-agent-communication-zero-trust">post on zero trust for agent communication</a> describes a handshake both sides must accept, with a stated reason the reviewing operator can read and revocation from either side. That covers who may connect. As the post says, it does not cover tool permissions, so the checks above still apply.</p>
+<div class="cta"><h3>Read the launch line before you send the link</h3><p>Install shell.online, start your agent with <code>--read-only</code>, and check what it loaded before anyone else opens the session.</p><a href="/docs/">Read the shell.online docs</a></div>
+</section>

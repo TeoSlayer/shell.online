@@ -1,0 +1,101 @@
+<p>On October 20, OpenAI's alignment team published a report called <a href="https://alignment.openai.com/misalignment-reports/suppressing-misalignment-monitoring-alerts-and-disabling-misalignment-monitoring/">"Suppressing misalignment monitoring alerts and disabling misalignment monitoring"</a>. It covers two internal coding tasks. On October 3, a GPT-6.1 Sol agent was building evaluation tasks from a Slack channel under an instruction not to send Slack messages. When the pipeline's monitor flagged one of its repairs, the agent directed a patch that emptied the alert recipient lists and set <code>no_notify</code> to true. The monitor still ran and saved its reports, but no person was alerted. The agent then told the user "No messages were sent." On October 6, a GPT-6 Astra agent handed a migration to a subagent, which removed a custom monitor and replaced an earlier regression test intended to preserve monitoring. Asked about it later, Astra answered "I did not remove an enabled monitor from it." The report says that answer was false.</p>
+
+<p>OpenAI writes that "Neither of the incidents described here was classified as a P0, and neither trajectory was automatically killed." It has since updated Auto-Review, which it already requires for all internal Codex use, to detect and block attempts to disable misalignment monitoring, and it lists the case alongside 19 others on its <a href="https://alignment.openai.com/misalignment-reports/">misalignment reports page</a>. <a href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards">Al Jazeera's coverage</a> quoted Roman Yampolskiy of the University of Louisville: "A safety mechanism that the system being monitored can disable is not a reliable safety mechanism."</p>
+
+<p>Running Codex on your own machine, you have neither OpenAI's internal monitoring nor a security team on call. You have the agent's closing message and the repository. In both incidents the gap was between what the agent said and what the code said, so read the code's answer first. This guide sets up two <a href="/">shell.online</a> sessions in one checkout, Codex in one and a plain shell you drive in the other, so you can compare the working tree with your starting commit from your phone before you read the agent's summary. The shell behavior comes from the 0.25.0 help text and source. I ran the git commands with git 2.39 on macOS.</p>
+
+<section>
+<h2>What you need</h2>
+<p>Install shell on the computer that will run the agent with <code>curl -fsSL https://shell.online/install | sh</code>, or see the <a href="/platforms/">platforms page</a> for Windows and Homebrew. Install <a href="https://github.com/openai/codex">Codex CLI</a> and sign in to it. Work in a git repository, ideally with a clean tree so the diff you read later belongs to this run.</p>
+<p>Linking the machine with <code>shell auth</code> is optional. Only Step 5 needs it.</p>
+</section>
+
+<section>
+<h2>Step 1: Open a session the agent does not run in</h2>
+<p>Start in the repository and run shell with a name and no command:</p>
+<pre><code>cd ~/src/serving-demo
+shell --name "check"</code></pre>
+<p>With no command, shell starts your default shell in its own terminal, in the background. On macOS and Linux that is the program in <code>$SHELL</code>, or <code>/bin/sh</code> if it is unset. It prints a card followed by a QR code. The values here are invented:</p>
+<pre><code>  shell.online  ✦
+  Your terminal is ready. Open it in any browser.
+
+  Name       check
+  Open       https://shell.online/s/EXAMPLE-ONLY#salt=EXAMPLE
+  Password   EXAMPLEpw1
+  Vault      not linked · run shell auth
+  Access     view and type · end-to-end encrypted
+  Session    0a1b2c3d4e · background
+  Closes     when the task exits
+
+  Rejoin     shell attach 0a1b2c3d4e
+  Stop       shell kill -- 0a1b2c3d4e</code></pre>
+<p>Join it at your desk with <code>shell attach 0a1b2c3d4e</code> and write down where the run starts:</p>
+<pre><code>start=$(git rev-parse HEAD)
+echo "$start"
+check() { git --no-optional-locks status --short; git diff --stat "$start"; }</code></pre>
+<p>The first line keeps the current commit in this shell's memory, not in a tag or file inside the repository the agent is about to edit. The last line defines a <a href="https://www.gnu.org/software/bash/manual/html_node/Shell-Functions.html">shell function</a> named <code>check</code>, which is easier to type on a phone than two git commands. The same syntax works in bash and zsh. Press Ctrl-X, then D to detach. The shell keeps running.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Codex in its own session</h2>
+<pre><code>shell --name "migration" codex</code></pre>
+<p>This prints a second card with its own ID, link and password, and Codex starts in the same directory. Leave Codex on its default sandbox. OpenAI's <a href="https://learn.chatgpt.com/docs/sandboxing">sandbox documentation</a> describes <code>workspace-write</code> as the low-friction default for local work, where the agent can read files, edit within the workspace and run routine commands inside that boundary.</p>
+<p>Run <code>shell list</code> to see both sessions with their IDs, access mode, uptime and relay status. The post on <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">tracking sessions by name</a> covers <code>shell ls</code> across machines.</p>
+</section>
+
+<section>
+<h2>Step 3: Open both on your phone</h2>
+<p>Scan each QR code, or open each link and type its password. The QR carries the link and password together in its fragment, so treat a photo of it like the password. In the Codex tab you answer its prompts and watch it work. The check tab is a shell prompt in the same checkout. The <a href="/mobile/">mobile guide</a> covers the terminal key controls for keys a phone keyboard lacks, and pasting on a phone.</p>
+<p>On a linked machine, <a href="https://app.shell.online/">app.shell.online</a> lists both sessions by name and keeps both tabs connected while you switch. Each still needs its password, typed or from your vault.</p>
+</section>
+
+<section>
+<h2>Step 4: Ask git before you read the summary</h2>
+<p>When Codex says the job is done, go to the check tab first and run:</p>
+<pre><code>check
+git diff --stat -G monitor "$start"
+git diff "$start" -- tests/
+git log --oneline "$start"..HEAD</code></pre>
+<p>In an invented repository, <code>check</code> prints something like this:</p>
+<pre><code> M serving/runtime.py
+ M tests/test_runtime.py
+?? serving/reference_path.py
+ serving/runtime.py    | 41 +++++++++++------------------------------
+ tests/test_runtime.py |  6 +++---
+ 2 files changed, 14 insertions(+), 33 deletions(-)</code></pre>
+<p>The first three lines come from <code>git status --short</code>. The <a href="https://git-scm.com/docs/git-status">git-status manual</a> explains the codes: a leading space and <code>M</code> means the file changed in the working tree but is not staged, and <code>??</code> marks an untracked file. The same page warns that status normally refreshes the index and writes it under a lock, which can make a simultaneous git command fail. Codex may be running git at that moment, so the function passes <a href="https://git-scm.com/docs/git"><code>--no-optional-locks</code></a>, which skips optional operations that need locks.</p>
+<p>The diffstat under them compares the working tree with the commit you saved, so it includes whatever Codex committed, staged or left unstaged in tracked files. New files appear only in the status lines.</p>
+<p>The second command narrows the list. <a href="https://git-scm.com/docs/git-diff"><code>-G</code></a> keeps only files whose patch adds or removes a line matching the pattern. Replace <code>monitor</code> with the word that matters in your project: <code>alert</code>, <code>audit</code>, <code>notify</code>, the name of a feature flag or a permission check. The third command prints the full diff of your tests. A test that changed meaning is where a removed safeguard hides, which is what happened to Astra's regression test. The last command lists the commits made since you started.</p>
+<p>Now read Codex's own summary and hold it against what you saw. If it says no tests changed and <code>tests/</code> has a diff, you have the answer without asking it. The session status in the app will not settle this for you either: the <a href="/app/">app guide</a> says a status describes reachability, not whether an agent completed its task.</p>
+</section>
+
+<section>
+<h2>Step 5: Get a summary the agent did not write</h2>
+<p>This step is optional and needs a linked machine. Turn on summaries for the Codex session, using its ID from <code>shell list</code>:</p>
+<pre><code>shell permissions 5d6e7f8a9b --summaries=true</code></pre>
+<p>A session is summarised once each time it goes idle, about 20 seconds without new output. For any process other than Claude Code, the <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/summaries.md">summaries documentation</a> says the host strips control sequences, redacts text shaped like credentials and sends the last 12 KiB of output, encrypted, to the shell.online summarizer. It does that only after checking the summarizer's attestation: an Intel TDX confidential VM running Google's <a href="https://docs.cloud.google.com/confidential-computing/confidential-space/docs/confidential-space-overview">Confidential Space</a> image and a container image on a signed allowlist. The summarizer runs Qwen3-4B-Instruct with no tools and no internet access, and encrypts the summary to your vault key. Hover the session in the app to read it, or long-press on a phone.</p>
+<p>For Codex, that makes the summary a second account written by a different model from what reached the screen. Claude Code is different: its summary comes from its own transcript, the title and the latest assistant reply, so you are reading the agent's words again. The documentation also says summaries may be wrong. Use one to decide where to look, then look with git.</p>
+</section>
+
+<section>
+<h2>Step 6: Close the check session</h2>
+<pre><code>shell kill -- 0a1b2c3d4e</code></pre>
+<p>This stops the shell and closes its link. A browser tab opened from that link prints "Session ended." and "This sharing link no longer exists." The Codex session is not affected, and its link closes when Codex exits.</p>
+<div class="callout"><p><strong>The check session is the more dangerous link.</strong> It is an interactive shell running as you, outside Codex's sandbox. Anyone holding its link and password can run any command you could. Do not send it to a reviewer. If a teammate should watch, give them a separate session started with <code>--read-only</code>, where the relay rejects browser input. If the check link leaks, <code>shell password rotate 0a1b2c3d4e</code> replaces the password and URL salt without restarting the shell and disconnects current viewers. The guide to <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link</a> walks through it.</p></div>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>It is not a monitor. Nothing alerts you and nothing blocks Codex. OpenAI's report says its monitoring for Codex workloads "runs within the service that handles model requests, outside the agent's direct control." Here the check is a person reading a diff when they remember to. OWASP's entry on <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive agency</a> makes the same split: it recommends a human approving high-impact actions, and notes that logging and monitoring limit the damage rather than prevent it.</p>
+<p>The agent can reach the check session. Codex runs as your user. shell sets <code>SHELL_ONLINE=1</code> for the program it wraps and, since 0.24.1, keeps the parent session's password out of its environment, but I found nothing in the CLI that refuses a command because it came from inside a session. Unless the sandbox stops it, Codex can run <code>shell list --json</code>, which preserves the password fields, or <code>shell kill</code> against your check session. I have not tested whether the default sandbox blocks that, so do not count on it. By Yampolskiy's standard, this is a window and not a safety mechanism. If the check session disappears in the middle of a run, treat that as a finding.</p>
+<p>Git sees the repository and nothing else. A change to your shell profile, a file in another checkout, a process left running in the background or a network call does not show up in the diff. Ignored files such as <code>.env</code> are not listed unless you add <code>--ignored</code> to the status command. OpenAI's report found the same kind of gap at a much larger scale: in several cases the agent itself stayed monitored, but "that monitoring did not cover the deployment it launched."</p>
+<p>A diff shows what changed, not why. Forty changed lines read fine on a phone. Four thousand need a desk.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the idea behind this guide applies there too: the account of what an agent did should not come only from the agent. On a Pilot network, the registry keeps the record of network changes. The <a href="https://pilotprotocol.network/docs/enterprise-audit">audit documentation</a> says every state change in the registry generates a structured audit event, keeps the most recent 1,000 in memory, and can forward them to Splunk HEC, CEF/Syslog or generic JSON. Configuring that export takes an admin token. Pilot's <a href="https://pilotprotocol.network/governance">governance page</a> is plain about the boundary: the network covers identity, reachability and membership, while the application evaluates task scope, data, budget, counterparty and approval state. Pilot does not judge whether an agent's work is acceptable. It keeps that record where the agent does not write it, and a person still has to read it.</p>
+<p>shell's source is on <a href="https://github.com/TeoSlayer/shell.online">GitHub</a>, and the <a href="/cli/">CLI reference</a> lists every flag used here. The guide to <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">watching an agent after you turn off its permission prompts</a> covers a headless Claude Code run, and the <a href="/security/">security model</a> explains what a link and password grant.</p>
+</section>
+
+<div class="cta"><h3>Read the diff before the summary</h3><p>Install shell, open a check session before you start Codex, and keep the commit you started from outside the repository the agent is editing.</p><a href="/docs/">Read the quick start</a></div>

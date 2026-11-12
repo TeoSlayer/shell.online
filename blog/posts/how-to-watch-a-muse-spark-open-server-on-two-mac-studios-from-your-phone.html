@@ -1,0 +1,119 @@
+<p>On October 15, Meta released <a href="https://research.meta.ai/blog/muse-spark-open">Muse Spark Open</a>, an open-weight mixture-of-experts model with 816 billion parameters, 42 billion of them active per token, and a context window of 1 million tokens. The weights are on <a href="https://huggingface.co/meta-models/Muse-Spark-Open-816B-A42B-NVFP4">Hugging Face</a> under the Muse Model License. The same day, Apple's machine learning team published <a href="https://machinelearning.apple.com/research/mlx-distributed-inference">its MLX measurements for the model</a>. The 4-bit build takes about 493GB, so it does not fit in one 512GB Mac Studio. Apple's table lists 24.99 tokens per second of decode for two M5 Ultra Mac Studios using tensor parallelism and 36.73 for four. Apple also found the two-machine tensor setup slower to the first token on long inputs than the pipeline one, a point <a href="https://gigazine.net/gsc_news/en/20261016-meta-muse-spark-open/">Gigazine's write-up</a> picked up. <a href="https://macstories.net/news/meta-releases-muse-spark-open-an-over-800-billion-parameter-model-that-can-run-locally-on-multiple-m5-ultra-mac-studios/">MacStories notes</a> that the 512GB M5 Ultra Mac Studio Apple tested on is slated for the end of the year, with no price announced.</p>
+
+<p>Meta's <a href="https://dev.meta.ai/docs/cookbook/muse-spark-open-mac">Mac cookbook</a> puts the setup at about four hours. Every Mac needs macOS 26.2 or later, which adds the RDMA over Thunderbolt driver, and MLX 0.30.1 or later. Each pair of Macs needs a direct Thunderbolt 5 cable, the primary needs passwordless SSH to the others, and each Mac loads the weights from its own disk. Meta's <a href="https://dev.meta.ai/resources/blog/build-with-muse-spark-open">developer guide</a> puts the NVFP4 checkpoint at about 530GB. Then one <code>mlx.launch</code> command starts <code>mlx_lm.server</code> on every Mac and serves an OpenAI-compatible API on port 8080. That is two half-terabyte downloads on two machines, then a server whose log sits in a terminal on the primary. None of it needs you at either desk.</p>
+
+<p>This guide puts that work in one list you can open from a phone. You link both Macs to one <a href="/">shell.online</a> account, run each download as a named session, start the server behind a read-only link, check the API from a plain session, and stop everything from the right machine. The shell behavior comes from the 0.25.0 help text and source. The MLX and Hugging Face commands come from Meta's cookbook and those projects' documentation. I have not run the 816B model myself, so I describe the server's output from its documentation rather than show it.</p>
+
+<section>
+<h2>What you need</h2>
+<p>Two Mac Studios that meet the cookbook's requirements, joined by Thunderbolt 5. The <a href="https://ml-explore.github.io/mlx/build/html/usage/distributed.html">MLX distributed documentation</a> says RDMA cannot be switched on remotely, even with sudo: start each Mac in Recovery, open Terminal from Utilities, run <code>rdma_ctl enable</code>, and reboot. Afterwards <code>ibv_devices</code> should list <code>rdma_en</code> devices.</p>
+<p>The cookbook tests SSH from the primary with <code>ssh mac-studio-2.local 'echo ok'</code>. If that asks for a password, it creates a key with <a href="https://man.openbsd.org/ssh-keygen.1"><code>ssh-keygen -t ed25519</code></a> and installs it with <code>ssh-copy-id mac-studio-2.local</code>. The host names here are examples. Then, on both Macs:</p>
+<pre><code>pip install -U mlx-lm
+pip install -U "huggingface_hub"
+hf auth login
+curl -fsSL https://shell.online/install | sh</code></pre>
+<p>The first line installs <a href="https://github.com/ml-explore/mlx-lm">mlx-lm</a>, which provides <code>mlx_lm.server</code>. The second installs the <code>hf</code> command; the <a href="https://huggingface.co/docs/huggingface_hub/guides/cli">Hugging Face CLI guide</a> says gated or private repositories need the token that <code>hf auth login</code> saves. If the model page asks you to accept the license, do that first. The last line installs shell, and the <a href="/platforms/">platforms page</a> covers Homebrew. I would run <code>hf auth login</code> before any shared session exists.</p>
+</section>
+
+<section>
+<h2>Step 1: Link both Macs to one account</h2>
+<p>shell works without an account. Linking is what lets one list show sessions from both machines. On each Mac:</p>
+<pre><code>shell auth
+shell whoami</code></pre>
+<p><code>shell auth</code> opens the approval screen in a browser, and after you approve, the browser hands a one-time code back to a listener on 127.0.0.1. On a Mac you reach over SSH, <code>shell auth --no-browser</code> prints the approval URL instead. A browser on another computer cannot reach that listener, so it stops on a page that will not load, and you paste that page's address back into the terminal. <code>shell whoami</code> shows the linked account.</p>
+<p>The first <code>shell auth</code> also asks whether your signed-in browser may start sessions on that machine. Nothing here needs it, and <code>shell auth --no-remote-start</code> links the Mac without it. From then on each session is published to your account as it starts: its share URL, the command, the Mac's host name and the timing. Terminal contents and the encryption key are never sent.</p>
+</section>
+
+<section>
+<h2>Step 2: Start each download as a named session</h2>
+<p>On the first Mac:</p>
+<pre><code>shell --name "weights studio-1" -- hf download meta-models/Muse-Spark-Open-816B-A42B-NVFP4</code></pre>
+<p>On the second, the same command with <code>--name "weights studio-2"</code>. <code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app, in one line of at most 120 characters. The <code>--</code> ends shell's own options. shell starts <code>hf</code> in its own terminal in the background and prints a card. These values are invented:</p>
+<pre><code>  shell.online  ✦
+  Your terminal is ready. Open it in any browser.
+
+  Name       weights studio-1
+  Open       https://shell.online/s/EXAMPLE-ONLY#salt=EXAMPLE
+  Password   EXAMPLEpw1
+  Vault      saved to your account vault
+  Access     view and type · end-to-end encrypted
+  Session    2c8e4d6a90 · background
+  Closes     when the task exits
+
+  Rejoin     shell attach 2c8e4d6a90
+  Stop       shell kill -- 2c8e4d6a90
+  Run these on this computer. Ctrl-X, then D detaches after rejoining.</code></pre>
+<p>A QR code follows, holding the link and the password, and the line under it says that anyone who scans it can view and type in the session. If the Vault line says there is no account vault, keep the password, because the app will ask for it. I leave the downloads interactive so that Ctrl-C from the phone can stop one started with the wrong repository name. When <code>hf</code> exits, the session closes with it.</p>
+<p>The weights land in the Hugging Face cache, where <code>mlx_lm.server</code> looks when given a repository name. Its <a href="https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md">server documentation</a> says it downloads a model that is not cached, so skipping this step would bury half a terabyte of progress bars in the server log.</p>
+</section>
+
+<section>
+<h2>Step 3: Find both Macs in one list</h2>
+<p>On either Mac, run <code>shell ls</code>. In a terminal narrower than 132 columns it prints one block per session, newest first:</p>
+<pre><code>7f3a9c2e1b  weights studio-2
+  online · 41m12s · mac-studio-2.local
+  Command   hf download meta-models/Muse-Spark-Open-816B-A42B-NVFP4
+
+2c8e4d6a90  weights studio-1
+  online · 43m5s · mac-studio-1.local
+  Command   hf download meta-models/Muse-Spark-Open-816B-A42B-NVFP4</code></pre>
+<p>A wider terminal gets a table with ID, NAME, STATUS, UPTIME, MACHINE and COMMAND columns. <code>shell ls</code> never prints a password, and <code>shell list</code> shows only the sessions on the Mac you run it on. The <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">post on tracking sessions across machines by name</a> covers the release that added <code>--name</code> and <code>shell ls</code>.</p>
+<p>On the phone, sign in at <a href="https://app.shell.online/">app.shell.online</a>. The same sessions appear in one list, and opening one asks you to open your vault or enter that session's password. The <a href="/app/">app guide</a> says status describes reachability: finished is a known process exit, not proof that the work succeeded. A Mac that stops answering shows as offline, and after ten minutes <code>shell ls</code> marks its sessions machine gone and hides them unless you add <code>--all</code>. To see how a download ended:</p>
+<pre><code>shell ls --all --json</code></pre>
+<p>Each record carries <code>status</code> and, for a session that exited, <code>exit_code</code>. Zero from both downloads is the signal to start the server.</p>
+</section>
+
+<section>
+<h2>Step 4: Start the server behind a read-only link</h2>
+<p>The cookbook leaves the hostfile to MLX, whose documentation shows <code>mlx.distributed_config</code> logging in to each Mac over SSH, reading the Thunderbolt connections and writing the file. On the primary:</p>
+<pre><code>mlx.distributed_config --verbose --hosts mac-studio-1.local,mac-studio-2.local \
+  --over thunderbolt --backend jaccl --auto-setup --output hostfile.json</code></pre>
+<p><code>--auto-setup</code> needs passwordless sudo; without it, the tool prints the configuration commands for each Mac. Then start the cookbook's server command inside shell:</p>
+<pre><code>shell --read-only --name muse-server -- \
+  mlx.launch --hostfile hostfile.json --backend jaccl --env MLX_METAL_FAST_SYNCH=1 -- \
+  mlx_lm.server --model meta-models/Muse-Spark-Open-816B-A42B-NVFP4 --port 8080</code></pre>
+<p>shell stops reading its own options at the first <code>--</code>, so the second reaches <code>mlx.launch</code> untouched, which uses it to separate its options from the program it starts on every Mac. <code>--backend jaccl</code> picks the RDMA over Thunderbolt backend, and the cookbook calls <code>MLX_METAL_FAST_SYNCH=1</code> an experimental feature for faster CPU and GPU synchronization.</p>
+<p>The card now reads <code>Access     view only · end-to-end encrypted</code>. The MLX documentation says <code>mlx.launch</code> gathers stdout from all processes, and its example output prefixes each line with the rank, so one session shows what both servers print. It does not say how stderr is handled, so a rank that fails quietly may need checking on its own Mac. Send a teammate the link and the password through separate channels; the guide to <a href="/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone/">a read-only link for a training run</a> gives the same advice.</p>
+<div class="callout"><strong>Why read-only here.</strong> The MLX documentation says <code>mlx.launch</code> broadcasts stdin to all processes. In an interactive link, whatever anyone types in the browser goes to the terminal and from there to every rank. <code>--read-only</code> makes the relay reject browser input for every viewer, you included, so stopping the server becomes a job for a terminal on the primary Mac.</div>
+</section>
+
+<section>
+<h2>Step 5: Check the API from your phone</h2>
+<p>The server's link only shows output, so open a plain session on each Mac for running commands:</p>
+<pre><code>shell --name "studio-1 shell"</code></pre>
+<p>With no command, shell starts your default shell in the background. This link is interactive, and whoever holds it types as you on that Mac, so keep it to yourself. Do the same with <code>--name "studio-2 shell"</code> on the second Mac. From the phone, in the studio-1 session:</p>
+<pre><code>curl localhost:8080/v1/models</code></pre>
+<p>The server documentation gives <code>localhost</code> and port 8080 as the defaults, and says <code>/v1/models</code> lists the available models with an <code>id</code> and a <code>created</code> field for each. Its example of a real request is longer to type on a phone:</p>
+<pre><code>curl localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+     "messages": [{"role": "user", "content": "Say this is a test!"}],
+     "temperature": 0.7
+   }'</code></pre>
+<p>The cookbook notes that the chat template defaults to <code>xhigh</code> reasoning and advises a high token limit to leave room for it. Apple's post also configures OpenCode to use <code>http://127.0.0.1:8080/v1</code> as an OpenAI-compatible provider. With that in place, <code>shell opencode</code> on the primary gives the agent a browser link of its own.</p>
+</section>
+
+<section>
+<h2>Step 6: Stop the server and check the second Mac</h2>
+<p>From a terminal on the primary Mac, or from the studio-1 session on your phone:</p>
+<pre><code>shell list
+shell kill -- 5d1e7b3f2a</code></pre>
+<p><code>shell list</code> shows that Mac's sessions with their IDs, and <code>shell kill</code> takes an ID or a prefix of at least six characters, then prints a <code>Stopping</code> line with the ID and command. In the source, stopping a session on macOS sends SIGTERM to the wrapped command's process group, waits two seconds, and sends SIGKILL if it is still running. That group lives on the primary. The ranks on the second Mac were started over SSH by <code>mlx.launch</code>, so what happens to them is up to <code>mlx.launch</code> and SSH. Check from the studio-2 session:</p>
+<pre><code>pgrep -fl mlx_lm</code></pre>
+<p>If it lists a process, stop it with <code>kill</code> and its PID. Close each plain session by typing <code>exit</code> in it.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>The link carries the terminal, not port 8080. Nobody who opens it can send a request to the model, and the server stays on <code>localhost</code>, which matters because its documentation says it "is not recommended for production as it only implements basic security checks." Pilot's post on <a href="https://pilotprotocol.network/blog/share-a-dev-servers-terminal-with-a-teammate-not-its-port-restarting-on-go-1-26">sharing a dev server's terminal with a teammate instead of its port</a> makes the same argument.</p>
+<p>It does not keep the Macs awake or online; a Mac that sleeps drops its sessions to offline. It does not restart a server that crashes or continue a download that failed. The session finishes and you start it again. For download timeouts, the Hugging Face guide suggests raising <code>HF_HUB_DOWNLOAD_TIMEOUT</code> and rerunning the command.</p>
+<p>Read-only stops typing, not reading. Everything the server prints reaches every viewer. The relay sees ciphertext plus routing, size, timing, IP and lifecycle metadata, as the <a href="/e2ee/">encryption page</a> explains, and the account records the command line and host name. Any connected phone also switches the shared terminal to a portrait grid, a read-only phone included, so the server's lines wrap narrower until the last phone leaves.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents. shell carries a terminal. Reaching the API itself from another machine or agent is network traffic, which is Pilot's job. Its post on <a href="https://pilotprotocol.network/blog/http-services-over-encrypted-overlay">running HTTP services over an encrypted agent overlay</a> shows a Go agent serving <code>net/http</code> on a Pilot virtual port, and <code>pilotctl extras gateway start --ports 80 &lt;address&gt;</code> mapping that agent to a loopback address so <code>curl</code> or a browser can reach it. Traffic between agents is encrypted with AES-256-GCM, and the post warns that the gateway serves plain HTTP on the local segment. Putting <code>mlx_lm.server</code> behind it would take a small agent in front of port 8080. That is a direction, not something I have tested.</p>
+<p>shell's source is on <a href="https://github.com/TeoSlayer/shell.online">GitHub</a>, the <a href="/cli/">CLI reference</a> lists every flag used here, and the <a href="/security/">security model</a> explains what a link and a password grant.</p>
+</section>
+
+<div class="cta"><h3>Put both Macs in one list</h3><p>Install shell on each Mac, link them with shell auth, and start the server with --read-only so the people watching it cannot type into every rank.</p><a href="/docs/">Read the quick start</a></div>
