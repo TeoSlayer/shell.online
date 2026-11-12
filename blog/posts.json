@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-which-systemd-services-can-start-claude-code-on-linux",
+    "title": "How to Check Which systemd Services Can Start Claude Code on Linux",
+    "description": "Find the systemd units that can launch a coding agent, tell shell.online's own service from the rest, and see which credential its agents get.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "systemd",
+      "linux",
+      "agent-security"
+    ],
+    "iso_date": "2026-11-12",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-which-systemd-services-can-start-claude-code-on-linux.webp"
+  },
+  {
     "slug": "how-to-check-a-claude-code-login-will-outlast-a-long-shared-run",
     "title": "How to Check a Claude Code Login Will Outlast a Long Shared Run",
     "description": "Read the login end date Claude Code 2.1.318 reports, renew before a long run, and watch the run from your phone through a read-only shell.online link.",
