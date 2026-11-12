@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Wordmark } from "./Wordmark";
 
 /*
@@ -32,13 +32,20 @@ export function AuthShell({
   foot,
   legal,
 }: AuthShellProps) {
+  /*
+   * The header link carries the page's router state across, as the link in
+   * the foot does. Someone sent here by `shell auth` has the CLI's request in
+   * that state; dropping it on the way to sign-in landed them on their
+   * sessions instead, with the terminal still waiting.
+   */
+  const location = useLocation();
   return (
     <div className="auth">
       <div className="auth-side">
         <header className="auth-head">
           <Wordmark />
           {headLink && (
-            <Link className="auth-head-link" to={headLink.to}>
+            <Link className="auth-head-link" to={headLink.to} state={location.state}>
               {headLink.label}
             </Link>
           )}

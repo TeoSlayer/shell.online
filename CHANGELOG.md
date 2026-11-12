@@ -4,6 +4,31 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 
 ## Unreleased
 
+### Added
+
+- A blog at shell.online/blog/, listing every shell.online post published so
+  far (23 posts, first published on pilotprotocol.network, which stays their
+  canonical home). Posts are listed in `blog/posts.json` with their bodies in
+  `blog/posts/`, and the build renders the index, each post, an RSS feed and a
+  sitemap as static pages. See blog/README.md.
+- `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
+- The installer runs a `shell` command once it has installed, by the new
+  executable's full path, so one pasted line can install and link a machine
+  before its install directory is on PATH:
+  `curl -fsSL https://shell.online/install | sh -s -- auth`. Piped into `sh`,
+  the command gets the terminal for its prompts; with no terminal it gets no
+  input rather than the rest of the script.
+
+### Changed
+
+- The empty Machines page and the app guide's "Link your computer" card give
+  that one line instead of two separate steps. Remote start stays a separate
+  choice at the prompt.
+- `shell auth` waits 15 minutes for the browser instead of 5. A first link can
+  mean signing in, creating a vault and confirming its recovery key, and five
+  minutes ran out partway through. When it does run out it now says to run
+  `shell auth` again.
+
 ### Fixed
 
 - Build with Go 1.26.11, which fixes three `net/http` vulnerabilities
@@ -15,18 +40,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   reconnects and renderer changes do not cause repeated resize requests.
   `?terminalAutoFit=0` opts out for one page; `VITE_TERMINAL_AUTO_FIT=0`
   disables automatic fitting for an app build.
-
-### Added
-
-- A blog at shell.online/blog/, listing every shell.online post published so
-  far (23 posts, first published on pilotprotocol.network, which stays their
-  canonical home). Posts are listed in `blog/posts.json` with their bodies in
-  `blog/posts/`, and the build renders the index, each post, an RSS feed and a
-  sitemap as static pages. See blog/README.md.
-- `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
-
-### Fixed
-
 - Mobile bottom navigation stays at the visible bottom after the browser scrolls
   the document to a focused field, instead of leaving an empty strip below it.
 - Chat preserves code indentation, literal identifiers and fenced blank lines,
@@ -38,6 +51,9 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Answers that resume after an idle pause continue in the same chat message.
 - Blue “Reading … as messages” notices are restored. Summary permission switches
   reflect a successful save immediately instead of waiting for the next poll.
+- Signing in from the header link of the sign-up page returns to the terminal
+  link request that sent you there. It used to land on the sessions list, with
+  the terminal still waiting for a callback that was never coming.
 
 ## [0.25.0] — 2026-10-02
 
@@ -189,7 +205,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   so on a machine short of memory an idle session could take 5-30 seconds to
   echo a keystroke. Existing installs keep the old agent until you run
   `shell service install`; `shell service status` says when that is needed.
-
 ## [0.23.2] — 2026-09-25
 
 ### Changed
