@@ -247,7 +247,11 @@ func performAgentCommand(
 		// not silently weaken E2EE or widen file sharing on the wrapper itself.
 		arguments := append([]string{"--"}, browserCommandArguments(command.Command)...)
 		launch := exec.CommandContext(ctx, self, arguments...)
-		launch.Env = passwordHandoffEnvironment(os.Environ(), "")
+		// Never an agent conversation's identity, even from a daemon an older
+		// release started with one: the browser asked for a new program. Also
+		// drop any inherited browser password the parent was handed, as a
+		// fresh launch reads its own from the pipe or not at all.
+		launch.Env = passwordHandoffEnvironment(detachedEnvironment(os.Environ()), "")
 		if command.Name != "" {
 			// The launched shell reads this when it publishes the session, so
 			// the name chosen in the browser survives to the session list.

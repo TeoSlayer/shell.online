@@ -83,6 +83,43 @@ func prepareCommandLaunch(arguments, environment []string, allowHandoff bool) co
 	return launch
 }
 
+// harnessIdentityVariables are the variables an agent harness sets to tell a
+// tool subprocess which conversation it belongs to. They are right for the one
+// command the agent ran, and wrong for anything that outlives it.
+//
+// The daemon is the case that matters: any shell command starts it when none
+// is running, so a first command typed inside Claude Code used to leave a
+// daemon carrying that conversation's id. Every session the browser then asked
+// for inherited it, read as a handoff, and forked that old conversation instead
+// of starting the program that was asked for, until the daemon next restarted.
+//
+// Keep this a superset of every adapter's detection and strip lists;
+// TestHarnessIdentityVariablesCoverEveryAdapter checks.
+var harnessIdentityVariables = []string{
+	"CLAUDECODE",
+	"CLAUDE_CODE_CHILD_SESSION",
+	"CLAUDE_CODE_SESSION_ID",
+	"CLAUDE_CODE_BRIDGE_SESSION_ID",
+	"CLAUDE_CODE_REMOTE_SESSION_ID",
+	"OPENCODE",
+	"OPENCODE_PID",
+	"OPENCODE_SESSION_ID",
+	"AGENT",
+}
+
+// detachedEnvironment is the environment for a process that outlives the
+// command that started it: this one, minus any agent conversation's identity.
+func detachedEnvironment(environment []string) []string {
+	return removeEnvironmentVariables(environment, harnessIdentityVariables...)
+}
+
+// handoffAllowed reports whether a launch may fork the agent conversation it
+// was started from. Only a background launch someone typed may. A session the
+// browser asked for never does: it asked for the program, started fresh.
+func handoffAllowed(foreground bool, environment []string) bool {
+	return !foreground && environmentValue(environment, sessionOriginEnvironment) == ""
+}
+
 func environmentValue(environment []string, name string) string {
 	prefix := name + "="
 	for _, entry := range environment {

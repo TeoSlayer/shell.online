@@ -134,7 +134,7 @@ func startDetachedDaemon(self string) {
 	defer null.Close()
 
 	command := exec.Command(self, "daemon")
-	command.Env = os.Environ()
+	command.Env = detachedEnvironment(os.Environ())
 	command.Stdin = null
 	command.Stdout = null
 	command.Stderr = null

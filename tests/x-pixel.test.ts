@@ -25,13 +25,19 @@ describe("X base pixel", () => {
       ["config", "rfilf"],
     ]);
   });
-  it.each(["/"])("loads on public %s", async path => {
+  it.each(["/", "/start/"])("loads on public %s", async path => {
     dom(`https://shell.online${path}?utm_source=x&twclid=valid_click-123`);
     (await import("../web/x-pixel")).initXPixel();
     expect(scripts).toHaveLength(1);
   });
+  it("attributes the /start/ visit to /start/, not the home page", async () => {
+    const w = dom("https://shell.online/start/?utm_source=x&utm_medium=paid_social");
+    (await import("../web/x-pixel")).initXPixel();
+    expect(Array.from(w.twq!.queue[0])).toEqual(["set", { page_location: "https://shell.online/start/" }]);
+  });
   it.each([
     "https://shell.online/s/abcdefghijklmnopqrstuvwxyz012345#salt=SECRET",
+    "https://shell.online/start", "https://shell.online/start/extra", "https://shell.online/start/?password=SECRET",
     "https://app.shell.online/", "https://stats.shell.online/", "http://shell.online/",
     "https://shell.online/docs/", "https://shell.online/cli/", "https://shell.online/docs/v0.23.0/security/",
     "http://localhost:5178/", "https://shell.online/oauth/callback", "https://shell.online/?password=SECRET",
@@ -62,6 +68,7 @@ describe("X base pixel", () => {
   });
   it("is wired only to the landing entry point", () => {
     expect(readFileSync("web/landing.ts", "utf8")).toContain("initXPixel();");
+    expect(readFileSync("web/start.ts", "utf8")).toContain("initXPixel();");
     expect(readFileSync("web/documentation-entry.ts", "utf8")).not.toContain("x-pixel");
     expect(readFileSync("web/main.ts", "utf8")).not.toContain("x-pixel");
     expect(readFileSync("app/src/components/ProductAnalytics.tsx", "utf8")).not.toContain("x-pixel");

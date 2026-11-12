@@ -1,4 +1,5 @@
 import { resolveDocumentationRoute } from "../shared/documentation";
+import { START_PATH } from "../shared/landing-paths";
 import { RELEASE_VERSION } from "../shared/release";
 import { sendPosthog, type PosthogCaptureContext } from "../shared/posthog";
 import { campaignMedium, campaignSource, classifyReferrer, publicSource } from "../shared/public-attribution";
@@ -29,6 +30,7 @@ export function analyticsRoute(url: URL): { surface: string; route: string; guid
   if (url.hostname === "shell.online") {
     if (/^\/s\/[A-Za-z0-9_-]{32}\/?$/.test(url.pathname)) return { surface: "terminal", route: "terminal" };
     if (url.pathname === "/") return { surface: "landing", route: "landing" };
+    if (url.pathname === START_PATH) return { surface: "landing", route: "start" };
     const guide = resolveDocumentationRoute(url.pathname, RELEASE_VERSION);
     if (guide) return { surface: "docs", route: "docs", guide: guide.kind };
   }
@@ -82,11 +84,22 @@ function browserContext(): PosthogCaptureContext {
   return { source: "browser", userAgent, automated };
 }
 
+let landingVariant: string | null = null;
+
+/**
+ * Which version of /start/ this visit saw: a page key defined in PostHog, or
+ * "default". Set before the page view is sent, so every event carries it.
+ */
+export function setLandingVariant(key: string): void {
+  landingVariant = key;
+}
+
 function attribution(url: URL): Record<string, unknown> {
   // UTM values and referrers are classified locally; no raw campaigns, click IDs,
   // paths or account/query/fragment data go to the provider.
   return { source: publicSource(url, document.referrer), campaign_source: campaignSource(url),
-    medium: campaignMedium(url), referrer_source: classifyReferrer(document.referrer, url.origin) };
+    medium: campaignMedium(url), referrer_source: classifyReferrer(document.referrer, url.origin),
+    ...(landingVariant ? { landing_variant: landingVariant } : {}) };
 }
 
 export function trackProduct(event: string, input: Record<string, unknown> = {}): void {

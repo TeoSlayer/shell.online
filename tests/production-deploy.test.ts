@@ -9,7 +9,7 @@ const valid = () => ({
   name: "shell-online", account_id: "a".repeat(32),
   compatibility_flags: ["enable_request_signal"],
   routes: [{ pattern: "shell.online" }, { pattern: "stats.shell.online" }],
-  vars: { MCP_CONTROL_ENABLED: "0" },
+  vars: { MCP_CONTROL_ENABLED: "0", POSTHOG_ENABLED: "1" },
 });
 describe("production deploy guard", () => {
   it("refuses an older or unknown release identity", () => {
@@ -21,7 +21,17 @@ describe("production deploy guard", () => {
   });
   it("accepts the explicit production target with either control state", () => {
     expect(() => validateProductionConfig(valid())).not.toThrow();
-    expect(() => validateProductionConfig({ ...valid(), vars: { MCP_CONTROL_ENABLED: "1" } })).not.toThrow();
+    expect(() => validateProductionConfig({ ...valid(), vars: { MCP_CONTROL_ENABLED: "1", POSTHOG_ENABLED: "1" } })).not.toThrow();
+  });
+  it("accepts relay analytics explicitly on or off", () => {
+    expect(() => validateProductionConfig({ ...valid(), vars: { MCP_CONTROL_ENABLED: "0", POSTHOG_ENABLED: "0" } })).not.toThrow();
+  });
+  // Regression: 0.23.1 deployed with a config that omitted the flag, and every
+  // relay event stopped reaching PostHog while the accounts app kept reporting.
+  it.each([undefined, "", "true", "yes", 1])("refuses a config whose relay analytics flag is %s", (value) => {
+    const vars: Record<string, unknown> = { MCP_CONTROL_ENABLED: "0" };
+    if (value !== undefined) vars.POSTHOG_ENABLED = value;
+    expect(() => validateProductionConfig({ ...valid(), vars })).toThrow("POSTHOG_ENABLED");
   });
   it.each([
     { name: "shell-online-staging" }, { account_id: undefined }, { routes: [] },

@@ -84,6 +84,7 @@ export const PUBLIC_CTA_TARGETS = new Set([
   "start_nav",
   "start_hero",
   "start_footer",
+  "start_share",
   "demo",
   "github_star",
   "signup_nav",

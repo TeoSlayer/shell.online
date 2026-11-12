@@ -12,6 +12,19 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
   `blog/posts/`, and the build renders the index, each post, an RSS feed and a
   sitemap as static pages. See blog/README.md.
 - `/blogs` and `/blogs/<post>/` redirect to the same page under `/blog/`.
+- A one-screen landing page at `/start/` for paid traffic, to test against
+  the home page. It says what shell does in one line and gives the three
+  setup steps: install, start your agent (`shell claude`, or tap Codex,
+  Hermes, OpenCode or Cursor), and scan the QR code. On a phone, "Send these
+  steps to my laptop" opens the share sheet. The page gets the home page's
+  analytics and X pixel, is kept out of search results, and reports as its
+  own route (`start`, `landing_start` on the statistics dashboard).
+- Ad-specific versions of `/start/`, set up in PostHog without a deploy. An ad
+  links to `/start/?utm_content=<page>`, and the page takes that page's
+  headline, subline, step 2 agent and button text from the payload of the
+  `start-landing-pages` feature flag. An unknown page, or PostHog being slow or
+  blocked, shows the default page. Events from the visit record the page key
+  as `landing_variant`, so results can be compared page by page.
 - The installer runs a `shell` command once it has installed, by the new
   executable's full path, so one pasted line can install and link a machine
   before its install directory is on PATH:
@@ -51,6 +64,25 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Answers that resume after an idle pause continue in the same chat message.
 - Blue “Reading … as messages” notices are restored. Summary permission switches
   reflect a successful save immediately instead of waiting for the next poll.
+- `npm run deploy:production` refuses a config that does not set
+  `POSTHOG_ENABLED` to `"0"` or `"1"`. Since 0.23.1 the relay has been
+  deployed with a config that left the flag out, and because Wrangler replaces
+  every Worker variable on deploy, relay analytics (downloads, installs,
+  sessions, viewers and MCP results) silently stopped on 23 September. The
+  accounts app was unaffected because its flag is committed. Production needs
+  `"POSTHOG_ENABLED": "1"` in `wrangler.production.jsonc` and a redeploy to
+  restore it.
+- Starting `claude` (or `opencode`) from the app no longer reopens an old
+  agent conversation. Any `shell` command starts the background daemon when
+  none is running, and it passed on its whole environment. Run from inside
+  Claude Code, that included the conversation's id, so every session the app
+  then asked for was treated as a handoff and forked that conversation instead
+  of starting fresh, until the daemon restarted. The daemon and the sessions it
+  starts no longer carry an agent conversation's identity, and a session the
+  app asks for never hands off. Typing `shell claude` inside Claude Code still
+  forks the conversation, as before. Machines already affected are fixed once
+  the new release's daemon replaces the running one (`shell service install`,
+  a restart, or signing in again).
 - Signing in from the header link of the sign-up page returns to the terminal
   link request that sent you there. It used to land on the sessions list, with
   the terminal still waiting for a callback that was never coming.
@@ -194,7 +226,6 @@ All notable user-visible changes are recorded here. Versions follow [Semantic Ve
 - Shell Keep's "Gather now" answered "internal error". The database only
   allowed a command to be a start or a kill, while the rest of the system
   already accepted the gathering's probe.
-
 ## [0.23.3] — 2026-09-25
 
 ### Fixed

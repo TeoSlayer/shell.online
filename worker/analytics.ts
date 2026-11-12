@@ -1,5 +1,6 @@
 import { resolveBlogRoute } from "../shared/blog";
 import { resolveDocumentationRoute } from "../shared/documentation";
+import { START_PATH } from "../shared/landing-paths";
 import type { UniqueSurface } from "../shared/stats";
 import { campaignSource, classifyReferrer, PUBLIC_CTA_TARGETS } from "../shared/public-attribution";
 export { campaignSource, classifyReferrer } from "../shared/public-attribution";
@@ -267,6 +268,7 @@ export function uniqueSurface(event: AnalyticsEvent, target: string): UniqueSurf
 export function documentTarget(pathname: string, status: number, currentVersion: string): string {
   if (status === 404) return "not_found";
   if (pathname === "/") return "landing";
+  if (pathname === START_PATH) return "landing_start";
   const route = resolveDocumentationRoute(pathname, currentVersion);
   if (route) return route.kind === "docs" ? "docs" : `docs_${route.kind.replace(/-/g, "_")}`;
   const post = resolveBlogRoute(pathname);
