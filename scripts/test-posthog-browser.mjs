@@ -100,7 +100,7 @@ try{
   await cdp('Fetch.enable',{patterns:[{urlPattern:'*',requestStage:'Request'}]});
   phase='landing'; expectedAgents.set(phase, await browser.evaluate('navigator.userAgent')); await browser.navigate(`https://shell.online/?utm_source=x&utm_campaign=${marker}&twclid=${marker}`);
   await wait(()=>events.some(e=>e.phase===phase&&e.payload.event==='$pageview'),'landing capture');
-  await browser.call(async()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{}}});document.querySelector('[data-copy=install]').click();document.querySelector('[data-cta=start_hero]').click();});
+  await browser.call(async()=>{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{}}});document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('a[data-cta]'))e.preventDefault();},true);document.querySelector('[data-copy=install]').click();document.querySelector('[data-cta=start_hero]').click();});
   // Engagement/focus events can arrive before the async clipboard result. Wait
   // for the actual interactions, not a total that unrelated events can satisfy.
   await wait(()=>['command_copy','landing_cta'].every(event=>events.some(e=>e.phase==='landing'&&e.payload.event===event)),'copy and CTA');
