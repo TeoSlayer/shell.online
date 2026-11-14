@@ -1,0 +1,88 @@
+.workshop-camera {
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.5em 0.625em;
+  border: 1px solid #677362;
+  border-radius: 12px;
+  background: #f6f5ed;
+  color: #202b22;
+  font: clamp(20px, 1.25vw, 48px)/1.3 var(--sans, system-ui, sans-serif);
+  color-scheme: light;
+}
+
+.workshop-camera *,
+.workshop-camera *::before,
+.workshop-camera *::after {
+  box-sizing: border-box;
+}
+
+.workshop-camera__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375em;
+}
+
+.workshop-camera button {
+  min-width: 48px;
+  min-height: 48px;
+  max-width: 100%;
+  padding: 0.35em 0.65em;
+  border: 1px solid #697765;
+  border-radius: 8px;
+  background: #fffef8;
+  color: #202b22;
+  font: inherit;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.workshop-camera button:hover:not(:disabled) {
+  background: #e6eddf;
+}
+
+.workshop-camera button:focus-visible {
+  outline: 3px solid #265ac0;
+  outline-offset: 3px;
+}
+
+.workshop-camera button:disabled {
+  border-style: dashed;
+  background: #e8e9e2;
+  color: #596154;
+  cursor: default;
+}
+
+.workshop-camera button[aria-pressed="true"] {
+  border-color: #3b6245;
+  background: #d8e8cf;
+}
+
+.workshop-camera__zoom {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.375em;
+}
+
+.workshop-camera__zoom button {
+  flex-shrink: 0;
+  font-weight: 650;
+}
+
+.workshop-camera output {
+  min-width: 0;
+  max-width: 18ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.workshop-camera__hint {
+  margin: 0.35em 0 0;
+  color: #475347;
+  overflow-wrap: anywhere;
+}
