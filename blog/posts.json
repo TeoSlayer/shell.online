@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-answer-a-codex-security-scans-budget-prompt-from-your-phone",
+    "title": "How to Answer a Codex Security Scan's Budget Prompt From Your Phone",
+    "description": "Run a Codex Security 0.10.0 scan inside shell.online, raise its cost limit from your phone at the 80% prompt, and resume an interrupted scan on the same link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex-security",
+      "mobile",
+      "persistent-sessions",
+      "security-scanning"
+    ],
+    "iso_date": "2026-11-14",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-answer-a-codex-security-scans-budget-prompt-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-self-host-shell-onlines-accounts-app-behind-your-own-sign-in",
     "title": "How to Self-Host shell.online's Accounts App Behind Your Own Sign-In",
     "description": "Run the shell.online accounts app with your own OpenID Connect provider and PostgreSQL, then point the CLI, relay and background service at it.",
