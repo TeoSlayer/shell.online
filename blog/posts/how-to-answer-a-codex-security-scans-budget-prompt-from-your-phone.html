@@ -1,0 +1,120 @@
+<p>On 12 November OpenAI published <a href="https://github.com/openai/codex-security/releases/tag/npm-v0.10.0">Codex Security 0.10.0</a>, the CLI and TypeScript SDK that scans a codebase for vulnerabilities, validates what it finds and drafts patches. The <a href="https://github.com/openai/codex-security">repository</a> is Apache 2.0 licensed. Two changes in this release matter if you run scans that take a while. An interrupted Standard scan can now continue from a saved checkpoint with <code>codex-security scans resume SCAN_ID</code>, keeping its usage and its budget, which came in with <a href="https://github.com/openai/codex-security/pull/2610">pull request 2610</a>. And bulk or component scans accept <code>--max-total-cost</code>, one estimated budget shared across repositories or components.</p>
+
+<p>The budget is the part that needs a person. The <a href="https://github.com/openai/codex-security/blob/main/sdk/typescript/docs/cli.md">CLI guide</a> says that when a single interactive scan reaches 80% of its <code>--max-cost</code> limit, the full-screen dashboard offers a higher total. Work continues while you decide, and the old limit stays in force until you save a new one. CI, JSON, headless and verbose runs never ask. So the prompt only appears in a real terminal, and only someone looking at that terminal can answer it before the scan reaches the old limit and stops.</p>
+
+<p>This guide runs a Codex Security scan inside shell.online, so the dashboard is on your phone as well as your desk. You will start the scan with a persistent link, answer the budget prompt from the phone's key bar, avoid the one tap that cancels the scan for good, and bring an interrupted scan back on the same link.</p>
+
+<section>
+<h2>Step 1: Install shell and Codex Security</h2>
+
+<p>On the computer that holds the checkout, install shell with the installer from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>, then the scanner from npm with a <a href="https://docs.npmjs.com/cli/v11/commands/npm-install">global install</a>:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell --version
+npm install --global @openai/codex-security
+codex-security --version
+codex-security login</code></pre>
+
+<p>The installer checks release checksums, and <code>shell --version</code> prints what you got. The npm package provides <code>codex-security</code> and a short alias, <code>cs</code>. <code>codex-security login</code> signs you in with ChatGPT.</p>
+</section>
+
+<section>
+<h2>Step 2: Choose an output folder and a state file</h2>
+
+<p>Codex Security wants an empty output directory outside the scanned directory and outside its Git worktree. shell wants a state file for <code>--persistent</code>, which holds the session's host credentials, its browser password and its decryption material. Neither belongs in the repository:</p>
+
+<pre><code>mkdir -p ~/scans ~/.shell-states
+chmod 700 ~/.shell-states</code></pre>
+
+<p>Do not create the output folder itself: the scanner creates it, private to you, and refuses one that already has files in it. Keep the state file name for later: re-running a command with the same <code>--persistent</code> file brings back the same link and the same password, which is what makes Step 5 work.</p>
+</section>
+
+<section>
+<h2>Step 3: Start the scan inside shell</h2>
+
+<p>From the checkout, wrap the scan in shell. The example repository, cost and paths are invented:</p>
+
+<pre><code>cd ~/src/payments-api
+shell --persistent ~/.shell-states/payments-scan.json --name "cs payments" -- \
+  codex-security scan . --max-cost 25 --output-dir ~/scans/payments-0.10</code></pre>
+
+<p>Everything after <code>--</code> is the scanner's command line. shell starts it in a pseudo-terminal on this machine, prints a browser link, a ten-character password and a QR code, and hands your prompt back while the scan runs in the background. <code>--name</code> labels the session in <code>shell list</code> and in the web app. <code>--max-cost 25</code> tells Codex Security to stop the scan and its workers once the estimated cost passes 25 US dollars. For OpenAI models the estimate uses the published <a href="https://developers.openai.com/api/docs/pricing">OpenAI API rates</a>. The guide is plain that requests already in flight can finish above it.</p>
+
+<p>Running inside shell matters for the prompt. In the 0.10.0 source the scanner offers a budget increase only when its standard input is a terminal. shell gives the scan a real pseudo-terminal, so the dashboard behaves as it would in your own window. If you redirect output or add <code>--headless</code>, you get plain status lines and no prompt, with or without shell.</p>
+
+<p>The link and password together are an access credential. Anyone holding both can type into this scan, including the keystroke that ends it. Send them over separate channels if you send them at all, and see the <a href="/security/">security page</a> and the <a href="/e2ee/">encryption details</a> for what the relay can and cannot read.</p>
+</section>
+
+<section>
+<h2>Step 4: Read the dashboard and answer the prompt on your phone</h2>
+
+<p>Scan the QR code, or open the link on the phone and type the password. The scan's dashboard draws in the browser through <a href="https://xtermjs.org/">xterm.js</a> as it does on the host, and the <a href="/mobile/">phone guide</a> covers the rest of the mobile view.</p>
+
+<p>Under the terminal, on a screen 760 pixels wide or narrower, or any touch screen, shell shows a key bar: <code>esc</code>, <code>tab</code>, four arrows, <code>enter</code> and <code>ctrl-c</code>. Each sends the byte a keyboard would. The bar is disabled on read-only links, while the page waits for the session key, and while the session is not connected, so a greyed-out bar tells you something before you tap it.</p>
+
+<p>Tap the terminal to raise the phone's keyboard and press <code>d</code> to switch the dashboard to its details view. There, <code>a</code> shows all sources, <code>m</code> the main scan, and <code>1</code> to <code>9</code> a single worker. The CLI guide suggests the details view for scrolling through the full readings on a short terminal, which a phone held upright is.</p>
+
+<p>When the estimate passes 80% of the limit, the dashboard asks for a higher total. You have three answers:</p>
+
+<ul>
+<li>Type a plain number, such as <code>40</code>, and tap <code>enter</code>. It has to be above the current limit and above the cost estimated so far. Anything else, including a dollar sign, gets the reply "Enter a finite total above" followed by the minimum, and the prompt stays open.</li>
+<li>Tap <code>enter</code> with nothing typed to keep the limit.</li>
+<li>Tap <code>esc</code> to dismiss the prompt and keep the limit.</li>
+</ul>
+
+<p>The scan keeps working the whole time. If you ignore the prompt, the old limit applies and the scan stops once the estimate crosses it.</p>
+
+<div class="callout"><p><strong>The ctrl-c key cancels the scan, and a cancelled scan cannot be resumed.</strong> It sits on the same strip as <code>enter</code>. In the 0.10.0 source, Ctrl-C or Ctrl-D typed into the budget prompt closes the prompt and interrupts the scan, and the CLI treats the first SIGINT or SIGTERM it receives as a cancellation (<a href="https://github.com/openai/codex-security/blob/main/sdk/typescript/src/cli-signals.ts">cli-signals.ts</a>). It prints <code>codex-security: Scan canceled by Ctrl-C.</code> and exits with status 130, or 143 for SIGTERM. The guide is explicit that completed, failed and cancelled scans need <code>scans rerun</code>, which starts a new scan with fresh discovery and does not continue the old one. <code>shell kill</code> is no gentler: it sends SIGTERM to the scan's process group and, on Unix, SIGKILL two seconds later if the scan is still running.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Bring an interrupted scan back on the same link</h2>
+
+<p>The resumable case is a scan that stopped without recording a cancellation. The guide names one: the connection fails after the session is saved, and the CLI prints the resume command itself. Because the CLI records a cancellation itself when it gets a signal, a process that dies before it can, from a SIGKILL or a power cut, should also leave the scan marked <code>running</code>. Either way, when the scanner exits, the shell session closes with it, and the link on your phone goes offline.</p>
+
+<p>Back at the machine, find the scan:</p>
+
+<pre><code>cd ~/src/payments-api
+codex-security scans list --scan-root ~/scans</code></pre>
+
+<p>The list prints each full scan ID. For a <code>running</code> Standard or Deep scan with a saved recipe and its original session, it also prints the resume command, and it labels a running scan whose last activity is more than 24 hours old. Resume it under the same state file:</p>
+
+<pre><code>shell --persistent ~/.shell-states/payments-scan.json -- \
+  codex-security scans resume SCAN_ID</code></pre>
+
+<p>shell reuses the session identity, password and URL from the state file, so reload the tab already open on your phone and type the same password. The <code>--name</code> from the first run carries over too. The scanner keeps the scan ID, completed workers, artifacts and accumulated cost, and continues in its original Codex session with the same <code>--max-cost</code> limit and <code>--max-time</code> deadline. Work since the last checkpoint may be done twice.</p>
+
+<p>Three things stop this command. The scanner refuses unless the checkout identity, revision and contents still match, so do not switch branches or edit files while a scan is waiting. shell refuses if you change the access mode: a state file created without <code>--read-only</code> answers a later run with <code>--read-only</code> by saying the access and encryption mode do not match. And if the machine crashed and left a local session record or control socket behind, shell blocks the resume until you look at it and recover it yourself. Nothing restarts it for you.</p>
+
+<p>When the scan completes, its results folder holds <code>report.md</code>, <code>findings.json</code> and a <a href="https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html">SARIF</a> export under <code>exports/results.sarif</code> when that optional write succeeds.</p>
+</section>
+
+<section>
+<h2>Step 6: Decide who else holds the link</h2>
+
+<p>The budget prompt needs an interactive link, because a <code>--read-only</code> session blocks browser input for every viewer, the owner included. That makes this setup a poor fit for a teammate who only needs to watch. If you hand them the link and password, they get the same <code>ctrl-c</code> key you have.</p>
+
+<p>If a watcher matters more than answering from the phone, start a separate scan with <code>--read-only</code> and its own state file. Then answer its prompts at the computer with <code>shell attach</code>, using the ID from <code>shell list</code>, and detach with Ctrl-X, then D. <a href="/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone/">A read-only link for a training run</a> walks through that pattern. If you shared the interactive link and want it back, <code>shell password rotate &lt;ID&gt;</code> changes the password and disconnects current viewers without stopping the scan, as <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">the post on revoking a link</a> explains.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>shell does not read the cost or tell you that the prompt is waiting. There is no push notification. You see the prompt when you look.</li>
+<li>It does not pause a scan. A persistent link is a stable identity, not a process checkpoint, as the <a href="/reliability/">reliability page</a> says. The resume comes from Codex Security's own checkpoint.</li>
+<li>It does not make Ctrl-C safe. From the phone, the keyboard or <code>shell kill</code>, a signal cancels the scan. The <a href="https://man7.org/linux/man-pages/man7/signal.7.html">signal(7) man page</a> explains that SIGKILL cannot be caught or ignored, and the <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap11.html">POSIX terminal interface</a> covers how a terminal turns Ctrl-C into SIGINT.</li>
+<li>It does not keep a sleeping or offline computer reachable. The host has to stay awake and online for the scan to run and for the link to work.</li>
+<li>It does not change what Codex Security sends to its model provider. End-to-end encryption covers the terminal traffic between your machine and the browser, nothing else.</li>
+<li>It does not cover batch budgets. The docs describe the increase prompt for a single interactive scan, so do not expect it from a <code>--max-total-cost</code> bulk run.</li>
+<li>It does not judge the findings. The guide states that a completed scan does not mean every file was examined. A scanner is one input to a process like NIST's <a href="https://csrc.nist.gov/pubs/sp/800/218/final">Secure Software Development Framework</a>, and OWASP's page on <a href="https://owasp.org/www-community/Source_Code_Analysis_Tools">source code analysis tools</a> lists the limits such tools share.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, an open source network stack for autonomous agents. A scanner that runs for a long time and spends money as it goes is still an agent, and Pilot's piece on <a href="https://pilotprotocol.network/blog/network-security-for-multi-agent-systems-key-strategies">network security for multi-agent systems</a> argues for layers of visibility and guardrails rather than one control. Here the cost limit is a guardrail and the link is visibility. In my view the cap is only worth setting if someone can see the prompt in time to answer it.</p>
+</section>
+
+<div class="cta"><h3>Run the next scan where you can see it</h3><p>Install shell, wrap the scan, and keep the dashboard in your pocket. The <a href="/cli/">CLI reference</a> lists every flag used here.</p><a href="/docs/">Read the shell.online docs</a></div>
