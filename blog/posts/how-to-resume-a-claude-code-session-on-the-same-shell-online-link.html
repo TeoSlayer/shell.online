@@ -1,0 +1,90 @@
+<p>Anthropic shipped <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.323">Claude Code 2.1.323 on 12 November</a> with a small addition for anyone who starts Claude Code from another program: <code>CLAUDE_CODE_RESUME_HINT_COMMAND</code>. The release note says a program that starts Claude Code can set it "to have the exit hint name its own resume command". The <a href="https://code.claude.com/docs/en/env-vars">environment variable reference</a> fills in the rest. You set it to the name you type to run your wrapper, and a local session then prints <code>mytool --resume &lt;session-id&gt;</code> at exit instead of <code>claude --resume &lt;session-id&gt;</code>. A day later, <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.325">2.1.325</a> fixed recent turns sometimes going missing from a resumed session after Claude Code stopped without a clean exit.</p>
+
+<p>This matters if you run Claude Code through shell.online. When a shared session's process exits, the link stops being live. If you then resume with a plain <code>claude --resume</code>, the conversation comes back in a local terminal with no link at all, and the teammate who was watching has nothing to reload. The exit hint pointed you at the wrong command.</p>
+
+<p>This guide builds a short wrapper script that fixes both halves. The wrapper sets the new variable, so the hint names the wrapper. The wrapper starts Claude Code through <code>shell --persistent</code>, so every run, including a resume, comes back on the same URL and password. I checked the shell behavior below against the shell.online source for the 0.25.0 release, on its macOS and Linux code path, and the Claude Code side against Anthropic's documentation for 2.1.325.</p>
+
+<section>
+<h2>Step 1: Check both versions</h2>
+<p>The variable does nothing on older Claude Code builds, so check first:</p>
+<pre><code>claude --version
+shell --version</code></pre>
+<p>The first prints something like <code>2.1.325 (Claude Code)</code>; you need 2.1.323 or later. The second prints <code>shell 0.25.0</code>, the latest published CLI release. If shell is missing, the <a href="/platforms/">platforms page</a> has the installers, and the <a href="/cli/">command reference</a> lists every flag used below.</p>
+</section>
+
+<section>
+<h2>Step 2: Write the wrapper</h2>
+<p>Put the script in a directory that is on your <code>PATH</code>. This example uses <code>~/.local/bin</code>:</p>
+<pre><code>mkdir -p ~/.local/bin
+cat &gt; ~/.local/bin/claude-shared &lt;&lt;'EOF'
+#!/bin/sh
+# Start Claude Code behind one persistent shell.online link.
+export CLAUDE_CODE_RESUME_HINT_COMMAND=claude-shared
+exec shell --persistent "${XDG_STATE_HOME:-$HOME/.local/state}/claude-shared/link.json" \
+  --name "claude-shared" -- claude "$@"
+EOF
+chmod 755 ~/.local/bin/claude-shared</code></pre>
+<p>Line by line:</p>
+<ul>
+<li><code>export CLAUDE_CODE_RESUME_HINT_COMMAND=claude-shared</code> puts the name in the environment. On Unix a child process <a href="https://man7.org/linux/man-pages/man7/environ.7.html">inherits a copy of its parent's environment</a>, and shell starts the wrapped command with the calling environment minus a few of its own internal variables, so Claude Code sees it. The docs say Claude Code ignores this variable in a settings file's <code>env</code> block, which is why it lives in the script.</li>
+<li><code>exec</code> replaces the script with shell, and <code>"$@"</code> hands every argument you typed to <code>claude</code> unchanged. The <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html">POSIX shell specification</a> defines <code>"$@"</code> as one field per argument, and zero fields when there are none.</li>
+<li><code>--persistent</code> names a state file. The <a href="https://specifications.freedesktop.org/basedir/latest/">XDG Base Directory specification</a> reserves <code>$XDG_STATE_HOME</code>, by default <code>~/.local/state</code>, for state that should persist between application restarts, which is what this is. shell creates a missing directory with mode 700 and writes the file with mode 600.</li>
+<li><code>--name</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app. The <code>--</code> ends shell's options so nothing after it is read as a shell flag.</li>
+</ul>
+<p>The state file is a credential. It holds the session ID, a host token, the browser password and the encryption key. Anyone who copies it can bring the link up from their own machine, so keep it out of any repository and any synced folder.</p>
+<div class="callout"><p>The variable takes a single name, not a command line. Claude Code ignores any value that does not match <code>^\w[\w-]*$</code>, and in that pattern <code>\w</code> means <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Regular_expressions/Character_class_escape">letters, digits and the underscore</a>. Setting it to <code>"shell claude"</code> is silently ignored because of the space, and the hint goes back to <code>claude --resume</code>. That is why this guide uses a wrapper with a one-word name.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Start a session and share it</h2>
+<p>Go to the project and run the wrapper as you would run <code>claude</code>, with or without a prompt:</p>
+<pre><code>cd ~/src/payments-api
+claude-shared "Read the failing tests in tests/billing and propose a fix"</code></pre>
+<p>shell prints a link, a password and a QR code, then returns your prompt while Claude Code runs in the background. The first run creates the state file. Send the link and the password to your teammate by different channels, as the <a href="/e2ee/">encryption guide</a> suggests for anything sensitive.</p>
+<p>Decide now whether the link should be view-only. Access mode is fixed when the state file is created. If you add <code>--read-only</code> to the wrapper later, the next start stops with <code>shell: persistent state access/encryption mode does not match the requested flags</code>. A read-only link blocks your own browser input too; you would then type through <code>shell attach</code> on the machine. The <a href="/security/">security page</a> covers the trade.</p>
+<p>On a machine linked with <code>shell auth</code>, shell also adds two flags of its own when it launches a fresh <code>claude</code>: <code>--settings</code> with a SessionStart hook that writes to a private file, and <code>--session-id</code> with a new <a href="https://www.rfc-editor.org/rfc/rfc9562.html">version 4 UUID</a>. They exist so owner-only summaries describe the right conversation. They matter in the next step.</p>
+</section>
+
+<section>
+<h2>Step 4: End the conversation and read the hint</h2>
+<p>When you are done for now, type <code>/exit</code> in the browser, or run <code>shell attach &lt;ID&gt;</code> on the machine and exit there. Claude Code prints its "Resume this session with" line, which now names the wrapper:</p>
+<pre><code>claude-shared --resume 0b7e4c2a-5f1d-4e8b-9a36-2c4d8e1f7a90</code></pre>
+<p>That ID is an invented example. Since <a href="https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md">2.1.317</a>, Claude Code repeats the flags you launched with ahead of <code>--resume</code>, so on a linked machine the printed line can carry the <code>--settings</code> or <code>--session-id</code> value shell added. Copy only <code>claude-shared --resume</code> and the ID. shell adds what it needs again on the next launch.</p>
+<p>A persistent session does not end the way an ordinary one does. In the <a href="https://github.com/TeoSlayer/shell.online/blob/main/worker/index.ts">relay's exit handler</a>, a persistent task exit marks the session disconnected rather than ended. A browser that was watching keeps the last screen the machine sent, under a notice headed "Temporarily offline". That screen should include the resume line. If it does not, Step 6 has two other ways to find the conversation.</p>
+<p>The same handler clears every MCP grant on the session. If another agent was watching over MCP, issue it a new grant with <code>shell mcp grant &lt;ID&gt; &lt;label&gt; observe</code> after you resume. The <a href="/agents/">agents guide</a> and the post on <a href="/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke/">scoped MCP grants</a> explain the scopes.</p>
+</section>
+
+<section>
+<h2>Step 5: Resume on the same link</h2>
+<p>From the same project directory, run the line from the hint:</p>
+<pre><code>cd ~/src/payments-api
+claude-shared --resume 0b7e4c2a-5f1d-4e8b-9a36-2c4d8e1f7a90</code></pre>
+<p>shell reads the state file, reserves the same session ID and reconnects to the relay with the stored host token. It prints the same link and the same password as the first run. Claude Code loads the conversation from its transcript and waits for your next message.</p>
+<p>Your teammate does nothing. The notice they were looking at says the terminal "reconnects on its own, and the terminal goes live again when it does", and that is what happens when the host comes back with the same identity and key. Someone who closed the tab opens the same link and enters the same password. The <a href="/reliability/">reliability guide</a> lists what a viewer sees while a host is away.</p>
+</section>
+
+<section>
+<h2>Step 6: Find a conversation without the hint</h2>
+<p>Because the wrapper passes every argument to <code>claude</code>, Claude Code's own ways of choosing a conversation work through it. The <a href="https://code.claude.com/docs/en/cli-reference">CLI reference</a> describes both:</p>
+<pre><code>claude-shared --resume
+claude-shared --continue</code></pre>
+<p><code>--resume</code> with no ID shows an interactive picker, which you can answer from the browser on your phone because it runs inside the shared session. <code>--continue</code> loads the most recent conversation in the current directory, so run it from the project you were working in. You can also give a conversation a name when you start it, with <code>claude-shared -n billing-fix</code>, and later resume it with <code>claude-shared --resume billing-fix</code>. Claude Code's <code>-n</code> is not shell's <code>--name</code>; the first names the conversation, the second names the shared session.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not save the process. Resuming reloads the conversation from Claude Code's transcript. Commands that were running, dev servers and background shells are gone. shell's own command reference says <code>--persistent</code> does not restore process memory.</li>
+<li>It runs one conversation per state file. A second <code>claude-shared</code> while the first is still running stops with <code>session is already running locally or has a retained record; recovery is needed before replacement</code>. For two parallel conversations, make a second wrapper with its own name and state file.</li>
+<li>It does not recover from a crash by itself. A crash that leaves a local record or control socket blocks resuming that persistent session until you review it, and nothing restarts automatically. The 2.1.325 fix is about Claude Code's transcript after an unclean stop; it does not change shell's check.</li>
+<li>It keeps a credential alive for a long time. <a href="https://github.com/TeoSlayer/shell.online/blob/main/shared/session-lifetime.ts">shell's lifetime rules</a> keep a disconnected persistent session for 30 days, against 12 hours for an ordinary one, and each exit restarts the 30 days. The <a href="https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html">OWASP Session Management Cheat Sheet</a> recommends an absolute timeout for every session; this link has none while you keep using it. Run <code>shell password rotate &lt;ID&gt;</code> when someone should lose access, as the post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a link without killing the process</a> shows.</li>
+<li>It covers macOS and Linux. The wrapper is a POSIX <code>sh</code> script, and I checked the Unix code path only.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>The state file is the whole trick here: the link survives because the identity lives in a file on your disk, not in the running process. Pilot Protocol, which develops shell.online, uses the same idea for agents on its network. Its post on <a href="https://pilotprotocol.network/blog/persistent-addresses-distributed-autonomous-systems">persistent addresses for distributed agents</a> ties each agent's address to its cryptographic identity rather than its network location, and notes that consistent key material is what keeps that address stable across restarts. The Pilot blog also covered <a href="https://pilotprotocol.network/blog/a-persistent-terminal-sharing-link-that-survives-a-reboot-shell-online-persisten">a persistent shell.online link across a reboot</a>, which pairs with this guide when the machine itself restarts. The source for everything above is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<div class="cta"><h3>Keep one link for the whole conversation</h3><p>Install shell, write the short wrapper, and your next Claude Code resume comes back where your teammate is already looking.</p><a href="/docs/">Read the shell.online docs</a></div>

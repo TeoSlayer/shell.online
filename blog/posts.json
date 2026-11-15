@@ -1,5 +1,20 @@
 [
   {
+    "slug": "how-to-resume-a-claude-code-session-on-the-same-shell-online-link",
+    "title": "How to Resume a Claude Code Session on the Same shell.online Link",
+    "description": "Use Claude Code 2.1.323's resume hint variable and a shell --persistent wrapper so a resumed conversation returns on the same link and password.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "persistent-sessions",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-15",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-resume-a-claude-code-session-on-the-same-shell-online-link.webp"
+  },
+  {
     "slug": "how-to-answer-a-codex-security-scans-budget-prompt-from-your-phone",
     "title": "How to Answer a Codex Security Scan's Budget Prompt From Your Phone",
     "description": "Run a Codex Security 0.10.0 scan inside shell.online, raise its cost limit from your phone at the 80% prompt, and resume an interrupted scan on the same link.",
