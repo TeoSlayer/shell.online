@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-fit-an-antigravity-cli-swarm-board-to-your-phones-screen",
+    "title": "How to Fit an Antigravity CLI Swarm Board to Your Phone's Screen",
+    "description": "Run an Antigravity CLI /swarm under shell.online, open it in the app on your phone, and have the board redraw at the phone's size with Fit to my screen.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "antigravity-cli",
+      "gemini-4-carbon",
+      "mobile",
+      "terminal-grid"
+    ],
+    "iso_date": "2026-11-16",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-fit-an-antigravity-cli-swarm-board-to-your-phones-screen.webp"
+  },
+  {
     "slug": "how-to-resume-a-claude-code-session-on-the-same-shell-online-link",
     "title": "How to Resume a Claude Code Session on the Same shell.online Link",
     "description": "Use Claude Code 2.1.323's resume hint variable and a shell --persistent wrapper so a resumed conversation returns on the same link and password.",

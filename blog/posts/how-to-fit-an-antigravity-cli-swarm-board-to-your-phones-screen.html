@@ -1,0 +1,90 @@
+<p>On November 10, Google made <a href="https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-carbon-now-available/">Gemini 4 Carbon available</a> to paying developers through the Gemini API and started rolling it out to Google AI Ultra subscribers in Antigravity. The introductory price is $2 per million input tokens and $10 per million output tokens until November 30, then $4 and $20. The same day, <a href="https://github.com/google-antigravity/antigravity-cli/releases/tag/1.5.5">Antigravity CLI 1.5.5</a> added <code>/swarm</code> as a preview: one prompt turns the agent into a coordinator that adds worker agents, each with its own conversation, all posting to a shared message board. The <a href="https://antigravity.google/blog/gemini-4-carbon-in-google-antigravity/">Antigravity team's post</a> suggests Carbon for the coordinator and verifier roles and lighter models for routine edits, and Google's <a href="https://blog.google/innovation-and-ai/technology/developers-tools/build-with-gemini-4-hydrogen/">Gemini 4 Hydrogen announcement</a> two days later describes Hydrogen running on its own or alongside Carbon and Argon.</p>
+
+<p>The CLI shows a swarm through <code>/swarm board</code>, a full-screen live view with three panes: a Roster of members with their state and model, a Posts feed, and a Message pane. The <a href="https://antigravity.google/docs/swarm/">swarm documentation</a> says a member that runs out of quota pauses, shows the error once, and stays paused until a new post arrives, its model is switched, or you message it. The board is where you would see that. It is also a layout drawn for whatever terminal the CLI is running in, and a board drawn for a wide desk window is not something you can read on a phone.</p>
+
+<p>This guide runs the Antigravity CLI under shell.online on your own machine, opens the session on your phone in the shell.online app, and has the program redraw itself at the phone's size with Fit to my screen. Then it puts the size back when you return to your desk.</p>
+
+<section>
+<h2>What you need before you start</h2>
+<p>You need four things. First, a shell.online CLI at v0.23.2 or later on the machine that runs the swarm. That release made the host own its terminal grid and take resize requests from the browser, as the <a href="https://pilotprotocol.network/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23">v0.23 write-up on the Pilot blog</a> explains. The latest release is v0.25.0. I read the host side of this in the macOS and Linux code, <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/terminal_grid.go">terminal_grid.go</a> and the Unix session loop, and did not check Windows.</p>
+<p>Second, the Antigravity CLI at 1.5.5 or later. The swarm docs say <code>/swarm</code> needs a Google AI Pro or Ultra plan, and the <a href="https://antigravity.google/docs/models/">model guide</a> lists Carbon for Ultra and Enterprise only, while Hydrogen is on every plan. Third, a machine linked to a shell.online account, because the Fit to my screen button lives in the <a href="/app/">shell.online app</a>, not in the plain link viewer that a QR code opens. Fourth, a phone signed in to the same account.</p>
+</section>
+
+<section>
+<h2>Step 1: Link the machine to your account</h2>
+<pre><code>shell auth
+shell whoami</code></pre>
+<p><code>shell auth</code> opens a browser on an approval screen. Approve it and the machine is linked; <code>shell whoami</code> prints the account it is linked to. From then on every session you start on this machine is published to your account as it starts, with its URL, command name, host name and timing. The terminal contents and the encryption key are not part of that.</p>
+<p>It also asks, once, whether your signed-in browser may start sessions on this machine. This guide does not need that, so you can say no. Fit to my screen travels over the session's own connection, not through the background daemon.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the Antigravity CLI under shell</h2>
+<p>Open a terminal in the repository the swarm should work on and start the CLI through shell:</p>
+<pre><code>cd ~/src/invoice-exporter
+shell --name swarm -- agy</code></pre>
+<p>shell starts <code>agy</code> in a pseudo-terminal in the background and prints a link, a ten-character password and a QR code, then gives you your prompt back. <code>--name swarm</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the app. The <code>--</code> marks where shell's own options end.</p>
+<p>A background start passes on the size of the terminal you typed the command in, so <code>agy</code> opens at that window's columns and rows. That size stays until a terminal attaches or someone fits the program from the app.</p>
+<p>Attach to the session to work in it from this window:</p>
+<pre><code>shell list
+shell attach 7f3c9a</code></pre>
+<p><code>shell list</code> prints each session's ID, access mode, uptime, closing rule, command, share URL, whether a password is stored and the relay status. Pass <code>shell attach</code> the ID or its first six or more characters. Inside <code>agy</code>, pick a model with <code>/model</code> if you want something other than the default, then give the swarm its task:</p>
+<pre><code>/swarm move the invoice exporter from moment to date-fns and keep the tests passing</code></pre>
+<p>Per the docs, the coordinator splits the work, adds named workers and a verifier, and tells you to run <code>/swarm board</code>. It also adds a <code>@monitor</code> worker that stays asleep and posts only if every member goes quiet before the work is done. When the swarm is running, press Ctrl-X, release it, then press D. That detaches your terminal and leaves <code>agy</code> running.</p>
+</section>
+
+<section>
+<h2>Step 3: Open the session on your phone</h2>
+<p>On the phone, open <code>app.shell.online</code>, find the session called swarm, and open it. If your vault is locked, the app asks you to open it or to type the session password.</p>
+<p>What you see first depends on the size <code>agy</code> is running at. The app's default renderer, Adaptive, keeps an exact copy of the session's grid in an <a href="https://xtermjs.org/">xterm.js</a> emulator that is never shown. If the whole grid fits the pane at 11 pixels or larger, it draws the grid whole. If not, it lays the text out again at the pane's width with a 13-pixel reading font, undoing the terminal's line wraps. That suits an agent writing prose. It does not suit a board with panes side by side, placed for a width the phone does not have.</p>
+</section>
+
+<section>
+<h2>Step 4: Fit the program to the phone</h2>
+<p>When you open a session you own in the app, it fits the session once by itself, asking the host to run the program at the size your pane would choose. The repository's <a href="https://github.com/TeoSlayer/shell.online/blob/main/CHANGELOG.md">changelog</a> lists this automatic fit under Unreleased, and the build serving app.shell.online today already has it. Adding <code>?terminalAutoFit=0</code> to the app's address turns it off for that page.</p>
+<p>The Fit to my screen button is the manual form. It appears in the pane's toolbar when the size your pane would choose differs from the size the program has. The app watches the pane with a <a href="https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver">ResizeObserver</a>, so turning the phone sideways re-measures it and the button comes back. Its tooltip says what it does: run the program at the size of this screen, and everyone watching sees the program redraw at that size.</p>
+<p>Underneath, the app sends a grid request to the relay. The relay forwards it only when the session is not read-only and the host has said it owns its grid. The host checks the size is within 10 to 500 columns and 4 to 300 rows, holds it to the size of any terminal attached on the machine, then resizes the pseudo-terminal and its replay copy together. On macOS and Linux the resize is the <a href="https://man7.org/linux/man-pages/man2/TIOCSWINSZ.2const.html"><code>TIOCSWINSZ</code></a> operation, and the kernel sends <code>SIGWINCH</code> to the foreground process group, which is how <code>agy</code> learns its new size and redraws.</p>
+<div class="callout"><p>A fit changes the program, not your view of it. Every viewer, including a teammate on a laptop, now sees the board at your phone's size, and it stays that size after you close the app. The relay also drops resize requests for a session started with <code>--read-only</code>, so a swarm you want to fit from your phone has to be an interactive session. That means its link and password let whoever holds them type into <code>agy</code>. Keep them to yourself.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Open the board</h2>
+<p>With the program at the phone's size, type this at the <code>agy</code> prompt:</p>
+<pre><code>/swarm board</code></pre>
+<p>The docs give Alt+S as a shortcut and note that on macOS it works only when the terminal sends Option as Meta, which in Apple's Terminal is the <a href="https://support.apple.com/guide/terminal/change-profiles-keyboard-settings-trmlkbrd/mac">Use Option as Meta key</a> setting. <code>/swarm board</code> works in every terminal, so from a phone keyboard it is the one to use.</p>
+<p>Most of the board's keys are plain letters: j and k move, Enter shows or hides the selected message, f toggles follow mode, p filters to one member, z zooms a pane, and q closes the board. The footer counts requests waiting for approval, which is the number worth checking from a phone. A paused member needs a new post, a model switch or a message from you before it continues; the docs say you can message one worker with <code>@name</code> from the CLI prompt. Waiting members use no tokens.</p>
+</section>
+
+<section>
+<h2>Step 6: Put the size back at your desk</h2>
+<p>Back at the machine, attach again:</p>
+<pre><code>shell attach 7f3c9a</code></pre>
+<p>Attaching applies your window's size to the program at once, and while you stay attached that window is also the upper limit for any browser fit. Detach with Ctrl-X then D and the limit goes away, but the program keeps its current size until someone asks for another. Opening the session in the app on your laptop also works: the automatic fit asks for the laptop pane's size.</p>
+<p>When the swarm is done, or you want it gone, stop the process:</p>
+<pre><code>shell kill -- 7f3c9a</code></pre>
+<p>That terminates <code>agy</code> and takes the link offline. The swarm docs do not describe a command that stops a whole swarm from inside the CLI, and they say a removed worker deletes its own working copy, so let workers land their changes before you stop anything. Several of them may be working in separate <a href="https://git-scm.com/docs/git-worktree">git worktrees</a>.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not decide how the board looks at phone size. The program redraws at the grid it is given, and the swarm docs say nothing about narrow terminals. If the panes are cramped in portrait, turn the phone sideways and fit again, or zoom one pane with z.</li>
+<li>It does not work from the plain link a QR code opens. That viewer draws the host's grid as it is. Fit to my screen is in the app only, and only for the session's owner. An assignee who can type cannot fit.</li>
+<li>It does not fit a <code>--read-only</code> session, a session on a host older than v0.23.2, or a pane set to a renderer other than Adaptive, such as Fixed grid or Chat.</li>
+<li>It does not alert you when a member pauses. You open the app and look.</li>
+<li>It does not save quota. Every worker is a separate agent, and the 1.5.5 release notes label <code>/swarm</code> as quota heavy for that reason.</li>
+<li>It does not keep a sleeping machine reachable. A host that sleeps or goes offline cannot be controlled or resized; the <a href="/reliability/">connection guide</a> covers what happens meanwhile.</li>
+</ul>
+<p>Earlier posts here cover how <a href="/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23/">the host came to own its grid</a> and the <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">chat view</a>, the better choice when an agent writes prose rather than drawing a board. The <a href="/mobile/">mobile guide</a> and <a href="/cli/">command reference</a> cover the rest, and the source is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>A swarm's members talk through a board inside one <code>agy</code> process on one machine. shell.online's job here is narrow: carry that process's screen to your phone, end to end encrypted, at a size you can read. When the agents that need to talk run on different machines, the board has to become a network. Pilot Protocol, which develops shell.online, gives each agent an address and encrypted tunnels to its peers, and its daemon has a <a href="https://pilotprotocol.network/blog/replace-message-broker-twelve-lines-go">publish and subscribe broker built in</a>, so agents can share a topic without a separate message server. The <a href="https://pilotprotocol.network/docs/">Pilot docs</a> go from installing the daemon to a first peer connection.</p>
+</section>
+
+<div class="cta">
+<h3>Read your swarm at your phone's size</h3>
+<p>Install shell, link the machine with shell auth, start agy under shell, and open the session in the app as its owner.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>
