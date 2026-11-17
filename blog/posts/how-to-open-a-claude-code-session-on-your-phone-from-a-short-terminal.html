@@ -1,0 +1,120 @@
+<p>Claude Code 2.1.326 was published on November 16, and three of the Remote Control fixes in <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.326">its release notes</a> are about the trip from a terminal to a phone. The QR code that <code>/remote-control</code> draws was being cut off in short terminal windows such as 80×24. Remote Control showed a session as running while it waited on a prompt that can only be answered in the terminal. And sessions showed as idle on the phone while background subagents were still running.</p>
+
+<p>Those are small bugs with a common shape. The bridge between a desk and a phone is usually a code printed in a terminal pane plus a status line on the far side, and both depend on details nobody checks until they fail: how many rows the pane has, and whether the remote view can see everything the terminal can. If you start a long Claude Code run in a split pane and plan to check on it from the couch, those details decide whether you can.</p>
+
+<p>shell.online takes a different route to the same phone. It prints a link, a password and a QR code, and the page the code opens is the terminal itself rather than a copy of the conversation. This guide measures how tall that QR code is, says when shell prints none at all, gives three ways to get the link onto a phone when the code has scrolled away, and shows why a prompt that only the terminal draws still reaches you.</p>
+
+<section>
+<h2>Step 1: Start Claude Code with shell and read the card</h2>
+
+<p>Install shell as the <a href="/docs/">docs</a> describe, then start Claude Code through it from your project folder:</p>
+
+<pre><code>cd ~/code/example-project
+shell claude</code></pre>
+
+<p><code>shell claude</code> starts Claude Code in the background on a new pseudo terminal and prints a card, then hands your prompt back. The card is written to standard error. It opens with "Your terminal is ready. Open it in any browser." and then lists the session in labelled rows:</p>
+
+<pre><code>  Open      https://shell.online/s/AbCdEfGhIj...#salt=...
+  Password  q7Xb-2kLmP
+  Vault     not linked · run shell auth
+  Access    view and type · end-to-end encrypted
+  Session   AbCdEfGhIj · background
+  Closes    when the task exits
+
+  Rejoin    shell attach AbCdEfGhIj
+  Stop      shell kill -- AbCdEfGhIj</code></pre>
+
+<p>The link and password above are invented. Below the rows, shell prints a reminder to keep the computer awake, then a line that reads "Scan to open", the QR code, and a footer that says who the code admits: "Anyone who scans this can view and type in this session." With <code>--read-only</code> the footer drops "and type".</p>
+
+<p>The link carries a random <code>#salt=</code> fragment and never the password. The QR code carries both, because <code>cmd/shell/qr.go</code> in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a> adds the password to the same fragment before it encodes the link. A fragment stays with the browser: <a href="https://www.rfc-editor.org/rfc/rfc3986.html#section-3.5">RFC 3986</a> separates it from the rest of the URI before the request is made, and <a href="https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment">MDN's page on fragments</a> describes the same split. So the relay never receives the password, but the picture on your screen does contain it.</p>
+</section>
+
+<section>
+<h2>Step 2: Work out whether the code fits your pane</h2>
+
+<p>shell renders the code with the <a href="https://github.com/skip2/go-qrcode">go-qrcode</a> library at its Low error correction level, then draws two rows of modules in each terminal row using half block characters. Every row is painted black on bright white, SGR codes 30 and 107 in the <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">xterm control sequences reference</a>, so the code reads the same on a light or a dark theme.</p>
+
+<p>The size follows from the length of what is encoded. A share link has a 32 character session ID and a 22 character salt, and the default password is ten characters from the <a href="https://www.rfc-editor.org/rfc/rfc4648.html#section-5">base64url alphabet</a>. Put together, the payload is 103 characters. I ran those lengths through the same library and version the repository pins, and the result was QR version 5. Denso Wave's <a href="https://www.qrcode.com/en/about/version.html">table of QR versions</a> puts version 5 at 37 by 37 modules; the library adds a four module quiet border on each side, so the bitmap is 45 modules square. In a terminal that comes to:</p>
+
+<ul>
+<li>23 rows and 47 columns for the code itself, counting the two spaces of indent,</li>
+<li>plus the "Scan to open" line above, the footer and a blank line below, and then your shell prompt: 27 rows from heading to prompt.</li>
+</ul>
+
+<p>Width is not the problem. 47 columns fits an 80 column pane with room to spare. Height is. In an 80×24 window the heading and the code's top two rows have scrolled out of view. Those two rows are the white border, so the finder patterns are still on screen, but on a dark theme the code now touches the dark top edge of the pane with no light margin above it. Whether a phone camera reads it like that depends on the reader. Scrolling up three lines removes the question.</p>
+
+<p>A custom password changes the arithmetic. With a 36 character <code>SHELL_ONLINE_E2EE_PASSWORD</code>, the payload grows to 128 characters and the code moves to version 6, 25 rows tall, and in 80×24 the cut now reaches into the finder patterns themselves. Characters outside the URL safe set are percent encoded in the fragment, which adds length too. The code in <code>qr.go</code> refuses any bitmap wider than 57 modules, which is version 8 with its border, and in that case the card simply has no QR section. There is no warning; the link and password rows are still there.</p>
+
+<div class="callout"><p>The QR code is the link and the password in one picture. A screenshot of the card, a screen recording of a demo, or a terminal pane visible on a video call gives the whole session to anyone who can scan it, and on an interactive share that includes typing into Claude Code. If that happens, run <code>shell password rotate &lt;ID&gt;</code>, as the guide on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> explains.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Know when shell prints no code at all</h2>
+
+<p>The QR section is tied to the same check that decides whether the card gets colour. In <code>cmd/shell/session_output.go</code>, shell prints the code only when all three of these hold:</p>
+
+<ul>
+<li><code>NO_COLOR</code> is unset or empty. The <a href="https://no-color.org/">NO_COLOR convention</a> says a non-empty value prevents ANSI colour, and the code is made of colour.</li>
+<li><code>TERM</code> is not <code>dumb</code>.</li>
+<li>Standard error is a character device, which is what Go's <a href="https://pkg.go.dev/os#ModeCharDevice"><code>os.ModeCharDevice</code></a> flag reports for a terminal.</li>
+</ul>
+
+<p>The third rule catches more people than the first two. A wrapper script that sends standard error to a log, a task runner that captures output, or a run like this one prints the card into the file with no code:</p>
+
+<pre><code>shell claude 2&gt;card.txt</code></pre>
+
+<p>A QR code in a log file would be a credential sitting on disk, so its absence there is no loss. The next step covers what to do instead.</p>
+</section>
+
+<section>
+<h2>Step 4: Get the link onto your phone without the code</h2>
+
+<p>If the code scrolled off, the simplest fix is to scroll back. In tmux, <a href="https://man.openbsd.org/tmux.1">copy mode</a> lets you page up through the pane's history, and most terminal emulators do the same with the mouse wheel. Make the pane taller first if you can, so the whole block is on screen at once.</p>
+
+<p>If the card is gone, ask shell for the pieces. <code>shell list</code> prints a table of the shares on this machine with each session ID, access mode, uptime, command, share URL, and whether a password is stored:</p>
+
+<pre><code>shell list
+shell password AbCdEfGhIj</code></pre>
+
+<p><code>shell password</code> takes the session ID or a prefix of at least six characters, such as the ten character ID on the card's Session row, and prints the password from the owner-only local record. Open the URL on the phone and type the password when the page asks for it. This is the route the help text recommends when the channel is sensitive anyway: send the URL and the password separately rather than as one scan.</p>
+
+<p>The third option skips copying altogether. Link the machine to an account once:</p>
+
+<pre><code>shell auth</code></pre>
+
+<p>After that, the sessions on this machine appear in the web app at app.shell.online on any device where you sign in, as the <a href="/app/">app guide</a> describes. The docs are clear that a signed-in listing is not a substitute for the terminal password. If the card's Vault row said "saved to your account vault", the password was also sealed to your account vault, and the help text says an open vault can recover it. Otherwise you still type the password from <code>shell password</code>.</p>
+</section>
+
+<section>
+<h2>Step 5: Answer a prompt that only the terminal shows</h2>
+
+<p>Claude Code asks some questions in the terminal before a remote surface can carry them. The <a href="https://code.claude.com/docs/en/remote-control">Remote Control documentation</a> lists two for <code>claude remote-control</code>: in a folder you have not trusted it asks <code>Trust &lt;directory&gt;? [y/N]</code>, and until you accept the one-time confirmation it asks <code>Enable Remote Control? (y/n)</code>. Claude Code's <a href="https://code.claude.com/docs/en/security">security page</a> describes the workspace trust dialog an interactive session shows in a folder you have not trusted. The 2.1.326 fix was for the status the phone showed while a prompt like that was waiting.</p>
+
+<p>A shell link has no separate status to drift, because what the phone draws is the pseudo terminal's screen. If Claude Code is sitting on a trust question, a permission menu, or a sign-in step, that is what you see when the link opens, at the same moment the desk would see it. On an interactive share you answer it by typing, and the keystrokes go to Claude Code exactly as if you had pressed them at the desk.</p>
+
+<p>If the grid is hard to read on a small screen, the app can show the same session as a conversation instead; <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">watching Claude Code from your phone as a conversation</a> walks through that view. When you are back at the desk, <code>shell attach AbCdEfGhIj</code> rejoins the session locally while the browser link stays live, and Ctrl-X then D detaches again without stopping Claude Code.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not tell you that a prompt is waiting. shell has no push notifications. You see the prompt when you open the link.</li>
+<li>It does not resize or shrink the QR code to fit your pane. If the pane is shorter than 27 rows, scroll back or use <code>shell list</code> and <code>shell password</code>.</li>
+<li>It does not warn you when a long password makes the code too large to print. The QR section is skipped silently.</li>
+<li>It does not replace Remote Control. Remote Control keeps the conversation in sync with claude.ai and the Claude app; shell shows and types into the terminal Claude Code runs in.</li>
+<li>It does not make the QR code safe to share. Treat it like the link and the password together, as the <a href="/security/">security page</a> says.</li>
+</ul>
+
+<p>The measurements in Step 2 come from the default lengths in the code at this commit. A self-hosted relay with a longer hostname, as in the <a href="/self-hosting/">self-hosting guide</a>, makes the code taller.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is developed by Pilot Protocol, and the problem underneath this guide is one Pilot spends most of its time on: a process on your own machine, behind a home router, has to be reachable from a device somewhere else without opening a port. The Pilot post on <a href="https://pilotprotocol.network/blog/connect-ai-agents-behind-nat-without-vpn">connecting agents behind NAT without a VPN</a> explains the three tiers it uses for that, from direct connections to hole punching to an encrypted relay that cannot read what it carries.</p>
+
+<p>If you want Claude Code itself to talk to other agents rather than only be watched, the Pilot guide to <a href="https://pilotprotocol.network/blog/connect-claude-code-to-pilot-protocol">connecting Claude Code to Pilot Protocol with MCP</a> adds a node and messaging tools in one <code>claude mcp add</code> command. The two fit together: shell gives you eyes on the terminal from a phone, and Pilot gives the agent in that terminal an address of its own.</p>
+</section>
+
+<div class="cta"><h3>Get your next Claude Code run onto your phone</h3><p>Install shell, start Claude Code with <code>shell claude</code> in a pane at least 27 rows tall, and scan the code. Every command in this guide is in the CLI reference.</p><a href="/cli/">Read the shell CLI reference</a></div>

@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-open-a-claude-code-session-on-your-phone-from-a-short-terminal",
+    "title": "How to Open a Claude Code Session on Your Phone From a Short Terminal",
+    "description": "Measure how tall shell.online's QR code is, get a shell claude link onto your phone when it scrolls off, and answer prompts only the terminal shows.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "qr-code",
+      "mobile",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-17",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-open-a-claude-code-session-on-your-phone-from-a-short-terminal.webp"
+  },
+  {
     "slug": "how-to-fit-an-antigravity-cli-swarm-board-to-your-phones-screen",
     "title": "How to Fit an Antigravity CLI Swarm Board to Your Phone's Screen",
     "description": "Run an Antigravity CLI /swarm under shell.online, open it in the app on your phone, and have the board redraw at the phone's size with Fit to my screen.",
