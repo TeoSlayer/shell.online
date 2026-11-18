@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-hand-claude-code-a-shell-online-mcp-grant-off-the-command-line",
+    "title": "How to Hand Claude Code a shell.online MCP Grant Off the Command Line",
+    "description": "Issue an observe-only shell.online MCP grant and register it with Claude Code 2.1.327 from stdin, so the bearer stays out of arguments, history and config.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "mcp",
+      "claude-code",
+      "credentials",
+      "coding-agents"
+    ],
+    "iso_date": "2026-11-18",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-hand-claude-code-a-shell-online-mcp-grant-off-the-command-line.webp"
+  },
+  {
     "slug": "how-to-open-a-claude-code-session-on-your-phone-from-a-short-terminal",
     "title": "How to Open a Claude Code Session on Your Phone From a Short Terminal",
     "description": "Measure how tall shell.online's QR code is, get a shell claude link onto your phone when it scrolls off, and answer prompts only the terminal shows.",

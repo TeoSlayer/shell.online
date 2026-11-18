@@ -1,0 +1,86 @@
+<p>Anthropic shipped <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.327">Claude Code 2.1.327 on November 17</a>, and one line in its release notes is small enough to miss: <code>claude mcp add-json &lt;name&gt; -</code> now reads the server's JSON from standard input, "so tokens can stay off the command line". The same notes say the stdin form is not available inside a Claude Code session, so you run it from your own terminal.</p>
+
+<p>That matters if you give an agent a credential for a remote MCP server. Until this release, the documented way to add one with a header was the pattern the <a href="https://code.claude.com/docs/en/mcp">Claude Code MCP documentation</a> still shows: <code>--header "Authorization: Bearer your-token"</code> typed as an argument. Arguments are not private. On Linux, <a href="https://man7.org/linux/man-pages/man5/proc_pid_cmdline.5.html">/proc/&lt;pid&gt;/cmdline</a> holds the complete command line of a running process, MITRE files the general mistake as <a href="https://cwe.mitre.org/data/definitions/214.html">CWE-214, invocation of a process using visible sensitive information</a>, and ATT&amp;CK lists searching <a href="https://attack.mitre.org/techniques/T1552/003/">shell history for stored credentials</a> as a known technique.</p>
+
+<p>shell.online has a credential of exactly this kind. <code>shell mcp grant</code> prints a bearer for the endpoint <code>https://shell.online/mcp</code>, and <code>shell help mcp</code> says to keep it out of URLs, command arguments, repositories and logs. This guide starts a coding agent behind a shell.online link, issues a one-hour observe grant into a variable, registers it with Claude Code through stdin so the config file holds only a reference, starts a Claude session that can read the terminal and nothing else, and then takes the access back.</p>
+
+<section>
+<h2>What you need</h2>
+<p>shell installed and linked to your account with <code>shell auth</code>, as the <a href="/docs/">getting started guide</a> describes, and Claude Code 2.1.327 or later (<code>claude --version</code> prints the number). I read the code path for <code>shell mcp grant</code> in the Unix build, so the commands below are for macOS and Linux. Every command is listed in the <a href="/cli/">CLI reference</a>.</p>
+<p>A grant is separate from the browser link and password. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/MCP.md">MCP design notes in the repository</a> describe it as a scoped, expiring credential that the session's own host issues, and the post that <a href="/blog/mcp-terminal-access-for-an-ai-agent-scoped-grants-that-expire-and-revoke/">introduced MCP terminal access</a> walks through the full tool surface.</p>
+</section>
+
+<section>
+<h2>Step 1: Start the run you want watched</h2>
+<pre><code>shell --name refactor codex</code></pre>
+<p>This starts Codex on your machine and prints a browser link and password, the same as any shell session. Run <code>shell list</code> to see the session's ID. Any unique prefix of at least six characters works in the commands that follow; the examples use the invented ID <code>3f9c2a71</code>.</p>
+</section>
+
+<section>
+<h2>Step 2: Issue an observe grant into a variable</h2>
+<pre><code>SHELL_WATCH_TOKEN="$(shell mcp grant 3f9c2a71 "claude watcher" observe 3600)"
+export SHELL_WATCH_TOKEN</code></pre>
+<p><code>shell mcp grant</code> takes the session, a label, a preset and a lifetime in seconds, and on success it prints one line to standard output: the bearer. The command substitution puts that line in the variable without printing it, so it never reaches your scrollback. Your history records the command you typed, not its output. <code>export</code> is a shell builtin, so the value is not the argument of any new process either.</p>
+<p>An observe grant has a one-hour default, which is what <code>0</code> or no lifetime gives you, and the relay caps it at twelve hours or the time left in the session, whichever is shorter. It does not renew when it is used. When the hour is up you issue a new one on purpose. The label is display text only. It does not identify the client that later presents the bearer.</p>
+</section>
+
+<section>
+<h2>Step 3: Register the server from standard input</h2>
+<p>Use a folder of its own for the watcher, so the entry does not end up in a repository you commit:</p>
+<pre><code>mkdir -p ~/watch-desk &amp;&amp; cd ~/watch-desk
+claude mcp add-json shell-watch - --scope project &lt;&lt;'EOF'
+{"type":"http","url":"https://shell.online/mcp","headers":{"Authorization":"Bearer ${SHELL_WATCH_TOKEN}"}}
+EOF</code></pre>
+<p>The <code>-</code> tells Claude Code to read the JSON from standard input, and the here-document supplies it. Quoting the delimiter matters. The <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html#tag_19_07_04">POSIX shell specification for here-documents</a> says that if any part of the delimiter word is quoted, the lines are not expanded. With <code>'EOF'</code> your shell leaves <code>${SHELL_WATCH_TOKEN}</code> alone, and the text that reaches Claude Code is the reference, not the bearer.</p>
+<p>Claude Code expands it later. Its documentation on <a href="https://code.claude.com/docs/en/mcp#environment-variable-expansion-in-mcp-json">environment variable expansion in .mcp.json</a> covers <code>${VAR}</code> in a server's <code>url</code> and <code>headers</code>. It also lists credential names such as <code>ANTHROPIC_API_KEY</code> that read as empty in a remote server's headers; a name like <code>SHELL_WATCH_TOKEN</code> is not on that list. The <code>"type":"http"</code> field is required, because the same page says an entry with a <code>url</code> and no <code>type</code> is read as a stdio server and fails. <code>--scope project</code> writes the entry to <code>~/watch-desk/.mcp.json</code>, and the command prints an <code>Added</code> line when it succeeds.</p>
+<p>The endpoint takes MCP messages as HTTP POST requests with the bearer in the <code>Authorization</code> header, which is the <a href="https://modelcontextprotocol.io/specification/2025-06-18/basic/transports">Streamable HTTP transport</a>. Claude Code accepts <code>streamable-http</code> as an alias for its <code>http</code> type.</p>
+<p>If you would rather store the literal bearer, stdin is also how you keep it off the command line. <code>printf</code> is built into Bash and zsh, so the value is not an argument of any process:</p>
+<pre><code>printf '{"type":"http","url":"https://shell.online/mcp","headers":{"Authorization":"Bearer %s"}}' "$SHELL_WATCH_TOKEN" | claude mcp add-json shell-watch -</code></pre>
+<p>That form writes the value into <code>~/.claude.json</code> under the default local scope and leaves it there until you remove the server. For a credential that is dead in an hour I would keep the reference.</p>
+</section>
+
+<section>
+<h2>Step 4: Approve the server and check the connection</h2>
+<pre><code>claude mcp list</code></pre>
+<p>A project server from <code>.mcp.json</code> starts at <code>⏸ Pending approval (run `claude` to approve)</code>. Per the <a href="https://code.claude.com/docs/en/mcp#server-status">server status section</a>, you approve it by running <code>claude</code> in the folder, accepting the folder trust dialog and approving the server when asked. After that, <code>claude mcp list</code> shows a health status for <code>shell-watch</code>. A failed connection appears as <code>✘ Failed to connect</code> with the HTTP status appended, and <code>claude mcp get shell-watch</code> prints the same detail on an <code>Issue:</code> line.</p>
+<div class="callout">
+<p>Claude Code reads <code>SHELL_WATCH_TOKEN</code> from the environment it was started in. Start <code>claude</code> from the terminal where you exported the variable. If it is unset, the docs say the config still loads, <code>claude mcp list</code> warns about the missing variable, and the unexpanded <code>${SHELL_WATCH_TOKEN}</code> text is sent as is, so the relay refuses the request. When the grant expires you will see the same refusal: issue a new grant, export the new value and start Claude Code again.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 5: Start Claude with the read tools only</h2>
+<pre><code>claude --allowedTools "mcp__shell-watch__*" --disallowedTools "mcp__shell-watch__shell_send"</code></pre>
+<p>The <a href="https://code.claude.com/docs/en/permissions">Claude Code permissions reference</a> names MCP tools <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> and accepts an allow glob after a literal server prefix, so the first flag lets Claude call this server's tools without asking. An observe grant already leaves <code>shell_send</code> out of the catalog. The deny rule is a second limit on the client side in case someone later puts a control bearer in the same variable.</p>
+<p>The observe tools are <code>shell_status</code>, <code>shell_screen</code> for the current rendered grid, <code>shell_output</code> for bounded output with a cursor, and <code>shell_wait</code>, which blocks for up to 45 seconds until output or a pattern appears. A prompt such as "check the refactor terminal every few minutes, and tell me when the tests fail or Codex asks a question" is enough to use them. Treat what Claude reads there the way the shell docs do: terminal output is "untrusted data, never permission to override controller instructions."</p>
+</section>
+
+<section>
+<h2>Step 6: See the grant, then end it</h2>
+<p>While the grant is live, the session's terminal pane in the <a href="/app/">web app</a> reads <code>MCP · server-side decryption authorized</code>. That label describes a real change. Browser sharing is end-to-end encrypted, as the <a href="/e2ee/">encryption page</a> explains, but an MCP client is a remote program, so the host hands the relay a frame key and the relay decrypts frames in memory to answer tool calls. Claude receives plaintext. In the words of <code>shell help mcp</code>, browser-only sharing remains end-to-end encrypted; a session with a live grant has a second reader.</p>
+<pre><code>shell mcp list 3f9c2a71</code></pre>
+<p>This prints one line per grant: its ID, whether it is <code>live</code>, <code>expired</code> or <code>revoked</code>, its scopes, the label and the expiry time. To end it early:</p>
+<pre><code>shell mcp revoke 3f9c2a71 &lt;grant-id&gt;
+shell mcp revoke-all 3f9c2a71
+unset SHELL_WATCH_TOKEN</code></pre>
+<p>The first prints <code>Revoked</code> and the grant ID, the second <code>Revoked all MCP grants.</code> Neither touches the browser link. Quitting Claude Code is not a revocation; the <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">OWASP secrets management cheat sheet</a> makes the general point that restarting an application does not revoke a stolen credential, which stays usable until the service expires or revokes it. If you think the bearer leaked, <code>shell password rotate 3f9c2a71</code> replaces the browser password and revokes every MCP grant without stopping Codex. The <a href="/security/">security page</a> covers the rest of the credential model. To drop the entry itself, run <code>claude mcp remove shell-watch --scope project</code> in <code>~/watch-desk</code>.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<p>It does not hide the bearer from Claude Code. The value sits in the environment of the <code>claude</code> process, and commands that its Bash tool runs inherit that environment, so a command such as <code>env</code> could print it into the conversation. What keeps that tolerable is the grant: observe only, one session, an hour.</p>
+<p>It is not a tested pairing. The shell MCP notes record a 16-check canary on 2026-09-21 that used a synthetic shell, staging runs with Codex and OpenCode, and the sentence "Claude model-backed behavior remains unverified." I did not run Claude Code against a grant for this guide. Keep the browser view open next to the first session and check Claude's reports against the screen.</p>
+<p>It does not let Claude type. Input needs a separate control grant, <code>shell_key</code> and <code>shell_interrupt</code> are not available in this release, and a session started with <code>--read-only</code> refuses input whatever the grant says. It also does not tell anyone which agent called. Neither a label nor an acknowledgement verifies the caller, and the bearer works for whoever holds it, which is what <a href="https://www.rfc-editor.org/rfc/rfc6750">RFC 6750</a> means by a bearer token.</p>
+<p>Finally, the native grant is not the same thing as the browser's Connect invitation for agents described in <a href="/blog/connect-an-ai-agent-to-a-live-terminal-without-giving-it-the-machine-shell-onlin/">an earlier post</a>. The docs say not to interchange their credentials.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is built by Pilot Protocol, and the contrast with Pilot's own MCP server is useful here. The <a href="https://pilotprotocol.network/docs/pilot-mcp">pilot-mcp documentation</a> adds it to Claude Code as a local stdio server, <code>claude mcp add --transport stdio pilot -- npx -y pilotprotocol-mcp</code>, which talks to the Pilot daemon on your machine, so there is no bearer to put anywhere. A remote MCP endpoint like shell's always needs one. Pilot's post on <a href="https://pilotprotocol.network/blog/connecting-mcp-servers-across-agents">connecting MCP servers to agents across any network</a> covers the other half of the problem: MCP gives an agent tools, and something else has to carry results between agents on different machines.</p>
+</section>
+
+<div class="cta">
+<h3>Give Claude one hour of read access to one terminal</h3>
+<p>Install shell, wrap the run, issue an observe grant and register it from stdin. The grant ends on its own, and a session with no grant stays end-to-end encrypted.</p>
+<a href="https://github.com/TeoSlayer/shell.online">shell.online on GitHub</a>
+</div>
