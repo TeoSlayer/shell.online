@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-pin-claude-codes-permission-mode-before-you-start-it-from-a-phone",
+    "title": "How to Pin Claude Code's Permission Mode Before You Start It From a Phone",
+    "description": "Claude Code 2.1.328 starts more Bedrock and Foundry sessions in auto mode. Set the mode a session from shell.online's web app starts in, then check it on the phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "permission-modes",
+      "amazon-bedrock",
+      "remote-start"
+    ],
+    "iso_date": "2026-11-19",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-pin-claude-codes-permission-mode-before-you-start-it-from-a-phone.webp"
+  },
+  {
     "slug": "how-to-hand-claude-code-a-shell-online-mcp-grant-off-the-command-line",
     "title": "How to Hand Claude Code a shell.online MCP Grant Off the Command Line",
     "description": "Issue an observe-only shell.online MCP grant and register it with Claude Code 2.1.327 from stdin, so the bearer stays out of arguments, history and config.",
