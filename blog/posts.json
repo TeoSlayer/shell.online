@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-compare-gpt-6-2-sol-and-astra-on-one-codex-task-from-your-phone",
+    "title": "How to Compare GPT-6.2 Sol and Astra on One Codex Task From Your Phone",
+    "description": "Run one read-only Codex review on GPT-6.2 Sol and on GPT-6.2 Astra as two named shell.online sessions, then compare the findings from your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "gpt-6-2",
+      "model-comparison",
+      "code-review"
+    ],
+    "iso_date": "2026-11-20",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-compare-gpt-6-2-sol-and-astra-on-one-codex-task-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-pin-claude-codes-permission-mode-before-you-start-it-from-a-phone",
     "title": "How to Pin Claude Code's Permission Mode Before You Start It From a Phone",
     "description": "Claude Code 2.1.328 starts more Bedrock and Foundry sessions in auto mode. Set the mode a session from shell.online's web app starts in, then check it on the phone.",
