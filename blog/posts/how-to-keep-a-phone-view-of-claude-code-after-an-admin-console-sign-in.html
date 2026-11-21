@@ -1,0 +1,116 @@
+<p>Anthropic shipped <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.330">Claude Code 2.1.330</a> on November 20, 2026. Its first line adds sign-in to organizations managed in Anthropic's <a href="https://claude.com/docs/third-party/claude-desktop/admin-console">Enterprise Admin Console</a>: after <code>claude auth login</code>, Claude Code applies the organization's settings and sends its model requests to the organization's cloud provider or gateway. Anthropic's <a href="https://claude.com/docs/third-party/claude-desktop/admin-console-claude-code">guide to managing Claude Code from the Enterprise Admin Console</a> pitches it as a way to stop deploying <code>managed-settings.json</code> files: put the settings in the console, remove the file, and let each developer pick them up at sign-in.</p>
+
+<p>There is a line in that guide that matters if you check on Claude Code from your phone. The sample message it gives administrators to send developers says that while you are signed in, "Remote Control, cloud sessions, voice mode, and connectors from your claude.ai account aren't available." That fits the <a href="https://code.claude.com/docs/en/remote-control">Remote Control documentation</a>, which says the feature does not work on Amazon Bedrock, Google Cloud's Agent Platform or Microsoft Foundry, behind an LLM gateway, or through a Claude apps gateway sign-in. Once your organization's connection takes over the terminal, the Claude app on your phone stops being a way into it.</p>
+
+<p>shell.online does not depend on any of that. It wraps the Claude Code process on your own machine and prints a browser link to its terminal, so the provider behind the session makes no difference to it. This guide walks through the sign-in, restarting your sessions under shell so they pick up the organization's settings, checking from the phone that they did, and typing longer text into the session with shell's Paste dialog. It ends with what this setup does not replace.</p>
+
+<section>
+<h2>Step 1: Check versions and the console switch</h2>
+
+<p>The guide lists Claude Code 2.1.330 or later as a requirement, because earlier versions either ignore the console or drop more of the computer's settings after a sign-in. Check both tools on the machine that runs your agent:</p>
+
+<pre><code>claude --version
+shell --version</code></pre>
+
+<p>The first should print 2.1.330 or higher. The second prints the shell.online CLI version; everything in this guide works on the current release, v0.25.0, from the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>.</p>
+
+<p>Two things are outside your control as a developer. An Owner has to turn on the switch called <strong>Allow sign-in from Claude Code in terminals and IDEs</strong>, which is off by default. If it is off, the sign-in shows <code>You chose an organization that is managed in Anthropic's Enterprise Admin Console</code> and nothing is saved. And the sign-in only tells Claude Code where to send requests: with a cloud provider you still need <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">your own cloud credentials</a> on the machine, and with a gateway you still need to be able to sign in to it.</p>
+</section>
+
+<section>
+<h2>Step 2: Stop the Claude Code sessions you are already sharing</h2>
+
+<p>The sample instructions tell developers to close any open Claude Code sessions after signing in and start <code>claude</code> again. A session that was running under shell before the sign-in is one of those. List what this machine is sharing:</p>
+
+<pre><code>shell list</code></pre>
+
+<p>The table shows each session's ID, access mode, uptime, closing rule, command and share URL. For every row whose command is <code>claude</code>, either type <code>/exit</code> in the session or stop it from the machine:</p>
+
+<pre><code>shell kill 3f9a</code></pre>
+
+<p>The ID here is invented; use the one from your table, or any prefix of it that matches only one session. <code>shell kill</code> terminates the wrapped process and takes its browser link offline. Anyone who had the old link sees it go offline.</p>
+</section>
+
+<section>
+<h2>Step 3: Sign in to your organization</h2>
+
+<p>Run the sign-in in an ordinary terminal on the machine, where the browser opens on the same screen:</p>
+
+<pre><code>claude auth login</code></pre>
+
+<p>The browser may ask for your email first. Select your organization and click Authorize. Claude Code's <a href="https://code.claude.com/docs/en/authentication">authentication documentation</a> says that when the browser shows a login code instead of redirecting back, you paste it into the terminal. The redirect back is the usual pattern for command line tools, a listener on the loopback address as described in <a href="https://www.rfc-editor.org/rfc/rfc8252">RFC 8252, OAuth 2.0 for Native Apps</a>; the code is the fallback when that does not work.</p>
+
+<p>Read what the terminal prints. <code>Signed in to the organization</code> is the result you want. If it prints <code>Login successful.</code> instead, the guide says you picked another account, so run the command again. If it adds that the organization's settings won't apply because the computer's own managed settings take priority, Claude Code <a href="https://code.claude.com/docs/en/managed-settings">managed settings</a> are still on the machine and your administrator needs to know.</p>
+
+<p>Release 2.1.330 also adds <code>CLAUDE_CODE_FULL_SIGN_IN_LINK=1</code>, which prints the full sign-in link for the case where the short one shows an error or a script needs to read values from it. Leave it unset unless you hit that error.</p>
+</section>
+
+<section>
+<h2>Step 4: Start Claude Code under shell</h2>
+
+<p>Now start a fresh session and give it a name you will recognize on the phone:</p>
+
+<pre><code>cd ~/src/billing-service
+shell --name billing-review claude</code></pre>
+
+<p>The folder and name are examples. shell starts Claude Code in the background on this machine and prints a browser link, a ten-character password and a QR code that carries both. The Claude Code process reads the same sign-in as any other on the computer, so the organization's connection and settings apply to it. shell only carries its terminal, encrypted between the CLI and each browser as described on the <a href="/e2ee/">end-to-end encryption page</a>.</p>
+
+<p>Scan the QR code with your phone, or open the link and enter the password. If this machine is linked to your account with <code>shell auth</code>, the session also appears at <a href="/app/">app.shell.online</a> under the name you gave it.</p>
+</section>
+
+<section>
+<h2>Step 5: Confirm the provider from your phone</h2>
+
+<p>In the session, on the phone, type <code>/status</code> and send it. The admin guide names the rows to look for:</p>
+
+<ul>
+<li><strong>Setting sources</strong> includes <code>Enterprise managed settings (remote)</code>, which is Claude Code's name for the console settings.</li>
+<li><strong>API provider</strong>, if your organization uses a cloud provider, names it and ends with <code>(chosen by your organization)</code>.</li>
+<li><strong>Anthropic base URL</strong>, if it uses a gateway, shows the gateway's address.</li>
+<li><strong>Managed settings (remote)</strong> appears only when Claude Code has something to report, and gives the cause of a problem.</li>
+</ul>
+
+<p>Two prompts can stop a fresh session before it does any work, and both are answered in the terminal. Claude Code may ask you to approve some of the organization's settings, such as a gateway's address; if you decline, it exits. And if your gateway has its own sign-in, Claude Code refuses each prompt until you run <code>/login</code> in the session. Both are easier to clear at the desk before you leave, but either can be answered from the phone because the link is interactive.</p>
+</section>
+
+<section>
+<h2>Step 6: Paste longer text from the phone</h2>
+
+<p>Short replies are fine on the phone keyboard. A stack trace, a ticket description or a block of instructions you wrote in a notes app is not. Copy it on the phone, then tap <strong>Paste</strong> in the terminal controls. In the web app it sits at the corner of the terminal, next to the Renderer menu.</p>
+
+<p>shell opens a dialog titled <strong>Paste into terminal</strong> with the line "Review before inserting. Line breaks can run commands." It tries to read the clipboard during your tap, because Safari only lets a page read the clipboard inside a user gesture, as WebKit's post on the <a href="https://webkit.org/blog/10855/async-clipboard-api/">async clipboard API</a> explains. If the read works, the text box fills and the status line says <code>Ready to insert. Nothing has been sent yet.</code> If your browser refuses, touch and hold in the box and choose Paste yourself. The dialog is a modal <a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/dialog"><code>&lt;dialog&gt;</code></a>, so nothing reaches the terminal while it is open.</p>
+
+<p>Read the text, edit it if needed, and tap <strong>Insert into terminal</strong>. shell hands it to the terminal's paste path, which keeps <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">bracketed paste mode</a> (mode 2004) intact for programs that turn it on. It does not add Enter. Send the message with the return key on your keyboard once you have checked it landed where you expected.</p>
+
+<p>The dialog refuses text over 12 KB and asks for a smaller selection. That leaves room inside the relay's 16 KiB input limit, and the <a href="/mobile/">mobile guide</a> notes that paste input is split into bounded frames that wait when the connection is busy.</p>
+
+<div class="callout"><p><strong>Paste is missing in the Chat renderer.</strong> If you read Claude Code as a conversation on your phone, the layout described in <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">watching Claude Code as a conversation</a>, the web app does not show the Paste button. Switch the session back to the default Adaptive renderer to paste. Paste also needs input access: on a <code>--read-only</code> link, or for a viewer without input, the dialog explains why it cannot insert.</p></div>
+</section>
+
+<section>
+<h2>When the organization sign-in ends</h2>
+
+<p>The guide says a sign-in lasts about a month. When it ends, Claude Code may stop with <code>no usable organization sign-in</code>. The part to watch: if you start <code>claude</code> again without signing in, it can start with your own Claude login or an API key, and its requests then go to the Anthropic API without your organization's settings. Nothing about the shell link changes when that happens. If you restart a session from your phone after an error, run <code>/status</code> again before you give it work, and run <code>claude auth login</code> at the machine if the organization rows are gone.</p>
+
+<p>Settings changes reach a running session on their own schedule. Claude Code downloads the console settings each time it starts and checks again every hour, but a change to the connection or the model list waits for the next start.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not replace Remote Control. You get the terminal itself, not the Claude app's conversation view, file attachments or its buttons.</li>
+<li>It does not sign you in. Signing in, renewing it and choosing the organization all happen in Claude Code at the machine.</li>
+<li>It does not carry or enforce your organization's settings. Claude Code applies them. The admin guide itself calls console settings a client-side control, not a security boundary.</li>
+<li>It does not route model traffic. Requests go from Claude Code on your machine to the organization's provider or gateway. shell carries only the terminal session.</li>
+<li>The console does not decide who can open your link. Anyone with the link and password can type into the session, and those requests run on your organization's provider. Keep the password to yourself, give a teammate who only needs to watch a <code>shell --read-only</code> session, and see the <a href="/security/">security page</a> and the post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a link without stopping the process</a> for <code>shell password rotate</code>.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>The Admin Console decides which provider and settings a Claude Code session uses. It says nothing about which other machines or agents can reach that session, which is a separate question with its own controls. shell.online answers it for one terminal with a link and a password. Pilot Protocol, the networking stack shell.online comes from, answers it for agents talking to each other: its <a href="https://pilotprotocol.network/blog/self-hosted-registry-identity-directory-sync-audit-export">self-hosted registry guide</a> covers binding nodes to identities from your identity provider and mapping directory entries to network roles, and its post on <a href="https://pilotprotocol.network/blog/secure-ai-agent-communication-zero-trust">zero trust communication between agents</a> is candid that transport security does not cover tool authorization or audit logging, which need their own layers. The same split applies here: the console governs the model side, and you still decide who gets the terminal.</p>
+</section>
+
+<div class="cta"><h3>Keep your agent's terminal one tap away</h3><p>Install the CLI, run <code>shell claude</code> on the machine you signed in, and scan the QR code. The command reference lists every flag used in this guide.</p><a href="/cli/">Read the shell.online CLI reference</a></div>

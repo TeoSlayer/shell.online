@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-keep-a-phone-view-of-claude-code-after-an-admin-console-sign-in",
+    "title": "How to Keep a Phone View of Claude Code After an Admin Console Sign-In",
+    "description": "Claude Code 2.1.330 signs in to Enterprise Admin Console organizations, which turns Remote Control off. Keep Claude Code on your phone with shell.online.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "enterprise-admin-console",
+      "remote-control",
+      "mobile"
+    ],
+    "iso_date": "2026-11-21",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-phone-view-of-claude-code-after-an-admin-console-sign-in.webp"
+  },
+  {
     "slug": "how-to-compare-gpt-6-2-sol-and-astra-on-one-codex-task-from-your-phone",
     "title": "How to Compare GPT-6.2 Sol and Astra on One Codex Task From Your Phone",
     "description": "Run one read-only Codex review on GPT-6.2 Sol and on GPT-6.2 Astra as two named shell.online sessions, then compare the findings from your phone.",
