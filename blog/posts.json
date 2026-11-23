@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-put-an-end-time-on-a-claude-code-loop-you-watch-from-your-phone",
+    "title": "How to Put an End Time on a Claude Code Loop You Watch From Your Phone",
+    "description": "Run a Claude Code /loop under shell.online, check its wakeups from a phone with /tasks, and end every scheduled run at a time you pick with --auto-close.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "scheduled-tasks",
+      "auto-close",
+      "mobile"
+    ],
+    "iso_date": "2026-11-23",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-put-an-end-time-on-a-claude-code-loop-you-watch-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-read-a-summary-when-opencodes-background-tests-report-back",
     "title": "How to Read a Summary When OpenCode's Background Tests Report Back",
     "description": "OpenCode 2.3.1 moves long test runs to the background. Turn on shell.online session summaries and read what OpenCode reported from your phone.",

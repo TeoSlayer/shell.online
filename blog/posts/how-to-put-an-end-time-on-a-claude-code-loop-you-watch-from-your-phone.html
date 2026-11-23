@@ -1,0 +1,93 @@
+<p>Claude Code <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.329">version 2.1.329</a>, released on November 19, 2026, made a session's own schedule visible in one place. The release adds "this session's scheduled tasks, <code>/loop</code> wakeups, the goal and this conversation's forks to <code>/tasks</code>", and pressing <code>x</code> on one of them stops it after asking. The scheduled tasks page also describes the older route, asking Claude to list them, and that still works.</p>
+
+<p>The scheduling itself lives inside the process. Anthropic's <a href="https://code.claude.com/docs/en/scheduled-tasks">page on running prompts on a schedule</a> says the tasks are session-scoped and fire only while Claude Code is running and idle. Closing the terminal stops them. A recurring task expires seven days after it was created, and a fixed-interval loop such as <code>/loop 30m</code> ignores Esc and Ctrl+C: you stop it by asking Claude to cancel it. OpenCode moved the same way today, when <a href="https://github.com/anomalyco/opencode/releases/tag/v2.4.0">OpenCode 2.4.0</a> added automations that run prompts, scripts or shell commands on a timer or a cron schedule. This guide sticks to Claude Code, because its documentation says exactly where its tasks run.</p>
+
+<p>If the loop lives as long as the process, then the process lifetime is the one setting you control from outside Claude. This guide runs Claude Code under <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> with a closing time, starts a loop, checks the schedule from a phone with <code>/tasks</code>, and explains what happens to the remaining wakeups when the deadline arrives.</p>
+
+<section>
+<h2>Step 1: Start Claude Code with a closing time</h2>
+
+<p>shell wraps a command in a terminal, prints a browser link and a password, and leaves the command running in the background. The <code>--auto-close</code> option adds a deadline. Run this from the repository the loop should work in:</p>
+
+<pre><code>shell --name pr-1234-loop --auto-close 07:30 claude</code></pre>
+
+<p>The <a href="/cli/">CLI reference</a> lists the forms <code>--auto-close</code> accepts: a duration such as <code>8h</code> or <code>1h30m</code>, an <a href="https://www.rfc-editor.org/rfc/rfc3339">RFC 3339</a> timestamp, <code>YYYY-MM-DD HH:MM</code>, a bare <code>HH:MM</code>, or <code>today</code> and <code>tomorrow</code> with an optional time. Multi-word forms can be typed without quotes, as in <code>--auto-close tomorrow 07:30</code>. A bare <code>07:30</code> means the next 07:30: the parser in <code>cmd/shell/autoclose.go</code> moves a clock time that has already passed today to tomorrow. A missing or invalid value exits with status 2 and is never mistaken for the command.</p>
+
+<p>The start card names the session, prints the link and the password, and adds a line for the deadline, along these lines:</p>
+
+<pre><code>Closes 2026-11-24T07:30:00+01:00, or when the task exits</code></pre>
+
+<p>That is the one-line summary of the whole setup. The session ends at 07:30 or earlier if Claude Code exits on its own. Put options before the command; everything after <code>claude</code> goes to Claude Code.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the loop and detach</h2>
+
+<p>The session is in the background, so attach to it from the same machine. <code>shell list</code> prints the session ID, and a prefix of at least six characters is enough:</p>
+
+<pre><code>shell list
+shell attach 3f9c2a</code></pre>
+
+<p>Answer the folder trust dialog if Claude Code shows one, then type the loop:</p>
+
+<pre><code>/loop 30m run gh pr checks 1234 and, if a job failed, read its log and tell me why. Do not push.</code></pre>
+
+<p>Claude converts the interval to a cron expression, schedules the job and confirms the cadence and an 8-character job ID. <a href="https://cli.github.com/manual/gh_pr_checks"><code>gh pr checks</code></a> prints the CI status of one pull request, and the prompt keeps the loop to reading. The cron format is the standard five fields described in the <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/crontab.html">POSIX crontab specification</a>, and all times are local.</p>
+
+<p>Press <code>Ctrl-X</code>, then <code>D</code>, to detach. Detaching leaves the process running, which is what keeps the loop alive. If you leave out the interval and type <code>/loop check whether CI passed</code>, Claude chooses a delay between one minute and one hour after each iteration instead, and the loop shows up in the task list as a pending one-shot wakeup.</p>
+
+<div class="callout"><p><strong>Esc and Ctrl+C do not stop a fixed-interval loop.</strong> The phone's key bar has <code>esc</code> and <code>ctrl-c</code> buttons, and on a self-paced loop Esc on an empty prompt cancels the pending wakeup. A <code>/loop 30m</code> ignores both. To end it before the deadline, open <code>/tasks</code> and stop it there, or type "cancel the CI check loop" and let Claude call <code>CronDelete</code>.</p></div>
+</section>
+
+<section>
+<h2>Step 3: Check the schedule from your phone</h2>
+
+<p>Open the link on your phone and enter the password. In a browser window 760 CSS pixels wide or narrower, or on any device whose primary input is a finger (the <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer">coarse pointer</a> case in CSS), the page shows a row of keys under the terminal: <code>esc</code>, <code>tab</code>, the four arrows, <code>enter</code> and <code>ctrl-c</code>. The <a href="/mobile/">mobile guide</a> covers the rest of the phone view.</p>
+
+<p>Type <code>/tasks</code> and tap <code>enter</code>. On 2.1.329 or later the list includes the loop you scheduled and any pending wakeup. If you would rather read the raw schedule, ask "what scheduled tasks do I have?" and Claude answers with a <code>CronList</code> call whose rows show each task's ID, schedule and next run time.</p>
+
+<p>That next run time will not match the cron line exactly. Claude Code adds jitter so that sessions do not all call the API at once. Per the docs, a task every 30 minutes runs 0 to 15 minutes late, and an hourly or daily task runs up to 30 minutes late. Only <code>/loop 5m</code>, written <code>*/5 * * * *</code>, runs early instead, 4 minutes 45 seconds after the previous run. Keep that in mind when you pick the deadline: a 30-minute loop with a 07:30 cutoff can start its last run as late as 07:15.</p>
+
+<p>The phone is also where you answer prompts. A fired iteration goes through the session's permission checks, so if <code>gh</code> needs approval at 03:00, the run waits at that prompt until someone answers it. The arrows and <code>enter</code> on the key bar are enough to choose an option.</p>
+</section>
+
+<section>
+<h2>Step 4: Read the deadline back from the machine</h2>
+
+<p>At the desk, <code>shell list</code> in a wide terminal has a CLOSES column. A session with a deadline shows the time left in at most two units, such as <code>in 9h12m</code>, and one without a deadline shows <code>on exit</code>. In a narrower window the list switches to one block per session, where the same value reads <code>in 9h12m, or when the task exits</code>. For a script, the JSON form carries the absolute time and the seconds left:</p>
+
+<pre><code>shell list --json | jq '.[] | {name, closes_at, closes_in_seconds}'</code></pre>
+
+<p>Pick fields with <code>jq</code> as above rather than printing the whole array, because <code>shell list --json</code> includes each session's browser password in <code>e2ee_password</code>.</p>
+</section>
+
+<section>
+<h2>Step 5: Know what happens at 07:30</h2>
+
+<p>I read the Unix code path for this step, in <code>cmd/shell/session_unix.go</code> and <code>cmd/shell/process_unix.go</code>. When the deadline passes, shell sends <code>SIGTERM</code> to the wrapped process's whole process group, using a negative process ID as <a href="https://man7.org/linux/man-pages/man2/kill.2.html">kill(2)</a> describes. It waits two seconds. If the process is still alive, it sends <code>SIGKILL</code>, which <a href="https://man7.org/linux/man-pages/man7/signal.7.html">signal(7)</a> lists as a signal that cannot be caught. The browser link closes with the process. The Windows build skips the <code>SIGTERM</code> step and kills the process outright.</p>
+
+<p>Once Claude Code has exited, no task fires, because the scheduler runs inside it. That is the outer bound this guide is after: the seven-day expiry stops a forgotten loop after a week, and the deadline stops it at the hour you chose.</p>
+
+<p>The deadline does not delete anything from Claude's side, though. The scheduled tasks page says <code>claude --resume</code> and <code>claude --continue</code> restore tasks created with <code>CronCreate</code> unless a recurring task has expired or a one-shot task's time has passed. A self-paced loop is not restored. If you resume the conversation the next morning, check <code>/tasks</code> before you leave it running again.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not keep the computer awake. A sleeping laptop runs no loop. On a Mac, <a href="https://ss64.com/mac/caffeinate.html">caffeinate</a> holds off idle sleep; on Linux, <a href="https://man7.org/linux/man-pages/man1/systemd-inhibit.1.html">systemd-inhibit</a> does the same for a command you wrap.</li>
+<li>It is not a cloud schedule. Anthropic's <a href="https://code.claude.com/docs/en/routines">cloud scheduled tasks</a> run without your machine on. A <code>/loop</code> under shell needs the machine on, the network up and the session open.</li>
+<li>It does not pause anything. A deadline ends the process. There is no option to suspend a loop overnight and continue it later.</li>
+<li>It does not undo work. If an iteration pushed a commit or posted a comment before 07:30, that stays. A loop that can act on its own is the case OWASP files under <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive agency</a>, which is why the prompt in Step 2 only reads.</li>
+<li>It does not limit who can type. Anyone with the link and the password can add a loop or cancel one. To cut off a teammate without stopping the run, use <code>shell password rotate</code>, as in <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a>. The <a href="/security/">security page</a> describes what the relay can and cannot read.</li>
+<li>It does not tell you when a run fails. You see the result when you open the link. The <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">session pulse</a> shows which session is waiting on you, and that is all.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>The deadline in this guide is the same mechanism Pilot covered in <a href="https://pilotprotocol.network/blog/a-terminal-sharing-link-that-expires-at-a-set-time-what-shell-online-auto-close">a terminal link that expires at a set time</a>, which also explains why a deadline is not a schedule. The loop on top of it is a polling pattern, and Claude Code's own docs point to pushed events as the alternative. <a href="https://pilotprotocol.network/">Pilot Protocol</a>, the networking stack for autonomous agents that shell comes from, takes the pushed approach between machines: its daemon can <a href="https://pilotprotocol.network/docs/webhooks">post events to a webhook</a> for connections, trust changes, messages and files, so an agent on one machine reacts when something arrives instead of asking every 30 minutes. For a CI check on one pull request, a loop with a closing time is simpler, and that is the trade I would make for a single night.</p>
+</section>
+
+<div class="cta"><h3>Give your next loop a closing time</h3><p>Install the CLI, then start Claude Code with <code>shell --auto-close 07:30 claude</code> and open the link on your phone. The documentation covers install, linking and the web app.</p><a href="/docs/">Read the documentation</a></div>
