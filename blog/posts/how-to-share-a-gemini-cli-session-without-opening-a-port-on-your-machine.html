@@ -1,0 +1,113 @@
+<p>Gemini CLI 0.71.1 went out on 24 November 2026 with a single change: a cherry-pick of <a href="https://github.com/google-gemini/gemini-cli/pull/30420">pull request 30420, which enforces bearer token authentication in the A2A server</a>. The A2A server is the package that lets other programs drive Gemini CLI over HTTP using the <a href="https://a2a-protocol.org/latest/specification/">Agent2Agent protocol</a>, whose specification says servers must reject requests with invalid or missing credentials. According to the pull request, the server now reads a token from <code>GEMINI_IPC_SECRET</code> or <code>CODER_AGENT_AUTH_TOKEN</code>, compares it in constant time with Node's <a href="https://nodejs.org/api/crypto.html"><code>crypto.timingSafeEqual</code></a>, and answers <code>401</code> to any request without it. If neither variable is set, every request gets <code>500</code>. Requests must also carry a loopback <code>Host</code> header, and a loopback <code>Origin</code> when one is present, or they get <code>403</code>. The code it replaced had placeholder checks: its bearer branch accepted the literal string <code>valid-token</code>.</p>
+
+<p>The server already listened only on <code>localhost</code>. That is the point worth taking away from the fix. A port on <code>127.0.0.1</code> is reachable by every process on the machine, and a web page open in your browser can reach it too through DNS rebinding, unless the server checks <code>Host</code> and the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Origin"><code>Origin</code> header</a> the browser sends. The <a href="https://modelcontextprotocol.io/specification/2025-06-18/basic/transports">MCP transport specification</a> spells out the same rule for local HTTP servers: validate <code>Origin</code>, bind to localhost, and authenticate every connection. A coding agent that can edit files and run commands is a bad thing to leave behind a port that only half checks who is calling.</p>
+
+<p>This guide does three things. It shows you how to list what is listening on your machine, how to confirm that a Gemini CLI A2A server you run has the fix, and how to put Gemini CLI on your phone with shell.online without adding a TCP listener at all. The checks are for macOS and Linux, where I read the code paths.</p>
+
+<section>
+<h2>Step 1: See what is listening on your machine</h2>
+
+<p>Before you share anything, find out which programs already accept connections. On macOS or Linux, <a href="https://github.com/lsof-org/lsof">lsof</a> lists open sockets by process:</p>
+
+<pre><code>lsof -nP -iTCP -sTCP:LISTEN</code></pre>
+
+<p><code>-iTCP</code> limits the list to TCP sockets, <code>-sTCP:LISTEN</code> keeps only the ones waiting for connections, and <code>-nP</code> prints addresses and port numbers instead of looking up names. Each row starts with the command name and its process ID and ends with the address, such as <code>127.0.0.1:41242 (LISTEN)</code>. An address of <code>127.0.0.1</code> or <code>[::1]</code> means loopback only. An address of <code>*</code> means every network interface, which includes your Wi-Fi.</p>
+
+<p>On Linux you can use <a href="https://man7.org/linux/man-pages/man8/ss.8.html">ss</a> instead:</p>
+
+<pre><code>ss -ltnp</code></pre>
+
+<p>Here <code>-l</code> shows listening sockets, <code>-t</code> limits it to TCP, <code>-n</code> skips name lookups and <code>-p</code> names the process. Without <code>sudo</code>, both tools can only name processes that belong to you. Keep this list. You will compare against it in Step 4.</p>
+</section>
+
+<section>
+<h2>Step 2: Check the Gemini CLI A2A server, if you run it</h2>
+
+<p>If you only use the <code>gemini</code> command in a terminal and have never set up the A2A server, skip to Step 3. If you do run it, for an IDE integration or your own scripts, it is published as <code>@google/gemini-cli-a2a-server</code>, and the fixed version is 0.71.1. The <a href="https://github.com/google-gemini/gemini-cli/releases/tag/v0.71.1">v0.71.1 release</a> lists the cherry-pick and nothing else.</p>
+
+<p>The package's <a href="https://github.com/google-gemini/gemini-cli/blob/v0.71.1/packages/a2a-server/README.md">README now has an Authentication section</a>. It says the token is read once at startup from the server's environment, never from a <code>.env</code> file, and that <code>GEMINI_IPC_SECRET</code> wins when both variables are set. From a checkout of the repository, the documented way to start it by hand is:</p>
+
+<pre><code>CODER_AGENT_AUTH_TOKEN="example-token-not-real" npm run start:a2a-server</code></pre>
+
+<p>That script sets <code>CODER_AGENT_PORT=41242</code>. Started any other way without that variable, the server asks the operating system for a free port, so read the port from the Step 1 list. Then test the three cases the pull request describes:</p>
+
+<pre><code>curl -i -H "Authorization: Bearer example-token-not-real" http://localhost:41242/listCommands
+curl -i http://localhost:41242/listCommands
+curl -i -H "Authorization: Bearer example-token-not-real" -H "Host: attacker.example" http://localhost:41242/listCommands</code></pre>
+
+<p>A fixed server answers <code>200</code> to the first, <code>401</code> to the second and <code>403</code> to the third. If the second request succeeds, the server is older than the fix. The README adds one more detail: requests that pass the <code>Host</code> and <code>Origin</code> checks but carry no token are limited to 100 a minute, after which the server answers <code>429</code>.</p>
+</section>
+
+<section>
+<h2>Step 3: Start Gemini CLI under shell</h2>
+
+<p>If the reason you were looking at the A2A server was to reach Gemini CLI from somewhere other than your desk, you may not need a server at all. <a href="https://github.com/TeoSlayer/shell.online">shell.online</a> starts a program on your computer and gives you a browser link to its terminal. It does not wrap any agent protocol. It shares the screen and the keyboard.</p>
+
+<p>Install it with the one-line installer, sign Gemini CLI in at the machine first, then start it through shell:</p>
+
+<pre><code>curl -fsSL https://shell.online/install | sh
+shell --name gemini -- gemini</code></pre>
+
+<p>There is no <code>shell gemini</code> shortcut the way there is <code>shell claude</code> or <code>shell codex</code>, so you pass the command after <code>--</code>. <code>--name</code> labels the session in <code>shell list</code> and the web app. shell prints a link, a password and a QR code that carries both, and runs Gemini CLI in the background. Closing the browser does not stop it. The session ends when <code>gemini</code> exits.</p>
+</section>
+
+<section>
+<h2>Step 4: Confirm the share added no TCP listener</h2>
+
+<p>Run the Step 1 command again:</p>
+
+<pre><code>lsof -nP -iTCP -sTCP:LISTEN</code></pre>
+
+<p>Compare it with the list you kept. On macOS and Linux, starting a session should not add a row for <code>shell</code>. To see what shell does have open, ask for its TCP sockets by process ID:</p>
+
+<pre><code>lsof -nP -a -p "$(pgrep -d, -x shell)" -iTCP</code></pre>
+
+<p><code>pgrep -d, -x shell</code> prints the IDs of every process named exactly <code>shell</code>, separated by commas, and <code>-a</code> tells lsof that both conditions must hold. What you should see are connections in the <code>ESTABLISHED</code> state to a remote address on port 443. Those are outbound: the CLI dials the relay over HTTPS and a secure WebSocket, which is why the <a href="/platforms/">platform notes</a> list a working PTY and outbound HTTPS and WebSockets as what a supported machine needs. Nothing on the internet connects in to your computer.</p>
+
+<p>The parts of shell that do talk to each other on your machine, the background daemon and each session, use Unix domain sockets. You can list them:</p>
+
+<pre><code>ls -la "/tmp/shell-online-$(id -u)"</code></pre>
+
+<p>You should see <code>daemon.sock</code> and one <code>&lt;ID&gt;.sock</code> per running session, each with mode <code>srw-------</code>. In <code>cmd/shell/local_transport_unix.go</code> and <code>daemon_unix.go</code>, shell sets each socket to <code>0600</code>, refuses to use the directory if it is not owned by your user, and resets the directory to <code>0700</code> if it finds looser permissions. The <a href="https://man7.org/linux/man-pages/man7/unix.7.html">unix(7) man page</a> notes that on Linux, connecting to a stream socket requires write permission on the socket file. A web page has no way to open a Unix socket at all, so the DNS rebinding route that the Gemini fix closes does not apply here. If you set <code>SHELL_ONLINE_RUNTIME_DIR</code>, the sockets live in that directory instead.</p>
+
+<div class="callout"><p><strong>The one TCP listener shell does open is during sign-in.</strong> <code>shell auth</code> binds <code>127.0.0.1</code> on a port the operating system picks, so the browser can hand the approval back. It closes when sign-in finishes or the wait runs out: five minutes in v0.25.0, raised to fifteen in the changelog's Unreleased section. The callback checks a random state value, and the flow uses a <a href="https://www.rfc-editor.org/rfc/rfc7636">PKCE code verifier</a> that never leaves the CLI. If you run Step 1 while signing in, that row is expected. On Windows the daemon uses a named pipe instead, and starting a background session briefly opens a loopback listener that requires a token; this guide's checks cover macOS and Linux only.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Open it on your phone and know what the relay carries</h2>
+
+<p>Scan the QR code, or open the link and type the password. On a phone, the <a href="/mobile/">mobile view</a> shows a key bar with esc, tab, the four arrows, enter and ctrl-c under the terminal, which is enough for any menu that moves with the arrow keys and confirms with enter. Typing works as on any terminal.</p>
+
+<p>Terminal traffic is end-to-end encrypted by default. The <a href="/security/">security model</a> says the host encrypts terminal payloads before the relay forwards them, and the relay carries authenticated ciphertext plus connection metadata such as IP addresses, timing, message sizes and the terminal's grid size. The <a href="/e2ee/">encryption page</a> has the details, and an earlier post covers <a href="/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon/">what the relay sees and what it can no longer read</a>. Read both before you share a link with anyone else.</p>
+</section>
+
+<section>
+<h2>Step 6: End the share when you are done</h2>
+
+<p>From the machine, list the running sessions and stop the one you started:</p>
+
+<pre><code>shell list
+shell kill -- &lt;ID&gt;</code></pre>
+
+<p><code>shell list</code> prints each session's ID with its name and uptime. <code>shell kill</code> stops the process and closes its link. If you want Gemini CLI to keep running but a link you handed out to stop working, <code>shell password rotate &lt;ID&gt;</code> revokes the password and prints a new one. The post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> walks through that case. Every command is in the <a href="/cli/">CLI reference</a>.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not secure servers that Gemini CLI or its MCP servers open. shell starts <code>gemini</code> and shares its terminal. Whatever ports the agent opens are its own, and Step 1 is how you find them.</li>
+<li>It does not replace the A2A server. Another program cannot send Gemini CLI a task through a shell link. A person with the link and password can read the screen and type.</li>
+<li>It does not protect the sockets from you. Any process running as your user can connect to them, which is how <code>shell attach</code> works on the same machine. The permissions keep out other users, not other programs of yours.</li>
+<li>An interactive link lets its holder type with Gemini CLI's permissions. If someone only needs to watch, start the session with <code>shell --read-only</code>, as in this earlier guide to <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">a read-only link for a coding agent</a>.</li>
+<li>The computer has to stay awake and online. A sleeping host cannot be reached by anything.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>The A2A server exists because some jobs really are one agent calling another, and a terminal link is the wrong tool for those. shell.online is built by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for agents, and its blog has a walkthrough of <a href="https://pilotprotocol.network/blog/a2a-agent-cards-over-pilot-tunnels">serving A2A agent cards over Pilot tunnels</a>. There the agent's card names a Pilot address instead of a public URL, peers resolve a private agent only once they are trusted, and the tunnel is encrypted after a signed handshake. If you want Gemini CLI itself on that network, the guide to <a href="https://pilotprotocol.network/blog/connect-gemini-cli-to-pilot-protocol">connecting Gemini CLI to Pilot Protocol</a> adds Pilot as an MCP server with one command. The <a href="https://geminicli.com/docs/">Gemini CLI documentation</a> covers the rest of its MCP setup.</p>
+</section>
+
+<div class="cta"><h3>Put Gemini CLI on your phone</h3><p>Install shell, start <code>shell --name gemini -- gemini</code>, and check for yourself that nothing new is listening.</p><a href="/docs/">Read the shell.online docs</a></div>

@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-share-a-gemini-cli-session-without-opening-a-port-on-your-machine",
+    "title": "How to Share a Gemini CLI Session Without Opening a Port on Your Machine",
+    "description": "Gemini CLI 0.71.1 put a token on its local A2A server. Check what your machine listens on, then share Gemini CLI to your phone with no new TCP listener.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "gemini-cli",
+      "a2a",
+      "localhost",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-24",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-gemini-cli-session-without-opening-a-port-on-your-machine.webp"
+  },
+  {
     "slug": "how-to-put-an-end-time-on-a-claude-code-loop-you-watch-from-your-phone",
     "title": "How to Put an End Time on a Claude Code Loop You Watch From Your Phone",
     "description": "Run a Claude Code /loop under shell.online, check its wakeups from a phone with /tasks, and end every scheduled run at a time you pick with --auto-close.",
