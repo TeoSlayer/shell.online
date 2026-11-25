@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-share-a-projects-files-from-a-claude-code-session-without-the-env",
+    "title": "How to Share a Project's Files From a Claude Code Session Without the .env",
+    "description": "Claude Code 2.1.332 stopped hanging on a .env that is a named pipe. Here is how shell's --files-root keeps that file and its neighbors away from a teammate.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "file-sharing",
+      "claude-code",
+      "secrets-management",
+      "named-pipes"
+    ],
+    "iso_date": "2026-11-25",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-projects-files-from-a-claude-code-session-without-the-env.webp"
+  },
+  {
     "slug": "how-to-share-a-gemini-cli-session-without-opening-a-port-on-your-machine",
     "title": "How to Share a Gemini CLI Session Without Opening a Port on Your Machine",
     "description": "Gemini CLI 0.71.1 put a token on its local A2A server. Check what your machine listens on, then share Gemini CLI to your phone with no new TCP listener.",
