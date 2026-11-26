@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-take-back-an-opencode-prompt-from-your-phone-before-it-answers",
+    "title": "How to Take Back an OpenCode Prompt From Your Phone Before It Answers",
+    "description": "Use the esc key on shell.online's phone key bar to stop an OpenCode 2.4.2 prompt in time to get it back for editing, and keep clear of the ctrl-c that ends the session.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "mobile",
+      "coding-agents",
+      "terminal-keys"
+    ],
+    "iso_date": "2026-11-26",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-take-back-an-opencode-prompt-from-your-phone-before-it-answers.webp"
+  },
+  {
     "slug": "how-to-share-a-projects-files-from-a-claude-code-session-without-the-env",
     "title": "How to Share a Project's Files From a Claude Code Session Without the .env",
     "description": "Claude Code 2.1.332 stopped hanging on a .env that is a named pipe. Here is how shell's --files-root keeps that file and its neighbors away from a teammate.",
