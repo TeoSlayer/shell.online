@@ -1,5 +1,21 @@
 [
   {
+    "slug": "how-to-check-a-resumed-codex-exec-run-kept-its-sandbox-from-your-phone",
+    "title": "How to Check a Resumed Codex Exec Run Kept Its Sandbox From Your Phone",
+    "description": "Run codex exec and its resume as read-only shell.online shares and read the sandbox line Codex 0.172.0 prints, before it scrolls out of a late viewer's replay.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "codex",
+      "sandbox",
+      "mobile",
+      "coding-agents"
+    ],
+    "iso_date": "2026-11-27",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-a-resumed-codex-exec-run-kept-its-sandbox-from-your-phone.webp"
+  },
+  {
     "slug": "how-to-take-back-an-opencode-prompt-from-your-phone-before-it-answers",
     "title": "How to Take Back an OpenCode Prompt From Your Phone Before It Answers",
     "description": "Use the esc key on shell.online's phone key bar to stop an OpenCode 2.4.2 prompt in time to get it back for editing, and keep clear of the ctrl-c that ends the session.",

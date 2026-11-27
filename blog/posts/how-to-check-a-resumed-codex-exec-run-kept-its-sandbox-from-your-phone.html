@@ -1,0 +1,106 @@
+<p>OpenAI published <a href="https://github.com/openai/codex/releases/tag/rust-v0.172.0">Codex CLI 0.172.0 on 24 November 2026</a>. Among its bug fixes is one line that matters to anyone who runs Codex unattended: <code>codex exec resume</code> now restores the saved sandbox permissions, the working directory and the workspace roots unless you override them. The same release also makes Codex report provider errors as soon as they arrive and name which API spend limit was reached, which is one of the usual reasons an exec run stops halfway.</p>
+
+<p>The pull request behind the fix, <a href="https://github.com/openai/codex/pull/62194">openai/codex#62194</a>, states the old behavior plainly. Resuming sent the current process's sandbox defaults as overrides, so a session started read-only could come back with workspace write access when the configured default was workspace. Nothing on screen warned you. A review you started with no write access could pick up again able to edit your files, which is the kind of quiet widening the <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">OWASP entry on excessive agency</a> lists as excessive permissions.</p>
+
+<p>Codex prints the sandbox it is actually using at the top of every exec run. This guide runs the first exec run and its resume as read-only shell.online shares, so you can read that line from your phone for both runs, and covers the one window in which you have to read it.</p>
+
+<section>
+<h2>What Codex Prints at the Start of an Exec Run</h2>
+
+<p>The <a href="https://learn.chatgpt.com/docs/non-interactive-mode">non-interactive mode documentation</a> says three things this guide relies on. <code>codex exec</code> runs in a read-only sandbox by default. While it runs, Codex streams progress to stderr and prints only the final agent message to stdout. And a resume keeps the saved working directory and sandbox permissions, with <code>-C</code> or <code>--sandbox</code> placed before <code>resume</code> to override them.</p>
+
+<p>The progress on stderr opens with a summary block. In the <a href="https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/exec/src/event_processor_with_human_output.rs">0.172.0 source</a> it is a line reading <code>OpenAI Codex v</code> and the version, a row of dashes, then one line each for <code>workdir</code>, <code>model</code>, <code>provider</code>, <code>approval</code> and <code>sandbox</code>, the reasoning settings on Responses providers, and <code>session id</code>. The <a href="https://github.com/openai/codex/blob/rust-v0.172.0/codex-rs/utils/sandbox-summary/src/sandbox_summary.rs">sandbox summary code</a> fills the sandbox line with <code>read-only</code>, <code>workspace-write</code> followed by the writable roots in brackets (such as <code>[workdir, /tmp, $TMPDIR]</code>), <code>danger-full-access</code>, <code>external-sandbox</code> or <code>custom permissions</code>, with <code>(network access enabled)</code> added when the network is on. The same pull request makes Codex report the sandbox from the running thread, so on 0.172.0 the line describes the session as it was restored.</p>
+
+<p>Both streams go to the terminal Codex runs in. Under shell.online that terminal is a pseudo-terminal, so the header, the progress and the final message all reach the browser. The <a href="https://man7.org/linux/man-pages/man3/stdin.3.html">stdin(3) man page</a> explains why stderr and stdout are separate streams that can still share one terminal.</p>
+</section>
+
+<section>
+<h2>Step 1: Update Codex to 0.172.0</h2>
+
+<p>The fix is only in 0.172.0 and later. The <a href="https://github.com/openai/codex/blob/rust-v0.172.0/README.md">Codex README</a> gives both install routes:</p>
+
+<pre><code>npm install -g @openai/codex
+brew install --cask codex
+codex --version</code></pre>
+
+<p>Use whichever one you installed with. The last command should report 0.172.0 or later. If it reports an older version, the resume in Step 4 can still widen its sandbox, and the explicit override shown there is the only thing protecting you.</p>
+</section>
+
+<section>
+<h2>Step 2: Start the First Run as a Read-Only Share</h2>
+
+<p>From the root of the repository Codex should review, start the run under shell. The sandbox flag repeats the default on purpose, so the command line says what you meant:</p>
+
+<pre><code>cd ~/src/example-api
+shell --read-only --name review-1 -- codex exec --sandbox read-only \
+  "Review src/ for race conditions. List each one with file and line."</code></pre>
+
+<p>Everything after <code>--</code> is the command shell runs, which follows <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html">POSIX utility syntax guideline 10</a>: the first <code>--</code> ends the options. shell starts Codex in the background in this directory, prints an unguessable browser link, a ten-character password and a QR code that carries both, and gives you your prompt back. <code>--name review-1</code> labels the session in <code>shell list</code>, <code>shell ls</code> and the web app.</p>
+
+<p><code>--read-only</code> makes the link view-only: the relay rejects browser input. An exec run takes its instructions from the command line and needs no typing, so nobody holding the link has a reason to type into it. The share also closes by itself when Codex exits. The <a href="/cli/">CLI reference</a> lists every start option.</p>
+</section>
+
+<section>
+<h2>Step 3: Open the Link on Your Phone Before the Header Scrolls Away</h2>
+
+<p>Scan the QR code, or open the link on your phone and enter the password. The terminal page draws the run so far, and if you open it within the first moments of the run, the summary block is at the top. Read the <code>sandbox:</code> line. For this run it should say <code>read-only</code>. Note the <code>session id:</code> line as well, since it names this exact session for Step 4.</p>
+
+<div class="callout"><p>A viewer who opens the link late does not get the whole run. The shell CLI keeps the last 512 KiB of raw output for live delivery, but what it sends a newly joined browser is a rebuilt screen with 100 lines of scrollback above it. Feeding 300 numbered lines through that buffer at an 80 by 24 grid gives back lines 178 to 300. Once the run has printed more than a screen plus 100 lines, the summary block is gone for anyone who joins after that point. A page that stays connected keeps its own history (the link viewer sets an xterm.js scrollback of 10,000 lines, or 3,000 on a screen 760 pixels wide or less or one with a coarse pointer), but a reload starts over from the 100-line replay. Open the link right after you start the run and leave the tab open.</p></div>
+
+<p>The two scrollback figures come from the viewer's code. The coarse pointer test is the CSS <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer">pointer media feature</a>, which a phone's touchscreen matches, and <a href="https://xtermjs.org/docs/api/terminal/interfaces/iterminaloptions/">scrollback</a> is the xterm.js option that sets how many rows a terminal keeps above the screen. The <a href="/mobile/">mobile guide</a> covers the rest of the phone view.</p>
+</section>
+
+<section>
+<h2>Step 4: Resume the Run as a Second Share</h2>
+
+<p>When the first run ends, its link goes offline. That happens when Codex finishes, and it also happens when Codex stops early on a spend limit, which 0.172.0 now names in the error. To continue, start the resume from the same directory as a new share:</p>
+
+<pre><code>cd ~/src/example-api
+shell --read-only --name review-2 -- codex exec resume --last \
+  "Rank the race conditions you found by how likely they are to fire."</code></pre>
+
+<p><code>--last</code> picks the most recent recorded session. Codex filters that pick by working directory unless you add <code>--all</code>, so run the command from the directory you used in Step 2. If you ran other exec sessions in that directory since, use the session id you noted from the phone instead of <code>--last</code>: <code>codex exec resume &lt;SESSION_ID&gt; "..."</code>.</p>
+
+<p>Open the new link on your phone the same way and read the <code>sandbox:</code> line again. On 0.172.0 it should match the first run and say <code>read-only</code>, whatever your configured default is. If it says <code>workspace-write</code>, the resume did not restore what you started with, and you should stop it from the machine with <code>shell kill</code> and the session ID from <code>shell list</code>.</p>
+
+<p>On an older Codex, or whenever you want the command line itself to say what the run may do, put the override before <code>resume</code> as the documentation says:</p>
+
+<pre><code>shell --read-only --name review-2 -- codex exec --sandbox read-only \
+  resume --last "Rank the race conditions you found by how likely they are to fire."</code></pre>
+
+<p>The pull request describes the old code sending the current process's sandbox settings as overrides, so on an older version the override you type is the one the resume sends. The difference 0.172.0 makes is that leaving it out no longer hands the resume your configured default.</p>
+</section>
+
+<section>
+<h2>Step 5: Compare What You Asked For With What Codex Reports</h2>
+
+<p>The header is what Codex says it applied. The command line is what you asked for. While a run is live, <code>shell list --json</code> on the machine has the second one for every local session. This filter prints only the name, the access mode and the command, and leaves out the password field that the full JSON includes:</p>
+
+<pre><code>shell list --json | jq -r '.[] | [.name, .read_only, .command] | @tsv'</code></pre>
+
+<p>Each line is one session: <code>review-2</code>, <code>true</code> for a read-only link, and the full command with quoted arguments, prompt included. The <a href="https://jqlang.org/manual/">jq manual</a> documents the <code>@tsv</code> filter used here. If the command has <code>--sandbox read-only</code> and the phone shows <code>workspace-write</code>, believe the phone and stop the run. Because the prompt is part of the command, it appears wherever the command does, so keep secrets out of it.</p>
+
+<p>The principle being checked is old. The <a href="https://csrc.nist.gov/glossary/term/least_privilege">NIST glossary entry for least privilege</a> restricts a process acting for a user to the minimum access its assigned tasks need, and a resume that keeps a review read-only is that principle applied to one restart.</p>
+</section>
+
+<section>
+<h2>What This Setup Does Not Do</h2>
+
+<p>shell does not enforce Codex's sandbox and does not know about it. <code>--read-only</code> blocks browser input to the terminal. It does not stop Codex from writing files; only Codex's own sandbox does that.</p>
+
+<p>The sandbox line is Codex reporting on itself. It is a useful check that a resume restored the setting you meant, not an independent audit of what the process can reach.</p>
+
+<p>shell does not resume Codex sessions or keep a run alive past its exit. Each exec run is its own share with its own link and password, and a share closes when its task exits. A late viewer gets the screen plus 100 lines of scrollback, not the full output.</p>
+
+<p>shell sends no alert when a run stops on a spend limit. You see it when you look.</p>
+
+<p>Anyone with a link and its password can read everything Codex prints, including code it quotes from your repository. Payloads are <a href="/e2ee/">end-to-end encrypted</a> between the CLI and each browser, and the relay sees routing, size, timing and lifecycle metadata. If a link reached the wrong person, <code>shell password rotate</code> with the session ID changes the password without restarting the run, as the post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared terminal link</a> walks through. The <a href="/security/">security page</a> and an earlier piece on <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">read-only links for coding agents</a> cover the rest of the model.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol Fits</h2>
+
+<p>shell.online is developed by Pilot Protocol, which builds networking for autonomous agents. A sandbox line tells you what an agent may write; where it may connect is the other half of its limits. Pilot's write-up on <a href="https://pilotprotocol.network/blog/pilot-protocol-from-a-locked-down-agent-sandbox">getting a Pilot node online from a locked-down agent VM</a> records what one tightly sandboxed agent could and could not reach, down to the proxy-only egress that finally worked. If you want Codex itself to talk to other agents, the guide to <a href="https://pilotprotocol.network/blog/connect-codex-cli-to-pilot-protocol">connecting Codex CLI to Pilot Protocol</a> is the place to start.</p>
+</section>
+
+<div class="cta"><h3>Watch your next exec run from your phone</h3><p>Install shell, start <code>codex exec</code> behind <code>shell --read-only</code>, and read the sandbox line before the run gets going. The <a href="/docs/">docs</a> cover setup on every platform.</p><a href="https://github.com/TeoSlayer/shell.online">shell.online on GitHub</a></div>
