@@ -1,0 +1,139 @@
+<p>On 12 November 2026 Anthropic opened a private beta of <a href="https://platform.claude.com/docs/en/release-notes/overview">self-hosted Claude Managed Agents</a>. Until now a team could keep only the sandboxes on its own machines, through <a href="https://platform.claude.com/docs/en/managed-agents/self-hosted-sandboxes">self-hosted sandboxes</a>. Now the whole service moves too. According to the <a href="https://platform.claude.com/docs/en/managed-agents/self-hosted">self-hosted Managed Agents documentation</a>, you run the API server and agent loop (<code>cma-server</code>), a PostgreSQL 16 or later database for agents, sessions and session history, and the workers that run the agent's shell and file tools. A console on your server signs people in through your own identity provider. Model calls still go out, to Anthropic by default or to a provider you pick.</p>
+
+<p><a href="https://claude.com/resources/articles/self-hosted-claude-managed-agents">Anthropic's announcement</a> gives the reason plainly: some teams need every part of the agent service inside their own environment, not only the sandbox. If your team is one of them, look at what else your agents touch. A terminal link that a teammate opens to watch a Claude Code run is one of those things. If the agent runs inside your perimeter but the list of sessions, the machines that can start them and the sign-in all live on someone else's service, the perimeter has a gap in it.</p>
+
+<p>shell.online can be run in two self-hosted pieces. The relay that carries terminal traffic is covered in two earlier posts, one on <a href="/blog/self-hosted-terminal-sharing-on-one-docker-box-the-shell-online-relay-without-a/">running it on one Docker box</a> and one on <a href="/blog/self-hosted-terminal-sharing-run-the-shell-online-relay-on-one-docker-host-inste/">choosing it over the Cloudflare Worker</a>. This guide covers the other piece: the accounts app behind app.shell.online. You will register an OpenID Connect client with your provider, start the app and its PostgreSQL database, point the CLI at all three of your addresses, and check that nothing still goes to the hosted service.</p>
+
+<section>
+<h2>What the accounts app holds, and what it never sees</h2>
+
+<p>The <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/README.md">accounts app README</a> describes it as optional: it provides accounts, organizations, linked machines, session lists, comments and browser-started sessions, and the CLI and relay work without it. When a linked machine starts a session, <code>shell help auth</code> lists what is published to the account: the share URL, the command name, the host name and the timing. It never publishes the terminal contents or the encryption key, because the key lives in the URL fragment and the fragment is stripped before the URL is sent.</p>
+
+<p>The app also carries browser terminal traffic, but only as a pass-through. The relay accepts a websocket only from its own origin, and a browser sets the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Origin">Origin header</a> from wherever the page came from. So the app's server forwards <code>/relay/*</code> to your relay and rewrites the Origin on the way. The comment on that proxy in <code>app/server/lib/relay-proxy.ts</code> states that frames are encrypted in the browser first, so the proxy sees the same ciphertext the relay sees. The <a href="/e2ee/">end-to-end encryption page</a> explains that model.</p>
+
+<p>By default, app.shell.online holds the session list, the machine list and the sign-in. After this guide, your own database holds them.</p>
+</section>
+
+<section>
+<h2>Step 1: Run your own relay first</h2>
+
+<p>The app needs a relay to forward to, and there is little point in a private session list for sessions that cross the hosted relay. The <a href="/self-hosting/">self-hosting page</a> has the full steps. The short version, on a host whose DNS already points at it:</p>
+
+<pre><code>git clone https://github.com/TeoSlayer/shell.online.git
+cd shell.online/standalone
+SHELL_ONLINE_PUBLIC_URL=https://relay.example.com \
+SHELL_ONLINE_SITE=relay.example.com \
+docker compose up -d --build</code></pre>
+
+<p>Caddy in that stack gets a certificate through its <a href="https://caddyserver.com/docs/automatic-https">automatic HTTPS</a> once DNS and ports 80 and 443 are ready. <code>curl https://relay.example.com/api/health</code> should answer before you go on.</p>
+</section>
+
+<section>
+<h2>Step 2: Register a public client with your identity provider</h2>
+
+<p>The app can sign people in with Firebase, which is what the hosted service uses, or with any OpenID Connect provider. With OIDC it uses the authorization code flow with <a href="https://www.rfc-editor.org/rfc/rfc7636">PKCE (RFC 7636)</a>, and registration, passwords and account recovery stay with your provider. In your provider's admin console, create one client with these settings, taken from the app README:</p>
+
+<ul>
+<li>A public client, with no client secret, because the code runs in a browser.</li>
+<li>PKCE with the <code>S256</code> method.</li>
+<li>Redirect URI <code>https://shell.example.com/auth/callback</code>, where <code>https://shell.example.com</code> is the public address the app will have (<code>WEB_ORIGIN</code> below).</li>
+<li>Allowed web origin <code>https://shell.example.com</code>. This one is easy to skip. The app renews a sign-in before it expires from a hidden iframe, and that renewal needs the origin allowed.</li>
+</ul>
+
+<p>Note the issuer URL and the client id your provider gives you. The server checks every ID token against that issuer and expects the client id as the audience. It finds the signing keys through the provider's <a href="https://openid.net/specs/openid-connect-discovery-1_0.html">OpenID Connect discovery document</a> unless you set <code>OIDC_JWKS_URI</code> yourself. The token rules themselves are in <a href="https://openid.net/specs/openid-connect-core-1_0.html">OpenID Connect Core</a>.</p>
+</section>
+
+<section>
+<h2>Step 3: Fill in the app's settings and start it</h2>
+
+<p>The app ships with a Compose file that runs it next to PostgreSQL 16. From the repository:</p>
+
+<pre><code>cd shell.online/app
+cp .env.example .env</code></pre>
+
+<p>Then edit <code>.env</code>. Leave the Firebase lines blank and set these:</p>
+
+<pre><code>VITE_OIDC_ISSUER=https://idp.example.com/realms/eng
+VITE_OIDC_CLIENT_ID=shell-online-app
+RELAY_URL=https://relay.example.com
+WEB_ORIGIN=https://shell.example.com
+POSTGRES_PASSWORD=change-this-before-you-start
+TRUST_PROXY=0</code></pre>
+
+<p>The two <code>VITE_</code> values are compiled into the browser bundle. Vite's guide on <a href="https://vite.dev/guide/env-and-mode">environment variables</a> explains why: they are bundled into the source at build time. The Compose file passes them as build arguments, and it passes <code>RELAY_URL</code> to both the client build and the server. It also hands the issuer and client id to the server as <code>OIDC_ISSUER</code> and <code>OIDC_AUDIENCE</code>. Because of the build step, any change to these values needs a rebuild, and a restart is not enough:</p>
+
+<pre><code>docker compose up --build -d
+curl http://localhost:8080/api/health
+curl http://localhost:8080/relay/api/health</code></pre>
+
+<p><a href="https://docs.docker.com/reference/cli/docker/compose/up/"><code>docker compose up</code></a> waits for the database's health check before it starts the app. The first <code>curl</code> asks the app itself and does not touch the database. The second goes through the app's relay proxy to your relay, so it shows the app can reach it. The app's own boot test expects a 502 from that path when nothing is listening at the relay address.</p>
+
+<p>The container listens on plain HTTP on port 8080. Put your usual TLS proxy in front of it at <code>https://shell.example.com</code>. Set <code>TRUST_PROXY=1</code> only if that proxy replaces the <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Forwarded-For">X-Forwarded-For</a> header. The Compose file notes that trusting it otherwise lets any caller pick a new address per request.</p>
+</section>
+
+<section>
+<h2>Step 4: Point the CLI at all three addresses</h2>
+
+<p>The CLI knows three services: the relay, the accounts API and the web page that approves a login. The app's client and server ship in one image on one origin, so the last two are the same URL. On each machine that runs agents:</p>
+
+<pre><code>export SHELL_ONLINE_SERVER=https://relay.example.com
+export SHELL_ONLINE_ACCOUNTS=https://shell.example.com
+export SHELL_ONLINE_WEB=https://shell.example.com
+shell auth</code></pre>
+
+<p>When either account address is not the production one, <code>shell auth</code> says so before the browser opens:</p>
+
+<pre><code>  Approving at https://shell.example.com
+  Tokens from  https://shell.example.com</code></pre>
+
+<p>If that block does not appear, a variable did not reach the command, and you are about to link the machine to app.shell.online. Press Ctrl-C and fix the environment first. If it does appear, the browser opens your app, your provider signs you in, and the machine is linked. The credential file records the accounts server it was issued by, and later commands such as <code>shell ls</code> read it from there. To check that field without printing the tokens next to it (on Linux the file is under <code>~/.config</code>):</p>
+
+<pre><code>jq -r .server "$HOME/Library/Application Support/shell-online/credentials.json"</code></pre>
+
+<p>That path is the macOS one. The CLI puts the file in Go's <a href="https://pkg.go.dev/os#UserConfigDir">user config directory</a>, or wherever <code>SHELL_ONLINE_CONFIG</code> says.</p>
+
+<div class="callout">
+<p><strong>The relay address is not remembered.</strong> <code>shell help auth</code> warns that every address defaults to production, so setting only some of them aims the rest at the real service. The credential file keeps your accounts server, but nothing keeps your relay. A later <code>shell claude</code> run from a terminal without <code>SHELL_ONLINE_SERVER</code> starts its session on https://shell.online, and your own app still lists it. Put the three exports in your shell profile, not in one terminal. Also check that <code>RELAY_URL</code> in the app's <code>.env</code> no longer holds the example value, which is the hosted relay.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 5: Carry the addresses into the background service</h2>
+
+<p><code>shell auth</code> asks once whether your signed-in browser may start sessions on this machine. The first yes also installs a background service, so the machine stays reachable after a restart. A service starts from the operating system and not from your shell, so it would not see your exports. The CLI copies six variables into the service definition when it installs it: <code>SHELL_ONLINE_LOCAL</code>, <code>SHELL_ONLINE_ACCOUNTS</code>, <code>SHELL_ONLINE_SERVER</code>, <code>SHELL_ONLINE_WEB</code>, <code>SHELL_ONLINE_CONFIG</code> and <code>SHELL_ONLINE_RUNTIME_DIR</code>. On macOS they go into the LaunchAgent's <code>EnvironmentVariables</code>, and on Linux into <code>Environment=</code> lines of the systemd user unit.</p>
+
+<p>If you link while the exports are set, that is done. If a service was installed earlier for the hosted service, it still carries the old environment. Reinstall it from a terminal where the exports are set:</p>
+
+<pre><code>shell service uninstall
+shell service install
+shell daemon status</code></pre>
+
+<p>Sessions you start from the browser are launched by this daemon and inherit its environment, so this step decides which relay they use. Then start something and look at where it went:</p>
+
+<pre><code>shell --name relay-check bash
+shell list
+shell ls</code></pre>
+
+<p><code>shell list</code> shows the local share URL, which should start with <code>https://relay.example.com</code>. <code>shell ls</code> asks your app for the account's sessions on every machine, and <code>relay-check</code> should be among them. Open the link on a phone and enter the password; the page now comes from your relay, and the <a href="/mobile/">mobile guide</a> applies as before. <code>shell kill -- &lt;ID&gt;</code>, with the id <code>shell list</code> printed, stops it. The <a href="/cli/">CLI reference</a> has every flag used here.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not keep your agent's model traffic inside. shell.online carries the terminal. Claude Code, Codex or anything else you wrap still sends prompts to its own provider. Anthropic's documentation makes the same point about its server: the conversation, including tool inputs and results, goes to your inference provider on every model call.</li>
+<li>It is not a cluster. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/self-hosting.md">operator guide</a> describes the standalone relay as a single node, and warns against running more than one replica against one state volume. It does not include the hosted analytics dashboard.</li>
+<li>It does not give you the native MCP channel. The self-hosting page names accounts and native MCP as separate deployments, and native MCP comes with the Cloudflare Worker relay.</li>
+<li>It does not handle account recovery. With OIDC, registration, passwords and recovery belong to your provider. Invitation email works only if you configure a mail provider (<code>MAIL_API_KEY</code> and <code>MAIL_FROM</code>).</li>
+<li>It does not back itself up. The <code>postgres</code> volume holds your accounts, machines and session list. A <a href="https://www.postgresql.org/docs/16/backup-dump.html"><code>pg_dump</code></a> on a schedule is the minimum. The relay's <code>relay-state</code> volume needs its own backup.</li>
+<li>It does not change who can type into a session. Read-only links, passwords and rotation behave as on the hosted service. The <a href="/security/">security page</a> and the post on <a href="/blog/team-terminal-sharing-sealed-so-the-service-cant-open-it/">sealed team sharing</a> cover those.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and its own directory can be run the same way. The Pilot docs on <a href="https://pilotprotocol.network/docs/enterprise">self-hosting the registry</a> tell you to run your own rendezvous and point your daemons at it, and the registry can check OIDC tokens itself. The post on <a href="https://pilotprotocol.network/blog/private-agent-network-company">building a private agent network for your company</a> goes further: a self-hosted rendezvous, private networks, and the outbound feeds, telemetry and updater turned off. If your agents talk to each other as well as to people, that is where to look next. shell.online then covers the human side: a link to the terminal that someone can open on a phone, through servers you run.</p>
+</section>
+
+<div class="cta"><h3>Keep the whole session path on your own servers</h3><p>Run the relay, the accounts app and the CLI against addresses you control, and sign in through the provider your team already uses.</p><a href="/self-hosting/">Read the self-hosting guide</a></div>

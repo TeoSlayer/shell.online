@@ -1,0 +1,93 @@
+<p>OpenCode <a href="https://github.com/anomalyco/opencode/releases/tag/v2.4.2">v2.4.2 was released on 26 November 2026</a>. One of its highlights is called "Esc Takes Back Your Last Message". If the composer is empty and you stop a response with Esc before the model has written anything or called a tool, OpenCode removes your message from the session and puts it back in the composer, images included, so you can edit it and send it again. The same release narrows "Always allow" for a web fetch to the one site you approved, where it used to allow every URL.</p>
+
+<p>The take-back comes from <a href="https://github.com/anomalyco/opencode/pull/65505">pull request 65505</a>, opened by Tarquinen and merged on 25 November. The description gives the reasoning: interrupting right after sending a prompt usually means you want to reword it, and before this change the prompt stayed in the session as an interrupted turn that you had to clear with <code>/undo</code> or type again. The model's thinking does not count as an answer, so the window can stay open through a long thinking phase.</p>
+
+<p>This matters most when you are steering an agent from a phone, where a prompt typed with your thumbs is the one most likely to go out wrong. A phone keyboard has no Esc key, though, and the obvious substitute, Ctrl-C, does something very different in OpenCode. This guide runs OpenCode under shell.online, opens it on a phone, sends a prompt and takes it back with the esc key on the viewer's key bar, then covers the cases where the prompt does not come back.</p>
+
+<section>
+<h2>What OpenCode 2.4.2 changed</h2>
+<p>The change applies to both the terminal interface and OpenCode's app. In the <a href="https://github.com/anomalyco/opencode/blob/v2.4.2/packages/tui/src/component/prompt/index.tsx">TUI prompt component at the v2.4.2 tag</a>, an interrupt takes the prompt back only when all of these hold:</p>
+<ul>
+<li>The composer is empty. If you have started typing a follow-up, you get a plain interrupt.</li>
+<li>No other prompt is waiting in the queue for that session.</li>
+<li>Nothing after your message counts as an answer: no assistant text, no tool call, and no shell command, compaction or synthetic prompt, since each of those starts a run of its own.</li>
+</ul>
+<p>When those hold, OpenCode stages a revert of that message with files left alone, commits it at once, and appends the prompt to the composer. There is no "reverted" notice and nothing to redo. The pull request says plainly that file changes are not touched, because there is no redo to bring them back. It is not behind a flag or a setting.</p>
+<p>The interrupt itself takes two presses. The <a href="https://opencode.ai/docs/cli/keybinds/">OpenCode keybinds reference</a> binds <code>session.interrupt</code> to <code>escape</code>. While a turn runs, the prompt area shows <code>esc interrupt</code> next to a spinner. The first press changes it to <code>esc again to interrupt</code>, and a second press within five seconds sends the interrupt. A press with an autocomplete list open closes the list instead.</p>
+</section>
+
+<section>
+<h2>Step 1: Start OpenCode under shell</h2>
+<p>Update OpenCode to v2.4.2 or later the way you installed it, then start it from an ordinary terminal on your computer, in the project you want it to work on:</p>
+<pre><code>cd ~/src/example-api
+shell --name reword-test opencode</code></pre>
+<p><code>shell</code> starts OpenCode in the background and prints a card. The lines that matter here are <code>Name</code> (the label you gave it), <code>Open</code> (the link), <code>Password</code> (a ten-character session password), <code>Access</code>, which should read <code>view and type · end-to-end encrypted</code>, and <code>Closes</code>, which reads <code>when the task exits</code>. Below that the card prints the commands to rejoin and stop the session, and a QR code labelled <code>Scan to open</code> that includes the link and the password.</p>
+<p>Run this from a plain terminal, not through OpenCode's own shell tool. <code>shell help start</code> explains that when OpenCode runs <code>shell opencode</code>, shell detects the current conversation and starts a fork of it, which is a different thing from a fresh session. The <a href="/cli/">CLI reference</a> lists the other start options.</p>
+<p>Keep the <code>Closes</code> line in mind. A shell session lasts as long as the program it shares. If OpenCode exits, the link closes with it.</p>
+</section>
+
+<section>
+<h2>Step 2: Open the link on your phone and find the key bar</h2>
+<p>Scan the QR code with your phone's camera. The page opens and reads the password from the code. If you open the link some other way, type the password when the page asks for it. The <a href="/e2ee/">encryption page</a> explains that the password is checked in the browser, and the password prompt itself says it is never sent to shell.online.</p>
+<p>Under the terminal you get a row of buttons: a paste button, then <code>esc</code>, <code>tab</code>, four arrows, <code>enter</code> and <code>ctrl-c</code>. The viewer's stylesheet shows this bar when the window is 760 pixels wide or narrower, or when the browser reports a coarse primary pointer through the <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/@media/pointer">CSS pointer media feature</a>, which is what a touch screen reports.</p>
+<p>Each button sends fixed bytes, defined in <a href="https://github.com/TeoSlayer/shell.online/blob/main/web/terminal-keyboard.ts">web/terminal-keyboard.ts</a>:</p>
+<ul>
+<li><code>esc</code> sends byte 27, the ESC control character listed in <a href="https://man7.org/linux/man-pages/man7/ascii.7.html">ascii(7)</a> and defined among the control functions of <a href="https://ecma-international.org/publications-and-standards/standards/ecma-48/">ECMA-48</a>.</li>
+<li>The arrows send <code>ESC [ A</code> through <code>ESC [ D</code>, the normal-mode cursor keys in the <a href="https://invisible-island.net/xterm/ctlseqs/ctlseqs.html">xterm control sequences</a>.</li>
+<li><code>enter</code> sends a carriage return, byte 13.</li>
+<li><code>ctrl-c</code> sends byte 3, ETX.</li>
+</ul>
+<p>The viewer sends the bytes on <code>pointerdown</code>, the <a href="https://www.w3.org/TR/pointerevents3/">Pointer Events</a> event that fires when your finger touches the button, so a tap goes out without waiting for the finger to lift. The buttons are hidden on a read-only or stopped session, and they are disabled while the page is offline, before the password has been accepted, and while someone else holds the input. In that last case the page says who, for example <code>Local owner is typing…</code> while you type into the session at the computer after <code>shell attach</code>.</p>
+</section>
+
+<section>
+<h2>Step 3: Send a prompt and take it back</h2>
+<p>Tap the terminal to bring up your phone keyboard, type a prompt into OpenCode's composer, and tap <code>enter</code> on the key bar. A spinner appears in the prompt area with <code>esc interrupt</code> beside it.</p>
+<p>Now take it back:</p>
+<ol>
+<li>Tap <code>esc</code> once. The status changes to <code>esc again to interrupt</code>.</li>
+<li>Tap <code>esc</code> again within five seconds.</li>
+</ol>
+<p>If the model had not yet written text or called a tool, your prompt reappears in the composer and the turn is gone from the session. Edit it with your phone keyboard and the left and right arrows on the key bar, then tap <code>enter</code> to send the new version.</p>
+<p>Use left and right to move inside the line. The keybinds reference maps up and down in the composer to the previous and next prompt history items, so the up arrow can walk you away from the text you just got back.</p>
+<p>The time that matters is how long the model takes to produce its first word or tool call. A prompt that sends a fast model straight to a tool call leaves you very little time, and the round trip from your phone to your computer adds to it.</p>
+</section>
+
+<section>
+<h2>Step 4: When the prompt does not come back</h2>
+<p>If the model had already answered with text or a tool call, the two taps give you an ordinary interrupt and the turn stays in the session. The same happens if your composer held a draft or another prompt was queued. Type the command instead:</p>
+<pre><code>/undo</code></pre>
+<p>The <a href="https://opencode.ai/docs/cli/tui/">OpenCode TUI documentation</a> says <code>/undo</code> reverts the latest user message and the work that followed it, and returns the reverted prompt to the composer so you can edit it. <code>/redo</code> restores the reverted work, and sending a new prompt instead accepts the revert. The same page lists Ctrl+X then U as the shortcut for undo. The key bar has no ctrl-x button, so on a phone the typed command is the way in.</p>
+<p>Note the difference. The 2.4.2 take-back leaves files alone because the model called no tool before you stopped it. <code>/undo</code> after a tool call is the path that also deals with the work that followed.</p>
+</section>
+
+<div class="callout"><p><strong>Do not reach for ctrl-c.</strong> The <a href="/mobile/">phone guide</a> describes Ctrl-C as interrupting the running command, and in a terminal with the <code>ISIG</code> flag set the line discipline turns byte 3 into SIGINT, as <a href="https://man7.org/linux/man-pages/man3/termios.3.html">termios(3)</a> and the <a href="https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap11.html">POSIX general terminal interface</a> describe. OpenCode reads it as a key instead. Its keybinds reference binds <code>ctrl+c</code> both to "Clear input field" and to "Exit the application", and in the v2.4.2 source the exit binding is active whenever the composer is empty. Tap ctrl-c while a turn runs with an empty composer and OpenCode quits, and with it the session and the link. Tap it right after a take-back and it clears the prompt you just got back. Esc is the key for this job.</p></div>
+
+<section>
+<h2>Step 5: Stop the session when you are done</h2>
+<p>Quit OpenCode from the phone by sending <code>/exit</code> as a prompt, or stop the session from your computer. The <code>Stop</code> line on the card gives the exact command with the session's short ID. To find it again later:</p>
+<pre><code>shell list
+shell kill -- &lt;ID&gt;</code></pre>
+<p><code>shell list</code> shows the active shares on this machine and their uptime, and <code>shell kill</code> stops the process and closes its link. If the link and password went somewhere they should not have, <code>shell password rotate &lt;ID&gt;</code> revokes the password and makes a fresh one while OpenCode keeps running, which an <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">earlier post on revoking a shared link</a> walks through.</p>
+<p>If OpenCode did exit by accident, start it again with <code>shell --name reword-test opencode</code> and pick up the earlier conversation with <code>/sessions</code>, which the TUI documentation lists among its common commands. The new run gets a new link and a new password.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>shell knows nothing about OpenCode's turns or composer. The key bar sends bytes, and whether a prompt comes back is decided entirely by OpenCode on your computer.</li>
+<li>Nothing confirms a tap. If the model started writing between your two taps, you get a plain interrupt, and the screen is the only place you find out.</li>
+<li>The take-back does not undo file changes, and neither does shell. Anything the model wrote to disk before you stopped it needs <code>/undo</code> or your own git.</li>
+<li>Anyone with the link and password can tap esc too, or type into the composer. If a teammate should only watch, start the session with <code>shell --read-only</code>, which hides the key bar; the <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">post on read-only links for coding agents</a> covers that setup. The <a href="/security/">security page</a> lists what each kind of link allows.</li>
+<li>These steps use the viewer at the link shell prints. OpenCode's own app has the same take-back, but it is a separate program and this guide does not cover it.</li>
+</ul>
+<p>If the phone grid looks cramped while you do this, an <a href="/blog/watch-a-coding-agent-remotely-without-shrinking-its-terminal-shell-online-v0-23/">earlier post on watching an agent without shrinking its terminal</a> explains how the session's size is decided.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is developed by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, and the two answer different questions. shell gives a person a link to one terminal, so you can reach OpenCode from a phone. Pilot is for the case where the other end is an agent rather than a person: each agent gets a permanent virtual address, and connections run through encrypted tunnels that need a signed mutual handshake first, as <a href="https://pilotprotocol.network/blog/how-pilot-protocol-works">how Pilot Protocol works</a> lays out. If you want two agents on different machines to pass work to each other, the <a href="https://pilotprotocol.network/docs/getting-started">Pilot getting started guide</a> installs the daemon, starts a node and walks through a first trust handshake.</p>
+<p>For the job in this guide, a person stopping a prompt before it runs, the link is the simpler tool. The source for the viewer and the CLI is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository on GitHub</a>.</p>
+</section>
+
+<div class="cta"><h3>Put your next OpenCode run on your phone</h3><p>Install shell, run <code>shell opencode</code>, and scan the code. The esc key is on the bar under the terminal.</p><a href="/docs/">Read the shell.online docs</a></div>

@@ -1,0 +1,120 @@
+<p>Anthropic published <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.328">Claude Code 2.1.328 on GitHub</a> early on 19 November 2026. Its first line adds auto mode for Claude Opus 4.6 and Sonnet 4.6 on Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry and the Claude apps gateway, and says that interactive sessions with no permission mode start in it. In auto mode, as the <a href="https://code.claude.com/docs/en/permission-modes">permission modes page</a> puts it, a second model called the classifier reviews actions instead of you.</p>
+
+<p>The same page says auto mode has been the built-in starting mode for interactive sessions since v2.1.283, but on those providers it lists only newer models: Sonnet 5 or later, Opus 4.7 or later, Haiku 5.5 and the Fable models. A team that pinned its models to Opus 4.6 or Sonnet 4.6 on Bedrock, and the <a href="https://code.claude.com/docs/en/amazon-bedrock">Claude Code on Amazon Bedrock guide</a> tells you to pin versions before a rollout, did not get auto mode. After the update it does, without anyone passing a flag. The same applies on Microsoft Foundry, where Sonnet 4.6 is one of the <a href="https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/how-to/use-foundry-models-claude">Claude models you can deploy</a>.</p>
+
+<p>That matters if you start Claude Code from your phone with shell.online. The <a href="/app/">web app's</a> New session sheet builds the command from a short form, and with the "Skip permission checks" toggle off the command is plain <code>claude</code>. That is a session with no permission mode. This guide pins the mode a session starts in on the machine itself, starts one from the phone, and reads the mode back off the screen. It also covers why a provider setting in your shell profile may never reach a session the app started.</p>
+
+<section>
+<h2>What the app sends to your machine</h2>
+
+<p>The form lives in <a href="https://github.com/TeoSlayer/shell.online/blob/main/app/src/lib/session-kinds.ts">app/src/lib/session-kinds.ts</a> in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>. For Claude Code it has four fields: a resume session ID, a model, the skip toggle and a session name. The builder turns them into one line. A resume ID adds <code>--resume</code>, a model adds <code>--model</code> with <code>opus</code>, <code>sonnet</code> or <code>haiku</code>, and the toggle adds <code>--dangerously-skip-permissions</code>.</p>
+
+<p>The sheet shows that line under the form before you press Start session, and the daemon on your machine runs it as given.</p>
+
+<p>Claude Code then picks its starting mode from the first of three sources that applies: the <code>--permission-mode</code> flag (or <code>--dangerously-skip-permissions</code>), then <code>permissions.defaultMode</code> in a settings file, then the built-in default. So the toggle wins over every settings file, and with the toggle off a settings file is the only thing that sets the mode before the built-in default does.</p>
+</section>
+
+<section>
+<h2>Step 1: Check what the machine will run</h2>
+
+<p>At the machine, check the version:</p>
+
+<pre><code>claude --version</code></pre>
+
+<p>Anything at 2.1.328 or later has the new behavior. Then look at your user settings:</p>
+
+<pre><code>jq '{env, permissions}' ~/.claude/settings.json</code></pre>
+
+<p>On a machine set up with the Bedrock wizard you will see an <code>env</code> object holding <code>CLAUDE_CODE_USE_BEDROCK</code>, the AWS profile or region, and any model pins such as <code>ANTHROPIC_DEFAULT_SONNET_MODEL</code>. If <code>permissions</code> prints <code>null</code> or has no <code>defaultMode</code>, a session from the app will start in whatever the built-in default is for your model and provider, which after this release is auto mode for the 4.6 models as well.</p>
+
+<div class="callout">
+<p><strong>A provider exported in your shell profile may not reach the phone's session.</strong> A session the web app starts is a child of shell's background daemon and gets the daemon's environment, not the environment of the terminal you happen to have open. When the daemon runs as the installed service, the service file shell writes (a launchd plist on macOS, a systemd user unit on Linux) carries at most six variables, all starting with <code>SHELL_ONLINE_</code>, and only the ones that were set when you installed it. You can read the list in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/service.go">cmd/shell/service.go</a>; on Linux they become <code>Environment=</code> lines, which <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html">systemd.exec</a> documents. An <code>export CLAUDE_CODE_USE_BEDROCK=1</code> in <code>~/.zshrc</code> is read by your interactive shell. launchd and systemd do not read that file, and the variable is not one of the six. Keep the provider in the <code>env</code> block of <code>~/.claude/settings.json</code>, so a session started from the phone talks to the same provider as one started at the keyboard.</p>
+</div>
+</section>
+
+<section>
+<h2>Step 2: Pin the starting mode in your user settings</h2>
+
+<p>Settings files are strict JSON. The <a href="https://www.rfc-editor.org/rfc/rfc8259">JSON grammar in RFC 8259</a> has no comments and no trailing commas, and Claude Code reports a file that breaks it as a Settings Error. Editing by hand is fine, but <a href="https://jqlang.org/manual/">jq</a> keeps every key you already have and adds the one you want:</p>
+
+<pre><code>mkdir -p ~/.claude
+test -f ~/.claude/settings.json || echo '{}' &gt; ~/.claude/settings.json
+jq '.permissions.defaultMode = "default"' ~/.claude/settings.json &gt; ~/.claude/settings.json.new \
+  &amp;&amp; mv ~/.claude/settings.json.new ~/.claude/settings.json
+jq '.permissions' ~/.claude/settings.json</code></pre>
+
+<p>The first two lines create an empty file if there is none. The third writes a copy with <code>permissions.defaultMode</code> set and moves it into place, and the last prints the result:</p>
+
+<pre><code>{
+  "defaultMode": "default"
+}</code></pre>
+
+<p>If you already had <code>allow</code> or <code>deny</code> rules they print alongside it. The value <code>default</code> is the mode Claude Code now labels Manual, and the CLI also accepts <code>manual</code> as an alias. In Manual mode only reads run without asking. If you would rather let it edit files and run common filesystem commands such as <code>mkdir</code> and <code>mv</code>, and still ask before other shell commands, use <code>acceptEdits</code> instead.</p>
+
+<p>Two details are worth knowing. If <code>CLAUDE_CONFIG_DIR</code> is set, Claude Code reads its settings from there rather than from <code>~/.claude</code>. And if your settings file is a symlink into a dotfiles repository, the <code>mv</code> above replaces the link with a plain file, so edit the target instead.</p>
+
+<p>The user file applies to every project on the machine, which is what you want when you do not know which folder the phone will start a session in. The <a href="https://code.claude.com/docs/en/settings">settings precedence page</a> gives the order. A project's own <code>.claude/settings.json</code> sits above it, so a repository can still set <code>acceptEdits</code> or <code>plan</code> for itself. The same page says the values <code>auto</code> and <code>bypassPermissions</code> do not take effect from project or local files, so a repository cannot quietly switch you into either one.</p>
+</section>
+
+<section>
+<h2>Step 3: Start the session from your phone</h2>
+
+<p>The machine has to be linked and allowed to take browser starts. If you said no when <code>shell auth</code> asked, run <code>shell auth --allow-remote-start</code> at the machine. Then check that the daemon is there:</p>
+
+<pre><code>shell daemon status</code></pre>
+
+<p>It says whether your browser can start sessions on this machine. On the phone, open app.shell.online, press New session, and choose Claude Code. Leave Skip permission checks off. Under Model, "Whatever the machine is set to" adds nothing to the command, while Opus, Sonnet or Haiku add the alias. On Bedrock an alias resolves to the pin in <code>ANTHROPIC_DEFAULT_OPUS_MODEL</code> or <code>ANTHROPIC_DEFAULT_SONNET_MODEL</code> when one is set, and the guide's own pinning example maps Sonnet to <code>us.anthropic.claude-sonnet-4-6</code>, a cross-region <a href="https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html">inference profile</a> for Sonnet 4.6.</p>
+
+<p>Pick the machine under Run on and read the preview line. It should say <code>$ claude</code> or <code>$ claude --model sonnet</code>, with no <code>--dangerously-skip-permissions</code>. Press Start session.</p>
+</section>
+
+<section>
+<h2>Step 4: Read the mode off the screen</h2>
+
+<p>Claude Code prints its mode in the status line under the prompt. The permission modes page lists the strings: <code>⏸ manual mode on</code> for <code>default</code>, <code>⏵⏵ accept edits on</code>, <code>⏸ plan mode on</code>, <code>⏵⏵ auto mode on</code> and <code>⏵⏵ bypass permissions on</code>.</p>
+
+<p>If you watch Claude Code in the app's Chat renderer, you will not see that line. The Claude Code reader in the app treats status lines as noise on purpose, because spinners and timers change every frame and would otherwise arrive as a message per repaint, and the mode line matches the same pattern. Set Renderer to Adaptive or Fixed grid and the status line is there with the rest of the screen. The <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">post on reading Claude Code as a conversation</a> describes what the Chat view keeps and drops.</p>
+
+<p>If the line says <code>⏵⏵ auto mode on</code> after Step 2, type <code>/status</code> into the session from the phone. Its Status tab has a Setting sources line that lists every settings file Claude Code loaded. If User settings is missing, the file did not load or is broken. If a managed source is listed, your organization's settings sit above your own file and may set the mode for you. On Bedrock, <code>/status</code> also shows the resolved region, which is a quick way to confirm the session reached the provider you expected.</p>
+</section>
+
+<section>
+<h2>Step 5: Choose auto mode on purpose</h2>
+
+<p>Pinning Manual as the default does not take auto mode away. For one run where you want it, start the session from a terminal on the machine and pass the flag, which beats the settings file:</p>
+
+<pre><code>shell --name nightly-refactor -- claude --permission-mode auto</code></pre>
+
+<p>shell prints a link and a ten-character password and returns, and the session shows up in the app under that name. An administrator who sets <code>disableAutoMode</code> to <code>"disable"</code> in managed settings removes auto from the cycle entirely, and a session started with <code>--permission-mode auto</code> then starts in Manual.</p>
+
+<p>To change the mode of a session that is already running, go to the machine, run <code>shell list</code> to find its ID, then <code>shell attach &lt;ID&gt;</code>. Press Shift+Tab to cycle: from auto the first press goes to <code>default</code>, then <code>acceptEdits</code>, then <code>plan</code>. Press Ctrl-X, release it, then press D to detach and leave the process running.</p>
+
+<p>I would not plan on cycling modes from a phone. A phone keyboard has no Shift+Tab, and the Chat renderer's direct key handling sends a plain Tab even when Shift is held.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>shell does not know or enforce Claude Code's permission mode. It runs the command it is given and carries the screen and your keystrokes. The prompts, the classifier and the settings files are all Claude Code's.</li>
+<li>The web app's form has no permission mode field. Its only permission control is the skip toggle, and that one overrides any settings file you write.</li>
+<li><code>defaultMode</code> decides how a session starts. A session that is already running keeps the mode it is in until someone changes it there, so read the status line rather than assuming.</li>
+<li>The setting is per machine and per user account on that machine. A second computer linked to the same shell.online account needs its own file.</li>
+<li>Managed settings from your organization beat your user file. If they set the mode, the value from Step 2 is ignored.</li>
+<li>Manual mode is not a safety net for an unattended run. A prompt nobody answers simply waits, and the run sits there until you get to it. The earlier <a href="/blog/how-to-watch-a-coding-agent-remotely-after-you-turn-off-its-permission-prompts/">guide to watching an agent after you turn off its prompts</a> covers the opposite trade.</li>
+</ul>
+
+<p>OWASP's entry on <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/">excessive agency</a> recommends human-in-the-loop approval for high-impact actions. Auto mode moves that approval to a classifier, so before it runs on a machine with production credentials you should decide that is acceptable rather than inherit it from an update. The <a href="/security/">security page</a> describes what shell itself exposes to a viewer, and the <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">post on browser starts on an idle Mac</a> covers the launchd side of the daemon.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>shell.online is built by the team behind <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents, and the question here, who decides what an agent may do without asking, comes up there between agents. Pilot's open source rendezvous has owner, admin and member roles, and only owners and admins can set network policy, as the post on <a href="https://pilotprotocol.network/blog/enterprise-phase-3-rbac-policies-audit-fleet">RBAC, policies and the audit trail</a> describes. That is the same split as managed settings sitting above a developer's own Claude Code file. And agents on a Pilot network only exchange data with peers they have verified, which the post on <a href="https://pilotprotocol.network/blog/how-mutual-trust-secures-decentralized-ai-agent-networks">mutual trust between agents</a> goes through.</p>
+</section>
+
+<div class="cta">
+<h3>Start a session you can read from your phone</h3>
+<p>Install shell, link the machine with shell auth, and start Claude Code from the web app in the mode you chose.</p>
+<a href="/docs/">Read the shell.online docs</a>
+</div>

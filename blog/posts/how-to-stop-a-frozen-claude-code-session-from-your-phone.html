@@ -1,0 +1,86 @@
+<p>Anthropic released <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.332">Claude Code 2.1.332</a> on 25 November 2026. One line in its long list of fixes reads "Fixed the terminal freezing, and ignoring Ctrl+C, while a local MCP server floods its standard output". The same release fixed freezes while a hook prints output without end, and resumed conversations sometimes missing their last messages after a crash or kill on Bedrock, Google Cloud's Agent Platform, Foundry and other third-party providers. Six days earlier, <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.329">2.1.329</a> fixed a status line script that prints without end freezing the prompt and using gigabytes of memory.</p>
+<p>A local MCP server is a child process. The <a href="https://modelcontextprotocol.io/specification/2025-06-18/basic/transports">MCP transport specification</a> says that with stdio the client launches the server as a subprocess and reads newline-delimited <a href="https://www.jsonrpc.org/specification">JSON-RPC</a> messages from its standard output, and that the server must not write anything else there. A server that floods that channel, with logging or anything else, is writing to the stream Claude Code reads its replies from. Updating fixes this case. The general problem stays: when a terminal program stops reading its input, Ctrl+C stops working too, and that matters most when you are watching from a phone and the machine is somewhere else.</p>
+<p>This guide sets up a machine so the Stop button in the shell.online web app can reach it, starts Claude Code under shell, and walks through what to do when the phone's ctrl-c button does nothing: what Stop sends, how long it waits, who is allowed to press it, and how to get the conversation back afterwards.</p>
+
+<section>
+<h2>Step 1: Let your account reach this machine</h2>
+<p>The terminal link and the Stop button travel different ways. The link carries the screen and your keys. Stop is a command queued in your shell.online account, and a small daemon on your machine collects it. Link the machine first:</p>
+<pre><code>shell auth --allow-remote-start
+shell daemon status</code></pre>
+<p><code>shell auth</code> opens the approval screen in your browser. Plain <code>shell auth</code> asks, once, whether your signed-in browser may start sessions on this machine. <code>--allow-remote-start</code> agrees without being asked. Saying yes runs the daemon in the background for as long as you stay signed in, and the help says the first yes also installs it as a background service, so it comes back after a restart. <code>shell daemon status</code> says whether your browser can start sessions here.</p>
+<p>The help text is blunt about the cost: while this is allowed, anyone signed in to your account can launch processes on the machine, as you, without touching the terminal. If that is more than you want, skip this step and use <code>shell kill</code> from the machine itself (Step 5). An <a href="/blog/start-a-terminal-session-from-the-browser-on-a-mac-that-sat-idle-for-days-the-la/">earlier post on starting a session on a Mac that sat idle for days</a> covers the daemon from the other direction.</p>
+<p>Two numbers from the code decide whether a Stop gets through. The daemon asks for queued work every 2 seconds (<code>agentPollInterval</code> in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/agent_loop.go">cmd/shell/agent_loop.go</a>). The accounts server treats a machine as reachable only if it polled in the last 15 seconds, and refuses a Stop for any other machine rather than queueing it.</p>
+</section>
+
+<section>
+<h2>Step 2: Start Claude Code under shell</h2>
+<p>From a plain terminal on the machine, in the project you want to work on:</p>
+<pre><code>cd ~/src/example-app
+shell --name mcp-trial -- claude -n mcp-trial</code></pre>
+<p><code>shell</code> starts Claude Code in the background and prints a card with the session's name, the link, a ten-character password and a QR code that carries both. The <code>--</code> ends shell's own flags, so <code>-n mcp-trial</code> goes to Claude Code. The <a href="https://code.claude.com/docs/en/cli-reference">Claude Code CLI reference</a> says <code>-n</code> sets a display name for the session and that you can resume a named session with <code>claude --resume &lt;name&gt;</code>, which Step 6 uses.</p>
+<p>Start it from a terminal, not through Claude Code's own Bash tool. <code>shell help start</code> explains that when Claude Code runs <code>shell claude</code>, shell detects the current conversation and starts a fork of it. The <a href="/cli/">CLI reference</a> lists the other start options.</p>
+<p>Scan the QR code with your phone. The <a href="/mobile/">phone guide</a> shows the page that opens: the terminal, and a row of keys under it that includes <code>esc</code>, <code>enter</code> and <code>ctrl-c</code>.</p>
+</section>
+
+<section>
+<h2>Step 3: Try ctrl-c first, and read what the screen does</h2>
+<p>The <code>ctrl-c</code> key sends byte 3, the same byte a laptop keyboard sends. The <a href="https://code.claude.com/docs/en/interactive-mode">interactive mode reference</a> says Ctrl+C interrupts a running operation, and that if nothing is running the first press clears the prompt input and a second press exits Claude Code.</p>
+<p>When nothing changes, this is why. In a terminal with the <code>ISIG</code> flag set, the line discipline turns byte 3 into SIGINT for the foreground process group, as <a href="https://man7.org/linux/man-pages/man3/termios.3.html">termios(3)</a> describes. Full-screen programs usually turn that off and read keys themselves. Node's documentation for <a href="https://nodejs.org/api/tty.html#readstreamsetrawmodemode">setRawMode</a> puts it plainly: in raw mode, "Ctrl+C will no longer cause a SIGINT". Claude Code handles Ctrl+C as a key, so the key does nothing until Claude Code's own loop reads it. A loop that is busy with a flood of output does not.</p>
+</section>
+
+<div class="callout"><p><strong>Tap ctrl-c once, then stop tapping.</strong> A frozen program does not throw your keys away. The bytes wait in the terminal's input queue until it reads again. If Claude Code recovers with five of them waiting and no turn running, the documented behavior is that the first clears the prompt and the second exits Claude Code. Exiting ends the shell session and closes the link. If one tap changed nothing, go to Stop.</p></div>
+
+<section>
+<h2>Step 4: Press Stop in the web app</h2>
+<p>Open app.shell.online on the phone (the <a href="/app/">app guide</a> describes it) and find <code>mcp-trial</code> in your sessions. The session's own page has a <code>Stop</code> button in its row of actions with <code>Open terminal</code>, and the list has one too. It reads <code>Stopping</code> while the request is sent, and the page reloads the row about a second and a half later, since the machine has to collect the command and report back.</p>
+<p>Only the session's owner sees the button, and the server checks again, answering "only the session owner can stop its process" to anyone else. A teammate holding the link can type, including ctrl-c, but cannot press Stop.</p>
+<p>What happens after the tap on macOS and Linux, from the code in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository</a>:</p>
+<ol>
+<li>The app posts a command of kind <code>kill</code> naming the session. The server finds the machine that started it and queues the command for that machine.</li>
+<li>Within one 2-second poll the daemon picks it up and runs <code>shell kill</code> with the session's short ID on the machine.</li>
+<li>That asks the session's host process, over its local control socket, to stop. The host sends SIGTERM to the whole process group, using a negative process ID the way <a href="https://pubs.opengroup.org/onlinepubs/9799919799/functions/kill.html">POSIX kill()</a> defines it.</li>
+<li>It waits 2 seconds. If Claude Code is still there, it sends SIGKILL.</li>
+<li>The link goes offline, and when the daemon reports the stop done the server closes the session in your list.</li>
+</ol>
+<p>The SIGKILL is what matters for a frozen program. One that handles SIGTERM itself has to run its own code to act on it, and a stuck loop may never get there. <a href="https://man7.org/linux/man-pages/man7/signal.7.html">signal(7)</a> says SIGKILL cannot be caught, blocked or ignored, so the kernel ends the process whatever state it is in.</p>
+<p>The process group is Claude Code's own. shell starts the program on a terminal through <a href="https://github.com/creack/pty">creack/pty</a>, which starts it in a new session, so Claude Code leads its own group. A local MCP server that Claude Code started stays in that group unless it moves itself out, and gets the same two signals.</p>
+<p>If the machine is asleep or offline, the app shows the server's answer instead: the machine "is not reachable, so the stop cannot be delivered", with a pointer to <code>shell auth</code>. For a machine you have since unlinked, it says to stop the session there with <code>shell kill</code>. On Windows, shell ends the process at once with Go's <a href="https://pkg.go.dev/os#Process.Kill">Process.Kill</a>, which calls <a href="https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess">TerminateProcess</a>, so there is no SIGTERM step and no 2-second wait.</p>
+</section>
+
+<section>
+<h2>Step 5: Do the same from a laptop terminal</h2>
+<p>At the machine, or if you skipped Step 1, run the daemon's command yourself:</p>
+<pre><code>shell list
+shell kill -- &lt;ID&gt;</code></pre>
+<p><code>shell list</code> shows the active shares on this machine and their uptime. <code>shell kill</code> takes the full ID or a prefix of at least 6 characters, prints <code>Stopping</code> with the short ID and the command, and goes down the same path as Step 4.</p>
+</section>
+
+<section>
+<h2>Step 6: Check for leftovers, update, and resume</h2>
+<p>An MCP server that moved itself into a different process group, or started its own background helper, will not have received the signals. Look for it by name:</p>
+<pre><code>ps -A -o pid,pgid,command | grep '[e]xample-mcp'</code></pre>
+<p>Replace <code>example-mcp</code> with the command your server runs. <a href="https://man7.org/linux/man-pages/man1/ps.1.html">ps(1)</a> prints each process with its process group ID, and the brackets keep grep from matching its own line.</p>
+<p>Then update and pick the conversation up again, under a new shell session:</p>
+<pre><code>claude update
+shell --name mcp-trial -- claude --resume mcp-trial</code></pre>
+<p><code>claude update</code> updates to the latest version, per the CLI reference, which also documents <code>-c</code> for the most recent conversation in the current directory if you did not name the session. On Bedrock, Agent Platform, Foundry or another third-party provider, update before resuming, since that is where 2.1.332 fixed resumed conversations missing their last messages after a kill. The new session has a new link and a new password. Once it is running, open <code>/mcp</code> and look at the servers this project loads before you call the one you suspect again.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>Stop does not unfreeze anything or cancel a turn. It ends the process. Whatever Claude Code was in the middle of stops there, and files it was writing stay as they were at that moment.</li>
+<li>shell does not know which server flooded or why. It sees bytes on a terminal and signals a process group.</li>
+<li>It cannot reach a process that left the group, such as a helper that started its own session. Step 6 is how you find those.</li>
+<li>It needs the daemon and a machine that is awake. A Stop for a machine that has not polled in 15 seconds is refused, not held.</li>
+<li>Only you can press Stop. Anyone else with the link and password can send keys, so start the session with <code>shell --read-only</code> if a teammate should only watch, and use <code>shell password rotate &lt;ID&gt;</code> if the password went somewhere it should not have. The <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">post on revoking a link without killing the process</a> covers the opposite case from this one, where the process should keep running. The <a href="/security/">security page</a> lists what each kind of link allows.</li>
+<li>This is not Claude Code's Remote Control. If the screen is hard to read on a phone, the <a href="/blog/watch-claude-code-from-your-phone-as-a-conversation-not-an-80-column-grid/">post on reading Claude Code as a conversation</a> covers the chat view.</li>
+</ul>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>The servers in this story are ones Claude Code runs as its own children. <a href="https://pilotprotocol.network/docs/pilot-mcp">pilot-mcp</a>, Pilot Protocol's local MCP server, is one of that kind: its documentation says it speaks MCP over stdio and runs a fixed <code>pilotctl</code> command against the Pilot daemon on the same machine for each tool, so its standard output is the channel the 2.1.332 fix is about. <a href="https://pilotprotocol.network/docs/mcp">Pilot Cloud</a> is the other shape. It is a hosted node your client reaches over Streamable HTTP at one endpoint, with no server process on your machine at all. Either way, the Stop button above acts on the Claude Code process, not on the server.</p>
+</section>
+
+<div class="cta"><h3>Keep a way out of every session</h3><p>Link your machine once and you can stop any of its sessions from the web app, whether or not you are at the keyboard. The docs cover the daemon, the link and the phone view.</p><a href="/docs/">Read the shell.online docs</a></div>

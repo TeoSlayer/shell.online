@@ -1,0 +1,96 @@
+<p>OpenAI released two models on 17 November. GPT-6.2 Astra is the one it pitches for the hardest work, and GPT-6.2 Sol is the cheaper model meant for everyday tasks. The number that matters to anyone paying for agent runs is a coding one: as <a href="https://www.digitaltrends.com/computing/openai-gpt-6-2-astra-sol-launch/">Digital Trends reported from OpenAI's announcement</a>, OpenAI says Sol finishes within half a percentage point of Astra on FrontierCode 2.0 at roughly a fifth of the cost. <a href="https://letsdatascience.com/news/openai-launches-gpt-62-astra-frontier-model-and-gpt-62-sol-ccad09ba">Let's Data Science lists Astra's API price</a> as $8 per million input tokens and $40 per million output tokens, and points out that the benchmark figures are OpenAI's own claims. Digital Trends gives Sol's price as $2 and $10, unchanged from the model before it.</p>
+
+<p>Codex picked both models up within days. The <a href="https://github.com/openai/codex/releases/tag/rust-v0.171.0">Codex 0.171.0 release</a>, published on GitHub on 20 November (UTC), adds GPT-6.2 Sol and Astra to its model catalogs, and the <a href="https://github.com/openai/codex/pull/62106">pull request behind that change</a> makes <code>gpt-6.2-sol</code> the default catalog selection. If you upgrade and have never pinned a model, your next Codex session may already be running on Sol.</p>
+
+<p>A vendor benchmark is a fair place to start and a poor place to stop. The test that counts is your repository and your prompt. This guide runs one read-only Codex review on both models at the same time, each in its own named <a href="/agents/">shell.online</a> session, so you can follow both from a phone, answer either one if it stops to ask you something, and compare what each found before you decide which model stays your default.</p>
+
+<section>
+<h2>Step 1: Upgrade Codex and check both tools</h2>
+<p>Install the new Codex release and confirm the versions on the machine that will run the reviews:</p>
+<pre><code>npm install -g @openai/codex
+codex --version
+shell --version</code></pre>
+<p>The install line is the one in the <a href="https://github.com/openai/codex">Codex README</a>, which also lists <code>brew install --cask codex</code> for Homebrew. <code>codex --version</code> should report 0.171.0 or later. Older builds do not list the two GPT-6.2 models in their catalog.</p>
+<p><code>shell --version</code> prints <code>shell</code> followed by the version; the current release is 0.25.0. If the command is missing, the install line in the shell.online README for macOS and Linux is <code>curl -fsSL https://shell.online/install | sh</code>, and the <a href="/cli/">CLI page</a> lists every command. The source for everything below is in the <a href="https://github.com/TeoSlayer/shell.online">shell.online repository on GitHub</a>.</p>
+</section>
+
+<section>
+<h2>Step 2: Write the prompt once</h2>
+<p>Both runs should get exactly the same instructions, so put them in a shell variable from the root of the checkout you want reviewed:</p>
+<pre><code>cd ~/src/demo-shop
+git switch feature/retry-checkout
+PROMPT='Review the changes in git diff main...HEAD. List real bugs with file and line. Skip style comments. Do not edit files.'</code></pre>
+<p>The single quotes keep every character literal, as the <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/V3_chap02.html">POSIX shell rules for quoting</a> require, so nothing in the prompt is expanded early. The three dots in <code>main...HEAD</code> matter: the <a href="https://git-scm.com/docs/git-diff">git diff manual</a> says that form compares the branch against its merge base with <code>main</code>, which is the change set a reviewer wants.</p>
+<p>Keep secrets out of the prompt. As Step 5 shows, shell records the whole command line, prompt included.</p>
+</section>
+
+<section>
+<h2>Step 3: Start the Sol review</h2>
+<pre><code>shell --name sol-review -- codex --model gpt-6.2-sol --sandbox read-only "$PROMPT"</code></pre>
+<p>Everything before <code>--</code> belongs to shell and everything after it is the command shell starts. shell parses its options with Go's flag package, and the <a href="https://pkg.go.dev/flag">flag package documentation</a> says parsing stops at the first non-flag argument or after the terminator <code>--</code>. That is why <code>--model</code> and <code>--sandbox</code> reach Codex instead of being read by shell.</p>
+<p>The two Codex options come from the <a href="https://learn.chatgpt.com/docs/developer-commands?surface=cli">Codex command reference</a>. <code>--model</code> overrides the model set in your configuration. <code>--sandbox</code> sets the policy for shell commands the model generates, and takes <code>read-only</code>, <code>workspace-write</code> or <code>danger-full-access</code>. With <code>read-only</code>, both reviews can read the same checkout without either one editing a file under the other. The prompt goes in double quotes so it arrives as one argument.</p>
+<p>shell starts Codex as a new background process and prints a card. The parts you need look like this, with your own link, password and ID in place of the brackets:</p>
+<pre><code>  Name       sol-review
+  Open       &lt;link&gt;
+  Password   &lt;ten characters&gt;
+  Vault      saved to your account vault
+  Access     view and type · end-to-end encrypted
+  Session    &lt;ID&gt; · background
+  Closes     when the task exits
+
+  Rejoin     shell attach &lt;ID&gt;
+  Stop       shell kill -- &lt;ID&gt;</code></pre>
+<p>The Vault line says <code>not linked · run shell auth</code> on a machine you have not linked to an account. The link and the password together open the session, and as the Access line says, the link is interactive: whoever holds both can type into Codex. The <a href="/e2ee/">encryption page</a> explains how the password protects what the relay carries.</p>
+</section>
+
+<section>
+<h2>Step 4: Start the Astra review the same way</h2>
+<pre><code>shell --name astra-review -- codex --model gpt-6.2-astra --sandbox read-only "$PROMPT"</code></pre>
+<p>Only the name and the model change. The model names <code>gpt-6.2-sol</code> and <code>gpt-6.2-astra</code> are the ones the Codex pull request adds to the bundled catalog. You now have two Codex processes on this machine, each reading the same branch, each behind its own link and its own password.</p>
+<div class="callout"><p>shell has no model setting. It passes the arguments after <code>--</code> to Codex unchanged, so a run started without <code>--model</code> uses whatever your Codex configuration says, and on 0.171.0 with nothing configured that is Sol. If you compare a bare <code>shell codex</code> against an Astra run, you may be comparing Sol with Astra without meaning to. Name the model on both command lines.</p></div>
+</section>
+
+<section>
+<h2>Step 5: Check what each session is running</h2>
+<pre><code>shell list
+shell list --json | jq -r '.[] | [.name, .command] | @tsv'</code></pre>
+<p><code>shell list</code> prints one row per active share on this machine with the columns ID, NAME, UPTIME, RELAY, CLOSES, ACCESS, COMMAND, SHARE URL and PASSWORD. In a terminal narrower than 132 columns it switches to a compact layout with one block per session. Both layouts shorten the command, so the model flag can be cut off. The wide table ends with the line <code>Long URLs and full credentials: shell list --json</code>.</p>
+<p>The JSON form carries the whole command line. The <a href="https://jqlang.org/manual/">jq manual</a> describes <code>-r</code> as printing strings without JSON quoting and <code>@tsv</code> as turning each array into one tab-separated line, so the second command prints two lines like these:</p>
+<pre><code>sol-review	codex --model gpt-6.2-sol --sandbox read-only "Review the changes in git diff main...HEAD. List real bugs with file and line. Skip style comments. Do not edit files."
+astra-review	codex --model gpt-6.2-astra --sandbox read-only "Review the changes in git diff main...HEAD. List real bugs with file and line. Skip style comments. Do not edit files."</code></pre>
+<p>That is your record of which run got which model and which prompt. shell puts double quotes around any argument that contains a space when it records the command. The JSON also holds each session's password in the <code>e2ee_password</code> field, so do not paste the raw output into a chat or a ticket.</p>
+</section>
+
+<section>
+<h2>Step 6: Open both runs on your phone</h2>
+<p>The quickest route is the <a href="/app/">web app</a>. Run <code>shell auth</code> once on the machine, approve the request in the browser, and every share you start from then on appears in your account. Sessions started before you linked do not show up, so if you link now, start the two reviews again. On the phone, sign in at app.shell.online and open both sessions. The web app keeps up to eight open sessions as tabs, labelled with the name you gave each one, so <code>sol-review</code> and <code>astra-review</code> sit next to each other. The tab badges described in <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">the post on the passive pulse</a> tell you which of the two has new output.</p>
+<p>Without an account, open each Open link from Step 3 on the phone and type its password. Either way, the <a href="/mobile/">mobile guide</a> is clear that a signed-in session listing is not a substitute for a terminal's password. The web app can recover a password from your account vault when the password was saved there, which is what the card's Vault line reports. If it said the password was not saved, keep the card at hand.</p>
+<p>When a review finishes its turn, type <code>/status</code> into that session. In the <a href="https://github.com/openai/codex/blob/rust-v0.171.0/codex-rs/tui/src/slash_command.rs">Codex source for 0.171.0</a>, <code>/status</code> is described as showing the current session configuration and token usage. Use it to check each run's configuration and to read its token counts. If you sign in to Codex with an API key, those counts and the per-million prices above give you the cost of each review.</p>
+</section>
+
+<section>
+<h2>Step 7: Compare the findings, then close both links</h2>
+<p>Read the two answers against the diff, not against each other. For each bug a model reports, open the file and line it names with <code>git diff main...HEAD -- &lt;path&gt;</code> and decide whether it is real. Digital Trends also reported that testing found the new models sometimes failed to tell users about problems they ran into while completing tasks, which is one more reason to check each claim rather than count them.</p>
+<p>When you have what you need, copy the findings out, then leave each Codex session with <code>/quit</code>, or stop it from the machine:</p>
+<pre><code>shell kill -- &lt;ID&gt;</code></pre>
+<p>Use the ID from the card or from <code>shell list</code>. The card said <code>Closes when the task exits</code>, and the mobile guide puts it the same way: the session ends when its process exits. Once Codex quits, that link stops showing the review. If you would rather have each answer in a file, run the reviews with <code>codex exec</code>, which the command reference says writes the final message to a path you give with <code>--output-last-message</code>.</p>
+<p>If you shared either link with a teammate and want them out before you are done, <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">rotating the session password</a> with <code>shell password rotate &lt;ID&gt;</code> revokes the old password without stopping the review.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>shell does not score, rank or diff the two answers. It shows you two terminals and records the two command lines. The judgment is yours.</li>
+<li>It does not count tokens or work out cost. The numbers come from Codex's <code>/status</code>, and the prices are OpenAI's as reported by the press.</li>
+<li>It does not isolate the runs from each other. Both use the same machine, the same checkout and the same Codex sign-in. The read-only sandbox covers commands the model generates. It does not stop a person who has a link and its password from typing into the session; start the share with <code>--read-only</code> before you give a link to someone who should only watch.</li>
+<li>It does not make one run a fair benchmark. One prompt on one branch is a sample of one, and a second attempt on the same model can find different things.</li>
+<li>It does not hold the review open after Codex exits. The session ends with the process, so copy what you want before you quit.</li>
+</ul>
+<p>The <a href="/security/">security page</a> sets out who can see and type into a session, and the <a href="/blog/track-terminal-sessions-across-machines-by-name-shell-online-v0-16-adds-name-and/">post on naming sessions</a> covers <code>--name</code> and <code>shell ls</code> when the two runs live on different machines.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell.online is developed by <a href="https://pilotprotocol.network/">Pilot Protocol</a>, a networking stack for autonomous agents. shell handles one half of this job: getting two terminals in front of a person. The other half, where one agent hands its findings to another without you copying text out of a phone, is the part Pilot is for. The <a href="https://pilotprotocol.network/docs/messaging">Pilot messaging guide</a> describes the ways agents on the network exchange data, from stream connections to stored messages, files and pub/sub, and the <a href="https://pilotprotocol.network/blog/connect-codex-cli-to-pilot-protocol">guide to connecting Codex CLI to Pilot over MCP</a> shows how to add Pilot's hosted MCP server to Codex with one command, after which Codex can message other agents. A Sol review that sends its list to the agent that will fix the bugs is a small step from there.</p>
+<div class="cta"><h3>Run both reviews on your own branch</h3><p>Install shell, start one Codex review per model, and follow both from your phone with a link each.</p><a href="/docs/">Read the shell.online docs</a></div>
+</section>

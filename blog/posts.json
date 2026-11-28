@@ -1,5 +1,260 @@
 [
   {
+    "slug": "how-to-stop-a-frozen-claude-code-session-from-your-phone",
+    "title": "How to Stop a Frozen Claude Code Session From Your Phone",
+    "description": "Claude Code 2.1.332 fixed a freeze that ignored Ctrl+C. How to end a stuck session from your phone with shell.online's Stop button, and what it sends.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "mcp",
+      "process-signals",
+      "mobile"
+    ],
+    "iso_date": "2026-11-28",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-stop-a-frozen-claude-code-session-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-check-a-resumed-codex-exec-run-kept-its-sandbox-from-your-phone",
+    "title": "How to Check a Resumed Codex Exec Run Kept Its Sandbox From Your Phone",
+    "description": "Run codex exec and its resume as read-only shell.online shares and read the sandbox line Codex 0.172.0 prints, before it scrolls out of a late viewer's replay.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "codex",
+      "sandbox",
+      "mobile",
+      "coding-agents"
+    ],
+    "iso_date": "2026-11-27",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-check-a-resumed-codex-exec-run-kept-its-sandbox-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-take-back-an-opencode-prompt-from-your-phone-before-it-answers",
+    "title": "How to Take Back an OpenCode Prompt From Your Phone Before It Answers",
+    "description": "Use the esc key on shell.online's phone key bar to stop an OpenCode 2.4.2 prompt in time to get it back for editing, and keep clear of the ctrl-c that ends the session.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "mobile",
+      "coding-agents",
+      "terminal-keys"
+    ],
+    "iso_date": "2026-11-26",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-take-back-an-opencode-prompt-from-your-phone-before-it-answers.webp"
+  },
+  {
+    "slug": "how-to-share-a-projects-files-from-a-claude-code-session-without-the-env",
+    "title": "How to Share a Project's Files From a Claude Code Session Without the .env",
+    "description": "Claude Code 2.1.332 stopped hanging on a .env that is a named pipe. Here is how shell's --files-root keeps that file and its neighbors away from a teammate.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "file-sharing",
+      "claude-code",
+      "secrets-management",
+      "named-pipes"
+    ],
+    "iso_date": "2026-11-25",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-projects-files-from-a-claude-code-session-without-the-env.webp"
+  },
+  {
+    "slug": "how-to-share-a-gemini-cli-session-without-opening-a-port-on-your-machine",
+    "title": "How to Share a Gemini CLI Session Without Opening a Port on Your Machine",
+    "description": "Gemini CLI 0.71.1 put a token on its local A2A server. Check what your machine listens on, then share Gemini CLI to your phone with no new TCP listener.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "gemini-cli",
+      "a2a",
+      "localhost",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-24",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-share-a-gemini-cli-session-without-opening-a-port-on-your-machine.webp"
+  },
+  {
+    "slug": "how-to-put-an-end-time-on-a-claude-code-loop-you-watch-from-your-phone",
+    "title": "How to Put an End Time on a Claude Code Loop You Watch From Your Phone",
+    "description": "Run a Claude Code /loop under shell.online, check its wakeups from a phone with /tasks, and end every scheduled run at a time you pick with --auto-close.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "scheduled-tasks",
+      "auto-close",
+      "mobile"
+    ],
+    "iso_date": "2026-11-23",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-put-an-end-time-on-a-claude-code-loop-you-watch-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-read-a-summary-when-opencodes-background-tests-report-back",
+    "title": "How to Read a Summary When OpenCode's Background Tests Report Back",
+    "description": "OpenCode 2.3.1 moves long test runs to the background. Turn on shell.online session summaries and read what OpenCode reported from your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "opencode",
+      "session-summaries",
+      "confidential-computing",
+      "mobile"
+    ],
+    "iso_date": "2026-11-22",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-read-a-summary-when-opencodes-background-tests-report-back.webp"
+  },
+  {
+    "slug": "how-to-keep-a-phone-view-of-claude-code-after-an-admin-console-sign-in",
+    "title": "How to Keep a Phone View of Claude Code After an Admin Console Sign-In",
+    "description": "Claude Code 2.1.330 signs in to Enterprise Admin Console organizations, which turns Remote Control off. Keep Claude Code on your phone with shell.online.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "enterprise-admin-console",
+      "remote-control",
+      "mobile"
+    ],
+    "iso_date": "2026-11-21",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-keep-a-phone-view-of-claude-code-after-an-admin-console-sign-in.webp"
+  },
+  {
+    "slug": "how-to-compare-gpt-6-2-sol-and-astra-on-one-codex-task-from-your-phone",
+    "title": "How to Compare GPT-6.2 Sol and Astra on One Codex Task From Your Phone",
+    "description": "Run one read-only Codex review on GPT-6.2 Sol and on GPT-6.2 Astra as two named shell.online sessions, then compare the findings from your phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex",
+      "gpt-6-2",
+      "model-comparison",
+      "code-review"
+    ],
+    "iso_date": "2026-11-20",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-compare-gpt-6-2-sol-and-astra-on-one-codex-task-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-pin-claude-codes-permission-mode-before-you-start-it-from-a-phone",
+    "title": "How to Pin Claude Code's Permission Mode Before You Start It From a Phone",
+    "description": "Claude Code 2.1.328 starts more Bedrock and Foundry sessions in auto mode. Set the mode a session from shell.online's web app starts in, then check it on the phone.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "permission-modes",
+      "amazon-bedrock",
+      "remote-start"
+    ],
+    "iso_date": "2026-11-19",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-pin-claude-codes-permission-mode-before-you-start-it-from-a-phone.webp"
+  },
+  {
+    "slug": "how-to-hand-claude-code-a-shell-online-mcp-grant-off-the-command-line",
+    "title": "How to Hand Claude Code a shell.online MCP Grant Off the Command Line",
+    "description": "Issue an observe-only shell.online MCP grant and register it with Claude Code 2.1.327 from stdin, so the bearer stays out of arguments, history and config.",
+    "category": "Security",
+    "tags": [
+      "shell-online",
+      "mcp",
+      "claude-code",
+      "credentials",
+      "coding-agents"
+    ],
+    "iso_date": "2026-11-18",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-hand-claude-code-a-shell-online-mcp-grant-off-the-command-line.webp"
+  },
+  {
+    "slug": "how-to-open-a-claude-code-session-on-your-phone-from-a-short-terminal",
+    "title": "How to Open a Claude Code Session on Your Phone From a Short Terminal",
+    "description": "Measure how tall shell.online's QR code is, get a shell claude link onto your phone when it scrolls off, and answer prompts only the terminal shows.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "qr-code",
+      "mobile",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-17",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-open-a-claude-code-session-on-your-phone-from-a-short-terminal.webp"
+  },
+  {
+    "slug": "how-to-fit-an-antigravity-cli-swarm-board-to-your-phones-screen",
+    "title": "How to Fit an Antigravity CLI Swarm Board to Your Phone's Screen",
+    "description": "Run an Antigravity CLI /swarm under shell.online, open it in the app on your phone, and have the board redraw at the phone's size with Fit to my screen.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "antigravity-cli",
+      "gemini-4-carbon",
+      "mobile",
+      "terminal-grid"
+    ],
+    "iso_date": "2026-11-16",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-fit-an-antigravity-cli-swarm-board-to-your-phones-screen.webp"
+  },
+  {
+    "slug": "how-to-resume-a-claude-code-session-on-the-same-shell-online-link",
+    "title": "How to Resume a Claude Code Session on the Same shell.online Link",
+    "description": "Use Claude Code 2.1.323's resume hint variable and a shell --persistent wrapper so a resumed conversation returns on the same link and password.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "claude-code",
+      "persistent-sessions",
+      "terminal-sharing"
+    ],
+    "iso_date": "2026-11-15",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-resume-a-claude-code-session-on-the-same-shell-online-link.webp"
+  },
+  {
+    "slug": "how-to-answer-a-codex-security-scans-budget-prompt-from-your-phone",
+    "title": "How to Answer a Codex Security Scan's Budget Prompt From Your Phone",
+    "description": "Run a Codex Security 0.10.0 scan inside shell.online, raise its cost limit from your phone at the 80% prompt, and resume an interrupted scan on the same link.",
+    "category": "Guide",
+    "tags": [
+      "shell-online",
+      "codex-security",
+      "mobile",
+      "persistent-sessions",
+      "security-scanning"
+    ],
+    "iso_date": "2026-11-14",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-answer-a-codex-security-scans-budget-prompt-from-your-phone.webp"
+  },
+  {
+    "slug": "how-to-self-host-shell-onlines-accounts-app-behind-your-own-sign-in",
+    "title": "How to Self-Host shell.online's Accounts App Behind Your Own Sign-In",
+    "description": "Run the shell.online accounts app with your own OpenID Connect provider and PostgreSQL, then point the CLI, relay and background service at it.",
+    "category": "Operations",
+    "tags": [
+      "shell-online",
+      "self-hosting",
+      "openid-connect",
+      "claude-managed-agents",
+      "postgresql"
+    ],
+    "iso_date": "2026-11-13",
+    "author": "Artemii Amelin",
+    "banner": "banners/how-to-self-host-shell-onlines-accounts-app-behind-your-own-sign-in.webp"
+  },
+  {
     "slug": "how-to-check-which-systemd-services-can-start-claude-code-on-linux",
     "title": "How to Check Which systemd Services Can Start Claude Code on Linux",
     "description": "Find the systemd units that can launch a coding agent, tell shell.online's own service from the rest, and see which credential its agents get.",

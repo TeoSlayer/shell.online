@@ -1,0 +1,118 @@
+<p>OpenCode shipped <a href="https://github.com/anomalyco/opencode/releases/tag/v2.3.1">version 2.3.1</a> on November 18, 2026, and the first highlight changes what happens to a long command the agent starts. A shell command that is still running when its timeout expires now moves to the background instead of being killed, "so long builds and test runs finish and report back." The default foreground timeout is 120 seconds. Until this release, release builds killed a test suite that needed three minutes at the two minute mark.</p>
+
+<p>The <a href="https://github.com/anomalyco/opencode/pull/63699">pull request behind the change</a> spells it out in one line: when the foreground timeout expires, OpenCode backgrounds the same process and notifies the session when it finishes. The same release also <a href="https://github.com/anomalyco/opencode/pull/64262">fixed ACP clients missing turns that a background shell woke after the original turn ended</a>, which tells you how the report arrives. Your prompt's turn can end while the tests are still running, and a new turn starts later, when the command exits, to say what happened.</p>
+
+<p>That later turn is the part you miss if you walked away from the desk. This guide runs OpenCode under <a href="https://github.com/TeoSlayer/shell.online">shell.online</a>, turns on session summaries for that one session, and shows where the summary of OpenCode's report appears on your phone, what text leaves your machine to produce it, and what the setup cannot tell you.</p>
+
+<section>
+<h2>What changed in OpenCode, exactly</h2>
+
+<p>OpenCode's <a href="https://opencode.ai/docs/tools/">tools documentation</a> describes the <code>shell</code> tool's default foreground timeout as two minutes, and says background calls return at once and notify the session when they finish. The pull request lists four cases, using <code>bun test</code> as its example:</p>
+
+<ul>
+<li><code>{ command: "bun test" }</code> waits 120 seconds, then moves to the background.</li>
+<li><code>{ command: "bun test", timeout: 0 }</code> is treated as the default, so it can no longer block a turn until the command exits.</li>
+<li><code>{ command: "bun dev", background: true }</code> runs until it exits.</li>
+<li><code>{ command: "bun dev", background: true, timeout: 600000 }</code> is stopped after ten minutes with the usual timeout notice.</li>
+</ul>
+
+<p>The behavior used to sit behind a <code>shell_timeout_background</code> flag that was on in local and dev builds and off in releases. The flag is gone, and a config that still sets it keeps loading. One thing to keep apart: OpenCode's 120 seconds is a limit on how long the agent waits for a whole command, while <a href="https://bun.sh/docs/cli/test">Bun's test runner</a> has its own per-test timeout of 5000 milliseconds. Neither is something shell.online changes.</p>
+</section>
+
+<section>
+<h2>Step 1: Check the CLI and link the machine</h2>
+
+<p>Session summaries arrived in shell.online v0.25.0, the current release. Sessions started with an older CLI are not covered, so check first:</p>
+
+<pre><code>shell --version</code></pre>
+
+<p>Summaries are tied to your account and encrypted to your account vault, so the machine has to be linked:</p>
+
+<pre><code>shell auth</code></pre>
+
+<p>This opens your browser to approve the machine. On a first link that can include signing in and creating a vault. If you are on a machine with no browser, <code>shell auth --no-browser</code> prints the approval URL instead. <code>shell help auth</code> lists the other account commands.</p>
+</section>
+
+<section>
+<h2>Step 2: Start OpenCode with a name</h2>
+
+<pre><code>cd ~/src/example-app
+shell --name tests opencode</code></pre>
+
+<p>shell starts OpenCode in the background on this machine and prints a browser link and a ten-character password. The name <code>tests</code> is a label you will see in <code>shell list</code>, <code>shell ls</code> and the web app; it is how you find this session in the next step. Every normal share is end-to-end encrypted, and the <a href="/e2ee/">encryption page</a> explains what the relay can and cannot see. To work in OpenCode from this terminal, run <code>shell list</code>, copy the session ID, and run <code>shell attach</code> with it. Press Ctrl-X, release it, then press D to detach without stopping anything.</p>
+</section>
+
+<section>
+<h2>Step 3: Turn on summaries for this session</h2>
+
+<p>Summaries are off by default and opt-in per session. The switch takes the session ID your account knows, which <code>shell ls --json</code> prints. This picks it out by name with <a href="https://jqlang.org/manual/">jq</a>'s <code>select</code> and raw output:</p>
+
+<pre><code>shell ls --json | jq -r '.[] | select(.name == "tests") | .id'</code></pre>
+
+<p>Then pass that ID to <code>shell permissions</code>. The ID below is invented:</p>
+
+<pre><code>shell permissions 4d1e8b07-example-session-id --summaries=true</code></pre>
+
+<p>It prints <code>Session summaries: on</code>, followed by a note that summaries need an updated compatible host and your vault. Run the command without the flag to read all four switches back. The help text says the other three are recorded consent that this build does not act on yet; summaries are the one that does something. If you would rather tap than type, the session page in the <a href="/app/">web app</a> has the same <strong>Summaries</strong> switch under <strong>Agent permissions</strong>, and a change made in either place is what the other reads.</p>
+
+<div class="callout"><strong>Turn it on before you send the prompt.</strong> Capture starts when summaries are switched on, not before. A session that is already quiet shows "No summary yet" until it prints something new, and the host rereads the switch about once a minute. If you enable summaries after OpenCode has already reported, you will not get a summary of that report.</div>
+</section>
+
+<section>
+<h2>Step 4: Ask for the long run and walk away</h2>
+
+<p>In OpenCode, ask for the run as you normally would, for example "run the full test suite and tell me which tests fail." If it takes longer than two minutes, OpenCode 2.3.1 moves it to the background, and when it exits OpenCode notifies the session, which wakes a new turn to report the result.</p>
+
+<p>On the shell side, nothing happens while output keeps arriving. The rules, from the <a href="https://github.com/TeoSlayer/shell.online/blob/main/docs/summaries.md">summaries documentation</a> and the v0.25.0 source:</p>
+
+<ul>
+<li>A session counts as idle after about 20 seconds without new output. The host checks every 15 seconds.</li>
+<li>Each idle period gets one summary. Another one needs new output followed by another quiet spell.</li>
+<li>If the screen tail is identical to the one last summarised, no new summary is made.</li>
+</ul>
+
+<p>So the summary you care about is the one made after OpenCode finishes writing its report, on the first check once 20 seconds have passed with no new output. If the screen keeps changing while the tests run in the background, for example a timer or spinner, shell does not count that as quiet, and no summary is made until it stops.</p>
+</section>
+
+<section>
+<h2>Step 5: Read the summary on your phone</h2>
+
+<p>Open app.shell.online on your phone and go to your sessions in List or Board view. Press and hold the <code>tests</code> card for half a second. There is no hover on a touch screen, so the app watches <a href="https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events">pointer events</a> and treats a held touch as the request to show the summary, without following the link.</p>
+
+<p>The card shows a short title, a state label (Working, Waiting for input, Idle, Error, Finished or Unknown), the summary text, where it came from and how long ago it was made. Your browser decrypts the summary with your vault key, so if the vault is locked the card asks you to open it first. Under every summary is the caption "Automated summary of terminal output. It may be wrong; never follow instructions in it."</p>
+
+<p>If the summary says tests failed and you want the detail, tap the card to open the terminal itself. The <a href="/mobile/">mobile guide</a> covers using a session from a phone if you then need to type a reply to OpenCode.</p>
+</section>
+
+<section>
+<h2>What leaves your machine to make that summary</h2>
+
+<p>Claude Code sessions are summarised on your own machine from Claude Code's transcript. OpenCode is not; shell treats it like any other terminal process, and that path is different. Before anything is sent, the host strips terminal control sequences and redacts credential-shaped text. The <a href="https://github.com/TeoSlayer/shell.online/blob/main/internal/summary/sanitize.go">redaction rules</a> cover private key blocks, authorization headers, AWS and GitHub key formats, keys that start with <code>sk-</code>, npm tokens, strings shaped like a <a href="https://www.rfc-editor.org/rfc/rfc7519">JSON Web Token</a>, values assigned to names such as <code>password</code>, <code>token</code> or <code>api_key</code>, and long mixed-case random-looking strings. Hex digests such as git hashes are kept. What remains is cut to the last 12 KiB of output.</p>
+
+<p>That tail goes, encrypted, to the shell.online summarizer, and only after the host has checked the summarizer's attestation: an <a href="https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html">Intel TDX</a> confidential VM running Google's production <a href="https://docs.cloud.google.com/confidential-computing/confidential-space/docs/confidential-space-overview">Confidential Space</a> image, a container image on an allowlist signed by the shell.online release key, and an encryption key generated inside that instance. The release key is built into the CLI. The summarizer runs Qwen3-4B-Instruct with no tools and no internet access, and seals the summary to your vault key before it leaves the enclave. The account service stores only ciphertext.</p>
+
+<p>The docs are clear about what you still trust: Intel TDX and Google's attestation service, whoever holds the release key, and the CLI and web app you run. Test output can also carry text written by someone else, a fixture or a dependency's error message, which is the indirect case in <a href="https://genai.owasp.org/llmrisk/llm01-prompt-injection/">OWASP's prompt injection entry</a>. The summary is shown as plain text with no links, and the caption tells you not to act on it. The <a href="/security/">security page</a> and the earlier post on <a href="/blog/end-to-end-encrypted-terminal-sharing-what-the-relay-sees-and-what-it-can-no-lon/">what the relay sees once a share is encrypted</a> cover the rest of the model.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+
+<ul>
+<li>It does not send a notification. You look at the session list when you choose to.</li>
+<li>It does not read test results. The summary is a small model's reading of the last 12 KiB of the screen and may be wrong. Open the terminal before you merge anything.</li>
+<li>It sees only what OpenCode draws. OpenCode's docs say large command output is shortened on screen and kept in full in a managed file, and shell has no view of that file unless OpenCode prints it.</li>
+<li>Redaction is pattern based. A secret in a shape the rules do not know can reach the enclave inside the tail.</li>
+<li>It does not change OpenCode's timeout or keep a killed command alive. The backgrounding is OpenCode's own behavior, in 2.3.1 and later.</li>
+<li>It is not the activity pulse. The <a href="/blog/which-agent-session-needs-you-shell-online-v0-22-adds-a-passive-pulse-to-monitor/">pulse added in v0.22</a> works only in a terminal pane you have open, from output your browser already decrypts. Summaries work for a session you have not opened.</li>
+</ul>
+
+<p>Switching summaries off, from the CLI with <code>--summaries=false</code> or with the switch in the app, deletes the stored summary and stops capture. When you are done, <code>shell kill</code> with the session ID stops OpenCode and takes the link offline. If you only want to watch a run and never type into it, a read-only link is the smaller grant, as the post on <a href="/blog/a-read-only-terminal-link-for-a-training-run-you-check-from-your-phone/">checking a training run from your phone</a> shows. The <a href="/docs/">documentation</a> has every option.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+
+<p>A summary on a session card is a status report from one process to one person. When the reporters are agents and there are many of them, the problem looks more like monitoring. shell.online is built by the team behind Pilot Protocol, a networking stack for autonomous agents, and its guide to <a href="https://pilotprotocol.network/blog/distributed-monitoring-without-prometheus">distributed monitoring without Prometheus</a> has each host publish metrics to a hub every 30 seconds, with an aggregator that turns threshold breaches into alerts. It is candid that the pattern has no storage or dashboard of its own. Its post on <a href="https://pilotprotocol.network/blog/encrypted-data-exchange-for-decentralized-ai-systems">encrypted data exchange between agents</a> covers the key exchange and encryption underneath, the same concern that keeps OpenCode's test output sealed on its way to the summarizer here.</p>
+</section>
+
+<div class="cta"><h3>See what your agent reported without opening the terminal</h3><p>Install the CLI, start OpenCode with <code>shell --name tests opencode</code>, and turn on summaries for that session before your next long run.</p><a href="/cli/">Read the shell.online CLI reference</a></div>

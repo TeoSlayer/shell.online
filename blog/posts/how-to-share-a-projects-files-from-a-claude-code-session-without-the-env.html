@@ -1,0 +1,86 @@
+<p>Anthropic published <a href="https://github.com/anthropics/claude-code/releases/tag/v2.1.332">Claude Code 2.1.332</a> on GitHub early on 25 November 2026 (UTC). Among its 150 listed changes is one that names a setup more developers now run: Read, @-mentions and compaction used to hang on a named pipe that nothing writes to, "such as a <code>.env</code> mounted by a locked secrets manager". The release note says the read now fails after 20 seconds.</p>
+
+<p>That setup is real and documented. 1Password can <a href="https://www.1password.dev/environments/local-env-file">mount an Environment as a local <code>.env</code> file</a>, and its developer docs say the contents are passed to the reading process on demand through a UNIX named pipe and never stored on disk. The feature works in 1Password for Mac and Linux. When a program reads the file you get an authorization prompt, and once you approve it, every process on the machine can read the file until 1Password locks or you turn the mount off. The Linux <a href="https://man7.org/linux/man-pages/man7/fifo.7.html">fifo(7) man page</a> explains the hang: opening a FIFO normally blocks until the other end is opened too. While 1Password is locked, nothing opens the other end, so the reader waits.</p>
+
+<p>If you share a coding agent's terminal with shell.online and also let a teammate open files from it, the same question comes up from the other side: does your <code>.env</code> travel with the files? This guide checks what kind of file your <code>.env</code> is, picks a file root that leaves it out, starts Claude Code with that root, and shows what the teammate can and cannot open.</p>
+
+<section>
+<h2>How shell decides which files a viewer can open</h2>
+<p>File access in shell is off by default. You turn it on per session with one of two flags, both listed in <code>shell help files</code> and on the <a href="/cli/">CLI reference</a>:</p>
+<pre><code>shell --files claude
+shell --files-root ./artifacts claude</code></pre>
+<p><code>--files</code> opens the command's working directory. <code>--files-root</code> opens a directory you name instead, and passing it is enough on its own to turn file access on. The CLI opens that directory with Go's <a href="https://pkg.go.dev/os#Root"><code>os.Root</code></a>, which keeps every lookup inside it, and it rejects parent traversal and symlinks that point outside.</p>
+<p>The rule that matters for a mounted <code>.env</code> is in <a href="https://github.com/TeoSlayer/shell.online/blob/main/cmd/shell/shared_files.go">cmd/shell/shared_files.go</a>. When a viewer lists a folder, shell returns directories and regular files and skips everything else: symlinks, sockets, devices and named pipes. When a viewer asks to read a path, shell checks that it is a regular file within the size limit and answers with an error if it is not, without reading from it. The help text puts it in one line: "Only regular files beneath that root can be opened."</p>
+<p>So a 1Password <code>.env</code> under the root never shows up in the Files panel. A plain <code>.env</code> under the root does, like any other file.</p>
+</section>
+
+<section>
+<h2>Step 1: Find out what kind of file each .env is</h2>
+<p>Run these in the project folder before you share anything. None of them opens the file, so none of them can hang on a pipe.</p>
+<pre><code>ls -l .env
+test -p .env &amp;&amp; echo "named pipe" || echo "not a named pipe"</code></pre>
+<p>In the <code>ls -l</code> output, the first character of the mode column is <code>p</code> for a named pipe and <code>-</code> for a regular file. The second line uses the <code>-p</code> primary of <a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/test.html">POSIX <code>test</code></a>, which is true only for a FIFO. Do not check a mounted file with <code>test -f</code>: a named pipe is not a regular file, so <code>-f</code> returns false for it.</p>
+<p>Projects rarely have a single env file. List every regular file whose name starts with <code>.env</code>, since those are the ones shell would share:</p>
+<pre><code>find . -path ./node_modules -prune -o -type f -name '.env*' -print</code></pre>
+<p><a href="https://pubs.opengroup.org/onlinepubs/9799919799/utilities/find.html"><code>find</code></a> skips <code>node_modules</code> and prints paths such as <code>./.env.local</code> or <code>./services/api/.env</code>. A <code>.env.example</code> with placeholder values is fine to share. Anything else on the list holds real values, and it will appear in the Files panel if its folder sits under the root you choose.</p>
+<div class="callout"><p>The type check protects a mounted <code>.env</code> by accident of how 1Password builds it, not because shell knows what a secret is. A <code>.env.local</code> that a framework wrote, a <code>.env</code> you copied out of 1Password by hand, or a <code>credentials.json</code> next to them are regular files, and <code>--files</code> shares them with everyone who has the link. Pick the root so that no such file is under it.</p></div>
+</section>
+
+<section>
+<h2>Step 2: Give the session its own file root</h2>
+<p>The simplest root is a folder that holds only what you mean to show: test reports, a generated diff, a log. Create it and tell the agent to write there.</p>
+<pre><code>mkdir -p artifacts
+find artifacts -type f -name '.env*'</code></pre>
+<p>The second command should print nothing. Create the folder before you start the session, because shell cannot open a root that does not exist. A relative path is resolved against the directory you run <code>shell</code> from.</p>
+<p>If you would rather share the whole working tree with <code>--files</code>, the earlier post on <a href="/blog/share-a-terminal-session-in-the-browser-without-handing-over-the-filesystem-shel/">sharing a terminal session without handing over the filesystem</a> covers how the root and its limits were designed. For this guide I would keep the root narrow. It is easier to reason about a folder you filled yourself than about every file a project accumulates.</p>
+</section>
+
+<section>
+<h2>Step 3: Start Claude Code with that root</h2>
+<pre><code>shell --name api-fix --files-root ./artifacts claude</code></pre>
+<p>shell starts Claude Code in the background and prints a card with the session's link. With file access on, the card has a <code>Files</code> row that reads <code>artifacts · on demand</code>: the root's folder name, and a reminder that nothing is sent until a browser asks for it. The browser is never given the full path, only that folder name.</p>
+<p>If the teammate should watch but never type, start the session read-only and answer Claude Code yourself in the terminal you launched it from:</p>
+<pre><code>shell --read-only --foreground --name api-fix --files-root ./artifacts claude</code></pre>
+<p><code>--read-only</code> makes the relay reject browser input for the whole session, and <code>--foreground</code> keeps the process mirrored in your own terminal so you can still answer its prompts. The help text is explicit that read-only links "may read files that were deliberately opted in", so read-only changes who can type, not what can be opened. The post on <a href="/blog/a-read-only-terminal-link-for-your-coding-agent-after-plugin4shell/">read-only links for a coding agent</a> goes further into what view-only blocks.</p>
+</section>
+
+<section>
+<h2>Step 4: What your teammate sees in the Files panel</h2>
+<p>Once your teammate has the session open, a <code>Files</code> button appears in the terminal view. It opens a panel headed "Shared from this session", with the root's folder name as its title. Folders come first, then files with their sizes, at most 256 entries per folder. Previews are limited to 16 MiB and the <code>Download</code> button to 128 MiB.</p>
+<p>A named pipe under the root does not appear in the list, and the browser has no entry to request. If something requests that path anyway, shell does not send its contents, because the read handler refuses any file that is not a regular file.</p>
+<p>The files travel over the session's existing WebSocket, encrypted end to end like the terminal itself. shell's browser code encrypts session frames with AES-GCM through the <a href="https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/encrypt">Web Crypto API</a>. According to <code>shell help files</code>, the relay routes request IDs and encrypted frame sizes, not paths or contents, and file sharing cannot be combined with <code>--no-e2ee</code>. The <a href="/e2ee/">E2EE page</a> describes what the relay can and cannot see in more detail.</p>
+</section>
+
+<section>
+<h2>Step 5: Keep the agent's own reads off the terminal</h2>
+<p>The Files panel is one way out for a secret. The terminal is the other. Whatever Claude Code prints, every viewer sees, and once you approve 1Password's prompt the mounted file is readable by any process until the vault locks. An agent that reads <code>.env</code> to debug a connection string can echo a value into the transcript.</p>
+<p>Claude Code's <a href="https://code.claude.com/docs/en/settings">settings guide</a> shows a deny rule for exactly this case. Add it to <code>~/.claude/settings.json</code>, or to the project's <code>.claude/settings.json</code> so teammates get it too:</p>
+<pre><code>{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}</code></pre>
+<p>Run <code>/status</code> in the session to confirm the file loaded. The <a href="https://code.claude.com/docs/en/permissions">permissions guide</a> explains how deny rules combine across files. That guide says Read and Edit deny rules apply to Claude's built-in file tools, so watch for <code>cat</code> and <code>env</code> in Bash prompts as well.</p>
+</section>
+
+<section>
+<h2>What this setup does not do</h2>
+<ul>
+<li>It does not recognize secrets. shell filters by file type, not by name or content. A regular file holding a key is shared if it sits under the root.</li>
+<li>It does not hide what the process prints. If a value reaches the terminal, everyone with the link has it. <a href="https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html">OWASP's secrets management cheat sheet</a> says secrets should never be logged, and a shared terminal is a log that other people read live.</li>
+<li>It does not stop the agent reading the pipe. 1Password's prompt is the gate there, and after you approve, every local process can read the file until the vault locks. 1Password also warns that mounted files are not built for concurrent readers, and the first process to read gets the secrets.</li>
+<li>It does not give viewers different views. Every link holder sees the same root. To take access away, the post on <a href="/blog/how-to-revoke-a-shared-terminal-link-without-killing-the-process-behind-it/">revoking a shared link without killing the process</a> covers <code>shell password rotate</code>.</li>
+<li>It does not apply on Windows the same way, because 1Password's local mount is for Mac and Linux only.</li>
+</ul>
+<p>The type check is a second line. The first is a root with nothing secret in it.</p>
+</section>
+
+<section>
+<h2>Where Pilot Protocol fits</h2>
+<p>shell's Files panel moves files from your machine to a person's browser. When the reader is another agent, <a href="https://pilotprotocol.network/">Pilot Protocol</a> covers that path. Its <a href="https://pilotprotocol.network/docs/services">built-in data exchange service</a> on port 1001 sends typed frames, including files with their names, which land in the recipient's <code>~/.pilot/received/</code> and wait there through disconnections. The same discipline applies: send the report, not the folder it was written in. If you want to see how Pilot encrypts those tunnels, its write-up on <a href="https://pilotprotocol.network/blog/zero-dependency-encryption-x25519-aes-gcm">X25519 key exchange and AES-256-GCM in zero-dependency Go</a> walks through the wire format. shell's source, including the file service quoted above, is on <a href="https://github.com/TeoSlayer/shell.online">GitHub</a>, and the <a href="/security/">security page</a> lists what the product does and does not protect.</p>
+</section>
+
+<div class="cta"><h3>Share the report, not the project</h3><p>Install shell, put the agent's output in its own folder, and start <code>shell --files-root ./artifacts claude</code>.</p><a href="/docs/">Read the shell.online docs</a></div>
